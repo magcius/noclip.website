@@ -14,6 +14,8 @@ import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers"
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -422,17 +424,9 @@ export class BINModelSectorData {
 }
 
 function textureToCanvas(texture: BINTexture, name: string, pixels: Uint8Array): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = texture.width;
-    const height = texture.height;
-    canvas.width = width;
-    canvas.height = height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), texture.width, texture.height);
     canvas.title = name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
 
     const extraInfo = new Map<string, string>();

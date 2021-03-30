@@ -16,17 +16,12 @@ import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorH
 import { F3DEX_Program } from '../BanjoKazooie/render';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
     canvas.title = texture.name;
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));

@@ -218,6 +218,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             indTexMatrix: GX.IndTexMtxID.OFF,
             indTexFormat: GX.IndTexFormat._8,
             indTexBiasSel: GX.IndTexBiasSel.NONE,
+            indTexAlphaSel: GX.IndTexAlphaSel.OFF,
             indTexWrapS: GX.IndTexWrap.OFF,
             indTexWrapT: GX.IndTexWrap.OFF,
             indTexAddPrev: false,

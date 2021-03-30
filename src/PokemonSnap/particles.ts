@@ -7,7 +7,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
-import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX } from "../MathHelpers";
+import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX, calcBillboardMatrix, CalcBillboardFlags } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { align, assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
@@ -15,7 +15,6 @@ import { getColor, getVec3 } from "./room";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { computeViewMatrix } from "../Camera";
-import { J3DCalcBBoardMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SnapPass } from "./render";
 
@@ -978,7 +977,7 @@ class Particle {
 
         computeViewMatrix(particleMtx, viewerInput.camera);
         mat4.mul(particleMtx, particleMtx, this.modelMatrix);
-        J3DCalcBBoardMtx(particleMtx, particleMtx);
+        calcBillboardMatrix(particleMtx, particleMtx, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         offs += fillMatrix4x3(draw, offs, particleMtx);
 
         offs += fillVec4v(draw, offs, this.prim);

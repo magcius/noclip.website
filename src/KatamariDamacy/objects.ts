@@ -1,5 +1,5 @@
 
-import { mat4, vec3, quat, ReadonlyMat4 } from "gl-matrix";
+import { mat4, vec3, quat, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
 import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
@@ -526,7 +526,7 @@ const groundScratch = nArray(3, () => vec3.create());
 const normalScratch = nArray(4, () => vec3.create());
 const groundMatrices = nArray(2, () => mat4.create());
 
-function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, target: vec3): boolean {
+function findGround(collision: CollisionList[], out: TriangleInfo, pos: ReadonlyVec3, target: ReadonlyVec3): boolean {
     let minDepth = vec3.dist(pos, target);
     let foundAny = false;
     mat4.identity(groundMatrices[0]);

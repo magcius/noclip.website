@@ -188,6 +188,14 @@ function patch(dst: any, srcpair: VKFPair[], replace: boolean): void {
 export async function parseVMT(filesystem: SourceFileSystem, path: string, depth: number = 0): Promise<VMT> {
     async function parsePath(path: string): Promise<VMT> {
         path = filesystem.resolvePath(path, '.vmt');
+        if (!filesystem.hasEntry(path)) {
+            // Amazingly, the material could be in materials/materials/, like is
+            //    materials/materials/nature/2/blenddirttojunglegrass002b.vmt
+            // from cp_mossrock
+            path = `materials/${path}`;
+        }
+        if (!filesystem.hasEntry(path))
+            path = `materials/editor/obsolete.vmt`;
         const buffer = assertExists(await filesystem.fetchFileData(path));
         const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
 

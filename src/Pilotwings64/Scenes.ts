@@ -32,6 +32,7 @@ import { F3DEX_Program } from "../BanjoKazooie/render";
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
 import { colorNewFromRGBA } from '../Color';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1922,15 +1923,7 @@ function textureToCanvas(texture: UVTX): Texture {
 
     for (let i = 0; i < texture.levels.length; i++) {
         const level = texture.levels[i];
-        const canvas = document.createElement("canvas")!;
-        canvas.width = level.width;
-        canvas.height = level.height;
-
-        const ctx = canvas.getContext("2d")!;
-        const imgData = ctx.createImageData(canvas.width, canvas.height);
-        imgData.data.set(level.pixels);
-        ctx.putImageData(imgData, 0, 0);
-
+        const canvas = convertToCanvas(ArrayBufferSlice.fromView(level.pixels), level.width, level.height);
         surfaces.push(canvas);
     }
 

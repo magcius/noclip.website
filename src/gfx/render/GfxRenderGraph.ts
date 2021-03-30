@@ -62,6 +62,11 @@ export interface GfxrPass {
     setDebugName(debugName: string): void;
 
     /**
+     * Set whether to output a debug thumbnail. {@default false} by default.
+     */
+    pushDebugThumbnail(attachmentSlot: GfxrAttachmentSlot): void;
+
+    /**
      * Attach the given render target with ID {@param renderTargetID} to the given attachment slot.
      *
      * This determines which render targets this pass will render to.
@@ -133,9 +138,14 @@ class PassImpl implements GfxrPass {
 
     // Misc. state.
     public debugName: string;
+    public debugThumbnails: boolean[] = [];
 
     public setDebugName(debugName: string): void {
         this.debugName = debugName;
+    }
+
+    public pushDebugThumbnail(attachmentSlot: GfxrAttachmentSlot): void {
+        this.debugThumbnails[attachmentSlot] = true;
     }
 
     public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
@@ -216,13 +226,28 @@ export interface GfxrGraphBuilder {
     createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number;
 
     /**
-     * Resolve the render target ID {@param renderTargetID}, and return the resolved texture ID.
+     * Resolve the render target in slot {@param attachmentSlot} of pass {@param pass}, and return
+     * the resolve texture ID.
      *
      * To bind the image of a render target in a rendering pass, it first must be "resolved" to
      * a texture. Please remember to attach the resolve texture to a pass where it is used with
      * {@see GfxrPassScope::attachResolveTexture}. When in the pass's execution or post callbacks,
      * you can retrieve a proper {@param GfxTexture} for a resolve texture ID with
      * {@see GfxrPassScope::getResolveTextureForID}}.
+     */
+    resolveRenderTargetPassAttachmentSlot(pass: GfxrPass, attachmentSlot: GfxrAttachmentSlot): number;
+
+    /**
+     * Resolve the render target ID {@param renderTargetID}, and return the resolve texture ID.
+     *
+     * To bind the image of a render target in a rendering pass, it first must be "resolved" to
+     * a texture. Please remember to attach the resolve texture to a pass where it is used with
+     * {@see GfxrPassScope::attachResolveTexture}. When in the pass's execution or post callbacks,
+     * you can retrieve a proper {@param GfxTexture} for a resolve texture ID with
+     * {@see GfxrPassScope::getResolveTextureForID}}.
+     *
+     * This just looks up the last pass that drew to the render target {@param renderTargetID},
+     * and then calls {@see resolveRenderTargetPassAttachmentSlot} using the information it found.
      */
     resolveRenderTarget(renderTargetID: number): number;
 
@@ -240,6 +265,18 @@ export interface GfxrGraphBuilder {
      * not have to pass information to any dependent modules to derive from it.
      */
     getRenderTargetDescription(renderTargetID: number): Readonly<GfxrRenderTargetDescription>;
+
+    /**
+     * Internal API.
+     */
+    getDebug(): GfxrGraphBuilderDebug;
+}
+
+export interface GfxrGraphBuilderDebug {
+    getPasses(): GfxrPass[];
+    getPassDebugThumbnails(pass: GfxrPass): boolean[];
+    getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): number;
+    getRenderTargetIDDebugName(renderTargetID: number): string;
 }
 
 class RenderTarget {
@@ -342,9 +379,6 @@ export class GfxrTemporalTexture {
     private outputTexture: SingleSampledTexture | null = null;
 
     public setDescription(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>): void {
-        if (this.outputTexture !== null && this.outputTexture.matchesDescription(desc))
-            return;
-
         // Updating the description will happen at the start of the frame,
         // so we need to keep the inputTexture alive (the previous frame's texture),
         // and create a new outputTexture.
@@ -358,6 +392,9 @@ export class GfxrTemporalTexture {
         }
 
         assert(this.inputTexture === this.outputTexture);
+
+        if (this.outputTexture !== null && this.outputTexture.matchesDescription(desc))
+            return;
 
         this.outputTexture = new SingleSampledTexture(device, desc);
         if (this.inputTexture === null)
@@ -391,7 +428,7 @@ export interface GfxrRenderGraph {
     destroy(device: GfxDevice): void;
 }
 
-export class GfxrRenderGraphImpl {
+export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, GfxrRenderGraphImpl {
     // For scope callbacks.
     private currentPass: PassImpl | null = null;
 
@@ -438,12 +475,6 @@ export class GfxrRenderGraphImpl {
         this.currentGraph = new GraphImpl();
     }
 
-    public endGraphBuilder(): GraphImpl {
-        const graph = assertExists(this.currentGraph);
-        this.currentGraph = null;
-        return graph;
-    }
-
     public pushPass(setupFunc: PassSetupFunc): void {
         const pass = new PassImpl();
         setupFunc(pass);
@@ -469,6 +500,18 @@ export class GfxrRenderGraphImpl {
         return null;
     }
 
+    public resolveRenderTargetPassAttachmentSlot(pass: GfxrPass, attachmentSlot: GfxrAttachmentSlot): number {
+        const renderPass = pass as PassImpl;
+
+        if (renderPass.resolveTextureOutputIDs[attachmentSlot] === undefined) {
+            const renderTargetID = renderPass.renderTargetIDs[attachmentSlot];
+            const resolveTextureID = this.createResolveTextureID(renderTargetID);
+            renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
+        }
+
+        return renderPass.resolveTextureOutputIDs[attachmentSlot];
+    }
+
     private findPassForResolveRenderTarget(renderTargetID: number): PassImpl {
         // Find the last pass that rendered to this render target, and resolve it now.
 
@@ -483,23 +526,22 @@ export class GfxrRenderGraphImpl {
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
 
         // Check that the pass isn't resolving its attachment to another texture. Can't do both!
-        assert(renderPass.resolveTextureOutputIDs[attachmentSlot] === undefined);
         assert(renderPass.resolveTextureOutputExternalTextures[attachmentSlot] === undefined);
 
         return renderPass;
     }
 
     public resolveRenderTarget(renderTargetID: number): number {
-        const resolveTextureID = this.createResolveTextureID(renderTargetID);
         const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
-        renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
-        return resolveTextureID;
+        return this.resolveRenderTargetPassAttachmentSlot(renderPass, attachmentSlot);
     }
 
     public resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void {
         const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+        // We shouldn't be resolving to a resolve texture ID in this case.
+        assert(renderPass.resolveTextureOutputIDs[attachmentSlot] === undefined);
         renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
     }
 
@@ -511,6 +553,7 @@ export class GfxrRenderGraphImpl {
     //#region Scheduling
     private renderTargetUseCount: number[] = [];
     private resolveTextureUseCount: number[] = [];
+    private resolveTextureConflict: boolean[] = [];
 
     private renderTargetAliveForID: RenderTarget[] = [];
     private singleSampledTextureForResolveTextureID: SingleSampledTexture[] = [];
@@ -533,6 +576,8 @@ export class GfxrRenderGraphImpl {
 
             const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
             this.renderTargetUseCount[renderTargetID]++;
+
+            this.resolveTextureConflict[resolveTextureID] = pass.renderTargetIDs.includes(renderTargetID);
         }
     }
 
@@ -616,7 +661,7 @@ export class GfxrRenderGraphImpl {
             const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
 
             // No need to resolve -- we're already rendering into a texture-backed RT.
-            if (renderTarget.texture !== null && pass.renderTargets[slot] !== renderTarget)
+            if (renderTarget.texture !== null && !this.resolveTextureConflict[resolveTextureOutputID])
                 return null;
 
             if (!this.singleSampledTextureForResolveTextureID[resolveTextureOutputID]) {
@@ -705,6 +750,7 @@ export class GfxrRenderGraphImpl {
         // Initialize our accumulators.
         fillArray(this.renderTargetUseCount, graph.renderTargetDescriptions.length, 0);
         fillArray(this.resolveTextureUseCount, graph.resolveTextureRenderTargetIDs.length, 0);
+        fillArray(this.resolveTextureConflict, graph.resolveTextureRenderTargetIDs.length, false);
 
         // Count.
         for (let i = 0; i < graph.passes.length; i++)
@@ -778,7 +824,31 @@ export class GfxrRenderGraphImpl {
 
     public execute(device: GfxDevice, builder: GfxrGraphBuilder): void {
         assert(builder === this);
-        this.execGraph(device, this.endGraphBuilder());
+        const graph = assertExists(this.currentGraph);
+        this.execGraph(device, graph);
+        this.currentGraph = null;
+    }
+
+    public getDebug(): GfxrGraphBuilderDebug {
+        return this;
+    }
+    //#endregion
+
+    //#region GfxrGraphBuilderDebug
+    public getPasses(): GfxrPass[] {
+        return this.currentGraph!.passes;
+    }
+
+    public getPassDebugThumbnails(pass: GfxrPass): boolean[] {
+        return (pass as PassImpl).debugThumbnails;
+    }
+
+    public getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): number {
+        return (pass as PassImpl).renderTargetIDs[slot];
+    }
+
+    public getRenderTargetIDDebugName(renderTargetID: number): string {
+        return this.currentGraph!.renderTargetDebugNames[renderTargetID];
     }
     //#endregion
 

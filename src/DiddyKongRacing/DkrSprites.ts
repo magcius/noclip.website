@@ -1,7 +1,6 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
-import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -11,6 +10,7 @@ import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, Gfx
     GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
+import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { assert } from '../util';
 import { ViewerRenderInput } from '../viewer';
@@ -260,7 +260,7 @@ export class DkrSprites {
                 } else {
                     mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, instanceObject.getModelMatrix());
                 }
-                J3DCalcBBoardMtx(viewMatrixCalc2Scratch, viewMatrixCalcScratch);
+                calcBillboardMatrix(viewMatrixCalc2Scratch, viewMatrixCalcScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
                 offs2 += fillMatrix4x3(d2, offs2, viewMatrixCalc2Scratch);
             }
 

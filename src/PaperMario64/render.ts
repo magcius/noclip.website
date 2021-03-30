@@ -21,6 +21,8 @@ import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorH
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
 import { translateCM } from '../Common/N64/RDP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -99,15 +101,9 @@ function textureToCanvas(texture: Tex.Image): Viewer.Texture {
     const surfaces: HTMLCanvasElement[] = [];
 
     for (let i = 0; i < texture.levels.length; i++) {
-        const canvas = document.createElement("canvas");
-        canvas.width = texture.width >>> i;
-        canvas.height = texture.height >>> i;
-
-        const ctx = canvas.getContext("2d")!;
-        const imgData = ctx.createImageData(canvas.width, canvas.height);
-        imgData.data.set(texture.levels[i]);
-        ctx.putImageData(imgData, 0, 0);
-
+        const width = texture.width >>> i;
+        const height = texture.height >>> i;
+        const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.levels[i]), width, height);
         surfaces.push(canvas);
     }
 

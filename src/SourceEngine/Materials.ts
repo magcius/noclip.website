@@ -108,7 +108,7 @@ class ParameterTexture {
     public texture: VTF | null = null;
     public lateBindingTexture: LateBindingTexture | null = null;
 
-    constructor(public additionalFlags: VTFFlags = 0, public isEnvmap: boolean = false) {
+    constructor(public isSRGB: boolean = false, public isEnvmap: boolean = false) {
     }
 
     public parse(S: string): void {
@@ -130,7 +130,7 @@ class ParameterTexture {
             let filename = this.ref;
             if (this.isEnvmap && this.ref === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null)
                 filename = entityParams.lightCache.envCubemap.filename;
-            this.texture = await materialCache.fetchVTF(filename, this.additionalFlags);
+            this.texture = await materialCache.fetchVTF(filename, this.isSRGB);
         }
     }
 
@@ -391,6 +391,7 @@ export abstract class BaseMaterial {
         if (this.vmt.proxies !== undefined)
             this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
 
+        this.initStaticBeforeResourceFetch();
         await this.fetchResources(renderContext.materialCache);
         this.initStatic(renderContext.device, renderContext.cache);
     }
@@ -410,10 +411,6 @@ export abstract class BaseMaterial {
             return false;
 
         return true;
-    }
-
-    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
-        // Nothing by default.
     }
 
     public setSkinningMode(skinningMode: SkinningMode): void {
@@ -566,7 +563,7 @@ export abstract class BaseMaterial {
         p['$nocull']                       = new ParameterBoolean(false, false);
 
         // Base parameters
-        p['$basetexture']                  = new ParameterTexture(VTFFlags.SRGB);
+        p['$basetexture']                  = new ParameterTexture(true);
         p['$basetexturetransform']         = new ParameterMatrix();
         p['$frame']                        = new ParameterNumber(0);
         p['$color']                        = new ParameterColor(1, 1, 1);
@@ -584,6 +581,9 @@ export abstract class BaseMaterial {
         }
         await Promise.all(promises);
         this.loaded = true;
+    }
+
+    protected initStaticBeforeResourceFetch(): void {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
@@ -606,7 +606,7 @@ export abstract class BaseMaterial {
             this.proxyDriver.update(renderContext, this.entityParams);
     }
 
-    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void;
+    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex?: number): void;
 
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
         // Nothing by default.
@@ -928,9 +928,11 @@ void mainVS() {
 vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE) {
+        return t_BaseTexture + t_DetailTexture * t_BlendFactor;
     } else if (t_CombineMode == COMBINE_MODE_BASE_OVER_DETAIL) {
         return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, (t_BlendFactor * (1.0 - t_BaseTexture.a))), t_DetailTexture.a);
-    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM || t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
         // Done in Post-Lighting.
         return t_BaseTexture;
     } else {
@@ -940,18 +942,20 @@ vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_Com
 }
 
 vec3 TextureCombinePostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
-    if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+    if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM) {
+        return t_DiffuseColor.rgb + t_DetailTexture.rgb * t_BlendFactor;
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
         // Remap.
         if (t_BlendFactor >= 0.5) {
             float t_Mult = (1.0 / t_BlendFactor);
-            return t_DiffuseColor + clamp((t_Mult * t_DetailTexture.rgb) + (1.0 - t_Mult), 0.0, 1.0);
+            return t_DiffuseColor.rgb + clamp((t_Mult * t_DetailTexture.rgb) + (1.0 - t_Mult), 0.0, 1.0);
         } else {
             float t_Mult = (4.0 * t_BlendFactor);
-            return t_DiffuseColor + clamp((t_Mult * t_DetailTexture.rgb) + (-0.5 * t_Mult), 0.0, 1.0);
+            return t_DiffuseColor.rgb + clamp((t_Mult * t_DetailTexture.rgb) + (-0.5 * t_Mult), 0.0, 1.0);
         }
     } else {
         // Nothing to do.
-        return t_DiffuseColor;
+        return t_DiffuseColor.rgb;
     }
 }
 
@@ -1135,19 +1139,13 @@ class Material_Generic extends BaseMaterial {
         }
     }
 
-    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
-        const lightmapTextureMapping = this.textureMapping[3];
-        lightmapTextureMapping.gfxTexture = gfxTexture;
-        lightmapTextureMapping.gfxSampler = gfxSampler;
-    }
-
     protected initParameters(): void {
         super.initParameters();
 
         const p = this.param;
 
         // Generic
-        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB, true);
+        p['$envmap']                       = new ParameterTexture(true, true);
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$envmapmask']                   = new ParameterTexture();
         p['$envmapmaskframe']              = new ParameterNumber(0);
@@ -1156,7 +1154,7 @@ class Material_Generic extends BaseMaterial {
         p['$envmapcontrast']               = new ParameterNumber(0);
         p['$envmapsaturation']             = new ParameterNumber(1);
         p['$fresnelreflection']            = new ParameterNumber(1);
-        p['$detail']                       = new ParameterTexture(VTFFlags.SRGB);
+        p['$detail']                       = new ParameterTexture();
         p['$detailframe']                  = new ParameterNumber(0);
         p['$detailblendmode']              = new ParameterNumber(0, false);
         p['$detailblendfactor']            = new ParameterNumber(1);
@@ -1173,7 +1171,7 @@ class Material_Generic extends BaseMaterial {
         p['$selfillumtint']                = new ParameterColor(1, 1, 1);
 
         // World Vertex Transition
-        p['$basetexture2']                 = new ParameterTexture(VTFFlags.SRGB);
+        p['$basetexture2']                 = new ParameterTexture(true);
         p['$frame2']                       = new ParameterNumber(0.0);
     }
 
@@ -1189,6 +1187,12 @@ class Material_Generic extends BaseMaterial {
             this.gfxProgram = cache.createProgram(device, this.program);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
         }
+    }
+
+    protected initStaticBeforeResourceFetch() {
+        // The detailBlendMode parameter determines whether we load an SRGB texture or not.
+        const detailBlendMode = this.paramGetNumber('$detailblendmode');
+        this.paramGetTexture('$detail').isSRGB = (detailBlendMode === 1);
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
@@ -1211,7 +1215,8 @@ class Material_Generic extends BaseMaterial {
         if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
             this.program.setDefineBool('USE_DETAIL', true);
-            this.program.defines.set('DETAIL_COMBINE_MODE', '' + this.paramGetNumber('$detailblendmode'));
+            const detailBlendMode = this.paramGetNumber('$detailblendmode');
+            this.program.defines.set('DETAIL_COMBINE_MODE', '' + detailBlendMode);
         }
 
         if (this.paramGetVTF('$bumpmap') !== null) {
@@ -1313,9 +1318,14 @@ class Material_Generic extends BaseMaterial {
         return offs - origOffs;
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
+        if (lightmapPageIndex !== null) {
+            const lightmapManager = renderContext.lightmapManager;
+            this.textureMapping[3].gfxTexture = lightmapManager.getPageTexture(lightmapPageIndex);
+            this.textureMapping[3].gfxSampler = lightmapManager.gfxSampler;
+        }
         this.recacheProgram(renderContext.device, renderContext.cache);
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
@@ -1464,7 +1474,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         const p = this.param;
 
-        p['$texture2']                     = new ParameterTexture(VTFFlags.SRGB);
+        p['$texture2']                     = new ParameterTexture(true);
         p['$texture2transform']            = new ParameterMatrix();
         p['$frame2']                       = new ParameterNumber(0.0);
 
@@ -1631,7 +1641,7 @@ class Material_Water extends BaseMaterial {
         p['$normalmap']                    = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
-        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB, true);
+        p['$envmap']                       = new ParameterTexture(true, true);
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$reflecttint']                  = new ParameterColor(1, 1, 1);
         p['$reflectamount']                = new ParameterNumber(0.8);
@@ -1832,7 +1842,7 @@ class Material_Refract extends BaseMaterial {
         p['$normalmap']                    = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
-        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB, true);
+        p['$envmap']                       = new ParameterTexture(true, true);
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$refracttint']                  = new ParameterColor(1, 1, 1);
         p['$refractamount']                = new ParameterNumber(2);
@@ -1908,11 +1918,11 @@ export class MaterialCache {
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
-        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', 0));
+        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false));
     }
 
     public async bindLocalCubemap(cubemap: Cubemap) {
-        const vtf = await this.fetchVTF(cubemap.filename, VTFFlags.SRGB);
+        const vtf = await this.fetchVTF(cubemap.filename, true);
         this.textureCache.set('env_cubemap', vtf);
     }
 
@@ -1957,21 +1967,23 @@ export class MaterialCache {
         return materialInstance;
     }
 
-    private async fetchVTFInternal(name: string, additionalFlags: VTFFlags): Promise<VTF> {
+    private async fetchVTFInternal(name: string, srgb: boolean, cacheKey: string): Promise<VTF> {
         const path = this.filesystem.resolvePath(this.resolvePath(name), '.vtf');
         const data = await this.filesystem.fetchFileData(path);
-        const vtf = new VTF(this.device, this.cache, data, path, additionalFlags);
-        this.textureCache.set(name, vtf);
+        const vtf = new VTF(this.device, this.cache, data, path, srgb);
+        this.textureCache.set(cacheKey, vtf);
         return vtf;
     }
 
-    public fetchVTF(name: string, additionalFlags: VTFFlags = 0): Promise<VTF> {
-        if (this.textureCache.has(name))
-            return Promise.resolve(this.textureCache.get(name)!);
+    public fetchVTF(name: string, srgb: boolean): Promise<VTF> {
+        const cacheKey = srgb ? `${name}_srgb` : name;
 
-        if (!this.texturePromiseCache.has(name))
-            this.texturePromiseCache.set(name, this.fetchVTFInternal(name, additionalFlags));
-        return this.texturePromiseCache.get(name)!;
+        if (this.textureCache.has(cacheKey))
+            return Promise.resolve(this.textureCache.get(cacheKey)!);
+
+        if (!this.texturePromiseCache.has(cacheKey))
+            this.texturePromiseCache.set(cacheKey, this.fetchVTFInternal(name, srgb, cacheKey));
+        return this.texturePromiseCache.get(cacheKey)!;
     }
 
     public destroy(device: GfxDevice): void {
@@ -2516,7 +2528,9 @@ export class ParameterReference {
 function paramLookupOptional<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T | null {
     if (ref.name !== null) {
         const pm = map[ref.name];
-        if (ref.index !== -1)
+        if (pm === undefined)
+            return null;
+        else if (ref.index !== -1)
             return pm.index(ref.index) as T;
         else
             return pm as T;

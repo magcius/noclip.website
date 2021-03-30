@@ -28,6 +28,10 @@ export function gfxSamplerBindingCopy(a: Readonly<GfxSamplerBinding>): GfxSample
     return { gfxSampler, gfxTexture, lateBinding };
 }
 
+export function gfxSamplerBindingNew(): GfxSamplerBinding {
+    return { gfxSampler: null, gfxTexture: null, lateBinding: null };
+}
+
 export function gfxUniformBufferBindingCopy(a: Readonly<GfxUniformBufferBinding>): GfxUniformBufferBinding {
     const buffer = a.buffer;
     const wordCount = a.wordCount;

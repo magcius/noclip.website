@@ -1,7 +1,7 @@
 
 // Common helpers for GX rendering.
 
-import { mat4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4 } from 'gl-matrix';
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
@@ -24,6 +24,7 @@ import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -146,7 +147,7 @@ function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d
     assert(d.length >= offs);
 }
 
-export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: mat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
+export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: ReadonlyMat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
     mat4.copy(sceneParams.u_Projection, projectionMatrix);
 
     if (customLODBias !== null) {
@@ -187,10 +188,7 @@ export class GXViewerTexture implements Viewer.Texture {
             this.surfaces.push(canvas);
 
             promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
-                const ctx = canvas.getContext('2d')!;
-                const imgData = new ImageData(mipLevel.width, mipLevel.height);
-                imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-                ctx.putImageData(imgData, 0, 0);
+                convertToCanvasData(canvas, ArrayBufferSlice.fromView(rgbaTexture.pixels));
             }));
         }
 
@@ -475,10 +473,8 @@ export class GXMaterialHelperGfx {
     }
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
-        if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
-            this.programKey = this.gfxProgram.ResourceUniqueId;
-        }
+        this.gfxProgram = cache.createProgram(device, this.program);
+        this.programKey = this.gfxProgram.ResourceUniqueId;
     }
 
     public createProgram(): void {

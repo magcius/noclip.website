@@ -16,7 +16,7 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
 import { colorCopy, Color, colorClamp, colorClampLDR } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixS } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, setMatrixTranslation } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { translateSampler } from '../JUTTexture';
@@ -83,7 +83,7 @@ export class ShapeData {
 }
 
 export class MaterialData {
-    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
     }
@@ -92,84 +92,6 @@ export class MaterialData {
 class JointTreeNode {
     constructor(public jointIndex: number = 0, public children: JointTreeNode[] = []) {
     }
-}
-
-const scratchVec3a = vec3.create();
-export function J3DCalcBBoardMtx(dst: mat4, m: ReadonlyMat4): void {
-    // Z        = { 0, 0, 1 }
-    // X = Y^Z  = { Y[1], -Y[0], 0 }
-    // Y = Z^X  = { Y[0],  Y[1], 0 }
-    vec3.set(scratchVec3a, m[4], m[5], 0);
-    vec3.normalize(scratchVec3a, scratchVec3a);
-
-    // Extract scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx * scratchVec3a[1];
-    dst[1] = mx * -scratchVec3a[0];
-    dst[2] = 0;
-
-    dst[4] = my * scratchVec3a[0];
-    dst[5] = my * scratchVec3a[1];
-    dst[6] = 0;
-
-    dst[8] = 0;
-    dst[9] = 0;
-    dst[10] = mz;
-
-    dst[12] = m[12];
-    dst[13] = m[13];
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-const scratchVec3b = vec3.create(), scratchVec3c = vec3.create();
-export function J3DCalcYBBoardMtx(dst: mat4, m: ReadonlyMat4): void {
-    // Z        = { 0, 0, 1 }
-    // X = Y^Z  = { Y[1], -Y[0], 0 }
-    // Z = X^Y
-
-    vec3.set(scratchVec3a, m[4], m[5], m[6]);
-    vec3.normalize(scratchVec3a, scratchVec3a);
-    vec3.set(scratchVec3b, -m[5], m[4], 0);
-    vec3.normalize(scratchVec3b, scratchVec3b);
-    vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
-
-    // Extract scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx * scratchVec3b[0];
-    dst[1] = mx * scratchVec3a[0];
-    dst[2] = mx * scratchVec3c[0];
-
-    dst[4] = my * scratchVec3b[1];
-    dst[5] = my * scratchVec3a[1];
-    dst[6] = my * scratchVec3c[1];
-
-    dst[8] = mz * scratchVec3b[2];
-    dst[9] = mz * scratchVec3a[2];
-    dst[10] = mz * scratchVec3c[2];
-
-    dst[12] = m[12];
-    dst[13] = m[13];
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
 }
 
 export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceState: ShapeInstanceState, shape: Shape, mtxGroup: MtxGroup): boolean {
@@ -186,9 +108,9 @@ export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceSt
         const dst = packetParams.u_PosMtx[i];
 
         if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
-            J3DCalcBBoardMtx(dst, drw);
+            calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
-            J3DCalcYBBoardMtx(dst, drw);
+            calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
         else
             mat4.copy(dst, drw);
 
@@ -308,7 +230,7 @@ function mat43Concat(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
     dst[14] = a20*b03 + a21*b13 + a22*b23 + a23;
 }
 
-function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
+function J3DGetTextureMtx(dst: mat4, srt: ReadonlyMat4): void {
     mat4.copy(dst, srt);
 
     // Move translation to third column.
@@ -321,7 +243,7 @@ function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
     dst[14] = 0;
 }
 
-function J3DGetTextureMtxOld(dst: mat4, srt: mat4): void {
+function J3DGetTextureMtxOld(dst: mat4, srt: ReadonlyMat4): void {
     mat4.copy(dst, srt);
 }
 
@@ -458,7 +380,7 @@ export class MaterialInstance {
         }
     }
 
-    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: mat4, modelMatrix: mat4): void {
+    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4): void {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
@@ -492,7 +414,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
+    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: ReadonlyMat4): void {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
@@ -537,7 +459,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
+    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
         // The input matrix is passed in in dst.
 
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
@@ -697,7 +619,7 @@ export class MaterialInstance {
         }
     }
 
-    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: mat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix = camera.viewMatrix): void {
+    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   ColorRegType.S10);
@@ -763,7 +685,7 @@ export class MaterialInstance {
             this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
         this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, packetParams, viewMatrix);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);

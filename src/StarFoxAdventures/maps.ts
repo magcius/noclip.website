@@ -1,13 +1,12 @@
 import * as Viewer from '../viewer';
 import { DataFetcher } from '../DataFetcher';
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
 import { White } from '../Color';
-import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
 import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
@@ -145,11 +144,11 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
+            b.block.addRenderInsts(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
         }
     }
 
@@ -203,8 +202,8 @@ export async function loadMap(gameInfo: GameInfo, dataFetcher: DataFetcher, mapN
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
 
-    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
-        super(device, animController);
+    constructor(private device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory) {
+        super(device, animController, materialFactory);
     }
 
     public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, blockFetcher: BlockFetcher): Promise<Viewer.SceneGfx> {
@@ -234,7 +233,7 @@ class MapSceneRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        this.map.prepareToRender(device, renderInstManager, renderLists, modelCtx);
+        this.map.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
         renderInstManager.popTemplateRenderInst();
     }

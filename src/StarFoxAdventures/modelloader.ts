@@ -1,4 +1,5 @@
 import { vec3 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { AABB } from '../Geometry';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
@@ -9,7 +10,7 @@ import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';
 import { TextureFetcher } from './textures';
-import { arrayBufferSliceFromDataView, dataCopy, dataSubarray, LowBitReader, readUint16, readUint32, readVec3 } from './util';
+import { dataCopy, dataSubarray, LowBitReader, readUint16, readUint32, readVec3 } from './util';
 
 export enum ModelVersion {
     AncientMap,
@@ -26,6 +27,7 @@ interface DisplayListInfo {
     size: number;
     aabb?: AABB;
     specialBitAddress?: number; // Command bit address for fur/grass or water
+    sortLayer?: number;
 }
 
 function parseDisplayListInfo(data: DataView): DisplayListInfo {
@@ -40,7 +42,8 @@ function parseDisplayListInfo(data: DataView): DisplayListInfo {
             data.getInt16(0xe) / 8,
             data.getInt16(0x10) / 8
         ),
-        specialBitAddress: data.getUint16(0x14),
+        specialBitAddress: data.getUint16(0x14), // Points to fur and water shapes
+        sortLayer: data.getUint8(0x18), // Used in map blocks only
     }
 }
 
@@ -539,7 +542,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
             if (joint.boneNum !== i)
                 throw Error(`wtf? joint's bone number doesn't match its index!`);
 
-                model.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
+            model.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
             vec3.negate(model.invBindTranslations[i], joint.bindTranslation);
         }
     }
@@ -566,7 +569,6 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         for (let i = 0; i < dlInfoCount; i++) {
             const dlOffsetsOffs = data.getUint32(fields.dlOffsets);
             const dlSizesOffs = data.getUint32(fields.dlSizes);
-
             dlInfos.push({
                 offset: readUint32(data, dlOffsetsOffs, i),
                 size: readUint16(data, dlSizesOffs, i),
@@ -574,10 +576,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         }
     } else {
         const dlInfoOffset = data.getUint32(fields.dlInfoOffset);
-
         for (let i = 0; i < dlInfoCount; i++) {
-            offs = dlInfoOffset + i * fields.dlInfoSize;
-            const dlInfo = parseDisplayListInfo(dataSubarray(data, offs, fields.dlInfoSize));
+            const dlInfo = parseDisplayListInfo(dataSubarray(data, dlInfoOffset, fields.dlInfoSize, i));
             dlInfos.push(dlInfo);
         }
     }
@@ -607,12 +607,12 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     const getVtxArrays = (posBuffer: DataView, nrmBuffer?: DataView) => {
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+        vtxArrays[GX.Attr.POS] = { buffer: ArrayBufferSlice.fromView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
         if (fields.hasNormals)
-            vtxArrays[GX.Attr.NRM] = { buffer: arrayBufferSliceFromDataView(nrmBuffer!), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
-        vtxArrays[GX.Attr.CLR0] = { buffer: arrayBufferSliceFromDataView(clrBuffer), offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
+            vtxArrays[GX.Attr.NRM] = { buffer: ArrayBufferSlice.fromView(nrmBuffer!), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+        vtxArrays[GX.Attr.CLR0] = { buffer: ArrayBufferSlice.fromView(clrBuffer), offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
         for (let t = 0; t < 8; t++)
-            vtxArrays[GX.Attr.TEX0 + t] = { buffer: arrayBufferSliceFromDataView(texcoordBuffer), offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+            vtxArrays[GX.Attr.TEX0 + t] = { buffer: ArrayBufferSlice.fromView(texcoordBuffer), offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
         return vtxArrays;
     }
 
@@ -710,6 +710,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
         if (dlInfo.aabb !== undefined)
             newGeom.setBoundingBox(dlInfo.aabb);
+        if (dlInfo.sortLayer !== undefined)
+            newGeom.setSortLayer(dlInfo.sortLayer);
         return new Shape(newGeom, new ShapeMaterial(material), false);
     }
 
@@ -768,6 +770,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                         newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
                         if (dlInfo.aabb !== undefined)
                             newGeom.setBoundingBox(dlInfo.aabb);
+                        if (dlInfo.sortLayer !== undefined)
+                            newGeom.setSortLayer(dlInfo.sortLayer);
                         const newShape = new Shape(newGeom, new ShapeMaterial(curMaterial!), !!(curShader.flags & ShaderFlags.DevGeometry));
                         shapes.push(newShape);
 

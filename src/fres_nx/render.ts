@@ -62,7 +62,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
 
             const canvas = document.createElement('canvas');
-            surfaceToCanvas(canvas, rgbaTexture, 0);
+            surfaceToCanvas(canvas, rgbaTexture);
             canvases.push(canvas);
         }
 

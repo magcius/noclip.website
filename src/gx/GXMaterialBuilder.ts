@@ -59,6 +59,7 @@ function copyTevStage(tevStage: TevStage): TevStage {
         indTexStage: tevStage.indTexStage,
         indTexFormat: tevStage.indTexFormat,
         indTexBiasSel: tevStage.indTexBiasSel,
+        indTexAlphaSel: tevStage.indTexAlphaSel,
         indTexMatrix: tevStage.indTexMatrix,
         indTexWrapS: tevStage.indTexWrapS,
         indTexWrapT: tevStage.indTexWrapT,
@@ -279,6 +280,7 @@ export class GXMaterialBuilder {
         tevStage.indTexStage = indTexStage;
         tevStage.indTexFormat = format;
         tevStage.indTexBiasSel = biasSel;
+        tevStage.indTexAlphaSel = alphaSel;
         tevStage.indTexMatrix = matrixSel;
         tevStage.indTexWrapS = wrapS;
         tevStage.indTexWrapT = wrapT;

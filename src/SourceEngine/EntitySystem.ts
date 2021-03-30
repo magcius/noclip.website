@@ -1,6 +1,7 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { Cyan, Green, Magenta, Red } from '../Color';
+import { randomRange } from '../BanjoKazooie/particles';
+import { Cyan, Green, Magenta } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
@@ -103,6 +104,8 @@ export class BaseEntity {
 
         if (entity.startdisabled)
             this.enabled = !Number(entity.startdisabled);
+        else if (entity.start_disabled)
+            this.enabled = !Number(entity.start_disabled);
 
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
@@ -614,6 +617,9 @@ class logic_timer extends BaseEntity {
 
     private refiretime: number = 0;
     private nextFireTime: number = 0;
+    private useRandomTime: boolean = false;
+    private lowerRandomBound: number = 0;
+    private upperRandomBound: number = 0;
 
     private output_onTimer = new EntityOutput();
 
@@ -621,10 +627,15 @@ class logic_timer extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.output_onTimer.parse(this.entity.ontimer);
-        this.refiretime = Number(fallbackUndefined(this.entity.refiretime, '0'));
+        this.refiretime = Number(fallbackUndefined(this.entity.refiretime, '5'));
+        this.useRandomTime = fallbackUndefined(this.entity.userandomtime, '0') !== '0';
+        this.lowerRandomBound = Number(fallbackUndefined(this.entity.lowerrandombound, '0'));
+        this.upperRandomBound = Number(fallbackUndefined(this.entity.upperrandombound, '5'));
     }
 
     private reset(entitySystem: EntitySystem): void {
+        if (this.useRandomTime)
+            this.refiretime = randomRange(this.lowerRandomBound, this.upperRandomBound);
         this.nextFireTime = entitySystem.currentTime + this.refiretime;
     }
 
@@ -785,7 +796,7 @@ class material_modify_control extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.materialname = fallbackUndefined(this.entity.materialname, '').toLowerCase();
-        this.materialvar = new ParameterReference(this.entity.materialvar);
+        this.materialvar = new ParameterReference(this.entity.materialvar, null, false);
 
         this.registerInput('setmaterialvar', this.input_setmaterialvar.bind(this));
         this.registerInput('startfloatlerp', this.input_startfloatlerp.bind(this));
@@ -937,10 +948,21 @@ export class EntitySystem {
             this.entities[i].spawn(this);
     }
 
-    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, entity: BSPEntity): void {
-        const factory = this.classname.has(entity.classname) ? this.classname.get(entity.classname)! : BaseEntity;
-        const entityInstance = new factory(this, renderContext, renderer, entity);
-        this.entities.push(entityInstance);
+    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, bspEntity: BSPEntity): void {
+        const factory = this.classname.get(bspEntity.classname);
+
+        let entity: BaseEntity;
+        if (factory !== undefined) {
+            entity = new factory(this, renderContext, renderer, bspEntity);
+        } else {
+            entity = new BaseEntity(this, renderContext, renderer, bspEntity);
+
+            // Set up some defaults.
+            if (bspEntity.classname.startsWith('func_nav_'))
+                entity.visible = false;
+        }
+
+        this.entities.push(entity);
     }
 
     public createEntities(renderContext: SourceRenderContext, renderer: BSPRenderer, entities: BSPEntity[]): void {

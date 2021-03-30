@@ -8,23 +8,40 @@ import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from
 import { colorNewFromRGBA } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { computeViewMatrix } from '../Camera';
+import { ViewerRenderInput } from '../viewer';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
+import { Plane } from '../Geometry';
 
 import { StandardMaterial } from './materials';
 import { ModelInstance, ModelRenderContext } from './models';
-import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
+import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16, getCamPos } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
-import { Viewer, ViewerRenderInput } from '../viewer';
+import { getMatrixTranslation } from '../MathHelpers';
+
+const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
+const scratchVec0 = vec3.create();
+const scratchVec1 = vec3.create();
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
 
+export interface ObjectUpdateContext {
+    viewerInput: ViewerRenderInput;
+}
+
 interface SFAClass {
+    // Called when loading objects
     setup: (obj: ObjectInstance, data: DataView) => void;
+    // Called when adding objects to world, after all objects have been loaded
     mount?: (obj: ObjectInstance, world: World) => void;
+    // Called when removing objects from wprld
     unmount?: (obj: ObjectInstance, world: World) => void;
+    // Called on each frame
+    update?: (obj: ObjectInstance, updateCtx: ObjectUpdateContext) => void;
 }
 
 function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number) {
@@ -67,6 +84,148 @@ function templeClass(): SFAClass {
     };
 }
 
+const CommonObjectParams_SIZE = 0x14;
+interface CommonObjectParams {
+    objType: number;
+    ambienceValue: number;
+    layerValues: number[/* 2 */];
+    position: vec3;
+    id: number;
+}
+
+function parseCommonObjectParams(objParams: DataView): CommonObjectParams {
+    return {
+        objType: objParams.getUint16(0x0),
+        ambienceValue: (objParams.getUint8(0x5) >>> 3) & 0x3,
+        layerValues: [
+            objParams.getUint8(0x3),
+            objParams.getUint8(0x5),
+        ],
+        position: readVec3(objParams, 0x8),
+        id: objParams.getUint32(0x14),
+    };
+}
+
+namespace TriggerClass {
+    const OBJTYPE_TrigPln = 0x4c;
+
+    const Action_SIZE = 0x4;
+    interface Action {
+        flags: number;
+        type: number;
+        param: number;
+    }
+
+    function parseAction(data: DataView): Action {
+        return {
+            flags: data.getUint8(0),
+            type: data.getUint8(1),
+            param: data.getUint16(2),
+        };
+    }
+
+    const ACTION_TYPES: {[key: number]: string} = {
+        0x0: 'NoOp',
+        0x4: 'Sound',
+        0x8: 'HeatShimmer',
+        0xa: 'EnvFx',
+        0x27: 'LoadAssets',
+        0x28: 'UnloadAssets',
+    };
+
+    interface UserData {
+        actions: Action[];
+        prevPoint?: vec3;
+        triggerData?: TrigPlnData;
+    }
+
+    interface TrigPlnData {
+        plane: Plane;
+        worldToPlaneSpaceMatrix: mat4;
+        radius: number; // Note: Actually, the trigger is square-shaped.
+    }
+
+    function performActions(obj: ObjectInstance, leaving: boolean) {
+        const userData = obj.userData as UserData;
+        
+        for (let action of userData.actions) {
+            if (!!(action.flags & 0x2) === leaving) {
+                // console.log(`Action: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
+            }
+        }
+    }
+
+    function setup(obj: ObjectInstance, data: DataView) {
+        commonSetup(obj, data, 0x3d, 0x3e);
+
+        let actions = [];
+        for (let i = 0; i < 8; i++) {
+            const action = parseAction(dataSubarray(data, CommonObjectParams_SIZE, Action_SIZE, i));
+            actions.push(action);
+            // console.log(`Action #${i}: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
+        }
+
+        if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {
+            mat4FromSRT(scratchMtx0, 1, 1, 1, obj.yaw, obj.pitch, obj.roll, obj.position[0], obj.position[1], obj.position[2]);
+            vec3.set(scratchVec0, 1, 0, 0);
+            vec3.transformMat4(scratchVec0, scratchVec0, scratchMtx0);
+            vec3.set(scratchVec1, 0, 1, 0);
+            vec3.transformMat4(scratchVec1, scratchVec1, scratchMtx0);
+            mat4.invert(scratchMtx1, scratchMtx0);
+
+            const plane = new Plane();
+            plane.set(obj.position, scratchVec0, scratchVec1);
+            const worldToPlaneSpaceMatrix = mat4.clone(scratchMtx1);
+            const radius = 100 * obj.scale;
+
+            const triggerData: TrigPlnData = { plane, worldToPlaneSpaceMatrix, radius, };
+            const userData: UserData = { actions, triggerData, };
+            obj.userData = userData;
+        }
+    };
+
+    function update(obj: ObjectInstance, updateCtx: ObjectUpdateContext) {
+        if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {
+            const userData = obj.userData as UserData;
+            const triggerData = userData.triggerData as TrigPlnData;
+
+            const currPoint = scratchVec0;
+            // FIXME: The current point is not always the camera. It can also be the player character.
+            getCamPos(currPoint, updateCtx.viewerInput.camera);
+
+            if (userData.prevPoint === undefined) {
+                userData.prevPoint = vec3.clone(currPoint);
+            } else {
+                const prevPointInPlane = triggerData.plane.distance(userData.prevPoint[0], userData.prevPoint[1], userData.prevPoint[2]) >= 0;
+                const currPointInPlane = triggerData.plane.distance(currPoint[0], currPoint[1], currPoint[2]) >= 0;
+
+                if (currPointInPlane !== prevPointInPlane) {
+                    const intersection = scratchVec1;
+                    triggerData.plane.intersectLineSegment(intersection, userData.prevPoint, currPoint);
+                    vec3.transformMat4(intersection, intersection, triggerData.worldToPlaneSpaceMatrix);
+                    if (-triggerData.radius <= intersection[0] && intersection[0] <= triggerData.radius &&
+                        -triggerData.radius <= intersection[1] && intersection[1] <= triggerData.radius)
+                    {
+                        // if (currPointInPlane)
+                        //     console.log(`Entered plane 0x${obj.commonObjectParams.id.toString(16)}`);
+                        // else
+                        //     console.log(`Exited plane 0x${obj.commonObjectParams.id.toString(16)}`);
+
+                        performActions(obj, !currPointInPlane);
+                    }
+                }
+
+                vec3.copy(userData.prevPoint, currPoint);
+            }
+        }
+    }
+
+    export const CLASS: SFAClass = {
+        setup,
+        update,
+    };
+}
+
 const SFA_CLASSES: {[num: number]: SFAClass} = {
     [77]: commonClass(0x3d, 0x3e),
     [198]: commonClass(),
@@ -93,9 +252,14 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x18);
             obj.scale = 5 * data.getInt16(0x1a) / 32767;
-            if (obj.scale < 0.05) {
+            if (obj.scale < 0.05)
                 obj.scale = 0.05;
-            }
+        },
+    },
+    [232]: { // checkpoint4
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x29);
+            obj.scale = Math.max(data.getUint8(0x2a), 5) / 128;
         },
     },
     [233]: commonClass(),
@@ -116,17 +280,15 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x1f, 0x1c);
             const objScale = data.getUint8(0x1d);
-            if (objScale !== 0) {
+            if (objScale !== 0)
                 obj.scale *= objScale / 64;
-            }
         },
     },
     [250]: { // InvisibleHi
         setup: (obj: ObjectInstance, data: DataView) => {
             const scaleParam = data.getUint8(0x1d);
-            if (scaleParam !== 0) {
+            if (scaleParam !== 0)
                 obj.scale *= scaleParam / 64;
-            }
         },
     },
     [251]: commonClass(0x18),
@@ -163,11 +325,10 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x1f);
             const objScale = data.getUint8(0x21) / 64;
-            if (objScale === 0) {
+            if (objScale === 0)
                 obj.scale = 1.0;
-            } else {
+            else
                 obj.scale *= objScale;
-            }
         },
     },
     [273]: commonClass(0x1a, 0x19, 0x18),
@@ -188,13 +349,12 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             // FIXME: some curve modes have a roll parameter at 0x38
         },
     },
-    [294]: commonClass(0x3d, 0x3e),
+    [294]: TriggerClass.CLASS,
     [296]: {
         setup: (obj: ObjectInstance, data: DataView) => {
             let objScale = data.getUint8(0x1c);
-            if (objScale < 10) {
+            if (objScale < 10)
                 objScale = 10;
-            }
             objScale /= 64;
             obj.scale *= objScale;
             obj.yaw = angle16ToRads((data.getUint8(0x1d) & 0x3f) << 10)
@@ -204,9 +364,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [297]: { // CampFire
         setup: (obj: ObjectInstance, data: DataView) => {
             const scaleParam = data.getUint8(0x1a);
-            if (scaleParam !== 0) {
+            if (scaleParam !== 0)
                 obj.scale = 0.01 * scaleParam;
-            }
         },
     },
     [298]: { // WM_krazoast
@@ -230,18 +389,18 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [306]: commonClass(0x1c, 0x1b, 0x1a), // WaterFallSp
     [307]: commonClass(),
     [308]: { // texscroll2
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.world.mapInstance === null) {
+        ...commonClass(),
+        mount: (obj: ObjectInstance, world: World) => {
+            if (world.mapInstance === null)
                 throw Error(`No map available when spawning texscroll`);
-            }
 
-            const block = obj.world.mapInstance.getBlockAtPosition(obj.posInMap[0], obj.posInMap[2]);
+            const block = world.mapInstance.getBlockAtPosition(obj.posInMap[0], obj.posInMap[2]);
             if (block === null) {
-                console.warn(`couldn't find block for texscroll object`);
+                console.warn(`Couldn't find block for texscroll object`);
             } else {
-                const scrollableIndex = data.getInt16(0x18);
-                const speedX = data.getInt8(0x1e);
-                const speedY = data.getInt8(0x1f);
+                const scrollableIndex = obj.objParams.getInt16(0x18);
+                const speedX = obj.objParams.getInt8(0x1e);
+                const speedY = obj.objParams.getInt8(0x1f);
 
                 const tabValue = readUint32(obj.world.resColl.tablesTab, 0, 0xe);
                 const targetTexId = readUint32(obj.world.resColl.tablesBin, 0, tabValue + scrollableIndex) & 0x7fff;
@@ -252,13 +411,13 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
                 const materials = block.getMaterials();
                 for (let i = 0; i < materials.length; i++) {
                     if (materials[i] !== undefined) {
-                        const mat = materials[i]!;
+                        const mat = materials[i]! as StandardMaterial;
                         for (let j = 0; j < mat.shader.layers.length; j++) {
                             const layer = mat.shader.layers[j];
                             if (layer.texId === targetTexId) {
                                 fail = false;
                                 // Found the texture! Make it scroll now.
-                                console.log(`Making texId ${targetTexId} scroll!`);
+                                // console.log(`Making texId ${targetTexId} scroll!`);
                                 const theTexture = obj.world.resColl.texFetcher.getTexture(obj.world.device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
@@ -269,9 +428,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
                     }
                 }
 
-                if (fail) {
+                if (fail)
                     console.warn(`Couldn't find material texture for scrolling`);
-                }
             }
         },
     },
@@ -293,11 +451,10 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             const scaleParam = data.getInt8(0x19);
             let objScale;
-            if (scaleParam === 0) {
+            if (scaleParam === 0)
                 objScale = 90;
-            } else {
+            else
                 objScale = 4 * scaleParam;
-            }
             obj.scale *= objScale / 90;
         },
     },
@@ -305,11 +462,10 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x18);
             const modelParam = data.getInt16(0x1e);
-            if (modelParam === 0x55) {
+            if (modelParam === 0x55)
                 obj.setModelNum(2);
-            } else if (modelParam === 0x56) {
+            else if (modelParam === 0x56)
                 obj.setModelNum(1);
-            }
         },
     },
     [332]: commonClass(),
@@ -321,9 +477,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             obj.pitch = angle16ToRads(data.getInt16(0x1c));
             obj.roll = angle16ToRads(data.getInt16(0x1e));
             let objScale = data.getInt8(0x2d);
-            if (objScale === 0) {
+            if (objScale === 0)
                 objScale = 20;
-            }
             obj.scale *= objScale / 20;
         },
     },
@@ -340,9 +495,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x18);
             let objScale = data.getInt8(0x19) / 64;
-            if (objScale === 0) {
+            if (objScale === 0)
                 objScale = 1;
-            }
             obj.scale *= objScale;
         },
     },
@@ -455,9 +609,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [453]: commonClass(0x18),
     [454]: { // DIMCannon
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum !== 0x1d6) {
+            if (obj.objType.typeNum !== 0x1d6)
                 commonSetup(obj, data, 0x28);
-            }
         },
     },
     [455]: commonClass(0x18),
@@ -498,11 +651,10 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     },
     [500]: { // SB_Lamp
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum === 0x3e4) {
+            if (obj.objType.typeNum === 0x3e4)
                 commonSetup(obj, data, 0x1a);
-            } else {
+            else
                 commonSetup(obj, data, 0x18);
-            }
             obj.pitch = 0;
             obj.roll = 0;
         },
@@ -625,9 +777,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x18);
             const scaleParam = data.getInt16(0x1a);
-            if (scaleParam !== 0) {
+            if (scaleParam !== 0)
                 obj.scale = 10 * scaleParam / 32767.0;
-            }
         },
     },
     [650]: commonClass(0x18),
@@ -724,7 +875,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
                 kfactor / (refBrightness * refDistance * refDistance)
                 );
 
-            obj.instanceData = {
+            obj.userData = {
                 color: colorNewFromRGBA(
                     data.getUint8(0x1a) / 0xff,
                     data.getUint8(0x1b) / 0xff,
@@ -737,8 +888,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         mount: (obj: ObjectInstance, world: World) => {
             world.lights.add({
                 position: obj.getPosition(),
-                color: obj.instanceData.color,
-                distAtten: obj.instanceData.distAtten,
+                color: obj.userData.color,
+                distAtten: obj.userData.distAtten,
             })
         },
     },
@@ -781,9 +932,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [693]: commonClass(),
     [694]: { // CNThitObjec
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (data.getInt8(0x19) === 2) {
+            if (data.getInt8(0x19) === 2)
                 obj.yaw = angle16ToRads(data.getInt16(0x1c));
-            }
         },
     },
 };
@@ -810,7 +960,7 @@ export class ObjectType {
             offs++;
         }
 
-        console.log(`object ${this.name} scale ${this.scale}`);
+        // console.log(`object ${this.name} scale ${this.scale}`);
 
         const numModels = data.getUint8(0x55);
         const modelListOffs = data.getUint32(0x8);
@@ -842,16 +992,14 @@ export interface Light {
     position: vec3;
 }
 
-const scratchQuat0 = quat.create();
-const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
-const scratchVec0 = vec3.create();
-const scratchMtx0 = mat4.create();
+const OBJECT_RENDER_LAYER = 31; // FIXME: For some spawn flags, 7 is used.
 
 export class ObjectInstance {
     public modelInst: ModelInstance | null = null;
 
     public parent: ObjectInstance | null = null;
 
+    public commonObjectParams: CommonObjectParams;
     public position: vec3 = vec3.create();
     public yaw: number = 0;
     public pitch: number = 0;
@@ -864,8 +1012,6 @@ export class ObjectInstance {
     private modelAnimNum: number | null = null;
     private anim: Anim | null = null;
     private modanim: DataView;
-    private layerVals0x3: number;
-    private layerVals0x5: number;
 
     private ambienceNum: number = 0;
 
@@ -873,23 +1019,20 @@ export class ObjectInstance {
     // In the game, each object class is responsible for driving its own animations
     // at the appropriate speed.
 
-    public instanceData: any;
+    public userData: any;
 
-    constructor(public world: World, public objType: ObjectType, private objParams: DataView, public posInMap: vec3) {
+    constructor(public world: World, public objType: ObjectType, public objParams: DataView, public posInMap: vec3) {
         this.scale = objType.scale;
 
-        const ambienceParam = (objParams.getUint8(0x5) & 0x18) >>> 3;
-        if (ambienceParam !== 0) {
-            this.ambienceNum = ambienceParam - 1;
-            // console.log(`ambience for ${this.objType.name} set by objparams: ${this.ambienceNum}`);
-        } else {
+        this.commonObjectParams = parseCommonObjectParams(objParams);
+
+        if (this.commonObjectParams.ambienceValue !== 0)
+            this.ambienceNum = this.commonObjectParams.ambienceValue - 1;
+        else
             this.ambienceNum = objType.ambienceNum;
-            // console.log(`ambience for ${this.objType.name} set by objtype: ${this.ambienceNum}`);
-        }
+
+        vec3.copy(this.position, this.commonObjectParams.position);
         
-        this.layerVals0x3 = objParams.getUint8(0x3);
-        this.layerVals0x5 = objParams.getUint8(0x5);
-        this.position = readVec3(objParams, 0x8);
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
         
@@ -946,14 +1089,12 @@ export class ObjectInstance {
         return result;
     }
 
-    public getWorldSRT(): mat4 {
+    public getWorldSRT(out: mat4) {
         const localSrt = this.getLocalSRT();
         if (this.parent !== null) {
-            const result = mat4.create();
-            mat4.mul(result, this.parent.getSRTForChildren(), localSrt);
-            return result;
+            mat4.mul(out, this.parent.getSRTForChildren(), localSrt);
         } else {
-            return localSrt;
+            mat4.copy(out, localSrt);
         }
     }
 
@@ -1017,75 +1158,60 @@ export class ObjectInstance {
         if (layer === 0)
             return true;
         else if (layer < 9)
-            return ((this.layerVals0x3 >>> (layer - 1)) & 1) === 0;
+            return ((this.commonObjectParams.layerValues[0] >>> (layer - 1)) & 1) === 0;
         else
-            return ((this.layerVals0x5 >>> (16 - layer)) & 1) === 0;
+            return ((this.commonObjectParams.layerValues[1] >>> (16 - layer)) & 1) === 0;
     }
 
     private curKeyframe: Keyframe | undefined = undefined;
 
-    public update() {
-        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
-            // TODO: use time values from animation data?
-            const amap = this.modelInst.getAmap(this.modelAnimNum!);
-            const kfTime = (this.world.animController.animController.getTimeInFrames() * this.animSpeed) % this.anim.keyframes.length;
-
-            const kf0Num = Math.floor(kfTime);
-            let kf1Num = kf0Num + 1;
-            if (kf1Num >= this.anim.keyframes.length)
-                kf1Num = 0;
-
-            const kf0 = this.anim.keyframes[kf0Num];
-            const kf1 = this.anim.keyframes[kf1Num];
-            const ratio = kfTime - kf0Num;
-            this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
-            applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
-        }
+    public update(updateCtx: ObjectUpdateContext) {
+        const objClass = SFA_CLASSES[this.objType.objClass];
+        if (objClass !== undefined && objClass.update !== undefined)
+            objClass.update(this, updateCtx);
     }
 
     private isFrustumCulled(viewerInput: ViewerRenderInput): boolean {
-        return !viewerInput.camera.frustum.containsSphere(this.position, this.cullRadius * this.scale);
+        const worldMtx = scratchMtx0;
+        this.getWorldSRT(worldMtx);
+        const worldPos = scratchVec0;
+        getMatrixTranslation(worldPos, worldMtx);
+        return !viewerInput.camera.frustum.containsSphere(worldPos, this.cullRadius * this.scale);
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
-        // Update animations
-        // TODO: Call update elsewhere?
-        this.update();
-
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
         if (this.modelInst !== null && this.modelInst !== undefined && !this.isFrustumCulled(objectCtx.sceneCtx.viewerInput)) {
-            const mtx = this.getWorldSRT();
-            const viewMtx = scratchMtx0;
+            // Update animation
+            if (this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
+                // TODO: use time values from animation data?
+                const amap = this.modelInst.getAmap(this.modelAnimNum!);
+                const kfTime = (this.world.animController.animController.getTimeInFrames() * this.animSpeed) % this.anim.keyframes.length;
+
+                const kf0Num = Math.floor(kfTime);
+                let kf1Num = kf0Num + 1;
+                if (kf1Num >= this.anim.keyframes.length)
+                    kf1Num = 0;
+
+                const kf0 = this.anim.keyframes[kf0Num];
+                const kf1 = this.anim.keyframes[kf1Num];
+                const ratio = kfTime - kf0Num;
+                this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
+                applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
+            }
+
+            const worldMtx = scratchMtx0;
+            this.getWorldSRT(worldMtx);
+            const viewMtx = scratchMtx1;
             computeViewMatrix(viewMtx, objectCtx.sceneCtx.viewerInput.camera);
-            const viewPos = scratchVec0;
-            vec3.transformMat4(viewPos, this.position, viewMtx);
+            const worldPos = scratchVec0;
+            getMatrixTranslation(worldPos, worldMtx);
+            const viewPos = scratchVec1;
+            vec3.transformMat4(viewPos, worldPos, viewMtx);
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
-            this.modelInst.prepareToRender(device, renderInstManager, {
+            this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, renderLists, mtx, -viewPos[2]);
-
-            // Draw bones
-            const drawBones = false;
-            if (drawBones) {
-                const ctx = getDebugOverlayCanvas2D();
-                // TODO: Draw pyramid shapes instead of lines
-                for (let i = 1; i < this.modelInst.model.joints.length; i++) {
-                    const joint = this.modelInst.model.joints[i];
-                    const jointMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(i));
-                    mat4.mul(jointMtx, jointMtx, mtx);
-                    const jointPt = vec3.create();
-                    mat4.getTranslation(jointPt, jointMtx);
-                    if (joint.parent != 0xff) {
-                        const parentMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(joint.parent));
-                        mat4.mul(parentMtx, parentMtx, mtx);
-                        const parentPt = vec3.create();
-                        mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
-                    } else {
-                        drawWorldSpacePoint(ctx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
-                    }
-                }
-            }
+            }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
     }
 }
@@ -1118,9 +1244,8 @@ export class ObjectManager {
     }
 
     public getObjectType(typeNum: number, skipObjindex: boolean = false): ObjectType {
-        if (!this.useEarlyObjects && !skipObjindex) {
+        if (!this.useEarlyObjects && !skipObjindex)
             typeNum = readUint16(this.objindexBin!, 0, typeNum);
-        }
 
         if (this.objectTypes[typeNum] === undefined) {
             const offs = readUint32(this.objectsTab, 0, typeNum);

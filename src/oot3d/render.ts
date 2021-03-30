@@ -23,19 +23,11 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
-    const canvas = document.createElement("canvas");
-    canvas.width = textureLevel.width;
-    canvas.height = textureLevel.height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureLevel.pixels), textureLevel.width, textureLevel.height);
     canvas.title = textureLevel.name;
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-
-    imgData.data.set(textureLevel.pixels, 0);
-
-    ctx.putImageData(imgData, 0, 0);
     return canvas;
 }
 

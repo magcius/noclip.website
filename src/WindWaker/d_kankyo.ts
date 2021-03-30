@@ -591,10 +591,10 @@ function GxFogSet_Sub(fog: FogBlock, tevStr: { fogStartZ: number, fogEndZ: numbe
     colorCopy(fog.Color, fogColor);
 
     // Empirically decided.
-    const fogFarPlane = Number.isFinite(camera.frustum.far) ? -camera.frustum.far : 100000;
+    const fogFarPlane = Number.isFinite(camera.far) ? camera.far : 100000;
 
     const type = camera.isOrthographic ? FogType.ORTHO_LIN : FogType.PERSP_LIN;
-    fogBlockSet(fog, type, tevStr.fogStartZ, tevStr.fogEndZ, -camera.frustum.near, fogFarPlane);
+    fogBlockSet(fog, type, tevStr.fogStartZ, tevStr.fogEndZ, camera.near, fogFarPlane);
 }
 
 export function dKy_GxFog_set(envLight: dScnKy_env_light_c, fog: FogBlock, camera: Camera): void {

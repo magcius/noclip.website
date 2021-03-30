@@ -36,7 +36,7 @@ import * as Scenes_Elebits from './rres/Scenes_Elebits';
 import * as Scenes_KirbysReturnToDreamLand from './rres/Scenes_KirbysReturnToDreamLand';
 import * as Scenes_Klonoa from './rres/Scenes_Klonoa';
 import * as Scenes_MarioAndSonicAtThe2012OlympicGames from './rres/Scenes_MarioAndSonicAtTheOlympicGames2012';
-import * as Scenes_MarioKartWii from './rres/Scenes_MarioKartWii';
+import * as Scenes_MarioKartWii from './MarioKartWii/Scenes_MarioKartWii';
 import * as Scenes_Okami from './rres/Scenes_Okami';
 import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
 import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
@@ -60,7 +60,9 @@ import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
+import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
+import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
@@ -149,7 +151,9 @@ const sceneGroups = [
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_Fez.sceneGroup,
+    Scenes_CounterStrikeSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
+    Scenes_HalfLife2DM.sceneGroup,
     Scenes_TeamFortress2.sceneGroup,
     Scenes_Portal.sceneGroup,
     "Experimental",

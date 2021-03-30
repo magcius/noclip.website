@@ -910,6 +910,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             let indTexStage: GX.IndTexStageID = GX.IndTexStageID.STAGE0;
             let indTexFormat: GX.IndTexFormat = GX.IndTexFormat._8;
             let indTexBiasSel: GX.IndTexBiasSel = GX.IndTexBiasSel.NONE;
+            let indTexAlphaSel: GX.IndTexAlphaSel = GX.IndTexAlphaSel.OFF;
             let indTexMatrix: GX.IndTexMtxID = GX.IndTexMtxID.OFF;
             let indTexWrapS: GX.IndTexWrap = GX.IndTexWrap.OFF;
             let indTexWrapT: GX.IndTexWrap = GX.IndTexWrap.OFF;
@@ -926,7 +927,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 indTexWrapT = view.getUint8(indTexStageOffs + 0x05);
                 indTexAddPrev = !!view.getUint8(indTexStageOffs + 0x06);
                 indTexUseOrigLOD = !!view.getUint8(indTexStageOffs + 0x07);
-                // bumpAlpha
+                indTexAlphaSel = view.getUint8(indTexStageOffs + 0x08);
             }
 
             const tevStage: GX_Material.TevStage = {
@@ -939,6 +940,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 indTexStage,
                 indTexFormat,
                 indTexBiasSel,
+                indTexAlphaSel,
                 indTexMatrix,
                 indTexWrapS,
                 indTexWrapT,

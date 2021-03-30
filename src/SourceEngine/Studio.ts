@@ -1067,7 +1067,6 @@ class StudioModelMeshInstance {
     private skinningMode: SkinningMode;
 
     constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
-        this.bindMaterial(renderContext);
         this.skinningMode = this.calcSkinningMode();
     }
 

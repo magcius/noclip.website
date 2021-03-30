@@ -1,10 +1,10 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { mat4, vec3, quat, ReadonlyMat4 } from 'gl-matrix';
+import { mat4, vec3, quat, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
 
-export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
-    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
+export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {
+    return new DataView(data.buffer, data.byteOffset + byteOffset + index * stride, byteLength);
 }
 
 export function dataCopy(data: DataView, byteOffset: number = 0, byteLength?: number): DataView {
@@ -14,55 +14,36 @@ export function dataCopy(data: DataView, byteOffset: number = 0, byteLength?: nu
     return new DataView(arrayBuffer);
 }
 
-export function arrayBufferSliceFromDataView(data: DataView): ArrayBufferSlice {
-    return new ArrayBufferSlice(data.buffer, data.byteOffset, data.byteLength);
-}
-
-export function interpS16(n: number): number {
-    // Bitwise operators automatically convert numbers to 32-bit signed integers.
-    return ((n & 0xffff) << 16) >> 16;
-}
-
 export function signExtend(n: number, bits: number) {
     const shift = 32 - bits;
     return (n << shift) >> shift;
+}
+
+export function interpS16(n: number): number {
+    return signExtend(n, 16);
 }
 
 export function angle16ToRads(a: number): number {
     return interpS16(a) * Math.PI / 32768;
 }
 
-export function mat4SetRow(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
-    // mat4's are Float32Arrays in column-major order
-    mtx[row] = m0;
-    mtx[4 + row] = m1;
-    mtx[8 + row] = m2;
-    mtx[12 + row] = m3;
+export function radsToAngle16(rads: number): number {
+    return interpS16((rads * 32768 / Math.PI) & 0xffff);
 }
 
-export function mat4SetCol(mtx: mat4, col: number, m0: number, m1: number, m2: number, m3: number) {
+export function vecPitch(v: ReadonlyVec3): number {
+    return Math.atan2(v[1], Math.hypot(v[2], v[0]));
+}
+
+export function mat4SetRow(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
     // mat4's are Float32Arrays in column-major order
-    const i = 4 * col;
-    mtx[i] = m0;
-    mtx[i + 1] = m1;
-    mtx[i + 2] = m2;
-    mtx[i + 3] = m3;
+    mtx[row + 0x00] = m0;
+    mtx[row + 0x04] = m1;
+    mtx[row + 0x08] = m2;
+    mtx[row + 0x0C] = m3;
 }
 
 // Because I'm sick of column-major...
-export function mat4FromRowMajor(
-    m00: number, m01: number, m02: number, m03: number,
-    m10: number, m11: number, m12: number, m13: number,
-    m20: number, m21: number, m22: number, m23: number,
-    m30: number, m31: number, m32: number, m33: number) {
-    return mat4.fromValues(
-        m00, m10, m20, m30,
-        m01, m11, m21, m31,
-        m02, m12, m22, m32,
-        m03, m13, m23, m33,
-    )
-}
-
 export function mat4SetRowMajor(
     out: mat4,
     m00: number, m01: number, m02: number, m03: number,
@@ -77,7 +58,20 @@ export function mat4SetRowMajor(
     )
 }
 
-export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
+export function mat4FromRowMajor(
+    m00: number, m01: number, m02: number, m03: number,
+    m10: number, m11: number, m12: number, m13: number,
+    m20: number, m21: number, m22: number, m23: number,
+    m30: number, m31: number, m32: number, m33: number): mat4 {
+    return mat4SetRowMajor(mat4.create(),
+        m00, m01, m02, m03,
+        m10, m11, m12, m13,
+        m20, m21, m22, m23,
+        m30, m31, m32, m33,
+    );
+}
+
+export function mat4SetValue(mtx: mat4, row: number, col: number, m: number): void {
     mtx[4 * col + row] = m;
 }
 
@@ -103,7 +97,7 @@ export function mat4FromSRT(dst: mat4,
 }
 
 // Post-translate a matrix. Note that mat4.translate pre-translates a matrix.
-export function mat4PostTranslate(m: mat4, v: vec3) {
+export function mat4PostTranslate(m: mat4, v: ReadonlyVec3) {
     m[12] += v[0];
     m[13] += v[1];
     m[14] += v[2];
@@ -218,16 +212,6 @@ export class LowBitReader {
         this.buf = 0;
         this.drop(bitAddr & 0x7);
     }
-}
-
-export function createDownloadLink(data: DataView, filename: string, text?: string): HTMLElement {
-    const aEl = document.createElement('a');
-    aEl.href = URL.createObjectURL(new Blob([data], {type: 'application/octet-stream'}));
-    aEl.download = filename;
-    if (text !== undefined) {
-        aEl.append(text);
-    }
-    return aEl;
 }
 
 export function getCamPos(v: vec3, camera: Camera): void {

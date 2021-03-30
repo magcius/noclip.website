@@ -72,14 +72,14 @@ export class JKRArchive {
         return findFileInDir(dir, filename);
     }
 
-    public findFileData(path: string): ArrayBufferSlice | null {
+    public findFileData(path: string): NamedArrayBufferSlice | null {
         const file = this.findFile(path);
         if (file === null)
             return null;
         return file.buffer;
     }
 
-    public findFilenameData(name: string): ArrayBufferSlice | null {
+    public findFilenameData(name: string): NamedArrayBufferSlice | null {
         for (let i = 0; i < this.files.length; i++)
             if (this.files[i].name.toLowerCase() === name.toLowerCase())
                 return this.files[i].buffer;
