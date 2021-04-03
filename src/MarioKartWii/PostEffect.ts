@@ -490,7 +490,7 @@ in vec2 v_TexCoord;
 void main() {
     vec2 t_TexCoord = v_TexCoord;
 
-#if USE_IND_WARP_TEX
+#ifdef USE_IND_WARP_TEX
     // Handcoded indtex pipeline...
     vec2 t_WarpTexCoord = Mul(u_IndTexMat, vec4(v_TexCoord, 0.0, 1.0));
     vec2 t_IndTexOffs = ((255.0 * texture(u_Texture2, t_WarpTexCoord).ba) - 128.0) * u_IndTexIndScale;
