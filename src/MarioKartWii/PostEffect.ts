@@ -14,7 +14,6 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GXShaderLibrary } from "../gx/gx_material";
-import { transformVec3Mat4w1 } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect";
 import { TextureMapping } from "../TextureHolder";
@@ -494,8 +493,6 @@ void main() {
     // Handcoded indtex pipeline...
     vec2 t_WarpTexCoord = Mul(u_IndTexMat, vec4(v_TexCoord, 0.0, 1.0));
     vec2 t_IndTexOffs = ((255.0 * texture(u_Texture2, t_WarpTexCoord).ba) - 128.0) * u_IndTexIndScale;
-    // Original game uses this against a screen size of 304x228, so divide out to get the UV adjustment
-    t_IndTexOffs /= vec2(304.0, 228.0);
     t_TexCoord += t_IndTexOffs;
 #endif
 
@@ -595,9 +592,10 @@ export class EggDrawPathDOF {
             offs += fillMatrix4x2(d, offs, this.indTexMat);
 
             // Game hardcodes a shift of -6, and also scales relative to the screen size.
-            const indTexShift = 1/64;
-            const indTexIndScaleS = this.indTexIndScale[0] * indTexShift * (this.target2ColorDesc.width / mainColorTargetDesc.width);
-            const indTexIndScaleT = this.indTexIndScale[1] * indTexShift * (this.target2ColorDesc.height / mainColorTargetDesc.height);
+            // TODO(jstpierre): Figure out where this extra factor of 2 comes from. I can't find it...
+            const indTexShift = 1/64 * (1/2);
+            const indTexIndScaleS = (this.indTexIndScale[0] / 832.0) * indTexShift;
+            const indTexIndScaleT = (this.indTexIndScale[1] / 456.0) * indTexShift * -1;
             offs += fillVec4(d, offs, focusZClipSpace, indTexIndScaleS, indTexIndScaleT);
         }
 

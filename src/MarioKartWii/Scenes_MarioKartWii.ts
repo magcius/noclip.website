@@ -141,7 +141,7 @@ class MarioKartWiiRenderer {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         if (this.eggDOF !== null)
-            this.eggDOF.updateScroll(this.animationController.getTimeInFrames());
+            this.eggDOF.updateScroll(this.animationController.getTimeInFrames() * 2.0);
         if (this.eggLightManager !== null)
             for (let i = 0; i < this.baseObjects.length; i++)
                 this.baseObjects[i].bindLightSetting(this.eggLightManager.lightSetting);
