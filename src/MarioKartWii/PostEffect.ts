@@ -531,7 +531,7 @@ export class EggDrawPathDOF {
         this.focusRange = pdof.focusRange;
 
         this.indTexMat[0] = pdof.indTexScaleS;
-        this.indTexMat[5] = pdof.indTexScaleT;
+        this.indTexMat[5] = pdof.indTexScaleT * -1; // Y flip for good measure...
         vec2.set(this.indTexScrollSpeed, pdof.indTexTransSScroll, pdof.indTexTransTScroll);
         vec2.set(this.indTexIndScale, pdof.indTexIndScaleS, pdof.indTexIndScaleT);
 
@@ -559,7 +559,7 @@ export class EggDrawPathDOF {
 
     public updateScroll(t: number): void {
         this.indTexMat[12] = this.indTexScrollSpeed[0] * t;
-        this.indTexMat[13] = this.indTexScrollSpeed[1] * t;
+        this.indTexMat[13] = this.indTexScrollSpeed[1] * t * -1;
     }
 
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
