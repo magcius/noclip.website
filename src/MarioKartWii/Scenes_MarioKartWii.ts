@@ -21,7 +21,8 @@ import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderI
 import { CameraController } from '../Camera';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { EggBloom, parseBBLM } from './PostEffect';
+import { EggDrawPathBloom, EggDrawPathDOF, parseBBLM, parseBDOF } from './PostEffect';
+import { BTI, BTIData } from '../Common/JSYSTEM/JUTTexture';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -73,7 +74,8 @@ class MarioKartWiiRenderer {
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
 
-    public eggBloom: EggBloom | null = null;
+    public eggBloom: EggDrawPathBloom | null = null;
+    public eggDOF: EggDrawPathDOF | null = null;
     public eggLightManager: EggLightManager | null = null;
     public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
@@ -138,6 +140,8 @@ class MarioKartWiiRenderer {
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
+        if (this.eggDOF !== null)
+            this.eggDOF.updateScroll(this.animationController.getTimeInFrames());
         if (this.eggLightManager !== null)
             for (let i = 0; i < this.baseObjects.length; i++)
                 this.baseObjects[i].bindLightSetting(this.eggLightManager.lightSetting);
@@ -172,8 +176,12 @@ class MarioKartWiiRenderer {
         });
 
         if (this.enablePostProcessing) {
+            const mainResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+
+            if (this.eggDOF !== null)
+                this.eggDOF.pushPassesDOF(builder, renderInstManager, viewerInput.camera, mainColorTargetID, mainDepthTargetID, mainResolveTextureID);
             if (this.eggBloom !== null)
-                this.eggBloom.pushPassesBloom(builder, renderInstManager, mainColorTargetID);
+                this.eggBloom.pushPassesBloom(builder, renderInstManager, mainColorTargetID, mainResolveTextureID);
         }
 
         this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
@@ -863,6 +871,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const kmp = parseKMP(assertExists(arc.findFileData(`./course.kmp`)));
         console.log(arc, kmp);
         const renderer = new MarioKartWiiRenderer(context);
+        const cache = renderer.renderHelper.renderCache;
 
         const modelCache = renderer.modelCache;
 
@@ -891,8 +900,22 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const bblmData = arc.findFileData(`./posteffect/posteffect.bblm`);
         if (bblmData !== null) {
             const bblmRes = parseBBLM(bblmData);
-            const eggBloom = new EggBloom(renderer.renderHelper.device, renderer.renderHelper.renderCache, bblmRes);
+            const eggBloom = new EggDrawPathBloom(device, cache, bblmRes);
             renderer.eggBloom = eggBloom;
+        }
+
+        const bdofData = arc.findFileData(`./posteffect/posteffect.bdof`);
+        if (bdofData !== null) {
+            const bdofRes = parseBDOF(bdofData);
+            const eggDOF = new EggDrawPathDOF(device, cache, bdofRes);
+            renderer.eggDOF = eggDOF;
+
+            const warpTex = arc.findFileData(`./posteffect/posteffect.bti`);
+            if (warpTex !== null) {
+                const warpTexBTIData = new BTIData(device, cache, BTI.parse(warpTex, `posteffect.bti`).texture);
+                context.destroyablePool.push(warpTexBTIData);
+                warpTexBTIData.fillTextureMapping(eggDOF.getIndTextureMapping());
+            }
         }
 
         return renderer;

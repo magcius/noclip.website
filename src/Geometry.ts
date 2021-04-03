@@ -43,7 +43,7 @@ export class Plane {
         this.z = z / h;
         this.d = d / h;
     }
-    
+
     // Compute point where line segment intersects plane
     public intersectLineSegment(dst: vec3, p0: ReadonlyVec3, p1: ReadonlyVec3) {
         const p0_p1 = Plane.scratchVec3[0];
