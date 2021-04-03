@@ -23,6 +23,7 @@ import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFull
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { EggDrawPathBloom, EggDrawPathDOF, parseBBLM, parseBDOF } from './PostEffect';
 import { BTI, BTIData } from '../Common/JSYSTEM/JUTTexture';
+import { Endianness } from '../endian';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -79,6 +80,7 @@ class MarioKartWiiRenderer {
     public eggLightManager: EggLightManager | null = null;
     public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
+    public cameraAnim: HackyCameraAnim | null = null;
 
     constructor(context: SceneContext) {
         this.renderHelper = new GXRenderHelperGfx(context.device, context);
@@ -139,6 +141,11 @@ class MarioKartWiiRenderer {
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
+
+        if (this.cameraAnim !== null && viewerInput.deltaTime > 0) {
+            this.cameraAnim.update(viewerInput.camera.viewMatrix);
+            mat4.invert(viewerInput.camera.worldMatrix, viewerInput.camera.viewMatrix);
+        }
 
         if (this.eggDOF !== null)
             this.eggDOF.updateScroll(this.animationController.getTimeInFrames() * 2.0);
@@ -278,7 +285,7 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
     return { gobj };
 }
 
-const scaleFactor = 0.1;
+const scaleFactor = 1;
 const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleFactor]);
 
 const FIdx2Rad = MathConstants.TAU / 0xFF;
@@ -350,6 +357,39 @@ class Aurora extends SimpleObjectRenderer {
         }
 
         super.prepareToRender(device, renderInstManager, viewerInput);
+    }
+}
+
+class HackyCameraAnim {
+    public idx = 0;
+    public num = 0;
+
+    constructor(private data: Float32Array) {
+        this.num = data.length / 12;
+    }
+
+    private getViewMtx(dst: mat4, i: number): void {
+        const o = i*12;
+        dst[0] = this.data[o+0];
+        dst[4] = this.data[o+1];
+        dst[8] = this.data[o+2];
+        dst[12] = this.data[o+3];
+
+        dst[1] = this.data[o+4];
+        dst[5] = this.data[o+5];
+        dst[9] = this.data[o+6];
+        dst[13] = this.data[o+7];
+
+        dst[2] = this.data[o+8];
+        dst[6] = this.data[o+9];
+        dst[10] = this.data[o+10];
+        dst[14] = this.data[o+11];
+    }
+
+    public update(dst: mat4): void {
+        this.idx++;
+        this.idx %= this.num;
+        this.getViewMtx(dst, this.idx);
     }
 }
 
@@ -917,6 +957,11 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
                 warpTexBTIData.fillTextureMapping(eggDOF.getIndTextureMapping());
             }
         }
+
+        context.dataFetcher.fetchData(`mkwii/grumble_volcano.bin`).then((buffer) => {
+            const matn = buffer.createTypedArray(Float32Array, 0, undefined, Endianness.BIG_ENDIAN);
+            renderer.cameraAnim = new HackyCameraAnim(matn);
+        });
 
         return renderer;
     }
