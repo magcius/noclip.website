@@ -559,7 +559,7 @@ export class EggDrawPathDOF {
 
     public updateScroll(t: number): void {
         this.indTexMat[12] = this.indTexScrollSpeed[0] * t;
-        this.indTexMat[13] = this.indTexScrollSpeed[0] * t;
+        this.indTexMat[13] = this.indTexScrollSpeed[1] * t;
     }
 
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -594,9 +594,11 @@ export class EggDrawPathDOF {
 
             offs += fillMatrix4x2(d, offs, this.indTexMat);
 
-            // Game hardcodes a shift of -6
+            // Game hardcodes a shift of -6, and also scales relative to the screen size.
             const indTexShift = 1/64;
-            offs += fillVec4(d, offs, focusZClipSpace, indTexShift * this.indTexIndScale[0], indTexShift * this.indTexIndScale[1]);
+            const indTexIndScaleS = this.indTexIndScale[0] * indTexShift * (this.target2ColorDesc.width / mainColorTargetDesc.width);
+            const indTexIndScaleT = this.indTexIndScale[1] * indTexShift * (this.target2ColorDesc.height / mainColorTargetDesc.height);
+            offs += fillVec4(d, offs, focusZClipSpace, indTexIndScaleS, indTexIndScaleT);
         }
 
         renderInst.drawPrimitives(3);
