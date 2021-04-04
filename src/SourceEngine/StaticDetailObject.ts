@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists } from "../util";
+import { assert, readString } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
@@ -13,7 +13,7 @@ import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
 import BitMap from "../BitMap";
-import { BSPFile, computeAmbientCubeFromLeaf, newAmbientCube } from "./BSPFile";
+import { BSPFile } from "./BSPFile";
 import { AABB } from "../Geometry";
 
 //#region Detail Models
@@ -318,6 +318,7 @@ export class DetailPropLeafRenderer {
         mat4.identity(scratchMatrix);
         this.materialInstance.setOnRenderInst(renderContext, renderInst, scratchMatrix);
         renderInst.drawIndexes(indexOffs);
+        renderInst.debug = this;
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -450,16 +451,12 @@ export class StaticPropRenderer {
 
     private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
-        this.materialParams.ambientCube = newAmbientCube();
 
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
         const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
         this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
-
-        const leaf = assertExists(this.bsp.findLeafForPoint(lightingOrigin));
-        computeAmbientCubeFromLeaf(this.materialParams.ambientCube, leaf, lightingOrigin);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
         this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);
@@ -501,9 +498,6 @@ export class StaticPropRenderer {
 
         if (!visible)
             return;
-
-        if ((this as any).debug)
-            this.materialParams.lightCache!.debugDrawLights(renderContext.currentView);
 
         computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
 

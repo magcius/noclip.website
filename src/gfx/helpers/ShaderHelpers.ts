@@ -46,12 +46,8 @@ vec4 saturate(vec4 v) { return clamp(v, vec4(0.0), vec4(1.0)); }
 `;
 
 export const invlerp: string = `
-float invlerp(float v, float min, float max) { return (v - min) / (max - min); }
+float invlerp(float a, float b, float v) { return (v - a) / (b - a); }
 `;
-
-export const lerp: string = `
-float lerp(float v, float a, float b) { return mix(a, b, v); }
-`
 
 // Vertex shader for indexbuffer-less full-screen triangle
 export const fullscreenVS: string = `

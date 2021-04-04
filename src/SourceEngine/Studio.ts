@@ -1145,6 +1145,7 @@ class StudioModelMeshInstance {
                 const renderInst = renderInstManager.newRenderInst();
                 this.materialInstance.setOnRenderInstSkinningParams(renderInst, boneMatrix, stripData.hardwareBoneTable);
                 renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
+                renderInst.debug = this;
                 renderInstManager.submitRenderInst(renderInst);
             }
         }

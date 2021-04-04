@@ -6,16 +6,16 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } fr
 import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec4, vec3, ReadonlyMat4 } from "gl-matrix";
+import { mat4, vec4, vec3, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
-import { VTF, VTFFlags } from "./VTF";
+import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero } from "../MathHelpers";
-import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA, colorNewFromRGBA } from "../Color";
+import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf } from "./BSPFile";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ } from "../MathHelpers";
+import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale } from "../Color";
 import { AABB } from "../Geometry";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 //#region Base Classes
@@ -58,6 +58,7 @@ layout(std140) uniform ub_SceneParams {
 
 // Utilities.
 ${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
 
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
     return t_Pos.xy * t_SB.xy + t_SB.zw;
@@ -71,8 +72,21 @@ vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in
     return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 + t_MapNormal.zzz * t_Basis2;
 }
 
-float CalcFresnelTerm(float t_DotProduct) {
+float CalcFresnelTerm5(float t_DotProduct) {
     return pow(1.0 - max(0.0, t_DotProduct), 5.0);
+}
+
+float CalcFresnelTerm2(float t_DotProduct) {
+    return pow(1.0 - max(0.0, t_DotProduct), 2.0);
+}
+
+float CalcFresnelTerm2Ranges(float t_DotProduct, in vec3 t_Ranges) {
+    // CalcFresnelTermRanges uses exponent 2.0, rather than Shlicke's 5.0.
+    float t_Fresnel = CalcFresnelTerm2(t_DotProduct);
+    if (t_Fresnel <= 0.5)
+        return mix(t_Ranges.x, t_Ranges.y, invlerp(0.0, 0.5, t_Fresnel));
+    else
+        return mix(t_Ranges.y, t_Ranges.z, invlerp(0.5, 1.0, t_Fresnel));
 }
 
 vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
@@ -354,7 +368,6 @@ export class EntityMaterialParameters {
     public animationStartTime = 0;
     public textureFrameIndex = 0;
     public blendColor = colorNewCopy(White);
-    public ambientCube: AmbientCube | null = null;
     public lightCache: LightCache | null = null;
 }
 
@@ -651,7 +664,7 @@ layout(std140) uniform ub_ObjectParams {
     // TODO(jstpierre): Pack this more efficiently?
     vec4 u_AmbientCube[6];
 #endif
-#ifdef USE_DYNAMIC_VERTEX_LIGHTING
+#ifdef USE_DYNAMIC_LIGHTING
     // We support up to N lights.
     WorldLight u_WorldLights[${Material_Generic_Program.MaxDynamicWorldLights}];
 #endif
@@ -669,9 +682,18 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
+#ifdef USE_SELFILLUM
+    vec4 u_SelfIllumTint;
+#endif
+#ifdef USE_PHONG
+    vec4 u_FresnelRangeSpecBoost;
+#endif
     vec4 u_ModulationColor;
     vec4 u_Misc[1];
 };
+
+#define u_AlphaTestReference (u_Misc[0].x)
+#define u_DetailBlendFactor  (u_Misc[0].y)
 
 #if SKINNING_MODE != ${SkinningMode.None}
 layout(std140) uniform ub_SkinningParams {
@@ -682,9 +704,6 @@ layout(std140) uniform ub_SkinningParams {
 #endif
 };
 #endif
-
-#define u_AlphaTestReference (u_Misc[0].x)
-#define u_DetailBlendFactor  (u_Misc[0].y)
 
 // Base, Detail
 varying vec4 v_TexCoord0;
@@ -710,8 +729,8 @@ varying vec3 v_TangentSpaceBasis2;
 varying float v_LightmapOffset;
 #endif
 
-// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2
-uniform sampler2D u_Texture[6];
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum
+uniform sampler2D u_Texture[8];
 // Envmap
 uniform samplerCube u_TextureCube[1];
 
@@ -740,91 +759,6 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
         t_Weight.y * u_AmbientCube[t_Negative.y ? 3 : 2].rgb +
         t_Weight.z * u_AmbientCube[t_Negative.z ? 5 : 4].rgb
     );
-}
-#endif
-
-#ifdef USE_DYNAMIC_VERTEX_LIGHTING
-float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
-    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
-}
-
-float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
-    int t_LightType = int(t_WorldLight.Position.w);
-
-    float t_Attenuation = 1.0;
-    bool t_UseDistanceAttenuation = (t_LightType == ${ShaderWorldLightType.Point} || t_LightType == ${ShaderWorldLightType.Spot});
-    bool t_UseAngleAttenuation = (t_LightType == ${ShaderWorldLightType.Spot});
-
-    if (t_UseDistanceAttenuation) {
-        float t_Distance = distance(t_WorldLight.Position.xyz, t_PositionWorld);
-        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.DistAttenuation.xyz, t_Distance);
-
-        if (t_UseAngleAttenuation) {
-            // Unpack spot parameters
-            float t_Exponent = t_WorldLight.Color.w;
-            float t_Stopdot = t_WorldLight.DistAttenuation.w;
-            float t_Stopdot2 = t_WorldLight.Direction.w;
-
-            vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
-            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
-
-            // invlerp
-            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
-            t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
-
-            t_Attenuation *= t_AngleAttenuation;
-        }
-    }
-
-    return t_Attenuation;
-}
-
-float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
-    int t_LightType = int(t_WorldLight.Position.w);
-
-    // Calculate incoming light direction.
-    vec3 t_LightDirectionWorld;
-
-    if (t_LightType == ${ShaderWorldLightType.Directional}) {
-        // Directionals just have incoming light direction stored in Position field.
-        t_LightDirectionWorld = -t_WorldLight.Direction.xyz;
-    } else {
-        t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
-    }
-
-    float t_NoL = dot(t_NormalWorld, t_LightDirectionWorld);
-    if (t_HalfLambert) {
-        // Valve's Half-Lambert / Wrapped lighting term.
-        t_NoL = t_NoL * 0.5 + 0.5;
-        t_NoL = t_NoL * t_NoL;
-        return t_NoL;
-    } else {
-        return max(0.0, t_NoL);
-    }
-}
-
-vec3 WorldLightCalc(in vec3 t_PositionWorld, in vec3 t_NormalWorld, in WorldLight t_WorldLight) {
-    int t_LightType = int(t_WorldLight.Position.w);
-
-    if (t_LightType == ${ShaderWorldLightType.None})
-        return vec3(0.0);
-
-#ifdef USE_HALF_LAMBERT
-    const bool t_HalfLambert = true;
-#else
-    const bool t_HalfLambert = false;
-#endif
-
-    float t_Attenuation = WorldLightCalcAttenuation(t_WorldLight, t_PositionWorld);
-    float t_Visibility = WorldLightCalcVisibility(t_WorldLight, t_PositionWorld, t_NormalWorld, t_HalfLambert);
-    return t_Visibility * t_Attenuation * t_WorldLight.Color.rgb;
-}
-
-vec3 WorldLightCalcAll(in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
-    vec3 t_FinalWorldLight = vec3(0.0);
-    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
-        t_FinalWorldLight += WorldLightCalc(t_PositionWorld, t_NormalWorld, u_WorldLights[i]);
-    return t_FinalWorldLight;
 }
 #endif
 
@@ -869,10 +803,6 @@ void mainVS() {
 // Mutually exclusive with above.
 #ifdef USE_AMBIENT_CUBE
     v_Color.rgb = AmbientLight(t_NormalWorld);
-#endif
-
-#ifdef USE_DYNAMIC_VERTEX_LIGHTING
-    v_Color.rgb += WorldLightCalcAll(t_PositionWorld, t_NormalWorld);
 #endif
 
 // TODO(jstpierre): Move ModulationColor to PS, support $blendtintbybasealpha and $blendtintcoloroverbase
@@ -964,12 +894,159 @@ const vec3 g_RNBasis0 = vec3( 0.8660254037844386,  0.0000000000000000, 0.5773502
 const vec3 g_RNBasis1 = vec3(-0.4082482904638631,  0.7071067811865475, 0.5773502691896258); // -sqrt1/6, sqrt1/2,  sqrt1/3
 const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502691896258); // -sqrt1/6, -sqrt1/2, sqrt1/3
 
+#ifdef USE_DYNAMIC_LIGHTING
+
+float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
+    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
+}
+
+float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    float t_Attenuation = 1.0;
+    bool t_UseDistanceAttenuation = (t_LightType == ${ShaderWorldLightType.Point} || t_LightType == ${ShaderWorldLightType.Spot});
+    bool t_UseAngleAttenuation = (t_LightType == ${ShaderWorldLightType.Spot});
+
+    if (t_UseDistanceAttenuation) {
+        float t_Distance = distance(t_WorldLight.Position.xyz, t_PositionWorld);
+        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.DistAttenuation.xyz, t_Distance);
+
+        if (t_UseAngleAttenuation) {
+            // Unpack spot parameters
+            float t_Exponent = t_WorldLight.Color.w;
+            float t_Stopdot = t_WorldLight.DistAttenuation.w;
+            float t_Stopdot2 = t_WorldLight.Direction.w;
+
+            vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
+            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
+
+            // invlerp
+            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
+            t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
+
+            t_Attenuation *= t_AngleAttenuation;
+        }
+    }
+
+    return t_Attenuation;
+}
+
+vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    if (t_LightType == ${ShaderWorldLightType.Directional}) {
+        // Directionals just have incoming light direction stored in Direction field.
+        return -t_WorldLight.Direction.xyz;
+    } else {
+        return normalize(t_WorldLight.Position.xyz - t_PositionWorld);
+    }
+}
+
+float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
+    vec3 t_LightDirectionWorld = WorldLightCalcDirection(t_WorldLight, t_PositionWorld);
+
+    float t_NoL = dot(t_NormalWorld, t_LightDirectionWorld);
+    if (t_HalfLambert) {
+        // Valve's Half-Lambert / Wrapped lighting term.
+        t_NoL = t_NoL * 0.5 + 0.5;
+        t_NoL = t_NoL * t_NoL;
+        return t_NoL;
+    } else {
+        return max(0.0, t_NoL);
+    }
+}
+
+vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert, in WorldLight t_WorldLight) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    if (t_LightType == ${ShaderWorldLightType.None})
+        return vec3(0.0);
+
+    float t_Attenuation = WorldLightCalcAttenuation(t_WorldLight, t_PositionWorld);
+    float t_Visibility = WorldLightCalcVisibility(t_WorldLight, t_PositionWorld, t_NormalWorld, t_HalfLambert);
+    return t_Visibility * t_Attenuation * t_WorldLight.Color.rgb;
+}
+
+vec3 WorldLightCalcAllDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
+    vec3 t_FinalLight = vec3(0.0);
+    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+        t_FinalLight += WorldLightCalcDiffuse(t_PositionWorld, t_NormalWorld, t_HalfLambert, u_WorldLights[i]);
+    return t_FinalLight;
+}
+
+struct SpecularLightResult {
+    vec3 SpecularLight;
+    vec3 RimLight;
+};
+
+SpecularLightResult SpecularLightResult_New() {
+    SpecularLightResult t_Result;
+    t_Result.SpecularLight = vec3(0, 0, 0);
+    t_Result.RimLight = vec3(0, 0, 0);
+    return t_Result;
+}
+
+void SpecularLightResult_Sum(inout SpecularLightResult t_Dst, in SpecularLightResult t_Src) {
+    t_Dst.SpecularLight += t_Src.SpecularLight;
+    t_Dst.RimLight += t_Src.RimLight;
+}
+
+struct SpecularLightInput {
+    vec3 PositionWorld;
+    vec3 NormalWorld;
+    vec3 WorldDirectionToEye;
+    float Fresnel;
+    float SpecularExponent;
+    float RimExponent;
+};
+
+SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in WorldLight t_WorldLight) {
+    vec3 t_Reflect = CalcReflection(t_Input.NormalWorld, t_Input.WorldDirectionToEye);
+    vec3 t_LightDirectionWorld = WorldLightCalcDirection(t_WorldLight, t_Input.PositionWorld);
+
+    const bool t_HalfLambert = false;
+    float t_NoL = saturate(dot(t_Input.NormalWorld, t_LightDirectionWorld));
+    float t_RoL = saturate(dot(t_Reflect, t_LightDirectionWorld));
+
+    SpecularLightResult t_Result = SpecularLightResult_New();
+
+    float t_Attenuation = WorldLightCalcAttenuation(t_WorldLight, t_Input.PositionWorld);
+
+    t_Result.SpecularLight += vec3(pow(t_RoL, t_Input.SpecularExponent));
+    // TODO(jstpierre): Specular Warp
+    t_Result.SpecularLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation;
+
+    t_Result.RimLight += vec3(pow(t_RoL, t_Input.RimExponent));
+    t_Result.RimLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation;
+
+    return t_Result;
+}
+
+SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
+    SpecularLightResult t_FinalLight = SpecularLightResult_New();
+    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+        SpecularLightResult_Sum(t_FinalLight, WorldLightCalcSpecular(t_Input, u_WorldLights[i]));
+    return t_FinalLight;
+}
+
+#endif
+
+// #define DEBUG_FULLBRIGHT 1
+
+vec4 DebugColorTexture(vec4 t_TextureSample) {
+#ifdef DEBUG_FULLBRIGHT
+    return vec4(0.5, 0.5, 0.5, t_TextureSample.a);
+#else
+    return t_TextureSample;
+#endif
+}
+
 void mainPS() {
-    vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
+    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)));
 
     vec4 t_Albedo, t_BlendedAlpha;
 #ifdef USE_DETAIL
-    vec4 t_DetailTexture = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw));
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
     t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #else
     t_Albedo = t_BaseTexture;
@@ -977,7 +1054,7 @@ void mainPS() {
 
 #ifdef USE_BASETEXTURE2
     // Blend in BaseTexture2 using blend factor.
-    vec4 t_BaseTexture2 = texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy);
+    vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy));
     t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
 #endif
 
@@ -1050,44 +1127,106 @@ void mainPS() {
     t_DiffuseLighting = vec3(1.0);
 #endif
 
+#ifdef USE_DYNAMIC_LIGHTING
+
+    bool t_HalfLambert = false;
+#ifdef USE_HALF_LAMBERT
+    t_HalfLambert = true;
+#endif
+
+#ifdef USE_PHONG
+    // Skin shader forces half-lambert on.
+    t_HalfLambert = true;
+#endif
+
+    t_DiffuseLighting.rgb += WorldLightCalcAllDiffuse(v_PositionWorld.xyz, t_NormalWorld.xyz, t_HalfLambert);
+#endif
+
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
 
 #ifdef USE_DETAIL
     t_FinalDiffuse = TextureCombinePostLighting(t_FinalDiffuse, t_DetailTexture.rgb, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
+#ifdef USE_SELFILLUM
+    vec3 t_SelfIllumMask;
+
+#ifdef USE_SELFILLUM_ENVMAPMASK_ALPHA
+    // TODO(jstpierre): Implement this
+    t_SelfIllumMask = vec3(0);
+#else
+#ifdef USE_SELFILLUM_MASK
+    t_SelfIllumMask = texture(SAMPLER_2D(u_Texture[7], v_TexCoord1.xy)).rgb;
+#else
+    t_SelfIllumMask = t_BaseTexture.aaa;
+#endif
+#endif
+
+    t_FinalDiffuse.rgb = mix(t_FinalDiffuse.rgb, u_SelfIllumTint.rgb * t_Albedo.rgb, t_SelfIllumMask.rgb);
+#endif
+
     t_FinalColor.rgb += t_FinalDiffuse;
 
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
+
+    vec3 t_SpecularLighting = vec3(0.0);
+
+    float t_Fresnel;
+    float t_FresnelDot = dot(t_NormalWorld, t_WorldDirectionToEye);
+#ifdef USE_PHONG
+    t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecBoost.xyz);
+#else
+    t_Fresnel = CalcFresnelTerm5(t_FresnelDot);
+#endif
+
 #ifdef USE_ENVMAP
-    vec3 t_SpecularFactor = vec3(u_EnvmapTint);
+    vec3 t_EnvmapFactor = u_EnvmapTint.rgb;
 
 #ifdef USE_ENVMAP_MASK
-    t_SpecularFactor *= texture(SAMPLER_2D(u_Texture[4], v_TexCoord1.zw)).rgb;
+    t_EnvmapFactor *= texture(SAMPLER_2D(u_Texture[4], v_TexCoord1.zw)).rgb;
 #endif
 
 #ifdef USE_NORMALMAP_ALPHA_ENVMAP_MASK
-    t_SpecularFactor *= t_BumpmapSample.a;
+    t_EnvmapFactor *= t_BumpmapSample.a;
 #endif
 #ifdef USE_BASE_ALPHA_ENVMAP_MASK
-    t_SpecularFactor *= 1.0 - t_BaseTexture.a;
+    t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
 #endif
 
-    vec3 t_SpecularLighting = vec3(0.0);
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
-    t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
-    t_SpecularLighting *= t_SpecularFactor;
 
-    t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
-    t_SpecularLighting = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_SpecularLighting)), t_SpecularLighting, u_EnvmapContrastSaturationFresnel.y);
+    vec3 t_EnvmapColor = texture(u_TextureCube[0], t_Reflection).rgb;
+    t_EnvmapColor *= t_EnvmapFactor;
 
-    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-    float t_Fresnel = CalcFresnelTerm(dot(t_NormalWorld, t_WorldDirectionToEye));
-    t_Fresnel = mix(u_EnvmapContrastSaturationFresnel.z, 1.0, t_Fresnel);
-    t_SpecularLighting *= t_Fresnel;
+    // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
+
+    t_EnvmapColor = mix(t_EnvmapColor, t_EnvmapColor*t_EnvmapColor, u_EnvmapContrastSaturationFresnel.x);
+    t_EnvmapColor = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_EnvmapColor)), t_EnvmapColor, u_EnvmapContrastSaturationFresnel.y);
+    t_EnvmapColor *= mix(t_Fresnel, 1.0, u_EnvmapContrastSaturationFresnel.z);
+
+    t_SpecularLighting.rgb += t_EnvmapColor.rgb;
+#endif
+
+#ifdef USE_PHONG
+#ifdef USE_DYNAMIC_LIGHTING
+    SpecularLightInput t_SpecularLightInput;
+    t_SpecularLightInput.PositionWorld = v_PositionWorld.xyz;
+    t_SpecularLightInput.NormalWorld = t_NormalWorld;
+    t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
+    t_SpecularLightInput.Fresnel = t_Fresnel;
+    t_SpecularLightInput.SpecularExponent = 1.0; // TODO(jstpierre): SpecularExponent map
+    t_SpecularLightInput.RimExponent = 1.0;
+
+    float t_SpecularMask = 1.0; // TODO(jstpierre): SpecularMask
+    SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
+
+    // TODO(jstpierre): Fix dynamic specular light.
+    // t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight * t_SpecularMask * u_FresnelRangeSpecBoost.w;
+#endif
+#endif
 
     t_FinalColor.rgb += t_SpecularLighting.rgb;
-#endif
 
 #ifndef USE_BASE_ALPHA_ENVMAP_MASK
     t_FinalColor.a = t_BaseTexture.a;
@@ -1100,7 +1239,7 @@ void mainPS() {
 }
 
 const enum ShaderType {
-    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Unknown,
+    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Unknown,
 };
 
 class Material_Generic extends BaseMaterial {
@@ -1109,8 +1248,10 @@ class Material_Generic extends BaseMaterial {
     private wantsEnvmapMask = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
+    private wantsSelfIllum = false;
+    private wantsPhong = false;
     private wantsStaticVertexLighting = false;
-    private wantsDynamicVertexLighting = false;
+    private wantsDynamicLighting = false;
     private wantsAmbientCube = false;
     private skinningMode = SkinningMode.None;
     private shaderType: ShaderType;
@@ -1119,7 +1260,7 @@ class Material_Generic extends BaseMaterial {
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
-    private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
+    private textureMapping: TextureMapping[] = nArray(9, () => new TextureMapping());
 
     public setSkinningMode(skinningMode: SkinningMode): void {
         this.skinningMode = skinningMode;
@@ -1128,15 +1269,23 @@ class Material_Generic extends BaseMaterial {
     }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
+        let changed = false;
+
         if (this.shaderType === ShaderType.VertexLitGeneric) {
             this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
-            this.wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            this.wantsDynamicLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
-            this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting);
-            this.program.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', this.wantsDynamicVertexLighting);
-            this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube);
-            this.gfxProgram = null;
+            changed = true;
+        } else if (this.shaderType === ShaderType.Skin) {
+            this.wantsStaticVertexLighting = false;
+            this.wantsDynamicLighting = true;
+            this.wantsAmbientCube = true;
         }
+
+        this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting);
+        this.program.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting);
+        this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube);
+        this.gfxProgram = null;
     }
 
     protected initParameters(): void {
@@ -1169,10 +1318,17 @@ class Material_Generic extends BaseMaterial {
         p['$ssbump']                       = new ParameterBoolean(false, false);
         p['$halflambert']                  = new ParameterBoolean(false, false);
         p['$selfillumtint']                = new ParameterColor(1, 1, 1);
+        p['$selfillummask']                = new ParameterTexture(false, false);
 
         // World Vertex Transition
         p['$basetexture2']                 = new ParameterTexture(true);
         p['$frame2']                       = new ParameterNumber(0.0);
+
+        // Phong (Skin)
+        p['$phong']                        = new ParameterBoolean(false, false);
+        p['$phongboost']                   = new ParameterNumber(1.0);
+        p['$phongexponenttexture']         = new ParameterTexture(false);
+        p['$phongfresnelranges']           = new ParameterVector(3);
     }
 
     protected setupParametersFromVMT(): void {
@@ -1208,9 +1364,16 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = ShaderType.WorldVertexTransition;
         else
             this.shaderType = ShaderType.Unknown;
-
+    
         this.program = new Material_Generic_Program();
         this.setSkinningMode(SkinningMode.None);
+
+        if (this.shaderType === ShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
+            // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
+            this.shaderType = ShaderType.Skin;
+            this.wantsPhong = true;
+            this.program.setDefineBool('USE_PHONG', true);
+        }
 
         if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
@@ -1237,6 +1400,15 @@ class Material_Generic extends BaseMaterial {
         if (this.paramGetVTF('$envmap') !== null) {
             this.wantsEnvmap = true;
             this.program.setDefineBool('USE_ENVMAP', true);
+        }
+
+        if (this.paramGetBoolean('$selfillum')) {
+            this.wantsSelfIllum = true;
+            this.program.setDefineBool('USE_SELFILLUM', true);
+
+            if (this.paramGetVTF('$selfillummask')) {
+                this.program.setDefineBool('USE_SELFILLUM_MASK', true);
+            }
         }
 
         if (this.shaderType === ShaderType.LightmappedGeneric || this.shaderType === ShaderType.WorldVertexTransition) {
@@ -1305,7 +1477,9 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$envmapmask').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapmaskframe'));
         if (this.wantsBaseTexture2)
             this.paramGetTexture('$basetexture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
-        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[6], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$phongexponenttexture').fillTextureMapping(this.textureMapping[6], 0);
+        this.paramGetTexture('$selfillummask').fillTextureMapping(this.textureMapping[7], 0);
+        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[8], this.paramGetInt('$envmapframe'));
     }
 
     private fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
@@ -1328,17 +1502,16 @@ class Material_Generic extends BaseMaterial {
         }
         this.recacheProgram(renderContext.device, renderContext.cache);
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 132);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += this.fillModelMatrix(d, offs, modelMatrix);
 
         if (this.wantsAmbientCube) {
-            const ambientCube = assertExists(assertExists(this.entityParams).ambientCube);
-            for (let i = 0; i < 6; i++)
-                offs += fillColor(d, offs, ambientCube[i]);
+            const lightCache = assertExists(assertExists(this.entityParams).lightCache);
+            offs += lightCache.fillAmbientCube(d, offs);
         }
 
-        if (this.wantsDynamicVertexLighting) {
+        if (this.wantsDynamicLighting) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
             offs += lightCache.fillWorldLights(d, offs);
         }
@@ -1362,6 +1535,16 @@ class Material_Generic extends BaseMaterial {
             const envmapSaturation = this.paramGetNumber('$envmapsaturation');
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
+        }
+
+        if (this.wantsSelfIllum) {
+            offs += this.paramFillColor(d, offs, '$selfillumtint');
+        }
+
+        if (this.wantsPhong) {
+            const fresnelRanges = this.paramGetVector('$phongfresnelranges');
+            const r0 = fresnelRanges.get(0), r1 = fresnelRanges.get(1), r2 = fresnelRanges.get(2);
+            offs += fillVec4(d, offs, r0, r1, r2, this.paramGetNumber('$phongboost'));
         }
 
         // Compute modulation color.
@@ -1607,7 +1790,7 @@ void mainPS() {
 
 #ifdef USE_FRESNEL
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-    float t_Fresnel = CalcFresnelTerm(dot(t_NormalWorld, t_WorldDirectionToEye));
+    float t_Fresnel = CalcFresnelTerm2(dot(t_NormalWorld, t_WorldDirectionToEye));
 #else
     float t_Fresnel = u_ReflectTint.a;
 #endif
@@ -1994,7 +2177,7 @@ export class MaterialCache {
 //#endregion
 
 //#region Runtime Lighting / LightCache
-function findEnvCubemapTexture(bspfile: BSPFile, pos: vec3): Cubemap {
+function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap {
     let bestDistance = Infinity;
     let bestIndex = -1;
 
@@ -2010,15 +2193,15 @@ function findEnvCubemapTexture(bspfile: BSPFile, pos: vec3): Cubemap {
     return bspfile.cubemaps[bestIndex];
 }
 
-function worldLightInsideRadius(light: WorldLight, delta: vec3): boolean {
+function worldLightInsideRadius(light: WorldLight, delta: ReadonlyVec3): boolean {
     return light.radius <= 0.0 || vec3.squaredLength(delta) <= light.radius**2;
 }
 
-function worldLightDistanceFalloff(light: WorldLight, delta: vec3): number {
+function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): number {
     if (light.type === WorldLightType.Surface) {
         if (!worldLightInsideRadius(light, delta))
             return 0.0;
-        return Math.max(0.0, 1.0 / vec3.squaredLength(delta));
+        return 1.0 / Math.max(1.0, vec3.squaredLength(delta));
     } else if (light.type === WorldLightType.Point || light.type === WorldLightType.Spotlight) {
         if (!worldLightInsideRadius(light, delta))
             return 0.0;
@@ -2105,32 +2288,100 @@ class LightCacheWorldLight {
     }
 }
 
+function newAmbientCube(): AmbientCube {
+    return nArray(6, () => colorNewCopy(TransparentBlack));
+}
+
+function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: ReadonlyVec3): void {
+    // XXX(jstpierre): This breaks on d2_coast_01, where there's a prop located outside
+    // the leaf it's in due to floating point rounding error.
+    // assert(leaf.bbox.containsPoint(pos));
+
+    if (leaf.ambientLightSamples.length === 0) {
+        // TODO(jstpierre): Figure out what to do in this scenario
+    } else if (leaf.ambientLightSamples.length === 1) {
+        // Fast path.
+        const sample = leaf.ambientLightSamples[0];
+        for (let p = 0; p < 6; p++)
+            colorCopy(dst[p], sample.ambientCube[p]);
+    } else if (leaf.ambientLightSamples.length > 1) {
+        // Slow path.
+        for (let p = 0; p < 6; p++)
+            colorCopy(dst[p], TransparentBlack);
+
+        let totalWeight = 0.0;
+
+        for (let i = 0; i < leaf.ambientLightSamples.length; i++) {
+            const sample = leaf.ambientLightSamples[i];
+
+            // Compute the weight for each sample, using inverse square falloff.
+            const dist2 = vec3.squaredDistance(sample.pos, pos);
+            const weight = 1.0 / (dist2 + 1.0);
+            totalWeight += weight;
+
+            for (let p = 0; p < 6; p++)
+                colorScaleAndAdd(dst[p], dst[p], sample.ambientCube[p], weight);
+        }
+
+        for (let p = 0; p < 6; p++)
+            colorScale(dst[p], dst[p], 1.0 / totalWeight);
+    }
+}
+
+const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ ] as const;
 export class LightCache {
     private leaf: number = -1;
     public envCubemap: Cubemap;
-    private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
+    public debug: boolean = false;
 
-    constructor(bspfile: BSPFile, private pos: vec3, bbox: AABB) {
+    private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
+    private ambientCube: AmbientCube = newAmbientCube();
+
+    constructor(private bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
         this.leaf = bspfile.findLeafIdxForPoint(pos);
         assert(this.leaf >= 0);
 
         this.envCubemap = findEnvCubemapTexture(bspfile, pos);
-
-        this.cacheWorldLights(bspfile.worldlights);
+        this.calc(bspfile);
     }
 
     public debugDrawLights(view: SourceEngineView): void {
         for (let i = 0; i < this.worldLights.length; i++) {
             const worldLight = this.worldLights[i].worldLight;
             if (worldLight !== null) {
-                const norm = Math.max(...worldLight.intensity);
-                const color = colorNewFromRGBA(worldLight.intensity[0] * norm, worldLight.intensity[1] * norm, worldLight.intensity[2] * norm);
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, worldLight.pos, color, 4);
+                const norm = 1 / Math.max(...worldLight.intensity);
+                const lightColor = colorNewFromRGBA(worldLight.intensity[0] * norm, worldLight.intensity[1] * norm, worldLight.intensity[2] * norm);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, worldLight.pos, lightColor, 10);
+
+                const lineColorI = [1.0, 0.8, 0.5, 0.0][i];
+                const lineColor = colorNewFromRGBA(lineColorI, lineColorI, lineColorI);
+                drawWorldSpaceLine(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.pos, worldLight.pos, lineColor, 4);
             }
         }
     }
 
-    public cacheWorldLights(worldLights: WorldLight[]): void {
+    private cacheAmbientLight(leaf: BSPLeaf): void {
+        computeAmbientCubeFromLeaf(this.ambientCube, leaf, this.pos);
+    }
+
+    private addWorldLightToAmbientCube(light: WorldLight): void {
+        vec3.sub(scratchVec3, light.pos, this.pos);
+        const ratio = worldLightDistanceFalloff(light, scratchVec3);
+        vec3.normalize(scratchVec3, scratchVec3);
+        // TODO(jstpierre): Angle attenuation
+
+        for (let i = 0; i < ambientCubeDirections.length; i++) {
+            const dst = this.ambientCube[i];
+            const mul = vec3.dot(scratchVec3, ambientCubeDirections[i]) * ratio;
+            if (mul <= 0)
+                continue;
+            dst.r += light.intensity[0] * mul;
+            dst.g += light.intensity[1] * mul;
+            dst.b += light.intensity[2] * mul;
+        }
+    }
+
+    private cacheWorldLights(worldLights: WorldLight[]): void {
         for (let i = 0; i < this.worldLights.length; i++)
             this.worldLights[i].reset();
 
@@ -2140,7 +2391,6 @@ export class LightCache {
             vec3.sub(scratchVec3, light.pos, this.pos);
             const ratio = worldLightDistanceFalloff(light, scratchVec3);
             const intensity = ratio * vec3.dot(light.intensity, ntscGrayscale);
-            // TODO(jstpierre): Angle attenuation.
 
             if (intensity <= 0.0)
                 continue;
@@ -2151,6 +2401,12 @@ export class LightCache {
                     continue;
 
                 // Found a better light than the one we have right now. Move down the remaining ones to make room.
+
+                // If we're about to eject a light, toss it into the ambient cube first.
+                const ejectedLight = this.worldLights[this.worldLights.length - 1].worldLight;
+                if (ejectedLight !== null)
+                    this.addWorldLightToAmbientCube(ejectedLight);
+
                 for (let k = this.worldLights.length - 1; k > j; k--)
                     if (this.worldLights[k].worldLight !== null)
                         this.worldLights[k].copy(this.worldLights[k - 1]);
@@ -2160,6 +2416,22 @@ export class LightCache {
                 break;
             }
         }
+    }
+
+    private calc(bspfile: BSPFile): void {
+        // Reset ambient cube to leaf lighting.
+        this.cacheAmbientLight(bspfile.leaflist[this.leaf]);
+
+        // Now go through and cache world lights.
+        this.cacheWorldLights(bspfile.worldlights);
+    }
+
+    public fillAmbientCube(d: Float32Array, offs: number): number {
+        const base = offs;
+        for (let i = 0; i < 6; i++)
+            offs += fillColor(d, offs, this.ambientCube[i]);
+            // offs += fillVec4(d, offs, 0.5, 0.5, 0.5);
+        return offs - base;
     }
 
     public fillWorldLights(d: Float32Array, offs: number): number {
@@ -2181,6 +2453,17 @@ class LightmapPage {
         const width = this.page.width, height = this.page.height;
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, width, height, 1));
         this.data = new Uint8Array(width * height * 4);
+
+        const fillEmptySpaceWithPink = false;
+
+        if (fillEmptySpaceWithPink) {
+            for (let i = 0; i < width * height * 4; i += 4) {
+                this.data[i+0] = 0xFF;
+                this.data[i+1] = 0x00;
+                this.data[i+2] = 0xFF;
+                this.data[i+3] = 0xFF;
+            }
+        }
     }
 
     public registerSurfaceLightmap(surface: SurfaceLightmap): void {
@@ -2220,7 +2503,6 @@ class LightmapPage {
         }
 
         if (anyDirty) {
-
             device.uploadTextureData(this.gfxTexture, 0, [data]);
         }
     }

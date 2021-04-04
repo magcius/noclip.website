@@ -7,7 +7,6 @@ import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
-import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
@@ -144,8 +143,6 @@ export class BaseEntity {
         const modelMatrix = this.updateModelMatrix()!;
         getMatrixTranslation(materialParams.position, modelMatrix);
 
-        const leaf = assertExists(this.bspRenderer.bsp.findLeafForPoint(materialParams.position));
-        computeAmbientCubeFromLeaf(materialParams.ambientCube!, leaf, materialParams.position);
         materialParams.lightCache = new LightCache(this.bspRenderer.bsp, materialParams.position, this.modelStudio!.modelData.bbox);
     }
 
@@ -156,7 +153,6 @@ export class BaseEntity {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.modelStudio.setSkin(renderContext, this.skin);
-        this.materialParams!.ambientCube = newAmbientCube();
         this.modelUpdated();
         this.updateLightingData();
     }
@@ -169,6 +165,9 @@ export class BaseEntity {
             // BSP models are rendered by the BSP system.
         } else if (this.modelStudio !== null) {
             this.modelStudio.prepareToRender(renderContext, renderInstManager);
+
+            if ((this as any).debug)
+                this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
         }
     }
 

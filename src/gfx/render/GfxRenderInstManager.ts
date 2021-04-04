@@ -152,6 +152,9 @@ export class GfxRenderInst {
     // TODO(jstpierre): Remove when we remove legacy GfxRenderInstManager.
     public filterKey: number = 0;
 
+    // Debugging pointer for whomever wants it...
+    public debug: any = null;
+
     // Pipeline building.
     private _renderPipelineDescriptor: GfxRenderPipelineDescriptor;
 
@@ -648,6 +651,7 @@ export class GfxRenderInstManager {
         const templateIndex = this.templatePool.allocCount - 1;
         const renderInstIndex = this.instPool.allocRenderInstIndex();
         const renderInst = this.instPool.pool[renderInstIndex];
+        renderInst.debug = null;
         if (templateIndex >= 0)
             renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         return renderInst;

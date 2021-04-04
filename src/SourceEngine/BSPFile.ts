@@ -2,8 +2,8 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray } from "../util";
-import { vec4, vec3, vec2, ReadonlyVec3 } from "gl-matrix";
+import { readString, assertExists, assert, nArray, hexzero, hexdump } from "../util";
+import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, BSPEntity } from "./VMT";
@@ -70,6 +70,7 @@ export interface SurfaceLightmapData {
 }
 
 export interface Overlay {
+    surfaceIndex: number;
 }
 
 export interface Surface {
@@ -93,12 +94,6 @@ export interface Surface {
     overlays: Overlay[];
 }
 
-interface TexinfoMapping {
-    // 4x2 matrix for texture coordinates
-    s: vec4;
-    t: vec4;
-}
-
 const enum TexinfoFlags {
     SKY2D     = 0x0002,
     SKY       = 0x0004,
@@ -117,6 +112,12 @@ interface Texinfo {
     texName: string;
     width: number;
     height: number;
+}
+
+interface TexinfoMapping {
+    // 4x2 matrix for texture coordinates
+    s: ReadonlyVec4;
+    t: ReadonlyVec4;
 }
 
 function calcTexCoord(dst: vec2, v: ReadonlyVec3, m: TexinfoMapping): void {
@@ -147,46 +148,6 @@ export interface BSPLeaf {
     surfaces: number[];
 }
 
-export function newAmbientCube(): AmbientCube {
-    return nArray(6, () => colorNewCopy(TransparentBlack));
-}
-
-export function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: ReadonlyVec3): void {
-    // XXX(jstpierre): This breaks on d2_coast_01, where there's a prop located outside
-    // the leaf it's in due to floating point rounding error.
-    // assert(leaf.bbox.containsPoint(pos));
-
-    if (leaf.ambientLightSamples.length === 0) {
-        // TODO(jstpierre): Figure out what to do in this scenario
-    } else if (leaf.ambientLightSamples.length === 1) {
-        // Fast path.
-        const sample = leaf.ambientLightSamples[0];
-        for (let p = 0; p < 6; p++)
-            colorCopy(dst[p], sample.ambientCube[p]);
-    } else if (leaf.ambientLightSamples.length > 1) {
-        // Slow path.
-        for (let p = 0; p < 6; p++)
-            colorCopy(dst[p], TransparentBlack);
-
-        let totalWeight = 0.0;
-
-        for (let i = 0; i < leaf.ambientLightSamples.length; i++) {
-            const sample = leaf.ambientLightSamples[i];
-
-            // Compute the weight for each sample, using inverse square falloff.
-            const dist2 = vec3.squaredDistance(sample.pos, pos);
-            const weight = 1.0 / (dist2 + 1.0);
-            totalWeight += weight;
-
-            for (let p = 0; p < 6; p++)
-                colorScaleAndAdd(dst[p], dst[p], sample.ambientCube[p], weight);
-        }
-
-        for (let p = 0; p < 6; p++)
-            colorScale(dst[p], dst[p], 1.0 / totalWeight);
-    }
-}
-
 export interface Model {
     bbox: AABB;
     headnode: number;
@@ -212,6 +173,7 @@ export interface WorldLight {
     exponent: number;
     stopdot: number;
     stopdot2: number;
+    style: number;
 }
 
 interface BSPDispInfo {
@@ -515,6 +477,7 @@ export class BSPFile {
 
     public entities: BSPEntity[] = [];
     public surfaces: Surface[] = [];
+    public overlays: Overlay[] = [];
     public models: Model[] = [];
     public pakfile: ZipFile | null = null;
     public nodelist: BSPNode[] = [];
@@ -807,7 +770,6 @@ export class BSPFile {
             this.models.push({ bbox, headnode, surfaces: [] });
         }
 
-
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
@@ -912,6 +874,7 @@ export class BSPFile {
                         const g = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x01), exp) * 255.0;
                         const b = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x02), exp) * 255.0;
                         ambientCube.push(colorNewFromRGBA(r, g, b));
+                        ambientSampleColorIdx += 0x04;
                     }
 
                     // Fraction of bbox.
@@ -941,6 +904,29 @@ export class BSPFile {
         for (let i = 0; i < surfaceToLeafIdx.length; i++)
             surfaceToLeafIdx[i].sort((a, b) => a - b);
 
+        interface OverlayInfo {
+        }
+
+        function readVec3(view: DataView, offs: number): vec3 {
+            const x = view.getFloat32(offs + 0x00, true);
+            const y = view.getFloat32(offs + 0x04, true);
+            const z = view.getFloat32(offs + 0x08, true);
+            return vec3.fromValues(x, y, z);
+        }
+
+        // Unpack overlays
+        const overlays = getLumpData(LumpType.OVERLAYS).createDataView();
+        const overlaycount = overlays.byteLength / 0x160;
+        const overlayinfolist: OverlayInfo[] = [];
+
+        const testOverlayHacks = false;
+        // TEST HACKS: Testing overlays in general
+        // Quad per overlay
+        if (testOverlayHacks) {
+            indexCount += 6 * overlaycount;
+            vertCount += 4 * overlaycount;
+        }
+
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         basicSurfaces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
@@ -962,7 +948,7 @@ export class BSPFile {
         const scratchTangentS = vec3.create();
 
         // now build buffers
-        let dstOffs = 0;
+        let dstOffsVertex = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
         for (let i = 0; i < basicSurfaces.length; i++) {
@@ -1017,18 +1003,18 @@ export class BSPFile {
             const firstPrimID = faces.getUint16(idx + 0x32, true);
             const smoothingGroups = faces.getUint32(idx + 0x34, true);
 
-            // Tangent space setup.
             const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
             const planeY = planes.getFloat32(planenum * 0x14 + 0x04, true);
             const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
             vec3.set(scratchPosition, planeX, planeY, planeZ);
 
+            // Tangent space setup.
             vec3.set(scratchTangentS, tex.textureMapping.s[0], tex.textureMapping.s[1], tex.textureMapping.s[2]);
             vec3.normalize(scratchTangentS, scratchTangentS);
             vec3.set(scratchTangentT, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
             vec3.normalize(scratchTangentT, scratchTangentT);
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
-            // Detect if we need to flip tangents.
+            // Detect if we need to flip tangents. XXX(jstpierre): This looks hella wrong?
             const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = basicSurface.lightmapData;
@@ -1069,30 +1055,30 @@ export class BSPFile {
                         const vertex = builder.vertex[y * disp.sideLength + x];
 
                         // Position
-                        vertexData[dstOffs++] = vertex.position[0];
-                        vertexData[dstOffs++] = vertex.position[1];
-                        vertexData[dstOffs++] = vertex.position[2];
+                        vertexData[dstOffsVertex++] = vertex.position[0];
+                        vertexData[dstOffsVertex++] = vertex.position[1];
+                        vertexData[dstOffsVertex++] = vertex.position[2];
 
                         // Normal
-                        vertexData[dstOffs++] = scratchNormal[0] = vertex.normal[0];
-                        vertexData[dstOffs++] = scratchNormal[1] = vertex.normal[1];
-                        vertexData[dstOffs++] = scratchNormal[2] = vertex.normal[2];
-                        vertexData[dstOffs++] = vertex.alpha;
+                        vertexData[dstOffsVertex++] = scratchNormal[0] = vertex.normal[0];
+                        vertexData[dstOffsVertex++] = scratchNormal[1] = vertex.normal[1];
+                        vertexData[dstOffsVertex++] = scratchNormal[2] = vertex.normal[2];
+                        vertexData[dstOffsVertex++] = vertex.alpha;
 
                         // Tangent
                         vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
-                        vertexData[dstOffs++] = scratchTangentS[0];
-                        vertexData[dstOffs++] = scratchTangentS[1];
-                        vertexData[dstOffs++] = scratchTangentS[2];
+                        vertexData[dstOffsVertex++] = scratchTangentS[0];
+                        vertexData[dstOffsVertex++] = scratchTangentS[1];
+                        vertexData[dstOffsVertex++] = scratchTangentS[2];
                         // Tangent Sign and Lightmap Offset
-                        vertexData[dstOffs++] = tangentSSign * lightmapBumpOffset;
+                        vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
 
                         // Texture UV
                         calcTexCoord(scratchVec2, vertex.position, tex.textureMapping);
                         scratchVec2[0] /= tex.width;
                         scratchVec2[1] /= tex.height;
-                        vertexData[dstOffs++] = scratchVec2[0];
-                        vertexData[dstOffs++] = scratchVec2[1];
+                        vertexData[dstOffsVertex++] = scratchVec2[0];
+                        vertexData[dstOffsVertex++] = scratchVec2[1];
 
                         // Lightmap UV
                         // Source seems to just have displacement lightmaps in surface space, and ignore the mapping. (!!!)
@@ -1103,8 +1089,8 @@ export class BSPFile {
                         scratchVec2[0] = (scratchVec2[0] + lightmapData.pagePosX) / page.width;
                         scratchVec2[1] = (scratchVec2[1] + lightmapData.pagePosY) / page.height;
 
-                        vertexData[dstOffs++] = scratchVec2[0];
-                        vertexData[dstOffs++] = scratchVec2[1];
+                        vertexData[dstOffsVertex++] = scratchVec2[0];
+                        vertexData[dstOffsVertex++] = scratchVec2[1];
                     }
                 }
 
@@ -1136,31 +1122,29 @@ export class BSPFile {
                 for (let j = 0; j < numedges; j++) {
                     // Position
                     const vertIndex = vertindices[firstedge + j];
-                    vertexData[dstOffs++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
-                    vertexData[dstOffs++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
-                    vertexData[dstOffs++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
+                    vertexData[dstOffsVertex++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
+                    vertexData[dstOffsVertex++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
+                    vertexData[dstOffsVertex++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
 
                     if (center !== null)
                         vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
 
-                    // Leave normal for later, as we need to do a different method of parsing them out.
-
                     // Normal
                     const vertnormalBase = basicSurface.vertnormalBase;
                     const normIndex = vertnormalindices[vertnormalBase + j];
-                    vertexData[dstOffs++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
-                    vertexData[dstOffs++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
-                    vertexData[dstOffs++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
-                    vertexData[dstOffs++] = 1.0; // Vertex Alpha (Unused)
+                    vertexData[dstOffsVertex++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
+                    vertexData[dstOffsVertex++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
+                    vertexData[dstOffsVertex++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
+                    vertexData[dstOffsVertex++] = 1.0; // Vertex Alpha (Unused)
 
                     // Compute Tangent S vector
                     // Tangent S = Normal x Texture T Mapping
                     vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
-                    vertexData[dstOffs++] = scratchTangentS[0];
-                    vertexData[dstOffs++] = scratchTangentS[1];
-                    vertexData[dstOffs++] = scratchTangentS[2];
+                    vertexData[dstOffsVertex++] = scratchTangentS[0];
+                    vertexData[dstOffsVertex++] = scratchTangentS[1];
+                    vertexData[dstOffsVertex++] = scratchTangentS[2];
                     // Tangent Sign and Lightmap Offset
-                    vertexData[dstOffs++] = tangentSSign * lightmapBumpOffset;
+                    vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
 
                     // Tangent T = Tangent S x Normal. Done in shader.
 
@@ -1168,8 +1152,8 @@ export class BSPFile {
                     calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
                     scratchVec2[0] /= tex.width;
                     scratchVec2[1] /= tex.height;
-                    vertexData[dstOffs++] = scratchVec2[0];
-                    vertexData[dstOffs++] = scratchVec2[1];
+                    vertexData[dstOffsVertex++] = scratchVec2[0];
+                    vertexData[dstOffsVertex++] = scratchVec2[1];
 
                     // Lightmap UV
                     if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
@@ -1185,8 +1169,8 @@ export class BSPFile {
                         scratchVec2[1] = (scratchVec2[1] + lightmapData.pagePosY) / page.height;
                     }
 
-                    vertexData[dstOffs++] = scratchVec2[0];
-                    vertexData[dstOffs++] = scratchVec2[1];
+                    vertexData[dstOffsVertex++] = scratchVec2[0];
+                    vertexData[dstOffsVertex++] = scratchVec2[1];
                 }
 
                 // index buffer
@@ -1239,6 +1223,112 @@ export class BSPFile {
                 ensureInList(this.leaflist[surfleaflist[j]].surfaces, surfaceIndex);
         }
 
+        for (let idx = 0; testOverlayHacks && idx < overlays.byteLength;) {
+            const nId = overlays.getUint32(idx + 0x00, true);
+            const nTexinfo = overlays.getUint16(idx + 0x04, true);
+            const m_nFaceCountAndRenderOrder = overlays.getUint16(idx + 0x06, true);
+            const m_nFaceCount = m_nFaceCountAndRenderOrder & 0x3FFF;
+            const m_nRenderOrder = m_nFaceCountAndRenderOrder >>> 14;
+            idx += 0x08;
+
+            const aFaces = nArray(m_nFaceCount, (i) => overlays.getInt32(idx + 0x04 * i, true));
+            idx += 0x100;
+
+            const flU0 = overlays.getFloat32(idx + 0x00, true);
+            const flU1 = overlays.getFloat32(idx + 0x04, true);
+            const flV0 = overlays.getFloat32(idx + 0x08, true);
+            const flV1 = overlays.getFloat32(idx + 0x0C, true);
+            const vecUVPoint0X = overlays.getFloat32(idx + 0x10, true);
+            const vecUVPoint0Y = overlays.getFloat32(idx + 0x14, true);
+            const vecUVPoint0Z = overlays.getFloat32(idx + 0x18, true);
+            const vecUVPoint1X = overlays.getFloat32(idx + 0x1C, true);
+            const vecUVPoint1Y = overlays.getFloat32(idx + 0x20, true);
+            const vecUVPoint1Z = overlays.getFloat32(idx + 0x24, true);
+            const vecUVPoint2X = overlays.getFloat32(idx + 0x28, true);
+            const vecUVPoint2Y = overlays.getFloat32(idx + 0x2C, true);
+            const vecUVPoint2Z = overlays.getFloat32(idx + 0x30, true);
+            const vecUVPoint3X = overlays.getFloat32(idx + 0x34, true);
+            const vecUVPoint3Y = overlays.getFloat32(idx + 0x38, true);
+            const vecUVPoint3Z = overlays.getFloat32(idx + 0x3C, true);
+            idx += 0x40;
+
+            const vecOrigin = readVec3(overlays, idx + 0x00);
+            idx += 0x0C;
+
+            const vecBasisNormal2 = readVec3(overlays, idx + 0x00);
+            idx += 0x0C;
+
+            // Basis normal 0 is encoded in Z of vecUVPoint data.
+            const vecBasisNormal0 = vec3.fromValues(vecUVPoint0Z, vecUVPoint1Z, vecUVPoint2Z);
+            const vecBasisNormal1 = vec3.cross(vec3.create(), vecBasisNormal2, vecBasisNormal0);
+
+            // Compute the four corners of the overlay.
+            const vecUVPoints = [
+                vecUVPoint0X, vecUVPoint0Y,
+                vecUVPoint1X, vecUVPoint1Y,
+                vecUVPoint2X, vecUVPoint2Y,
+                vecUVPoint3X, vecUVPoint3Y,
+            ] as const;
+
+            const center = vec3.create();
+
+            for (let j = 0; j < 4; j++) {
+                vec3.copy(scratchPosition, vecOrigin);
+                vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal0, vecUVPoints[j * 2 + 0]);
+                vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal1, vecUVPoints[j * 2 + 1]);
+
+                // Offset just a smidgen...
+                vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal2, 0.5);
+
+                vec3.scaleAndAdd(center, center, scratchPosition, 1/4);
+
+                // Position.
+                vertexData[dstOffsVertex++] = scratchPosition[0];
+                vertexData[dstOffsVertex++] = scratchPosition[1];
+                vertexData[dstOffsVertex++] = scratchPosition[2];
+
+                // Normal should be the original surface normal, but for now, just set this plane.
+                vertexData[dstOffsVertex++] = vecBasisNormal2[0];
+                vertexData[dstOffsVertex++] = vecBasisNormal2[1];
+                vertexData[dstOffsVertex++] = vecBasisNormal2[2];
+                vertexData[dstOffsVertex++] = 1.0; // Vertex Alpha (Unused)
+
+                // Tangent S
+                vertexData[dstOffsVertex++] = vecBasisNormal0[0];
+                vertexData[dstOffsVertex++] = vecBasisNormal0[1];
+                vertexData[dstOffsVertex++] = vecBasisNormal0[2];
+                vertexData[dstOffsVertex++] = 1.0; // sign / bump offset (huh?)
+
+                // Texture Coord
+                // {0,0}, {0,1}, {1,1}, {1,0}
+                const texCoordRawS = (j === 2 || j === 3) ? 1 : 0;
+                const texCoordRawT = (j === 1 || j === 2) ? 1 : 0;
+
+                const texCoordS = texCoordRawS === 1 ? flU1 : flU0;
+                const texCoordT = texCoordRawT === 1 ? flV1 : flV0;
+                vertexData[dstOffsVertex++] = texCoordS;
+                vertexData[dstOffsVertex++] = texCoordT;
+
+                // Lightmap Coord -- this needs to be per-face.
+                vertexData[dstOffsVertex++] = 0;
+                vertexData[dstOffsVertex++] = 0;
+            }
+
+            const startIndex = dstOffsIndex;
+            const indexCount = 6;
+            const vertexCount = 4;
+            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, vertexCount);
+            dstOffsIndex += indexCount;
+            dstIndexBase += vertexCount;
+
+            const tex = texinfoa[nTexinfo];
+            const texName = tex.texName;
+            const surface = { texName, onNode: false, startIndex, indexCount, center, lightmapData: [], lightmapPageIndex: 0, isDisplacement: false, bbox: null, overlays: [] };
+            const surfaceIndex = this.surfaces.push(surface) - 1;
+            this.models[0].surfaces.push(surfaceIndex);
+            this.overlays.push({ surfaceIndex });
+        }
+
         this.vertexData = vertexData;
         this.indexData = indexData;
 
@@ -1289,7 +1379,7 @@ export class BSPFile {
             worldlightsIsHDR = false;
         }
 
-        for (let idx = 0x00; idx < worldlights.byteLength; idx += 0x58) {
+        for (let i = 0, idx = 0x00; idx < worldlights.byteLength; i++, idx += 0x58) {
             const posX = worldlights.getFloat32(idx + 0x00, true);
             const posY = worldlights.getFloat32(idx + 0x04, true);
             const posZ = worldlights.getFloat32(idx + 0x08, true);
@@ -1340,9 +1430,9 @@ export class BSPFile {
                     const intensityScalar = vec3.length(intensity);
                     const minLightValue = worldlightsIsHDR ? 0.015 : 0.03;
                     const a = quadratic_attn, b = linear_attn, c = (constant_attn - intensityScalar / minLightValue);
-                    const rad = (b ** 2) + 4 * a * c;
+                    const rad = (b ** 2) - 4 * a * c;
                     if (rad > 0.0)
-                        radius = -b + Math.sqrt(rad) / 2.0 * a;
+                        radius = (-b + Math.sqrt(rad)) / (2.0 * a);
                     else
                         radius = 2000.0;
                 }
@@ -1350,7 +1440,7 @@ export class BSPFile {
 
             const distAttenuation = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
 
-            this.worldlights.push({ pos, intensity, normal, type, radius, distAttenuation, exponent, stopdot, stopdot2 });
+            this.worldlights.push({ pos, intensity, normal, type, radius, distAttenuation, exponent, stopdot, stopdot2, style });
         }
 
         const dprp = getGameLumpData('dprp');

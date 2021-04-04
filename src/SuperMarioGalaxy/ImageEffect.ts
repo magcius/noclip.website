@@ -615,7 +615,7 @@ void main() {
     float t_TexCoord = saturate((t_TexCoord128 + 0.5) / 128.0);
 
     // Do the "indirect texture lookup"
-    float t_BlurAmount = saturate(invlerp(t_TexCoord, u_BlurMinDist, u_BlurMaxDist));
+    float t_BlurAmount = saturate(invlerp(u_BlurMinDist, u_BlurMaxDist, t_TexCoord));
 
     vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
     vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord, t_Aspect);

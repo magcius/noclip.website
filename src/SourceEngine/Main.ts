@@ -5,7 +5,7 @@ import BitMap from "../BitMap";
 import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
 import { DataFetcher } from "../DataFetcher";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -332,6 +332,7 @@ class BSPSurfaceRenderer {
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix, this.surface.lightmapPageIndex);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
+        renderInst.debug = this;
 
         if (this.surface.center !== null) {
             const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.surface.center);
@@ -492,9 +493,18 @@ export class BSPModelRenderer {
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
         this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
+        for (let i = 0; i < this.bsp.overlays.length; i++)
+            this.liveSurfaceSet.add(this.bsp.overlays[i].surfaceIndex);
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
             this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+
+        /*
+        for (let i = 0; i < this.bsp.overlays.length; i++) {
+            const surface = this.surfacesByIdx[this.bsp.overlays[i].surfaceIndex];
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, surface.surface.center!, surface.surface.texName);
+        }
+        */
     }
 }
 
@@ -826,7 +836,7 @@ export class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 7 },
+    { numUniformBuffers: 3, numSamplers: 9 },
 ];
 
 const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
