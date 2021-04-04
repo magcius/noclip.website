@@ -645,7 +645,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this.uniformBufferWordAlignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4;
         this.uniformBufferMaxPageWordSize = this._uniformBufferMaxPageByteSize / 4;
 
-        this.supportedSampleCounts = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES) || [];
+        const supportedSampleCounts = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES);
+        this.supportedSampleCounts = supportedSampleCounts ? [...supportedSampleCounts] : [];
         if (!this.supportedSampleCounts.includes(1))
             this.supportedSampleCounts.push(1);
         this.supportedSampleCounts.sort((a, b) => (a - b));
