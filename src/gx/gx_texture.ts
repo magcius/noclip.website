@@ -5,7 +5,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
 import { align, assertExists } from '../util';
-import { lerp } from '../MathHelpers';
 
 export interface TextureInputGX {
     name: string;
@@ -102,12 +101,6 @@ export function calcMipChain(texture: TextureInputGX, mipCount: number = texture
         mipOffs += Math.max(mipSize, 32);
         width /= 2;
         height /= 2;
-
-        // It seems like anything below 4x4 has junk data, at least from evidence from
-        // Super Paper Mario. Not sure if this data is even read by GC.
-        const sizeLimit = 2;
-        if (width <= sizeLimit || height <= sizeLimit)
-            break;
     }
 
     return { name, mipLevels, fullTextureSize: mipOffs };
