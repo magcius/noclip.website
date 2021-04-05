@@ -953,6 +953,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl_target = WebGL2RenderingContext.TEXTURE_2D_ARRAY;
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+        } else if (descriptor.dimension === GfxTextureDimension.n3D) {
+            gl_target = WebGL2RenderingContext.TEXTURE_3D;
+            gl.bindTexture(gl_target, gl_texture);
+            gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
         } else if (descriptor.dimension === GfxTextureDimension.Cube) {
             gl_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP;
             gl.bindTexture(gl_target, gl_texture);
@@ -984,6 +988,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_sampler = this.ensureResourceExists(gl.createSampler());
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_WRAP_S, translateWrapMode(descriptor.wrapS));
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_WRAP_T, translateWrapMode(descriptor.wrapT));
+        // TODO(jstpierre): Expose this as a sampler parameter.
+        gl.samplerParameteri(gl_sampler, gl.TEXTURE_WRAP_R, WebGL2RenderingContext.CLAMP_TO_EDGE);
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_MIN_FILTER, translateFilterMode(descriptor.minFilter, descriptor.mipFilter));
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_MAG_FILTER, translateFilterMode(descriptor.magFilter, GfxMipFilterMode.NO_MIP));
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MIN_LOD, descriptor.minLOD);
@@ -1353,7 +1359,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (i >= firstMipLevel) {
                 const levelData = levelDatas[levelDatasOffs++] as ArrayBufferView;
 
-                if (gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY && isCompressed) {
+                if (is3D && isCompressed) {
                     // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511
                     const imageSize = levelData.byteLength / depth;
                     for (let z = 0; z < depth; z++) {

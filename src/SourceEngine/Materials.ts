@@ -11,9 +11,9 @@ import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf } from "./BSPFile";
+import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ } from "../MathHelpers";
-import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale } from "../Color";
+import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale } from "../Color";
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
@@ -728,11 +728,114 @@ varying vec3 v_TangentSpaceBasis2;
 #ifdef USE_BUMPMAP
 varying float v_LightmapOffset;
 #endif
+#ifdef USE_DYNAMIC_LIGHTING
+varying vec4 v_LightAtten;
+#endif
 
 // Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum
 uniform sampler2D u_Texture[8];
 // Envmap
 uniform samplerCube u_TextureCube[1];
+
+// #define DEBUG_DIFFUSEONLY 1
+// #define DEBUG_FULLBRIGHT 1
+
+float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
+    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
+}
+
+#ifdef USE_DYNAMIC_LIGHTING
+float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    float t_Attenuation = 1.0;
+    bool t_UseDistanceAttenuation = (t_LightType == ${ShaderWorldLightType.Point} || t_LightType == ${ShaderWorldLightType.Spot});
+    bool t_UseAngleAttenuation = (t_LightType == ${ShaderWorldLightType.Spot});
+
+    if (t_UseDistanceAttenuation) {
+        float t_Distance = distance(t_WorldLight.Position.xyz, t_PositionWorld);
+        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.DistAttenuation.xyz, t_Distance);
+
+        if (t_UseAngleAttenuation) {
+            // Unpack spot parameters
+            float t_Exponent = t_WorldLight.Color.w;
+            float t_Stopdot = t_WorldLight.DistAttenuation.w;
+            float t_Stopdot2 = t_WorldLight.Direction.w;
+
+            vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
+            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
+
+            // invlerp
+            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
+            t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
+
+            t_Attenuation *= t_AngleAttenuation;
+        }
+    }
+
+    return t_Attenuation;
+}
+
+vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    if (t_LightType == ${ShaderWorldLightType.Directional}) {
+        // Directionals just have incoming light direction stored in Direction field.
+        return -t_WorldLight.Direction.xyz;
+    } else {
+        return normalize(t_WorldLight.Position.xyz - t_PositionWorld);
+    }
+}
+
+vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
+    vec4 t_FinalAtten = vec4(0.0);
+    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+        t_FinalAtten[i] = WorldLightCalcAttenuation(u_WorldLights[i], t_PositionWorld);
+    return t_FinalAtten;
+}
+
+float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
+    vec3 t_LightDirectionWorld = WorldLightCalcDirection(t_WorldLight, t_PositionWorld);
+
+    float t_NoL = dot(t_NormalWorld, t_LightDirectionWorld);
+    if (t_HalfLambert) {
+        // Valve's Half-Lambert / Wrapped lighting term.
+        t_NoL = t_NoL * 0.5 + 0.5;
+        t_NoL = t_NoL * t_NoL;
+        return t_NoL;
+    } else {
+        return max(0.0, t_NoL);
+    }
+}
+
+vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert, in float t_Attenuation, in WorldLight t_WorldLight) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    if (t_LightType == ${ShaderWorldLightType.None})
+        return vec3(0.0);
+
+    float t_Visibility = WorldLightCalcVisibility(t_WorldLight, t_PositionWorld, t_NormalWorld, t_HalfLambert);
+    return t_WorldLight.Color.rgb * t_Attenuation * t_Visibility;
+}
+
+struct DiffuseLightInput {
+    vec3 PositionWorld;
+    vec3 NormalWorld;
+    vec4 LightAttenuation;
+    bool HalfLambert;
+};
+
+vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
+#ifdef DEBUG_FULLBRIGHT
+    return vec3(0.0);
+#else
+    vec3 t_FinalLight = vec3(0.0);
+    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+        t_FinalLight += WorldLightCalcDiffuse(t_DiffuseLightInput.PositionWorld, t_DiffuseLightInput.NormalWorld, t_DiffuseLightInput.HalfLambert, t_DiffuseLightInput.LightAttenuation[i], u_WorldLights[i]);
+    return t_FinalLight;
+#endif
+}
+#endif
 
 #ifdef VERT
 layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
@@ -752,6 +855,9 @@ layout(location = ${MaterialProgramBase.a_BoneIDs}) attribute vec4 a_BoneIndices
 
 #ifdef USE_AMBIENT_CUBE
 vec3 AmbientLight(in vec3 t_NormalWorld) {
+#ifdef DEBUG_FULLBRIGHT
+    return vec3(1.0);
+#else
     vec3 t_Weight = t_NormalWorld * t_NormalWorld;
     bvec3 t_Negative = lessThan(t_NormalWorld, vec3(0.0));
     return (
@@ -759,6 +865,7 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
         t_Weight.y * u_AmbientCube[t_Negative.y ? 3 : 2].rgb +
         t_Weight.z * u_AmbientCube[t_Negative.z ? 5 : 4].rgb
     );
+#endif
 }
 #endif
 
@@ -842,6 +949,9 @@ void mainVS() {
     v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
+#ifdef USE_DYNAMIC_LIGHTING
+    v_LightAtten.xyzw = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
+#endif
 }
 #endif
 
@@ -895,85 +1005,6 @@ const vec3 g_RNBasis1 = vec3(-0.4082482904638631,  0.7071067811865475, 0.5773502
 const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502691896258); // -sqrt1/6, -sqrt1/2, sqrt1/3
 
 #ifdef USE_DYNAMIC_LIGHTING
-
-float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
-    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
-}
-
-float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
-    int t_LightType = int(t_WorldLight.Position.w);
-
-    float t_Attenuation = 1.0;
-    bool t_UseDistanceAttenuation = (t_LightType == ${ShaderWorldLightType.Point} || t_LightType == ${ShaderWorldLightType.Spot});
-    bool t_UseAngleAttenuation = (t_LightType == ${ShaderWorldLightType.Spot});
-
-    if (t_UseDistanceAttenuation) {
-        float t_Distance = distance(t_WorldLight.Position.xyz, t_PositionWorld);
-        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.DistAttenuation.xyz, t_Distance);
-
-        if (t_UseAngleAttenuation) {
-            // Unpack spot parameters
-            float t_Exponent = t_WorldLight.Color.w;
-            float t_Stopdot = t_WorldLight.DistAttenuation.w;
-            float t_Stopdot2 = t_WorldLight.Direction.w;
-
-            vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
-            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
-
-            // invlerp
-            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
-            t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
-
-            t_Attenuation *= t_AngleAttenuation;
-        }
-    }
-
-    return t_Attenuation;
-}
-
-vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
-    int t_LightType = int(t_WorldLight.Position.w);
-
-    if (t_LightType == ${ShaderWorldLightType.Directional}) {
-        // Directionals just have incoming light direction stored in Direction field.
-        return -t_WorldLight.Direction.xyz;
-    } else {
-        return normalize(t_WorldLight.Position.xyz - t_PositionWorld);
-    }
-}
-
-float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
-    vec3 t_LightDirectionWorld = WorldLightCalcDirection(t_WorldLight, t_PositionWorld);
-
-    float t_NoL = dot(t_NormalWorld, t_LightDirectionWorld);
-    if (t_HalfLambert) {
-        // Valve's Half-Lambert / Wrapped lighting term.
-        t_NoL = t_NoL * 0.5 + 0.5;
-        t_NoL = t_NoL * t_NoL;
-        return t_NoL;
-    } else {
-        return max(0.0, t_NoL);
-    }
-}
-
-vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert, in WorldLight t_WorldLight) {
-    int t_LightType = int(t_WorldLight.Position.w);
-
-    if (t_LightType == ${ShaderWorldLightType.None})
-        return vec3(0.0);
-
-    float t_Attenuation = WorldLightCalcAttenuation(t_WorldLight, t_PositionWorld);
-    float t_Visibility = WorldLightCalcVisibility(t_WorldLight, t_PositionWorld, t_NormalWorld, t_HalfLambert);
-    return t_Visibility * t_Attenuation * t_WorldLight.Color.rgb;
-}
-
-vec3 WorldLightCalcAllDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
-    vec3 t_FinalLight = vec3(0.0);
-    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
-        t_FinalLight += WorldLightCalcDiffuse(t_PositionWorld, t_NormalWorld, t_HalfLambert, u_WorldLights[i]);
-    return t_FinalLight;
-}
-
 struct SpecularLightResult {
     vec3 SpecularLight;
     vec3 RimLight;
@@ -1031,14 +1062,19 @@ SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
 
 #endif
 
-// #define DEBUG_FULLBRIGHT 1
-
 vec4 DebugColorTexture(vec4 t_TextureSample) {
-#ifdef DEBUG_FULLBRIGHT
-    return vec4(0.5, 0.5, 0.5, t_TextureSample.a);
-#else
-    return t_TextureSample;
+#ifdef DEBUG_DIFFUSEONLY
+    t_TextureSample.rgb = vec3(0.5);
 #endif
+    return t_TextureSample;
+}
+
+vec4 DebugLightmapTexture(vec4 t_TextureSample) {
+#ifdef DEBUG_FULLBRIGHT
+    // A "fullbright" lightmap is 0x80 sRGB (because of overbright). Convert to linear.
+    t_TextureSample.rgb = GammaToLinear(vec3(0.5));
+#endif
+    return t_TextureSample;
 }
 
 void mainPS() {
@@ -1085,16 +1121,14 @@ void mainPS() {
     t_NormalWorld = v_TangentSpaceBasis2;
 #endif
 
-    vec3 t_DiffuseLighting;
-
+    vec3 t_DiffuseLighting = vec3(1.0);
 #ifdef USE_LIGHTMAP
-
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
 #ifdef USE_DIFFUSE_BUMPMAP
-    vec3 t_LightmapColor1 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
-    vec3 t_LightmapColor2 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
-    vec3 t_LightmapColor3 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
+    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0)))).rgb;
+    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0)))).rgb;
+    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0)))).rgb;
 
     vec3 t_Influence;
 
@@ -1118,17 +1152,14 @@ void mainPS() {
     t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
     t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
 #else
-    t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy)).rgb;
+    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy))).rgb;
+    t_DiffuseLighting = t_LightmapColor1;
 #endif
 
     t_DiffuseLighting *= t_DiffuseLightingScale;
-
-#else
-    t_DiffuseLighting = vec3(1.0);
 #endif
 
 #ifdef USE_DYNAMIC_LIGHTING
-
     bool t_HalfLambert = false;
 #ifdef USE_HALF_LAMBERT
     t_HalfLambert = true;
@@ -1139,7 +1170,13 @@ void mainPS() {
     t_HalfLambert = true;
 #endif
 
-    t_DiffuseLighting.rgb += WorldLightCalcAllDiffuse(v_PositionWorld.xyz, t_NormalWorld.xyz, t_HalfLambert);
+    // TODO(jstpierre): Add in ambient cube? Or is that in the vertex color already...
+    DiffuseLightInput t_DiffuseLightInput;
+    t_DiffuseLightInput.PositionWorld = v_PositionWorld.xyz;
+    t_DiffuseLightInput.NormalWorld = t_NormalWorld.xyz;
+    t_DiffuseLightInput.LightAttenuation = v_LightAtten.xyzw;
+    t_DiffuseLightInput.HalfLambert = t_HalfLambert;
+    t_DiffuseLighting.rgb = WorldLightCalcAllDiffuse(t_DiffuseLightInput);
 #endif
 
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
@@ -1215,14 +1252,31 @@ void mainPS() {
     t_SpecularLightInput.NormalWorld = t_NormalWorld;
     t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
     t_SpecularLightInput.Fresnel = t_Fresnel;
-    t_SpecularLightInput.SpecularExponent = 1.0; // TODO(jstpierre): SpecularExponent map
+
+    // TODO(jstpierre): Support $phongexponentfactor override
+    vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_Texture[6]), v_TexCoord0.xy);
+    t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
     t_SpecularLightInput.RimExponent = 1.0;
 
-    float t_SpecularMask = 1.0; // TODO(jstpierre): SpecularMask
+    // Specular mask is either in base map or normal map alpha.
+    float t_SpecularMask;
+#ifdef USE_BASE_ALPHA_PHONG_MASK
+    t_SpecularMask = t_BaseTexture.a;
+#else
+#ifdef USE_BUMPMAP
+    t_SpecularMask = t_BumpmapSample.a;
+#else
+    t_SpecularMask = 1.0;
+#endif
+#endif
+
+#ifdef USE_PHONG_MASK_INVERT
+    t_SpecularMask = 1.0 - t_SpecularMask;
+#endif
+
     SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
 
-    // TODO(jstpierre): Fix dynamic specular light.
-    // t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight * t_SpecularMask * u_FresnelRangeSpecBoost.w;
+    t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight * t_SpecularMask * u_FresnelRangeSpecBoost.w;
 #endif
 #endif
 
@@ -1269,17 +1323,19 @@ class Material_Generic extends BaseMaterial {
     }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
-        let changed = false;
-
         if (this.shaderType === ShaderType.VertexLitGeneric) {
             this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
             this.wantsDynamicLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
-            changed = true;
         } else if (this.shaderType === ShaderType.Skin) {
             this.wantsStaticVertexLighting = false;
             this.wantsDynamicLighting = true;
-            this.wantsAmbientCube = true;
+            this.wantsAmbientCube = false;
+        }
+
+        // Ensure that we never have a lightmap at the same time as "studio model" lighting, as they're exclusive...
+        if (this.wantsStaticVertexLighting || this.wantsDynamicLighting || this.wantsAmbientCube) {
+            assert(!this.wantsLightmap);
         }
 
         this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting);
@@ -1329,6 +1385,8 @@ class Material_Generic extends BaseMaterial {
         p['$phongboost']                   = new ParameterNumber(1.0);
         p['$phongexponenttexture']         = new ParameterTexture(false);
         p['$phongfresnelranges']           = new ParameterVector(3);
+        p['$basemapalphaphongmask']        = new ParameterBoolean(false, false);
+        p['$invertphongmask']              = new ParameterBoolean(false, false);
     }
 
     protected setupParametersFromVMT(): void {
@@ -1445,6 +1503,12 @@ class Material_Generic extends BaseMaterial {
         if (this.paramGetBoolean('$normalmapalphaenvmapmask') && this.wantsBumpmap)
             this.program.setDefineBool('USE_NORMALMAP_ALPHA_ENVMAP_MASK', true);
 
+        if (this.paramGetBoolean('$basemapalphaphongmask'))
+            this.program.setDefineBool('USE_BASE_ALPHA_PHONG_MASK', true);
+
+        if (this.paramGetBoolean('$invertphongmask'))
+            this.program.setDefineBool('USE_PHONG_MASK_INVERT', true);
+
         if (this.paramGetBoolean('$ssbump'))
             this.program.setDefineBool('USE_SSBUMP', true);
 
@@ -1554,7 +1618,7 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsLightmap) {
             const lightMapScale = gammaToLinear(2.0);
-            colorScaleAndAdd(scratchColor, scratchColor, TransparentWhite, lightMapScale);
+            colorScale(scratchColor, scratchColor, lightMapScale);
         }
 
         scratchColor.a *= this.paramGetNumber('$alpha');
@@ -2292,19 +2356,22 @@ function newAmbientCube(): AmbientCube {
     return nArray(6, () => colorNewCopy(TransparentBlack));
 }
 
-function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: ReadonlyVec3): void {
+function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: ReadonlyVec3): boolean {
     // XXX(jstpierre): This breaks on d2_coast_01, where there's a prop located outside
     // the leaf it's in due to floating point rounding error.
     // assert(leaf.bbox.containsPoint(pos));
 
     if (leaf.ambientLightSamples.length === 0) {
-        // TODO(jstpierre): Figure out what to do in this scenario
+        // No ambient light samples.
+        return false;
     } else if (leaf.ambientLightSamples.length === 1) {
         // Fast path.
         const sample = leaf.ambientLightSamples[0];
         for (let p = 0; p < 6; p++)
             colorCopy(dst[p], sample.ambientCube[p]);
-    } else if (leaf.ambientLightSamples.length > 1) {
+
+        return true;
+    } else {
         // Slow path.
         for (let p = 0; p < 6; p++)
             colorCopy(dst[p], TransparentBlack);
@@ -2325,6 +2392,8 @@ function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: Readon
 
         for (let p = 0; p < 6; p++)
             colorScale(dst[p], dst[p], 1.0 / totalWeight);
+
+        return true;
     }
 }
 
@@ -2360,8 +2429,8 @@ export class LightCache {
         }
     }
 
-    private cacheAmbientLight(leaf: BSPLeaf): void {
-        computeAmbientCubeFromLeaf(this.ambientCube, leaf, this.pos);
+    private cacheAmbientLight(leaf: BSPLeaf): boolean {
+        return computeAmbientCubeFromLeaf(this.ambientCube, leaf, this.pos);
     }
 
     private addWorldLightToAmbientCube(light: WorldLight): void {
@@ -2381,12 +2450,15 @@ export class LightCache {
         }
     }
 
-    private cacheWorldLights(worldLights: WorldLight[]): void {
+    private cacheWorldLights(worldLights: WorldLight[], hasAmbientLeafLighting: boolean): void {
         for (let i = 0; i < this.worldLights.length; i++)
             this.worldLights[i].reset();
 
         for (let i = 0; i < worldLights.length; i++) {
             const light = worldLights[i];
+
+            if (hasAmbientLeafLighting && !!(light.flags & WorldLightFlags.InAmbientCube))
+                continue;
 
             vec3.sub(scratchVec3, light.pos, this.pos);
             const ratio = worldLightDistanceFalloff(light, scratchVec3);
@@ -2408,7 +2480,7 @@ export class LightCache {
                     this.addWorldLightToAmbientCube(ejectedLight);
 
                 for (let k = this.worldLights.length - 1; k > j; k--)
-                    if (this.worldLights[k].worldLight !== null)
+                    if (this.worldLights[k - 1].worldLight !== null)
                         this.worldLights[k].copy(this.worldLights[k - 1]);
 
                 this.worldLights[j].worldLight = light;
@@ -2420,10 +2492,10 @@ export class LightCache {
 
     private calc(bspfile: BSPFile): void {
         // Reset ambient cube to leaf lighting.
-        this.cacheAmbientLight(bspfile.leaflist[this.leaf]);
+        const hasAmbientLeafLighting = this.cacheAmbientLight(bspfile.leaflist[this.leaf]);
 
         // Now go through and cache world lights.
-        this.cacheWorldLights(bspfile.worldlights);
+        this.cacheWorldLights(bspfile.worldlights, hasAmbientLeafLighting);
     }
 
     public fillAmbientCube(d: Float32Array, offs: number): number {
@@ -2604,9 +2676,9 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
         const sr = linearToLightmap(src[srcOffs0++]), sg = linearToLightmap(src[srcOffs0++]), sb = linearToLightmap(src[srcOffs0++]);
 
         // Lightmap 0 is easy (unused tho).
-        dst[dstOffs0++] = (sr * 255.0) | 0;
-        dst[dstOffs0++] = (sg * 255.0) | 0;
-        dst[dstOffs0++] = (sb * 255.0) | 0;
+        dst[dstOffs0++] = Math.round(sr * 255.0);
+        dst[dstOffs0++] = Math.round(sg * 255.0);
+        dst[dstOffs0++] = Math.round(sb * 255.0);
         dstOffs0++;
 
         let b0r = src[srcOffs1++], b0g = src[srcOffs1++], b0b = src[srcOffs1++];
@@ -2629,30 +2701,24 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
 
             for (let j = 0; j < colors.length; j++) {
                 if (colors[j][1] > 1.0) {
-                    const max = Math.max(colors[j][2], colors[j][2], colors[j][3]);
+                    const max = Math.max(colors[j][2], colors[j][3], colors[j][4]);
                     const m = (max - 1.0) / max;
-                    colors[j][2] -= m;
-                    colors[j][3] -= m;
-                    colors[j][4] -= m;
+                    const mr = m * colors[j][2], mg = m * colors[j][3], mb = m * colors[j][4];
+                    colors[j][2] -= mr;
+                    colors[j][3] -= mg;
+                    colors[j][4] -= mb;
 
-                    colors[(j+1)%3][2] += m * 0.5;
-                    colors[(j+1)%3][3] += m * 0.5;
-                    colors[(j+1)%3][4] += m * 0.5;
+                    colors[(j+1)%3][2] += mr * 0.5;
+                    colors[(j+1)%3][3] += mg * 0.5;
+                    colors[(j+1)%3][4] += mb * 0.5;
 
-                    colors[(j+2)%3][2] += m * 0.5;
-                    colors[(j+2)%3][3] += m * 0.5;
-                    colors[(j+2)%3][4] += m * 0.5;
+                    colors[(j+2)%3][2] += mr * 0.5;
+                    colors[(j+2)%3][3] += mg * 0.5;
+                    colors[(j+2)%3][4] += mb * 0.5;
                 }
             }
 
             for (let j = 0; j < colors.length; j++) {
-                if (colors[j][2] > 1.0 || colors[j][3] > 1.0 || colors[j][3] > 1.0) {
-                    const m = Math.max(colors[j][2], colors[j][2], colors[j][3]);
-                    colors[j][2] /= m;
-                    colors[j][3] /= m;
-                    colors[j][4] /= m;
-                }
-
                 if (colors[j][0] === 0) {
                     b0r = colors[j][2];
                     b0g = colors[j][3];
@@ -2669,19 +2735,19 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
             }
         }
 
-        dst[dstOffs1++] = (b0r * 255.0) | 0;
-        dst[dstOffs1++] = (b0g * 255.0) | 0;
-        dst[dstOffs1++] = (b0b * 255.0) | 0;
+        dst[dstOffs1++] = Math.round(b0r * 255.0);
+        dst[dstOffs1++] = Math.round(b0g * 255.0);
+        dst[dstOffs1++] = Math.round(b0b * 255.0);
         dstOffs1++;
 
-        dst[dstOffs2++] = (b1r * 255.0) | 0;
-        dst[dstOffs2++] = (b1g * 255.0) | 0;
-        dst[dstOffs2++] = (b1b * 255.0) | 0;
+        dst[dstOffs2++] = Math.round(b1r * 255.0);
+        dst[dstOffs2++] = Math.round(b1g * 255.0);
+        dst[dstOffs2++] = Math.round(b1b * 255.0);
         dstOffs2++;
 
-        dst[dstOffs3++] = (b2r * 255.0) | 0;
-        dst[dstOffs3++] = (b2g * 255.0) | 0;
-        dst[dstOffs3++] = (b2b * 255.0) | 0;
+        dst[dstOffs3++] = Math.round(b2r * 255.0);
+        dst[dstOffs3++] = Math.round(b2g * 255.0);
+        dst[dstOffs3++] = Math.round(b2b * 255.0);
         dstOffs3++;
     }
 }

@@ -90,7 +90,7 @@ export interface GfxInputLayoutBufferDescriptor {
 }
 
 export const enum GfxTextureDimension {
-    n2D, n2DArray, Cube,
+    n2D, n2DArray, n3D, Cube,
 }
 
 export interface GfxTextureDescriptor {

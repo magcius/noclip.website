@@ -258,6 +258,7 @@ export class StudioModelData {
     public checksum: number;
     public bbox: AABB;
     public bones: Bone[] = [];
+    public illumPosition = vec3.create();
 
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice, vtxBuffer: ArrayBufferSlice) {
         const mdlView = mdlBuffer.createDataView();
@@ -287,6 +288,7 @@ export class StudioModelData {
         const illumPositionX = mdlView.getFloat32(0x5C, true);
         const illumPositionY = mdlView.getFloat32(0x60, true);
         const illumPositionZ = mdlView.getFloat32(0x64, true);
+        vec3.set(this.illumPosition, illumPositionX, illumPositionY, illumPositionZ);
 
         const moveHullMinX = mdlView.getFloat32(0x68, true);
         const moveHullMinY = mdlView.getFloat32(0x6C, true);

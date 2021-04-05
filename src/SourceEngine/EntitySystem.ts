@@ -5,7 +5,7 @@ import { Cyan, Green, Magenta } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
+import { computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, LightCache, ParameterReference, paramSetNum } from './Materials';
@@ -59,6 +59,7 @@ export class BaseEntity {
     public visible = true;
     public materialParams: EntityMaterialParameters | null = null;
     public skin: number = 0;
+    public lightingOrigin = vec3.create();
 
     public targetName: string | null = null;
     public parentEntity: BaseEntity | null = null;
@@ -143,7 +144,13 @@ export class BaseEntity {
         const modelMatrix = this.updateModelMatrix()!;
         getMatrixTranslation(materialParams.position, modelMatrix);
 
-        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, materialParams.position, this.modelStudio!.modelData.bbox);
+        if (this.modelStudio !== null) {
+            transformVec3Mat4w1(this.lightingOrigin, modelMatrix, this.modelStudio.modelData.illumPosition);
+        } else {
+            vec3.copy(this.lightingOrigin, materialParams.position);
+        }
+
+        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin, this.modelStudio!.modelData.bbox);
     }
 
     protected modelUpdated(): void {
@@ -791,6 +798,7 @@ class material_modify_control extends BaseEntity {
     private lerpEndValue = -1;
     private lerpStartTime = -1;
     private lerpEndTime = -1;
+
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
@@ -849,6 +857,63 @@ class material_modify_control extends BaseEntity {
     }
 }
 
+class color_correction extends BaseEntity {
+    public static classname = `color_correction`;
+
+    private minfalloff: number;
+    private maxfalloff: number;
+    private maxweight: number;
+    private filename: string;
+    private layer: Uint8Array | null = null;
+    private weightOverride = -1;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.filename = fallbackUndefined(this.entity.filename, '').toLowerCase();
+        this.maxweight = Number(fallbackUndefined(this.entity.maxweight, '1'));
+        this.minfalloff = Number(fallbackUndefined(this.entity.minfalloff, '-1'));
+        this.maxfalloff = Number(fallbackUndefined(this.entity.maxfalloff, '-1'));
+
+        this.fetchLUT(renderContext);
+    }
+
+    private async fetchLUT(renderContext: SourceRenderContext) {
+        const lutData = await renderContext.filesystem.fetchFileData(this.filename);
+        if (lutData === null)
+            return;
+
+        this.layer = lutData.createTypedArray(Uint8Array);
+        renderContext.colorCorrection.addLayer(this.layer);
+    }
+
+    private calcWeight(renderContext: SourceRenderContext): number {
+        if (this.weightOverride >= 0.0)
+            return this.weightOverride;
+
+        if (!this.enabled)
+            return 0.0;
+
+        this.getAbsOrigin(scratchVec3a);
+        if (this.minfalloff >= 0 && this.maxfalloff >= 0 && this.minfalloff !== this.maxfalloff) {
+            const dist = vec3.distance(renderContext.currentView.cameraPos, scratchVec3a);
+            return saturate(invlerp(this.minfalloff, this.maxfalloff, dist));
+        } else {
+            return 1.0;
+        }
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.layer === null)
+            return;
+
+        const weight = this.calcWeight(renderContext);
+        renderContext.colorCorrection.setLayerWeight(this.layer, weight);
+    }
+}
+
 interface EntityFactory {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
     classname: string;
@@ -883,6 +948,7 @@ export class EntitySystem {
         this.registerFactory(trigger_once);
         this.registerFactory(env_texturetoggle);
         this.registerFactory(material_modify_control);
+        this.registerFactory(color_correction);
     }
 
     public registerFactory(factory: EntityFactory): void {

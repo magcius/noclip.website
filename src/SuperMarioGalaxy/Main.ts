@@ -1,7 +1,7 @@
 
 import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, fallback, nArray, spliceBisectRight } from '../util';
+import { assert, assertExists, fallback, spliceBisectRight } from '../util';
 import { DataFetcher, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { texProjCameraSceneTex } from '../Camera';

@@ -11,16 +11,16 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, getMatrixTranslation } from "../MathHelpers";
+import { clamp, getMatrixTranslation, lerp, range } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
-import { assert, assertExists, nArray } from "../util";
+import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipCompressionMethod, ZipFile, ZipFileEntry } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
@@ -808,6 +808,122 @@ export class BSPRenderer {
     }
 }
 
+export class SourceColorCorrection {
+    private lutData: Uint8Array;
+    private gfxTexture: GfxTexture;
+    private gfxSampler: GfxSampler;
+    private dirty: boolean = true;
+    private size: number = 32;
+
+    private layers: Uint8Array[] = [];
+    private weights: number[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        const width = this.size, height = this.size, depth = this.size;
+
+        this.lutData = new Uint8Array(width * height * depth * 4);
+        this.gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n3D,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            width, height, depth, numLevels: 1,
+        });
+
+        this.gfxSampler = cache.createSampler(device, {
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        this.prepareToRender(device);
+    }
+
+    public addLayer(layer: Uint8Array): void {
+        assert(this.size === 32);
+        assert(layer.length >= 32*32*32*3);
+        this.layers.push(layer);
+        this.weights.push(1.0);
+        this.dirty = true;
+    }
+
+    public removeLayer(layer: Uint8Array): void {
+        arrayRemove(this.layers, layer);
+    }
+
+    public setLayerWeight(layer: Uint8Array, weight: number): void {
+        const idx = this.layers.indexOf(layer);
+        assert(idx >= 0);
+
+        if (this.weights[idx] === weight)
+            return;
+
+        this.weights[idx] = weight;
+        this.dirty = true;
+    }
+
+    public fillTextureMapping(m: TextureMapping): void {
+        m.gfxTexture = this.gfxTexture;
+        m.gfxSampler = this.gfxSampler;
+    }
+
+    private computeLUTPixel(dst: Uint8Array, defaultWeight: number, weights: number[], size: number, x: number, y: number, z: number): void {
+        const ratio = 0xFF / (size - 1);
+
+        const dstPx = ((((z*size)+y)*size)+x)*4;
+        const lutPx = ((((z*size)+y)*size)+x)*3;
+
+        let r = (x * ratio) * defaultWeight;
+        let g = (y * ratio) * defaultWeight;
+        let b = (z * ratio) * defaultWeight;
+
+        // Add up each LUT.
+        for (let i = 0; i < weights.length; i++) {
+            const lut = this.layers[i], weight = weights[i];
+            r += lut[lutPx+0] * weight;
+            g += lut[lutPx+1] * weight;
+            b += lut[lutPx+2] * weight;
+        }
+
+        dst[dstPx+0] = r;
+        dst[dstPx+1] = g;
+        dst[dstPx+2] = b;
+        dst[dstPx+3] = 0xFF;
+    }
+
+    public prepareToRender(device: GfxDevice): void {
+        if (!this.dirty)
+            return;
+
+        // Normalize our weights.
+        let weights = this.weights.slice();
+        let totalWeight = weights.reduce((a, b) => a + b, 0);
+        let defaultWeight: number;
+        if (totalWeight < 1.0) {
+            defaultWeight = 1.0 - totalWeight;
+            // weights are fine as-is
+        } else {
+            defaultWeight = 0.0;
+            weights = weights.map((v) => v / totalWeight);
+        }
+
+        const dst = this.lutData, size = this.size;
+        for (let z = 0; z < size; z++)
+            for (let y = 0; y < size; y++)
+                for (let x = 0; x < size; x++)
+                    this.computeLUTPixel(dst, defaultWeight, weights, size, x, y, z);
+
+        device.uploadTextureData(this.gfxTexture, 0, [this.lutData]);
+        this.dirty = false;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
+}
+
 export class SourceRenderContext {
     public lightmapManager: LightmapManager;
     public studioModelCache: StudioModelCache;
@@ -821,17 +937,20 @@ export class SourceRenderContext {
     public currentView: SourceEngineView;
     public showToolMaterials = false;
     public showTriggerDebug = false;
+    public colorCorrection: SourceColorCorrection;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);
         this.materialCache = new MaterialCache(device, cache, this.filesystem);
         this.studioModelCache = new StudioModelCache(this, this.filesystem);
+        this.colorCorrection = new SourceColorCorrection(device, cache);
     }
 
     public destroy(device: GfxDevice): void {
         this.lightmapManager.destroy(device);
         this.materialCache.destroy(device);
         this.studioModelCache.destroy(device);
+        this.colorCorrection.destroy(device);
     }
 }
 
@@ -839,20 +958,28 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 9 },
 ];
 
-const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 0, numSamplers: 1 },
+const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 0, numSamplers: 2 },
 ];
 
-class FullscreenGammaCorrectProgram extends DeviceProgram {
+class FullscreenPostProgram extends DeviceProgram {
+    public both = `
+precision mediump float; precision lowp sampler3D;
+uniform sampler2D u_FramebufferTexture;
+uniform sampler3D u_ColorCorrectTexture;
+`;
     public vert: string = GfxShaderLibrary.fullscreenVS;
-
     public frag: string = `
-uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 t_Color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    vec4 t_Color = texture(SAMPLER_2D(u_FramebufferTexture), v_TexCoord);
     t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
+
+    vec3 t_Size = vec3(textureSize(u_ColorCorrectTexture, 0));
+    vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
+    t_Color.rgb = texture(u_ColorCorrectTexture, t_TexCoord).rgb;
+
     gl_FragColor = t_Color;
 }
 `;
@@ -861,8 +988,8 @@ void main() {
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
-    private framebufferTextureMapping = nArray(1, () => new TextureMapping());
-    private gammaCorrectProgram = new FullscreenGammaCorrectProgram();
+    private postTextureMapping = nArray(2, () => new TextureMapping());
+    private postProgram = new FullscreenPostProgram();
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
@@ -884,7 +1011,7 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache(), filesystem);
 
-        this.framebufferTextureMapping[0].gfxSampler = this.renderContext.cache.createSampler(device, {
+        this.postTextureMapping[0].gfxSampler = this.renderContext.cache.createSampler(device, {
             magFilter: GfxTexFilterMode.BILINEAR,
             minFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.NO_MIP,
@@ -981,6 +1108,7 @@ export class SourceRenderer implements SceneGfx {
 
         // Update our lightmaps right before rendering.
         this.renderContext.lightmapManager.prepareToRender(device);
+        this.renderContext.colorCorrection.prepareToRender(device);
 
         this.renderHelper.prepareToRender(device);
     }
@@ -990,7 +1118,7 @@ export class SourceRenderer implements SceneGfx {
         const r = this.renderHelper.renderInstManager;
 
         r.setVisibleByFilterKeyExact(filterKey);
-        r.simpleRenderInstList!.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.framebufferTextureMapping[0]);
+        r.simpleRenderInstList!.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.postTextureMapping[0]);
         r.drawOnPassRenderer(device, passRenderer);
     }
 
@@ -1040,7 +1168,8 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                this.framebufferTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.postTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.renderContext.colorCorrection.fillTextureMapping(this.postTextureMapping[1]);
                 this.executeOnPass(passRenderer, FilterKey.Translucent);
             });
         });
@@ -1052,24 +1181,24 @@ export class SourceRenderer implements SceneGfx {
         const cache = this.renderContext.cache;
 
         builder.pushPass((pass) => {
-            // Now do a fullscreen gamma-correct pass to output to our UNORM backbuffer.
-            pass.setDebugName('Gamma Correct');
+            // Now do a fullscreen color-correction pass to output to our UNORM backbuffer.
+            pass.setDebugName('Color Correction & Gamma Correction');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorGammaTargetID);
 
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
-            gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
+            gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsPost);
             gammaCorrectRenderInst.setInputLayoutAndState(null, null);
-            const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
+            const gammaCorrectProgram = cache.createProgram(device, this.postProgram);
             gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
             gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
             gammaCorrectRenderInst.drawPrimitives(3);
 
             pass.exec((passRenderer, scope) => {
-                this.framebufferTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.framebufferTextureMapping);
+                this.postTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.postTextureMapping);
                 gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
             });
         });

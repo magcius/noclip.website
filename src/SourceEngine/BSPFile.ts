@@ -163,6 +163,10 @@ export const enum WorldLightType {
     SkyAmbient,
 }
 
+export const enum WorldLightFlags {
+    InAmbientCube = 0x01,
+}
+
 export interface WorldLight {
     pos: vec3;
     intensity: vec3;
@@ -174,6 +178,7 @@ export interface WorldLight {
     stopdot: number;
     stopdot2: number;
     style: number;
+    flags: WorldLightFlags;
 }
 
 interface BSPDispInfo {
@@ -493,6 +498,8 @@ export class BSPFile {
     public vertexData: Float32Array;
 
     constructor(buffer: ArrayBufferSlice, mapname: string) {
+        const USING_HDR = false;
+
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
@@ -622,9 +629,13 @@ export class BSPFile {
         }
 
         // Parse out surfaces.
-        let faces = getLumpData(LumpType.FACES_HDR, 1).createDataView();
-        if (faces.byteLength === 0)
-            faces = getLumpData(LumpType.FACES, 1).createDataView();
+        let faces_: DataView | null = null;
+        if (USING_HDR)
+            faces_ = getLumpData(LumpType.FACES_HDR, 1).createDataView();
+        if (faces_ === null || faces_.byteLength === 0)
+            faces_ = getLumpData(LumpType.FACES, 1).createDataView();
+        // typescript nonsense
+        const faces = faces_!;
 
         const dispinfo = getLumpData(LumpType.DISPINFO).createDataView();
         const dispinfolist: BSPDispInfo[] = [];
@@ -667,8 +678,10 @@ export class BSPFile {
 
         const basicSurfaces: BasicSurface[] = [];
 
-        let lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
-        if (lighting.byteLength === 0)
+        let lighting: ArrayBufferSlice | null = null;
+        if (USING_HDR)
+            lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
+        if (lighting === null || lighting.byteLength === 0)
             lighting = getLumpData(LumpType.LIGHTING, 1);
 
         // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
@@ -773,14 +786,17 @@ export class BSPFile {
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
-        let leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX_HDR).createDataView();
-        if (leafambientindex.byteLength === 0)
+        let leafambientindex: DataView | null = null;
+        if (USING_HDR)
+            leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX_HDR).createDataView();
+        if (leafambientindex === null || leafambientindex.byteLength === 0)
             leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX).createDataView();
 
-        let leafambientlightingLump: ArrayBufferSlice;
-        let leafambientlightingVersion: number;
-        [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING_HDR);
-        if (leafambientlightingLump.byteLength === 0)
+        let leafambientlightingLump: ArrayBufferSlice | null = null;
+        let leafambientlightingVersion: number = 0;
+        if (USING_HDR)
+            [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING_HDR);
+        if (leafambientlightingLump === null || leafambientlightingLump.byteLength === 0)
             [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING);
         const leafambientlighting = leafambientlightingLump.createDataView();
 
@@ -1372,9 +1388,14 @@ export class BSPFile {
             this.cubemaps.push({ pos, filename });
         }
 
-        let worldlights = getLumpData(LumpType.WORLDLIGHTS_HDR).createDataView();
-        let worldlightsIsHDR = true;
-        if (worldlights.byteLength === 0) {
+        let worldlights: DataView | null = null;
+        let worldlightsIsHDR = false;
+
+        if (USING_HDR) {
+            worldlights = getLumpData(LumpType.WORLDLIGHTS_HDR).createDataView();
+            worldlightsIsHDR = true;
+        }
+        if (worldlights === null || worldlights.byteLength === 0) {
             worldlights = getLumpData(LumpType.WORLDLIGHTS).createDataView();
             worldlightsIsHDR = false;
         }
@@ -1390,7 +1411,7 @@ export class BSPFile {
             const normalY = worldlights.getFloat32(idx + 0x1C, true);
             const normalZ = worldlights.getFloat32(idx + 0x20, true);
             const cluster = worldlights.getUint32(idx + 0x24, true);
-            const type = worldlights.getUint32(idx + 0x28, true);
+            const type: WorldLightType = worldlights.getUint32(idx + 0x28, true);
             const style = worldlights.getUint32(idx + 0x2C, true);
             // cone angles for spotlights
             const stopdot = worldlights.getFloat32(idx + 0x30, true);
@@ -1400,7 +1421,7 @@ export class BSPFile {
             let constant_attn = worldlights.getFloat32(idx + 0x40, true);
             let linear_attn = worldlights.getFloat32(idx + 0x44, true);
             let quadratic_attn = worldlights.getFloat32(idx + 0x48, true);
-            const flags = worldlights.getUint32(idx + 0x4C, true);
+            const flags: WorldLightFlags = worldlights.getUint32(idx + 0x4C, true);
             const texinfo = worldlights.getUint32(idx + 0x50, true);
             const owner = worldlights.getUint32(idx + 0x54, true);
 
@@ -1440,7 +1461,7 @@ export class BSPFile {
 
             const distAttenuation = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
 
-            this.worldlights.push({ pos, intensity, normal, type, radius, distAttenuation, exponent, stopdot, stopdot2, style });
+            this.worldlights.push({ pos, intensity, normal, type, radius, distAttenuation, exponent, stopdot, stopdot2, style, flags });
         }
 
         const dprp = getGameLumpData('dprp');

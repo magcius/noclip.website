@@ -444,6 +444,7 @@ export class StaticPropRenderer {
     private colorMeshData: HardwareVertData | null = null;
     private bbox = new AABB();
     private materialParams = new EntityMaterialParameters();
+    private lightingOrigin = vec3.create();
 
     constructor(renderContext: SourceRenderContext, private bsp: BSPFile, private staticProp: StaticProp) {
         this.createInstance(renderContext, bsp);
@@ -455,8 +456,11 @@ export class StaticPropRenderer {
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
-        const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
-        this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
+        if (this.staticProp.lightingOrigin !== null)
+            vec3.copy(this.lightingOrigin, this.staticProp.lightingOrigin);
+        else
+            transformVec3Mat4w1(this.lightingOrigin, scratchMatrix, modelData.illumPosition);
+        this.materialParams.lightCache = new LightCache(bsp, this.lightingOrigin, this.bbox);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
         this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);
