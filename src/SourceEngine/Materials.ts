@@ -434,8 +434,25 @@ export abstract class BaseMaterial {
         // Nothing by default.
     }
 
-    protected setupParametersFromVMT(): void {
+    private findFallbackBlock(shaderTypeName: string): any | null {
+        const fallbackSuffixes = [`>=dx90_20b`, `>=dx90`, `>dx90`, `ldr`, `srgb`, `dx9`];
+        for (let i = 0; i < fallbackSuffixes.length; i++) {
+            const blockName = `${shaderTypeName}_${fallbackSuffixes[i]}`;
+            const block = this.vmt[blockName];
+            if (block !== undefined)
+                return block;
+        }
+
+        return null;
+    }
+
+    private setupParametersFromVMT(): void {
         setupParametersFromVMT(this.param, this.vmt);
+
+        const shaderTypeName = this.vmt._Root.toLowerCase();
+        const fallback = this.findFallbackBlock(shaderTypeName);
+        if (fallback !== null)
+            setupParametersFromVMT(this.param, fallback);
     }
 
     protected paramGetTexture(name: string): ParameterTexture {
@@ -1387,13 +1404,6 @@ class Material_Generic extends BaseMaterial {
         p['$phongfresnelranges']           = new ParameterVector(3);
         p['$basemapalphaphongmask']        = new ParameterBoolean(false, false);
         p['$invertphongmask']              = new ParameterBoolean(false, false);
-    }
-
-    protected setupParametersFromVMT(): void {
-        super.setupParametersFromVMT();
-
-        if (this.vmt.lightmappedgeneric_dx9 !== undefined)
-            setupParametersFromVMT(this.param, this.vmt.lightmappedgeneric_dx9);
     }
 
     private recacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
