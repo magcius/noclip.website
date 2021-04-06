@@ -13,7 +13,7 @@ import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main"
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ } from "../MathHelpers";
-import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale } from "../Color";
+import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
@@ -148,12 +148,16 @@ class ParameterTexture {
         }
     }
 
-    public fillTextureMapping(m: TextureMapping, frame: number): void {
+    public fillTextureMapping(m: TextureMapping, frame: number): boolean {
         if (this.texture !== null) {
             this.texture.fillTextureMapping(m, frame);
+            return true;
         } else if (this.lateBindingTexture !== null) {
             assert(frame === 0);
             m.lateBinding = this.lateBindingTexture;
+            return true;
+        } else {
+            return false;
         }
     }
 }
@@ -1543,8 +1547,10 @@ class Material_Generic extends BaseMaterial {
         this.recacheProgram(device, cache);
     }
 
-    private updateTextureMappings(): void {
-        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+    private updateTextureMappings(renderContext: SourceRenderContext): void {
+        if (!this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame')))
+            this.textureMapping[0].gfxTexture = renderContext.materialCache.systemTextures.whiteTexture2D;
+
         this.paramGetTexture('$detail').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$detailframe'));
         this.paramGetTexture('$bumpmap').fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
         // Lightmap is supplied by entity.
@@ -1568,7 +1574,7 @@ class Material_Generic extends BaseMaterial {
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
-        this.updateTextureMappings();
+        this.updateTextureMappings(renderContext);
         if (lightmapPageIndex !== null) {
             const lightmapManager = renderContext.lightmapManager;
             this.textureMapping[3].gfxTexture = lightmapManager.getPageTexture(lightmapPageIndex);
@@ -2168,14 +2174,45 @@ class Material_Refract extends BaseMaterial {
 //#endregion
 
 //#region Material Cache
+function makeSolidColorTexture2D(device: GfxDevice, color: Color): GfxTexture {
+    const tex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+    const data = new Uint8Array(4);
+    data[0] = color.r * 0xFF;
+    data[1] = color.g * 0xFF;
+    data[2] = color.b * 0xFF;
+    data[3] = color.a * 0xFF;
+    device.uploadTextureData(tex, 0, [data]);
+    return tex;
+}
+
+class SystemTextures {
+    public whiteTexture2D: GfxTexture;
+    public opaqueBlackTexture2D: GfxTexture;
+    public transparentBlackTexture2D: GfxTexture;
+
+    constructor(device: GfxDevice) {
+        this.whiteTexture2D = makeSolidColorTexture2D(device, White);
+        this.opaqueBlackTexture2D = makeSolidColorTexture2D(device, OpaqueBlack);
+        this.transparentBlackTexture2D = makeSolidColorTexture2D(device, TransparentBlack);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.whiteTexture2D);
+        device.destroyTexture(this.opaqueBlackTexture2D);
+        device.destroyTexture(this.transparentBlackTexture2D);
+    }
+}
+
 export class MaterialCache {
     private textureCache = new Map<string, VTF>();
     private texturePromiseCache = new Map<string, Promise<VTF>>();
     private materialPromiseCache = new Map<string, Promise<VMT>>();
+    public systemTextures: SystemTextures;
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
         this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false));
+        this.systemTextures = new SystemTextures(device);
     }
 
     public async bindLocalCubemap(cubemap: Cubemap) {
@@ -2244,6 +2281,7 @@ export class MaterialCache {
     }
 
     public destroy(device: GfxDevice): void {
+        this.systemTextures.destroy(device);
         for (const vtf of this.textureCache.values())
             vtf.destroy(device);
     }
