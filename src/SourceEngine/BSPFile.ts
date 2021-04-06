@@ -498,12 +498,17 @@ export class BSPFile {
     public vertexData: Float32Array;
 
     constructor(buffer: ArrayBufferSlice, mapname: string) {
-        const USING_HDR = false;
-
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
-        assert(this.version === 0x13 || this.version === 0x14);
+        assert(this.version === 19 || this.version === 20 || this.version === 21);
+
+        let USING_HDR = false;
+        if (this.version === 21) {
+            // SDR lumps appear to be empty on version 21...
+            // TODO(jstpierre): Use HDR lumps everywhere / reimplement Source HDR
+            USING_HDR = true;
+        }
 
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
@@ -1388,17 +1393,19 @@ export class BSPFile {
             this.cubemaps.push({ pos, filename });
         }
 
-        let worldlights: DataView | null = null;
+        let worldlightsLump: ArrayBufferSlice | null = null;
+        let worldlightsVersion = 0;
         let worldlightsIsHDR = false;
 
         if (USING_HDR) {
-            worldlights = getLumpData(LumpType.WORLDLIGHTS_HDR).createDataView();
+            [worldlightsLump, worldlightsVersion] = getLumpDataEx(LumpType.WORLDLIGHTS_HDR);
             worldlightsIsHDR = true;
         }
-        if (worldlights === null || worldlights.byteLength === 0) {
-            worldlights = getLumpData(LumpType.WORLDLIGHTS).createDataView();
+        if (worldlightsLump === null || worldlightsLump.byteLength === 0) {
+            [worldlightsLump, worldlightsVersion] = getLumpDataEx(LumpType.WORLDLIGHTS);
             worldlightsIsHDR = false;
         }
+        const worldlights = worldlightsLump.createDataView();
 
         for (let i = 0, idx = 0x00; idx < worldlights.byteLength; i++, idx += 0x58) {
             const posX = worldlights.getFloat32(idx + 0x00, true);
@@ -1410,6 +1417,15 @@ export class BSPFile {
             const normalX = worldlights.getFloat32(idx + 0x18, true);
             const normalY = worldlights.getFloat32(idx + 0x1C, true);
             const normalZ = worldlights.getFloat32(idx + 0x20, true);
+            let shadow_cast_offsetX = 0;
+            let shadow_cast_offsetY = 0;
+            let shadow_cast_offsetZ = 0;
+            if (worldlightsVersion === 1) {
+                shadow_cast_offsetX = worldlights.getFloat32(idx + 0x24, true);
+                shadow_cast_offsetY = worldlights.getFloat32(idx + 0x28, true);
+                shadow_cast_offsetZ = worldlights.getFloat32(idx + 0x2C, true);
+                idx += 0x0C;
+            }
             const cluster = worldlights.getUint32(idx + 0x24, true);
             const type: WorldLightType = worldlights.getUint32(idx + 0x28, true);
             const style = worldlights.getUint32(idx + 0x2C, true);
@@ -1435,6 +1451,7 @@ export class BSPFile {
             const pos = vec3.fromValues(posX, posY, posZ);
             const intensity = vec3.fromValues(intensityX, intensityY, intensityZ);
             const normal = vec3.fromValues(normalX, normalY, normalZ);
+            const shadow_cast_offset = vec3.fromValues(shadow_cast_offsetX, shadow_cast_offsetY, shadow_cast_offsetZ);
 
             if (radius === 0.0) {
                 // Compute a proper radius from our attenuation factors.
@@ -1470,7 +1487,7 @@ export class BSPFile {
 
         const sprp = getGameLumpData('sprp');
         if (sprp !== null)
-            this.staticObjects = deserializeGameLump_sprp(sprp[0], sprp[1]);
+            this.staticObjects = deserializeGameLump_sprp(sprp[0], sprp[1], this.version);
     }
 
     public findLeafIdxForPoint(p: ReadonlyVec3, nodeid: number = 0): number {

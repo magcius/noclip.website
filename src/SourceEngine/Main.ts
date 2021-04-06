@@ -32,13 +32,19 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
-    public mounts: VPKMount[] = [];
+    public zip: ZipFile[] = [];
+    public vpk: VPKMount[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
 
     public async createVPKMount(path: string) {
-        this.mounts.push(await createVPKMount(this.dataFetcher, path));
+        this.vpk.push(await createVPKMount(this.dataFetcher, path));
+    }
+
+    public async createZipMount(path: string) {
+        const data = await this.dataFetcher.fetchData(path);
+        this.zip.push(parseZipFile(data));
     }
 
     public resolvePath(path: string, ext: string): string {
@@ -82,8 +88,8 @@ export class SourceFileSystem {
     }
 
     public hasEntry(resolvedPath: string): boolean {
-        for (let i = 0; i < this.mounts.length; i++) {
-            const entry = this.mounts[i].findEntry(resolvedPath);
+        for (let i = 0; i < this.vpk.length; i++) {
+            const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
                 return true;
         }
@@ -95,19 +101,33 @@ export class SourceFileSystem {
                 return true;
         }
 
+        for (let i = 0; i < this.zip.length; i++) {
+            const zip = this.zip[i];
+            const entry = zip.find((entry) => entry.filename === resolvedPath);
+            if (entry !== undefined)
+                return true;
+        }
+
         return false;
     }
 
     public async fetchFileData(resolvedPath: string): Promise<ArrayBufferSlice | null> {
-        for (let i = 0; i < this.mounts.length; i++) {
-            const entry = this.mounts[i].findEntry(resolvedPath);
+        for (let i = 0; i < this.vpk.length; i++) {
+            const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
-                return this.mounts[i].fetchFileData(entry);
+                return this.vpk[i].fetchFileData(entry);
         }
 
         for (let i = 0; i < this.pakfiles.length; i++) {
-            const pakfile = this.pakfiles[i];
-            const entry = pakfile.find((entry) => entry.filename === resolvedPath);
+            const zip = this.pakfiles[i];
+            const entry = zip.find((entry) => entry.filename === resolvedPath);
+            if (entry !== undefined)
+                return decompressZipFileEntry(entry);
+        }
+
+        for (let i = 0; i < this.zip.length; i++) {
+            const zip = this.zip[i];
+            const entry = zip.find((entry) => entry.filename === resolvedPath);
             if (entry !== undefined)
                 return decompressZipFileEntry(entry);
         }

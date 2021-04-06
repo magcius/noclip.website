@@ -273,7 +273,7 @@ export class StudioModelData {
         assert(readString(mdlBuffer, 0x00, 0x04) === 'IDST');
         const mdlVersion = mdlView.getUint32(0x04, true);
 
-        const supportedVersions = [44, 45, 46, 47, 48];
+        const supportedVersions = [44, 45, 46, 47, 48, 49];
         assert(supportedVersions.includes(mdlVersion));
 
         this.checksum = mdlView.getUint32(0x08, true);
@@ -740,6 +740,15 @@ export class StudioModelData {
                             if (!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED))
                                 continue;
 
+                            const hasTopologyData = mdlVersion >= 49;
+                            if (hasTopologyData) {
+                                // It seems that Valve extended the .vtx format at some point without
+                                // changing the major version for that version, but it can be detected
+                                // through the mdl version... this is for subd.
+                                const numTopologyIndices = vtxView.getUint32(vtxStripGroupIdx + 0x18, true);
+                                const topologyOffset = vtxView.getUint32(vtxStripGroupIdx + 0x1C, true);
+                            }
+
                             // Build the vertex data for our strip group.
                             let vertIdx = vtxStripGroupIdx + vertOffset;
                             for (let v = 0; v < numVerts; v++) {
@@ -883,11 +892,17 @@ export class StudioModelData {
 
                                 const numBoneStateChanges = vtxView.getUint32(vtxStripIdx + 0x13, true);
                                 const boneStateChangeOffset = vtxView.getUint32(vtxStripIdx + 0x17, true);
-                                let boneStateChangeIdx = boneStateChangeOffset;
+                                let boneStateChangeIdx = vtxStripIdx + boneStateChangeOffset;
+
+                                if (hasTopologyData) {
+                                    const numTopologyIndices = vtxView.getUint32(vtxStripIdx + 0x1B, true);
+                                    const topologyOffset = vtxView.getUint32(vtxStripIdx + 0x1F, true);
+                                    vtxStripIdx += 0x08;
+                                }
 
                                 for (let i = 0; i < numBoneStateChanges; i++) {
-                                    const hardwareID = vtxView.getUint32(vtxStripIdx + boneStateChangeIdx + 0x00, true);
-                                    const boneID = vtxView.getUint32(vtxStripIdx + boneStateChangeIdx + 0x04, true);
+                                    const hardwareID = vtxView.getUint32(boneStateChangeIdx + 0x00, true);
+                                    const boneID = vtxView.getUint32(boneStateChangeIdx + 0x04, true);
                                     hardwareBoneTable[hardwareID] = boneID;
                                     boneStateChangeIdx += 0x08;
                                 }

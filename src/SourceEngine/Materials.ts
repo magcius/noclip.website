@@ -1408,6 +1408,9 @@ class Material_Generic extends BaseMaterial {
         p['$phongfresnelranges']           = new ParameterVector(3);
         p['$basemapalphaphongmask']        = new ParameterBoolean(false, false);
         p['$invertphongmask']              = new ParameterBoolean(false, false);
+
+        // SolidEnergy (probably doesn't make sense on this..., basically only to get Portal 2 to load...)
+        p['$flow_color_intensity']         = new ParameterNumber(0.0);
     }
 
     private recacheProgram(device: GfxDevice, cache: GfxRenderCache): void {

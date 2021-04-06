@@ -362,8 +362,8 @@ export interface StaticObjects {
     staticProps: StaticProp[];
 }
 
-export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number): StaticObjects | null {
-    assert(version === 4 || version === 5 || version === 6 || version === 10);
+export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number, bspVersion: number): StaticObjects | null {
+    assert(version === 4 || version === 5 || version === 6 || version === 9 || version === 10);
     const sprp = buffer.createDataView();
     let idx = 0x00;
 
@@ -410,17 +410,50 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         }
 
         let minDXLevel = -1, maxDXLevel = -1;
-        if (version >= 6) {
+        if (version >= 6 && version <= 7) {
             minDXLevel = sprp.getUint16(idx + 0x00, true);
             maxDXLevel = sprp.getUint16(idx + 0x02, true);
             idx += 0x04;
         }
 
-        if (version >= 7) {
-            flags = sprp.getUint32(idx + 0x00, true);
-            const lightmapResolutionX = sprp.getUint16(idx + 0x04, true);
-            const lightmapResolutionY = sprp.getUint16(idx + 0x06, true);
-            idx += 0x08;
+        if (version >= 8) {
+            minDXLevel = sprp.getUint8(idx + 0x00);
+            maxDXLevel = sprp.getUint8(idx + 0x01);
+            const minGPULevel = sprp.getUint8(idx + 0x02);
+            const maxGPULevel = sprp.getUint8(idx + 0x03);
+            idx += 0x04;
+        }
+
+        // The version seems to have significantly forked after this...
+        // TF2's 7-10 seem to use this below, which is 8 bytes.
+        // The version 10 that CS:GO and Portal 2 use (bspfile version 21) is very different.
+
+        if (bspVersion === 21) {
+            // CS:GO, Portal 2
+
+            if (version >= 7) {
+                const diffuseModulation = sprp.getUint32(idx + 0x00, false);
+                idx += 0x04;
+            }
+
+            if (version >= 9 && version <= 10) {
+                const disableX360 = sprp.getUint32(idx + 0x00, true);
+                idx += 0x04;
+            }
+
+            if (version >= 10) {
+                const flagsEx = sprp.getUint32(idx + 0x00, true);
+                idx += 0x04;
+            }
+        } else if (bspVersion === 19 || bspVersion === 20) {
+            // TF2
+
+            if (version >= 7) {
+                flags = sprp.getUint32(idx + 0x00, true);
+                const lightmapResolutionX = sprp.getUint16(idx + 0x04, true);
+                const lightmapResolutionY = sprp.getUint16(idx + 0x06, true);
+                idx += 0x08;
+            }
         }
 
         let lightingOrigin: vec3 | null = null;
