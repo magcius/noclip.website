@@ -21,7 +21,11 @@ interface EntityOutputAction {
 }
 
 function parseEntityOutputAction(S: string): EntityOutputAction {
-    const parts = S.split(',');
+    let parts: string[];
+    if (S.includes('\x1b'))
+        parts = S.split('\x1b');
+    else
+        parts = S.split(',');
     assert(parts.length === 5);
     const [targetName, inputNameStr, parameterOverride, delayStr, timesToFireStr] = parts;
     const inputName = inputNameStr.toLowerCase();
