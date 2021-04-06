@@ -789,6 +789,7 @@ export class SourceColorCorrection {
     private gfxTexture: GfxTexture;
     private gfxSampler: GfxSampler;
     private dirty: boolean = true;
+    private enabled: boolean = true;
     private size: number = 32;
 
     private layers: Uint8Array[] = [];
@@ -869,13 +870,21 @@ export class SourceColorCorrection {
         dst[dstPx+3] = 0xFF;
     }
 
+    public setEnabled(v: boolean): void {
+        // For debugging.
+        this.enabled = v;
+        this.dirty = true;
+    }
+
     public prepareToRender(device: GfxDevice): void {
         if (!this.dirty)
             return;
 
         // Normalize our weights.
         let weights = this.weights.slice();
-        let totalWeight = weights.reduce((a, b) => a + b, 0);
+        if (!this.enabled)
+            weights.length = 0;
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
         let defaultWeight: number;
         if (totalWeight < 1.0) {
             defaultWeight = 1.0 - totalWeight;
