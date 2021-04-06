@@ -3,9 +3,8 @@ import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
 import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
-import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
 import { DataFetcher } from "../DataFetcher";
-import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -16,13 +15,13 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, getMatrixTranslation, lerp, range } from "../MathHelpers";
+import { clamp, getMatrixTranslation } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
 import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { ZipCompressionMethod, ZipFile, ZipFileEntry } from "../ZipFile";
+import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
 import { BaseEntity, EntitySystem, sky_camera } from "./EntitySystem";
 import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
@@ -30,29 +29,6 @@ import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
-
-function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
-    if (entry.compressionMethod === ZipCompressionMethod.None) {
-        return entry.data;
-    } else if (entry.compressionMethod === ZipCompressionMethod.LZMA) {
-        // Parse out the ZIP-style LZMA header. See APPNOTE.txt section 5.8.8
-        const view = entry.data.createDataView();
-
-        // First two bytes are LZMA version.
-        // const versionMajor = view.getUint8(0x00);
-        // const versionMinor = view.getUint8(0x00);
-        // Next two bytes are "properties size", which should be 5 in all valid files.
-        const propertiesSize = view.getUint16(0x02, true);
-        assert(propertiesSize === 5);
-
-        const properties = decodeLZMAProperties(entry.data.subarray(0x04, propertiesSize));
-        // Compressed data comes immediately after the properties.
-        const compressedData = entry.data.slice(0x04 + propertiesSize);
-        return new ArrayBufferSlice(decompress(compressedData, properties, entry.uncompressedSize!));
-    } else {
-        throw "whoops";
-    }
-}
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
