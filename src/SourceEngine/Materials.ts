@@ -1314,7 +1314,7 @@ void mainPS() {
 }
 
 const enum ShaderType {
-    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Unknown,
+    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, Unknown,
 };
 
 class Material_Generic extends BaseMaterial {
@@ -1437,6 +1437,8 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = ShaderType.UnlitGeneric;
         else if (shaderTypeStr === 'worldvertextransition')
             this.shaderType = ShaderType.WorldVertexTransition;
+        else if (shaderTypeStr === 'black')
+            this.shaderType = ShaderType.Black;
         else
             this.shaderType = ShaderType.Unknown;
     
@@ -1631,9 +1633,13 @@ class Material_Generic extends BaseMaterial {
         }
 
         // Compute modulation color.
-        colorCopy(scratchColor, White);
-        this.paramGetVector('$color').mulColor(scratchColor);
-        this.paramGetVector('$color2').mulColor(scratchColor);
+        if (this.shaderType === ShaderType.Black) {
+            colorCopy(scratchColor, OpaqueBlack);
+        } else {
+            colorCopy(scratchColor, White);
+            this.paramGetVector('$color').mulColor(scratchColor);
+            this.paramGetVector('$color2').mulColor(scratchColor);
+        }
 
         if (this.wantsLightmap) {
             const lightMapScale = gammaToLinear(2.0);
@@ -2132,7 +2138,8 @@ class Material_Refract extends BaseMaterial {
             this.program.setDefineBool('USE_ENVMAP', true);
         }
 
-        this.program.defines.set('BLUR_AMOUNT', '' + this.paramGetNumber('$bluramount'));
+        const blurAmount = this.paramGetNumber('$bluramount') | 0;
+        this.program.defines.set('BLUR_AMOUNT', '' + blurAmount);
 
         this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
