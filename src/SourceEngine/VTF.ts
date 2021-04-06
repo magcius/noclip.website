@@ -217,7 +217,9 @@ export class VTF {
 
         assert(readString(buffer, 0x00, 0x04, false) === 'VTF\0');
         this.versionMajor = view.getUint32(0x04, true);
+        assert(this.versionMajor === 7);
         this.versionMinor = view.getUint32(0x08, true);
+        assert(this.versionMinor >= 1 && this.versionMinor <= 5);
         const headerSize = view.getUint32(0x0C, true);
 
         let dataIdx: number;
@@ -275,7 +277,8 @@ export class VTF {
         const pixelFormat = imageFormatToGfxFormat(device, this.format, srgb);
         const dimension = isCube ? GfxTextureDimension.Cube : GfxTextureDimension.n2D;
         const faceCount = (isCube ? 6 : 1);
-        const faceDataCount = (isCube ? 7 : 1);
+        const hasSpheremap = this.versionMinor < 5;
+        const faceDataCount = (isCube ? (6 + (hasSpheremap ? 1 : 0)) : 1);
         const descriptor: GfxTextureDescriptor = {
             dimension, pixelFormat,
             width: this.width,
