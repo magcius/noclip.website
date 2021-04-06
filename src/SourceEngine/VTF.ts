@@ -8,18 +8,19 @@ import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const enum ImageFormat {
-    RGBA8888     = 0x00,
-    ABGR8888     = 0x01,
-    BGR888       = 0x03,
-    I8           = 0x05,
-    ARGB8888     = 0x0B,
-    BGRA8888     = 0x0C,
-    DXT1         = 0x0D,
-    DXT3         = 0x0E,
-    DXT5         = 0x0F,
-    BGRX8888     = 0x10,
-    BGRA5551     = 0x15,
-    UV88         = 0x16,
+    RGBA8888      = 0x00,
+    ABGR8888      = 0x01,
+    BGR888        = 0x03,
+    I8            = 0x05,
+    ARGB8888      = 0x0B,
+    BGRA8888      = 0x0C,
+    DXT1          = 0x0D,
+    DXT3          = 0x0E,
+    DXT5          = 0x0F,
+    BGRX8888      = 0x10,
+    BGRA5551      = 0x15,
+    UV88          = 0x16,
+    RGBA16161616F = 0x18,
 }
 
 function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
@@ -32,6 +33,8 @@ function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
 }
 
 function imageFormatGetBPP(fmt: ImageFormat): number {
+    if (fmt === ImageFormat.RGBA16161616F)
+        return 8;
     if (fmt === ImageFormat.RGBA8888)
         return 4;
     if (fmt === ImageFormat.ABGR8888)
@@ -93,6 +96,8 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return GfxFormat.S8_RG_NORM;
     else if (fmt === ImageFormat.I8)
         return GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.RGBA16161616F)
+        return GfxFormat.F16_RGBA;
     else
         throw "whoops";
 }
@@ -156,7 +161,7 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
         return dst;
     } else if (fmt === ImageFormat.UV88) {
         return data.createTypedArray(Int8Array);
-    } else if (fmt === ImageFormat.BGRA5551) {
+    } else if (fmt === ImageFormat.BGRA5551 || fmt === ImageFormat.RGBA16161616F) {
         return data.createTypedArray(Uint16Array);
     } else if (fmt === ImageFormat.I8) {
         // I8 => RGBA8888

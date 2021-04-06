@@ -689,6 +689,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     //#region GfxDevice
     private translateTextureInternalFormat(fmt: GfxFormat): GLenum {
         switch (fmt) {
+        case GfxFormat.F16_RGBA:
+            return WebGL2RenderingContext.RGBA16F;
         case GfxFormat.F32_R:
             return WebGL2RenderingContext.R32F;
         case GfxFormat.F32_RG:
@@ -798,6 +800,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.UNSIGNED_INT;
         case FormatTypeFlags.S8:
             return WebGL2RenderingContext.BYTE;
+        case FormatTypeFlags.F16:
+            return WebGL2RenderingContext.HALF_FLOAT;
         case FormatTypeFlags.F32:
             return WebGL2RenderingContext.FLOAT;
         case FormatTypeFlags.U16_PACKED_5551:
@@ -824,7 +828,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case FormatTypeFlags.BC4_SNORM:
         case FormatTypeFlags.BC5_UNORM:
         case FormatTypeFlags.BC5_SNORM:
-                return true;
+            return true;
         default:
             return false;
         }
@@ -1358,22 +1362,22 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         for (let i = 0; i < maxMipLevel; i++) {
             if (i >= firstMipLevel) {
                 const levelData = levelDatas[levelDatasOffs++] as ArrayBufferView;
+                const compByteSize = isCompressed ? 1 : getFormatCompByteSize(pixelFormat);
+                const sliceElementSize = (levelData.byteLength / compByteSize) / depth;
 
                 if (is3D && isCompressed) {
                     // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511
-                    const imageSize = levelData.byteLength / depth;
                     for (let z = 0; z < depth; z++) {
-                        gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
+                        gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * sliceElementSize, sliceElementSize);
                     }
                 } else if (isCube) {
-                    const imageSize = levelData.byteLength / depth;
                     for (let z = 0; z < depth; z++) {
                         const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
                         if (isCompressed) {
-                            gl.compressedTexSubImage2D(face_target, i, 0, 0, w, h, gl_format, levelData, z * imageSize, imageSize);
+                            gl.compressedTexSubImage2D(face_target, i, 0, 0, w, h, gl_format, levelData, z * sliceElementSize, sliceElementSize);
                         } else {
                             const gl_type = this.translateTextureType(pixelFormat);
-                            gl.texSubImage2D(face_target, i, 0, 0, w, h, gl_format, gl_type, levelData, z * imageSize);
+                            gl.texSubImage2D(face_target, i, 0, 0, w, h, gl_format, gl_type, levelData, z * sliceElementSize);
                         }
                     }
                 } else if (is3D) {
