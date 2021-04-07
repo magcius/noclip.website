@@ -10,7 +10,7 @@ import { assert, assertExists, fallbackUndefined } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
-import { BSPEntity, vmtParseNumbers } from './VMT';
+import { BSPEntity, vmtParseNumber, vmtParseVector } from './VMT';
 
 interface EntityOutputAction {
     targetName: string;
@@ -88,23 +88,21 @@ export class BaseEntity {
         }
 
         if (entity.origin) {
-            const origin = vmtParseNumbers(entity.origin);
+            const origin = vmtParseVector(entity.origin);
             vec3.set(this.localOrigin, origin[0], origin[1], origin[2]);
         }
 
         if (entity.angles) {
-            const angles = vmtParseNumbers(entity.angles);
+            const angles = vmtParseVector(entity.angles);
             vec3.set(this.angles, angles[0], angles[1], angles[2]);
         }
 
-        if (entity.renderamt)
-            this.renderamt = Number(entity.renderamt) / 255.0;
+        this.renderamt = vmtParseNumber(entity.renderamt, 255.0) / 255.0;
 
         if (entity.targetname)
             this.targetName = '' + entity.targetname;
 
-        if (entity.skin)
-            this.skin = Number(entity.skin);
+        this.skin = vmtParseNumber(entity.skin, 0);
 
         if (entity.startdisabled)
             this.enabled = !Number(entity.startdisabled);
@@ -327,7 +325,7 @@ abstract class BaseToggle extends BaseEntity {
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
-        vec3.copy(this.moveDir, vmtParseNumbers(fallbackUndefined(this.entity.movedir, "")) as vec3);
+        vec3.copy(this.moveDir, vmtParseVector(fallbackUndefined(this.entity.movedir, "")) as vec3);
         this.startPosition = Number(fallbackUndefined(this.entity.startposition, '0'));
         this.moveDistance = Number(fallbackUndefined(this.entity.movedistance, '0'));
         this.speed = Number(fallbackUndefined(this.entity.speed, '0'));

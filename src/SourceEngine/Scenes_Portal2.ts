@@ -24,9 +24,10 @@ class Portal2SceneDesc implements SceneDesc {
 
 const pathBase = `Portal2`;
 
-const id = 'Portal 2';
+const id = 'Portal2';
 const name = 'Portal 2';
 const sceneDescs = [
+    "Single Player",
     new Portal2SceneDesc("sp_a1_intro1"),
     new Portal2SceneDesc("sp_a1_intro2"),
     new Portal2SceneDesc("sp_a1_intro3"),
@@ -90,6 +91,7 @@ const sceneDescs = [
     new Portal2SceneDesc("sp_a4_tb_trust_drop"),
     new Portal2SceneDesc("sp_a4_tb_wall_button"),
     new Portal2SceneDesc("sp_a5_credits"),
+    "Multi-Player",
     new Portal2SceneDesc("mp_coop_catapult_1"),
     new Portal2SceneDesc("mp_coop_catapult_2"),
     new Portal2SceneDesc("mp_coop_catapult_wall_intro"),
@@ -132,6 +134,7 @@ const sceneDescs = [
     new Portal2SceneDesc("mp_coop_wall_5"),
     new Portal2SceneDesc("mp_coop_wall_block"),
     new Portal2SceneDesc("mp_coop_wall_intro"),
+    "???",
     new Portal2SceneDesc("e1912"),
 ];
 

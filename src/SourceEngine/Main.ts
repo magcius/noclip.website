@@ -2,7 +2,7 @@
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
-import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
@@ -12,7 +12,7 @@ import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullC
 import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { clamp, getMatrixTranslation } from "../MathHelpers";
@@ -252,13 +252,15 @@ export class SkyboxRenderer {
         offs += fillVec3v(d, offs, view.cameraPos);
 
         for (let i = 0; i < 6; i++) {
-            if (!this.materialInstances[i].isMaterialVisible(renderContext))
+            const materialInstance = this.materialInstances[i];
+            if (!materialInstance.isMaterialVisible(renderContext))
                 continue;
             const renderInst = renderInstManager.newRenderInst();
-            this.materialInstances[i].setOnRenderInst(renderContext, renderInst, this.modelMatrix);
+            materialInstance.setOnRenderInst(renderContext, renderInst, this.modelMatrix);
+            // Overwrite the filter key from the material instance.
             renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
             renderInst.drawIndexes(6, i*6);
-            renderInstManager.submitRenderInst(renderInst);
+            materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -335,10 +337,7 @@ class BSPSurfaceRenderer {
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
-        if (this.materialInstance.isTranslucent)
-            renderInst.filterKey = FilterKey.Translucent;
-
-        renderInstManager.submitRenderInst(renderInst);
+        this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }
 }
 
@@ -504,8 +503,6 @@ export class BSPModelRenderer {
     }
 }
 
-const enum FilterKey { Skybox, Main, Translucent }
-
 // A "View" is effectively a camera, but in Source engine space.
 export class SourceEngineView {
     // aka viewMatrix
@@ -520,6 +517,9 @@ export class SourceEngineView {
     // Frustum is stored in Source engine world space.
     public frustum = new Frustum();
 
+    public mainList = new GfxRenderInstList();
+    public indirectList = new GfxRenderInstList(null);
+
     public setupFromCamera(camera: Camera, extraTransformInSourceEngineSpace: mat4 | null = null): void {
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         if (extraTransformInSourceEngineSpace !== null)
@@ -532,6 +532,11 @@ export class SourceEngineView {
         // Compute camera position.
 
         this.frustum.newFrame();
+    }
+
+    public reset(): void {
+        this.mainList.reset();
+        this.indirectList.reset();
     }
 }
 
@@ -640,7 +645,7 @@ export class DebugCube {
         renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.program));
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(6*6);
-        renderInstManager.submitRenderInst(renderInst);
+        view.mainList.submitRenderInst(renderInst);
         let offs = renderInst.allocateUniformBuffer(DebugCubeProgram.ub_ObjectParams, 16+4*6);
         const d = renderInst.mapUniformBufferF32(DebugCubeProgram.ub_ObjectParams);
 
@@ -993,7 +998,7 @@ void main() {
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
-    private postTextureMapping = nArray(2, () => new TextureMapping());
+    private textureMapping = nArray(2, () => new TextureMapping());
     private postProgram = new FullscreenPostProgram();
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
@@ -1014,9 +1019,10 @@ export class SourceRenderer implements SceneGfx {
     constructor(context: SceneContext, filesystem: SourceFileSystem) {
         const device = context.device;
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache(), filesystem);
 
-        this.postTextureMapping[0].gfxSampler = this.renderContext.cache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = this.renderContext.cache.createSampler(device, {
             magFilter: GfxTexFilterMode.BILINEAR,
             minFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.NO_MIP,
@@ -1073,7 +1079,6 @@ export class SourceRenderer implements SceneGfx {
         template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
         template.setBindingLayouts(bindingLayouts);
 
-        template.filterKey = FilterKey.Skybox;
         if (this.skyboxRenderer !== null && this.drawSkybox2D)
             this.skyboxRenderer.prepareToRender(this.renderContext, renderInstManager, this.skyboxView);
 
@@ -1095,7 +1100,6 @@ export class SourceRenderer implements SceneGfx {
             }
         }
 
-        template.filterKey = FilterKey.Main;
         if (this.drawWorld) {
             for (let i = 0; i < this.bspRenderers.length; i++) {
                 const bspRenderer = this.bspRenderers[i];
@@ -1118,13 +1122,20 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    private executeOnPass(passRenderer: GfxRenderPass, filterKey: FilterKey): void {
+    private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
         const device = this.renderContext.device;
         const r = this.renderHelper.renderInstManager;
+        list.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.textureMapping[0]);
+        list.drawOnPassRenderer(device, r.gfxRenderCache, passRenderer);
+    }
 
-        r.setVisibleByFilterKeyExact(filterKey);
-        r.simpleRenderInstList!.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.postTextureMapping[0]);
-        r.drawOnPassRenderer(device, passRenderer);
+    private resetViews(): void {
+        this.mainView.reset();
+        this.skyboxView.reset();
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(1/20);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -1148,7 +1159,8 @@ export class SourceRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
 
             pass.exec((passRenderer) => {
-                this.executeOnPass(passRenderer, FilterKey.Skybox);
+                this.executeOnPass(passRenderer, this.skyboxView.mainList);
+                this.executeOnPass(passRenderer, this.skyboxView.indirectList);
             });
         });
 
@@ -1160,7 +1172,7 @@ export class SourceRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
             pass.exec((passRenderer) => {
-                this.executeOnPass(passRenderer, FilterKey.Main);
+                this.executeOnPass(passRenderer, this.mainView.mainList);
             });
         });
 
@@ -1173,9 +1185,8 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                this.postTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                this.renderContext.colorCorrection.fillTextureMapping(this.postTextureMapping[1]);
-                this.executeOnPass(passRenderer, FilterKey.Translucent);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.executeOnPass(passRenderer, this.mainView.indirectList);
             });
         });
 
@@ -1193,18 +1204,19 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
-            const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
-            gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsPost);
-            gammaCorrectRenderInst.setInputLayoutAndState(null, null);
-            const gammaCorrectProgram = cache.createProgram(device, this.postProgram);
-            gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
-            gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
-            gammaCorrectRenderInst.drawPrimitives(3);
+            const postRenderInst = this.renderHelper.renderInstManager.newRenderInst();
+            postRenderInst.setBindingLayouts(bindingLayoutsPost);
+            postRenderInst.setInputLayoutAndState(null, null);
+            const postProgram = cache.createProgram(device, this.postProgram);
+            postRenderInst.setGfxProgram(postProgram);
+            postRenderInst.setMegaStateFlags(fullscreenMegaState);
+            postRenderInst.drawPrimitives(3);
 
             pass.exec((passRenderer, scope) => {
-                this.postTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.postTextureMapping);
-                gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
+                postRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                postRenderInst.drawOnPass(device, cache, passRenderer);
             });
         });
 
@@ -1214,6 +1226,7 @@ export class SourceRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
+        this.resetViews();
         renderInstManager.resetRenderInsts();
     }
 

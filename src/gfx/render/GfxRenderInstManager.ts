@@ -537,7 +537,7 @@ export class GfxRenderInstList {
      * the position specified by the compare function, so the render inst must be
      * fully constructed at this point.
      */
-    public insertSorted(renderInst: GfxRenderInst): void {
+    private insertSorted(renderInst: GfxRenderInst): void {
         if (this.compareFunction === null) {
             this.renderInsts.push(renderInst);
         } else if (this.usePostSort) {
@@ -547,6 +547,11 @@ export class GfxRenderInstList {
         }
 
         this.checkUsePostSort();
+    }
+
+    public submitRenderInst(renderInst: GfxRenderInst): void {
+        renderInst._flags |= GfxRenderInstFlags.Draw;
+        this.insertSorted(renderInst);
     }
 
     public hasLateSamplerBinding(name: string): boolean {
@@ -662,9 +667,8 @@ export class GfxRenderInstManager {
      * this assumes the render inst was fully filled in, so do not modify it
      * after submitting it.
      */
-    public submitRenderInst(renderInst: GfxRenderInst): void {
-        renderInst._flags |= GfxRenderInstFlags.Draw;
-        this.currentRenderInstList.insertSorted(renderInst);
+    public submitRenderInst(renderInst: GfxRenderInst, list: GfxRenderInstList = this.currentRenderInstList): void {
+        list.submitRenderInst(renderInst);
     }
 
     /**
@@ -754,7 +758,7 @@ export class GfxRenderInstManager {
 
         for (let i = 0; i < this.instPool.allocCount; i++)
             if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
-                list.insertSorted(this.instPool.pool[i]);
+                list.submitRenderInst(this.instPool.pool[i]);
     }
 
     /**

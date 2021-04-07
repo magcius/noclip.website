@@ -2,7 +2,7 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray, hexzero, hexdump } from "../util";
+import { readString, assertExists, assert, nArray } from "../util";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
@@ -11,7 +11,7 @@ import { Plane, AABB } from "../Geometry";
 import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
 import BitMap from "../BitMap";
 import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
-import { Color, colorNewFromRGBA, colorCopy, TransparentBlack, colorScaleAndAdd, colorScale, colorNewCopy } from "../Color";
+import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
 import { lerp } from "../MathHelpers";
 
@@ -479,6 +479,7 @@ function ensureInList<T>(L: T[], v: T): void {
 const scratchVec3 = vec3.create();
 export class BSPFile {
     public version: number;
+    public usingHDR: boolean;
 
     public entities: BSPEntity[] = [];
     public surfaces: Surface[] = [];
@@ -509,6 +510,7 @@ export class BSPFile {
             // TODO(jstpierre): Use HDR lumps everywhere / reimplement Source HDR
             USING_HDR = true;
         }
+        this.usingHDR = USING_HDR;
 
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
@@ -1384,12 +1386,13 @@ export class BSPFile {
         }
 
         const cubemaps = getLumpData(LumpType.CUBEMAPS).createDataView();
+        const cubemapHDRSuffix = this.usingHDR ? `.hdr` : ``;
         for (let idx = 0x00; idx < cubemaps.byteLength; idx += 0x10) {
             const posX = cubemaps.getInt32(idx + 0x00, true);
             const posY = cubemaps.getInt32(idx + 0x04, true);
             const posZ = cubemaps.getInt32(idx + 0x08, true);
             const pos = vec3.fromValues(posX, posY, posZ);
-            const filename = `maps/${mapname}/c${posX}_${posY}_${posZ}`;
+            const filename = `maps/${mapname}/c${posX}_${posY}_${posZ}${cubemapHDRSuffix}`;
             this.cubemaps.push({ pos, filename });
         }
 

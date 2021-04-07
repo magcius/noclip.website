@@ -319,7 +319,7 @@ export class DetailPropLeafRenderer {
         this.materialInstance.setOnRenderInst(renderContext, renderInst, scratchMatrix);
         renderInst.drawIndexes(indexOffs);
         renderInst.debug = this;
-        renderInstManager.submitRenderInst(renderInst);
+        this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
