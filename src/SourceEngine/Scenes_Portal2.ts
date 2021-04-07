@@ -138,4 +138,4 @@ const sceneDescs = [
     new Portal2SceneDesc("e1912"),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };
