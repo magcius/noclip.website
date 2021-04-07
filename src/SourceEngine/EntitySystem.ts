@@ -1,11 +1,12 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
-import { Cyan, Green, Magenta } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { IS_DEVELOPMENT } from '../BuildVersion';
+import { colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, LightCache, ParameterReference, paramSetNum } from './Materials';
@@ -44,15 +45,17 @@ class EntityOutput {
             this.actions.push(parseEntityOutputAction(S));
     }
 
-    public fire(entitySystem: EntitySystem, value: string = ''): void {
+    public fire(entitySystem: EntitySystem, activator: BaseEntity, value: string = ''): void {
         for (let i = 0; i < this.actions.length; i++)
-            entitySystem.queueEntityOutputAction(this.actions[i], value);
+            entitySystem.queueEntityOutputAction(this.actions[i], activator, value);
     }
 }
 
 type EntityInputFunc = (entitySystem: EntitySystem, value: string) => void;
 
 const scratchMat4a = mat4.create();
+
+// Some part of this is definitely BaseAnimating, maybe split at some point?
 export class BaseEntity {
     public modelBSP: BSPModelRenderer | null = null;
     public modelStudio: StudioModelInstance | null = null;
@@ -111,6 +114,12 @@ export class BaseEntity {
 
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
+        this.registerInput('kill', this.input_kill.bind(this));
+        this.registerInput('skin', this.input_skin.bind(this));
+
+        // Set up some defaults.
+        if (this.entity.classname.startsWith('func_nav_'))
+            this.visible = false;
     }
 
     private input_enable(): void {
@@ -119,6 +128,14 @@ export class BaseEntity {
 
     private input_disable(): void {
         this.enabled = false;
+    }
+
+    private input_kill(): void {
+        this.remove();
+    }
+
+    private input_skin(entitySystem: EntitySystem, value: string): void {
+        this.skin = Number(value) || 0;
     }
 
     protected remove(): void {
@@ -133,7 +150,7 @@ export class BaseEntity {
     public fireInput(entitySystem: EntitySystem, inputName: string, value: string): void {
         const func = this.inputs.get(inputName);
         if (!func) {
-            console.warn(`Unknown input: ${this.targetName} (${this.entity.classname}) ${inputName}`);
+            console.warn(`Unknown input: ${this.targetName} (${this.entity.classname}) ${inputName} ${value}`);
             return;
         }
 
@@ -167,12 +184,13 @@ export class BaseEntity {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
-        if (!this.visible)
+        if (!this.visible || !this.enabled || !this.alive)
             return;
 
         if (this.modelBSP !== null) {
             // BSP models are rendered by the BSP system.
         } else if (this.modelStudio !== null) {
+            this.modelStudio.setSkin(renderContext, this.skin);
             this.modelStudio.prepareToRender(renderContext, renderInstManager);
 
             if ((this as any).debug)
@@ -193,7 +211,7 @@ export class BaseEntity {
         vec3.copy(this.localOrigin, v);
     }
 
-    protected getAbsOrigin(dst: vec3): void {
+    public getAbsOrigin(dst: vec3): void {
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
             if (parentModelMatrix !== null) {
@@ -365,6 +383,7 @@ abstract class BaseToggle extends BaseEntity {
 }
 
 const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 class func_movelinear extends BaseToggle {
     public static classname = `func_movelinear`;
 
@@ -390,9 +409,9 @@ class func_movelinear extends BaseToggle {
 
     protected moveDone(entitySystem: EntitySystem): void {
         if (vec3.distance(this.localOrigin, this.positionClosed) < MathConstants.EPSILON)
-            this.output_onFullyClosed.fire(entitySystem);
+            this.output_onFullyClosed.fire(entitySystem, this);
         if (vec3.distance(this.localOrigin, this.positionOpened) < MathConstants.EPSILON)
-            this.output_onFullyOpen.fire(entitySystem);
+            this.output_onFullyOpen.fire(entitySystem, this);
     }
 
     private input_open(entitySystem: EntitySystem): void {
@@ -464,21 +483,21 @@ class func_door extends BaseToggle {
     private goToTop(entitySystem: EntitySystem): void {
         this.toggleState = ToggleState.GoingToTop;
         this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
-        this.output_onOpen.fire(entitySystem);
+        this.output_onOpen.fire(entitySystem, this);
     }
 
     private goToBottom(entitySystem: EntitySystem): void {
         this.toggleState = ToggleState.GoingToBottom;
         this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
-        this.output_onClose.fire(entitySystem);
+        this.output_onClose.fire(entitySystem, this);
     }
 
     private hitTop(entitySystem: EntitySystem): void {
-        this.output_onFullyOpen.fire(entitySystem);
+        this.output_onFullyOpen.fire(entitySystem, this);
     }
 
     private hitBottom(entitySystem: EntitySystem): void {
-        this.output_onFullyClosed.fire(entitySystem);
+        this.output_onFullyClosed.fire(entitySystem, this);
     }
 
     protected moveDone(entitySystem: EntitySystem): void {
@@ -516,6 +535,27 @@ class func_door extends BaseToggle {
     }
 }
 
+class func_instance_io_proxy extends BaseEntity {
+    public static classname = `func_instance_io_proxy`;
+
+    private output_onProxyRelay: EntityOutput[] = [];
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        const numProxies = 30;
+        for (let i = 1; i <= numProxies; i++) {
+            const output = new EntityOutput();
+            this.output_onProxyRelay.push(output);
+            const ioName = `onproxyrelay${i}`;
+            output.parse(this.entity[ioName]);
+            this.registerInput(ioName, (entitySystem: EntitySystem) => {
+                output.fire(entitySystem, this);
+            });
+        }
+    }
+}
+
 class logic_auto extends BaseEntity {
     public static classname = `logic_auto`;
 
@@ -530,76 +570,7 @@ class logic_auto extends BaseEntity {
     public spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        this.output_onMapSpawn.fire(entitySystem);
-    }
-}
-
-class math_counter extends BaseEntity {
-    public static classname = `math_counter`;
-
-    private min = 0;
-    private max = 0;
-    private value = 0;
-
-    private minEdgeState: boolean = false;
-    private maxEdgeState: boolean = false;
-
-    private output_outValue = new EntityOutput();
-    private output_onHitMin = new EntityOutput();
-    private output_onHitMax = new EntityOutput();
-
-    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(entitySystem, renderContext, bspRenderer, entity);
-
-        this.output_outValue.parse(this.entity.outvalue);
-        this.output_onHitMin.parse(this.entity.onhitmin);
-        this.output_onHitMax.parse(this.entity.onhitmax);
-        this.registerInput('add', this.input_add.bind(this));
-        this.registerInput('subtract', this.input_subtract.bind(this));
-
-        this.value = Number(fallbackUndefined(this.entity.startvalue, '0'));
-        this.min = Number(fallbackUndefined(this.entity.min, '0'));
-        this.max = Number(fallbackUndefined(this.entity.max, '0'));
-    }
-
-    private input_add(entitySystem: EntitySystem, value: string): void {
-        const num = Number(value);
-        this.updateValue(entitySystem, this.value + num);
-    }
-
-    private input_subtract(entitySystem: EntitySystem, value: string): void {
-        const num = Number(value);
-        this.updateValue(entitySystem, this.value - num);
-    }
-
-    private updateValue(entitySystem: EntitySystem, v: number): void {
-        this.value = v;
-
-        if (this.max !== 0) {
-            if (this.value >= this.max) {
-                this.value = this.max;
-                if (!this.maxEdgeState) {
-                    this.output_onHitMax.fire(entitySystem);
-                    this.maxEdgeState = true;
-                }
-            } else {
-                this.maxEdgeState = false;
-            }
-        }
-
-        if (this.min !== 0) {
-            if (this.value <= this.min) {
-                this.value = this.min;
-                if (!this.minEdgeState) {
-                    this.output_onHitMin.fire(entitySystem);
-                    this.minEdgeState = true;
-                }
-            } else {
-                this.minEdgeState = false;
-            }
-        }
-
-        this.output_outValue.fire(entitySystem);
+        this.output_onMapSpawn.fire(entitySystem, this);
     }
 }
 
@@ -616,9 +587,10 @@ class logic_relay extends BaseEntity {
     }
 
     private input_trigger(entitySystem: EntitySystem): void {
-        this.output_onTrigger.fire(entitySystem);
+        this.output_onTrigger.fire(entitySystem, this);
     }
 }
+
 
 class logic_timer extends BaseEntity {
     public static classname = `logic_timer`;
@@ -654,9 +626,92 @@ class logic_timer extends BaseEntity {
             return;
 
         if (entitySystem.currentTime >= this.nextFireTime) {
-            this.output_onTimer.fire(entitySystem);
+            this.output_onTimer.fire(entitySystem, this);
             this.reset(entitySystem);
         }
+    }
+}
+
+class math_counter extends BaseEntity {
+    public static classname = `math_counter`;
+
+    private min = 0;
+    private max = 0;
+    private value = 0;
+
+    private minEdgeState: boolean = false;
+    private maxEdgeState: boolean = false;
+
+    private output_outValue = new EntityOutput();
+    private output_onHitMin = new EntityOutput();
+    private output_onHitMax = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_outValue.parse(this.entity.outvalue);
+        this.output_onHitMin.parse(this.entity.onhitmin);
+        this.output_onHitMax.parse(this.entity.onhitmax);
+        this.registerInput('add', this.input_add.bind(this));
+        this.registerInput('subtract', this.input_subtract.bind(this));
+        this.registerInput('setvalue', this.input_setvalue.bind(this));
+        this.registerInput('setvaluenofire', this.input_setvaluenofire.bind(this));
+
+        this.value = Number(fallbackUndefined(this.entity.startvalue, '0'));
+        this.min = Number(fallbackUndefined(this.entity.min, '0'));
+        this.max = Number(fallbackUndefined(this.entity.max, '0'));
+    }
+
+    private input_add(entitySystem: EntitySystem, value: string): void {
+        const num = Number(value);
+        this.updateValue(entitySystem, this.value + num);
+    }
+
+    private input_subtract(entitySystem: EntitySystem, value: string): void {
+        const num = Number(value);
+        this.updateValue(entitySystem, this.value - num);
+    }
+
+    private input_setvalue(entitySystem: EntitySystem, value: string): void {
+        const num = Number(value);
+        this.updateValue(entitySystem, num);
+    }
+
+    private input_setvaluenofire(entitySystem: EntitySystem, value: string): void {
+        let num = Number(value);
+        if (this.min !== 0 || this.max !== 0)
+            num = clamp(num, this.min, this.max);
+        this.value = num;
+    }
+
+    private updateValue(entitySystem: EntitySystem, v: number): void {
+        this.value = v;
+
+        if (this.max !== 0) {
+            if (this.value >= this.max) {
+                this.value = this.max;
+                if (!this.maxEdgeState) {
+                    this.output_onHitMax.fire(entitySystem, this);
+                    this.maxEdgeState = true;
+                }
+            } else {
+                this.maxEdgeState = false;
+            }
+        }
+
+        if (this.min !== 0) {
+            if (this.value <= this.min) {
+                this.value = this.min;
+                if (!this.minEdgeState) {
+                    this.output_onHitMin.fire(entitySystem, this);
+                    this.minEdgeState = true;
+                }
+            } else {
+                this.minEdgeState = false;
+            }
+        }
+
+        this.output_outValue.fire(entitySystem, this);
     }
 }
 
@@ -677,6 +732,8 @@ class trigger_multiple extends BaseEntity {
         this.output_onStartTouch.parse(this.entity.onstarttouch);
         this.output_onEndTouch.parse(this.entity.onendtouch);
         this.output_onEndTouchAll.parse(this.entity.onendtouchall);
+
+        this.visible = false;
     }
 
     private getAABB(): AABB | null {
@@ -689,13 +746,13 @@ class trigger_multiple extends BaseEntity {
     }
 
     protected onTouch(entitySystem: EntitySystem): void {
-        this.output_onTrigger.fire(entitySystem);
-        this.output_onStartTouch.fire(entitySystem);
+        this.output_onTrigger.fire(entitySystem, this);
+        this.output_onStartTouch.fire(entitySystem, this);
     }
 
     protected onUnTouch(entitySystem: EntitySystem): void {
-        this.output_onEndTouch.fire(entitySystem);
-        this.output_onEndTouchAll.fire(entitySystem);
+        this.output_onEndTouch.fire(entitySystem, this);
+        this.output_onEndTouchAll.fire(entitySystem, this);
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -922,6 +979,7 @@ interface EntityFactory {
 }
 
 interface QueuedOutputEvent {
+    activator: BaseEntity;
     triggerTime: number;
     action: EntityOutputAction;
     value: string;
@@ -931,6 +989,7 @@ export class EntitySystem {
     public classname = new Map<string, EntityFactory>();
     public entities: BaseEntity[] = [];
     public currentTime = 0;
+    public debugger = new EntityMessageDebugger();
     private outputQueue: QueuedOutputEvent[] = [];
 
     constructor() {
@@ -942,6 +1001,7 @@ export class EntitySystem {
         this.registerFactory(water_lod_control);
         this.registerFactory(func_movelinear);
         this.registerFactory(func_door);
+        this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
         this.registerFactory(logic_timer);
@@ -965,12 +1025,12 @@ export class EntitySystem {
         return false;
     }
 
-    public queueEntityOutputAction(action: EntityOutputAction, value: string): void {
+    public queueEntityOutputAction(action: EntityOutputAction, activator: BaseEntity, value: string): void {
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
         const triggerTime = this.currentTime + action.delay;
-        this.outputQueue.push({ action, triggerTime, value });
+        this.outputQueue.push({ activator, action, triggerTime, value });
     }
 
     public findEntityByTargetName(targetName: string): BaseEntity | null {
@@ -978,6 +1038,12 @@ export class EntitySystem {
             if (this.entities[i].targetName === targetName)
                 return this.entities[i];
         return null;
+    }
+
+    private fireInput(target: BaseEntity, event: QueuedOutputEvent): void {
+        this.debugger.fireInput(target, event, this.currentTime);
+
+        target.fireInput(this, event.action.inputName, event.value);
     }
 
     private fireEntityOutputAction(event: QueuedOutputEvent): boolean {
@@ -988,7 +1054,7 @@ export class EntitySystem {
             const target = this.entities[i];
             if (!this.entityMatchesTargetName(target, event.action.targetName))
                 continue;
-            target.fireInput(this, event.action.inputName, event.value);
+            this.fireInput(target, event);
         }
 
         return true;
@@ -1002,12 +1068,13 @@ export class EntitySystem {
 
     public movement(renderContext: SourceRenderContext): void {
         this.processOutputQueue();
+        this.debugger.movement(renderContext);
 
         for (let i = 0; i < this.entities.length; i++)
             if (this.entities[i].alive)
                 this.entities[i].movement(this, renderContext);
 
-        this.currentTime += renderContext.globalDeltaTime;
+        this.currentTime = renderContext.globalTime;
     }
 
     private spawn(): void {
@@ -1023,10 +1090,6 @@ export class EntitySystem {
             entity = new factory(this, renderContext, renderer, bspEntity);
         } else {
             entity = new BaseEntity(this, renderContext, renderer, bspEntity);
-
-            // Set up some defaults.
-            if (bspEntity.classname.startsWith('func_nav_'))
-                entity.visible = false;
         }
 
         this.entities.push(entity);
@@ -1036,5 +1099,63 @@ export class EntitySystem {
         for (let i = 0; i < entities.length; i++)
             this.createEntity(renderContext, renderer, entities[i]);
         this.spawn();
+    }
+}
+
+interface EntityMessageDebuggerItem {
+    target: BaseEntity;
+    event: QueuedOutputEvent;
+    time: number;
+}
+
+class EntityMessageDebugger {
+    private messages: EntityMessageDebuggerItem[] = [];
+    public capture = IS_DEVELOPMENT;
+    public draw = IS_DEVELOPMENT;
+
+    public fireInput(target: BaseEntity, event: QueuedOutputEvent, time: number): void {
+        if (!this.capture)
+            return;
+
+        this.messages.unshift({ target, event, time });
+    }
+
+    // Show for 1 second, then fade it out for 1 second.
+
+    public timeFull = 1;
+    public timeFade = 1;
+    public movement(renderContext: SourceRenderContext): void {
+        if (!this.draw)
+            return;
+
+        const activatorColor = colorNewCopy(Green);
+        const targetColor = colorNewCopy(Red);
+        const lineColor = colorNewCopy(White);
+
+        const timeTotal = this.timeFade + this.timeFull;
+        for (let i = 0; i < this.messages.length; i++) {
+            const message = this.messages[i];
+            const timeDelta = renderContext.globalTime - message.time;
+
+            if (timeDelta > timeTotal) {
+                this.messages.length = i;
+                break;
+            }
+
+            const alpha = saturate(invlerp(timeTotal, this.timeFull, timeDelta));
+            activatorColor.a = alpha;
+            targetColor.a = alpha;
+            lineColor.a = alpha;
+
+            const activator = message.event.activator, target = message.target;
+            const ctx = getDebugOverlayCanvas2D();
+
+            activator.getAbsOrigin(scratchVec3a);
+            target.getAbsOrigin(scratchVec3b);
+            drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, activatorColor, 6);
+            drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, targetColor, 6);
+            drawWorldSpaceLine(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, scratchVec3b, lineColor, 3);
+            drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, message.event.action.inputName, 6, lineColor, { outline: 3, font: '8pt monospace' });
+        }
     }
 }

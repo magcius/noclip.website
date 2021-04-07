@@ -1,6 +1,6 @@
 
 import { DeviceProgram } from "../Program";
-import { VMT, parseVMT, VKFPair, vmtParseVector, VKFParamMap } from "./VMT";
+import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists } from "../util";
@@ -386,6 +386,7 @@ export abstract class BaseMaterial {
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
     public isTranslucent = false;
+    public isIndirect = false;
     public isToolMaterial = false;
     public param: ParameterMap = {};
     public entityParams: EntityMaterialParameters | null = null;
@@ -499,6 +500,15 @@ export abstract class BaseMaterial {
         this.paramGetVector(name).fillColor(scratchColor, alpha);
         colorGammaToLinear(scratchColor, scratchColor);
         return fillColor(d, offs, scratchColor);
+    }
+
+    protected textureIsIndirect(name: string): boolean {
+        const texture = this.paramGetTexture(name);
+
+        if (texture.lateBindingTexture === LateBindingTexture.FramebufferTexture)
+            return true;
+
+        return false;
     }
 
     protected textureIsTranslucent(name: string): boolean {
@@ -643,7 +653,10 @@ export abstract class BaseMaterial {
 
     public getRenderInstListForView(view: SourceEngineView): GfxRenderInstList {
         // Choose the right list.
-        return this.isTranslucent ? view.indirectList : view.mainList;
+        if (this.isIndirect)
+            return view.indirectList;
+
+        return view.mainList;
     }
 }
 //#endregion
@@ -736,6 +749,7 @@ varying vec4 v_TexCoord2;
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
 varying vec4 v_Color;
+varying vec3 v_DiffuseLighting;
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -749,7 +763,7 @@ varying vec3 v_TangentSpaceBasis2;
 #ifdef USE_BUMPMAP
 varying float v_LightmapOffset;
 #endif
-#ifdef USE_DYNAMIC_LIGHTING
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
 varying vec4 v_LightAtten;
 #endif
 
@@ -921,16 +935,40 @@ void mainVS() {
     v_Color = vec4(1.0);
 #endif
 
-// This should be mutually exclusive with USE_VERTEX_COLOR, so overwrite.
+    v_DiffuseLighting.rgb = vec3(1.0);
+
 #ifdef USE_STATIC_VERTEX_LIGHTING
     // Static vertex lighting should already include ambient lighting.
     // 2.0 here is overbright.
-    v_Color.rgb = GammaToLinear(a_StaticVertexLighting) * 2.0;
+    v_DiffuseLighting.rgb = GammaToLinear(a_StaticVertexLighting) * 2.0;
 #endif
 
 // Mutually exclusive with above.
 #ifdef USE_AMBIENT_CUBE
-    v_Color.rgb = AmbientLight(t_NormalWorld);
+    v_DiffuseLighting.rgb = AmbientLight(t_NormalWorld);
+#endif
+
+#ifdef USE_DYNAMIC_LIGHTING
+    vec4 t_LightAtten = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
+#endif
+
+#ifdef USE_DYNAMIC_VERTEX_LIGHTING
+    bool t_HalfLambert = false;
+#ifdef USE_HALF_LAMBERT
+    t_HalfLambert = true;
+#endif
+
+    DiffuseLightInput t_DiffuseLightInput;
+    t_DiffuseLightInput.PositionWorld = t_PositionWorld.xyz;
+    t_DiffuseLightInput.NormalWorld = t_NormalWorld.xyz;
+    t_DiffuseLightInput.LightAttenuation = t_LightAtten.xyzw;
+    t_DiffuseLightInput.HalfLambert = t_HalfLambert;
+    vec3 t_DiffuseLighting = WorldLightCalcAllDiffuse(t_DiffuseLightInput);
+    v_DiffuseLighting.rgb += t_DiffuseLighting;
+#endif
+
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+    v_LightAtten.xyzw = t_LightAtten;
 #endif
 
 // TODO(jstpierre): Move ModulationColor to PS, support $blendtintbybasealpha and $blendtintcoloroverbase
@@ -969,9 +1007,6 @@ void mainVS() {
 #ifdef USE_BUMPMAP
     v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
-#endif
-#ifdef USE_DYNAMIC_LIGHTING
-    v_LightAtten.xyzw = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
 #endif
 }
 #endif
@@ -1033,7 +1068,7 @@ const vec3 g_RNBasis0 = vec3( 0.8660254037844386,  0.0000000000000000, 0.5773502
 const vec3 g_RNBasis1 = vec3(-0.4082482904638631,  0.7071067811865475, 0.5773502691896258); // -sqrt1/6, sqrt1/2,  sqrt1/3
 const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502691896258); // -sqrt1/6, -sqrt1/2, sqrt1/3
 
-#ifdef USE_DYNAMIC_LIGHTING
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
 struct SpecularLightResult {
     vec3 SpecularLight;
     vec3 RimLight;
@@ -1144,6 +1179,10 @@ void mainPS() {
 #endif
 
     vec3 t_DiffuseLighting = vec3(1.0);
+
+    // Multiply in diffuse lighting from vertex shader.
+    t_DiffuseLighting.rgb *= v_DiffuseLighting.rgb;
+
 #ifdef USE_LIGHTMAP
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
@@ -1201,7 +1240,7 @@ void mainPS() {
         discard;
 #endif
 
-#ifdef USE_DYNAMIC_LIGHTING
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
     bool t_HalfLambert = false;
 #ifdef USE_HALF_LAMBERT
     t_HalfLambert = true;
@@ -1218,7 +1257,7 @@ void mainPS() {
     t_DiffuseLightInput.NormalWorld = t_NormalWorld.xyz;
     t_DiffuseLightInput.LightAttenuation = v_LightAtten.xyzw;
     t_DiffuseLightInput.HalfLambert = t_HalfLambert;
-    t_DiffuseLighting.rgb = WorldLightCalcAllDiffuse(t_DiffuseLightInput);
+    t_DiffuseLighting.rgb *= WorldLightCalcAllDiffuse(t_DiffuseLightInput);
 #endif
 
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
@@ -1288,7 +1327,7 @@ void mainPS() {
 #endif
 
 #ifdef USE_PHONG
-#ifdef USE_DYNAMIC_LIGHTING
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
     SpecularLightInput t_SpecularLightInput;
     t_SpecularLightInput.PositionWorld = v_PositionWorld.xyz;
     t_SpecularLightInput.NormalWorld = t_NormalWorld;
@@ -1365,15 +1404,27 @@ class Material_Generic extends BaseMaterial {
     }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
+        let wantsDynamicVertexLighting: boolean;
+        let wantsDynamicPixelLighting: boolean;
+
         if (this.shaderType === ShaderType.VertexLitGeneric) {
             this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
-            this.wantsDynamicLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            wantsDynamicPixelLighting = false;
         } else if (this.shaderType === ShaderType.Skin) {
             this.wantsStaticVertexLighting = false;
-            this.wantsDynamicLighting = true;
             this.wantsAmbientCube = false;
+            wantsDynamicVertexLighting = false;
+            wantsDynamicPixelLighting = true;
+        } else {
+            this.wantsStaticVertexLighting = false;
+            this.wantsAmbientCube = false;
+            wantsDynamicVertexLighting = false;
+            wantsDynamicPixelLighting = false;
         }
+
+        this.wantsDynamicLighting = wantsDynamicVertexLighting || wantsDynamicPixelLighting;
 
         // Ensure that we never have a lightmap at the same time as "studio model" lighting, as they're exclusive...
         if (this.wantsStaticVertexLighting || this.wantsDynamicLighting || this.wantsAmbientCube) {
@@ -1381,6 +1432,8 @@ class Material_Generic extends BaseMaterial {
         }
 
         this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting);
+        this.program.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', wantsDynamicVertexLighting);
+        this.program.setDefineBool('USE_DYNAMIC_PIXEL_LIGHTING', wantsDynamicPixelLighting);
         this.program.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting);
         this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube);
         this.gfxProgram = null;
@@ -2227,9 +2280,11 @@ class Material_Refract extends BaseMaterial {
         const blurAmount = this.paramGetNumber('$bluramount') | 0;
         this.program.defines.set('BLUR_AMOUNT', '' + blurAmount);
 
-        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
+        const isTranslucent = this.textureIsTranslucent('$basetexture');
+        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
+        this.isIndirect = this.textureIsIndirect('$basetexture');
 
         this.setCullMode(this.megaStateFlags);
 

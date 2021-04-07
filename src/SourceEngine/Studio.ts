@@ -1082,6 +1082,7 @@ class StudioModelMeshInstance {
     private materialInstance: BaseMaterial | null = null;
     private inputStateWithColorMesh: GfxInputState | null = null;
     private skinningMode: SkinningMode;
+    private currentSkin: number;
 
     constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
         this.skinningMode = this.calcSkinningMode();
@@ -1115,6 +1116,10 @@ class StudioModelMeshInstance {
 
     private async bindMaterial(renderContext: SourceRenderContext, skin: number = 0): Promise<void> {
         this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialNames[skin], this.entityParams);
+
+        if (this.currentSkin !== skin)
+            return;
+
         this.materialInstance.setSkinningMode(this.skinningMode);
         this.syncMaterialInstanceStaticLightingMode();
     }
@@ -1131,7 +1136,12 @@ class StudioModelMeshInstance {
     public setSkin(renderContext: SourceRenderContext, skin: number): void {
         if (skin >= this.meshData.materialNames.length)
             skin = 0;
+
+        if (this.currentSkin === skin)
+            return;
+
         this.bindMaterial(renderContext, skin);
+        this.currentSkin = skin;
     }
 
     public movement(renderContext: SourceRenderContext): void {

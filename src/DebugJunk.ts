@@ -1,7 +1,7 @@
 // Misc utilities to help me debug various issues. Mostly garbage.
 
 import { AABB } from "./Geometry";
-import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
+import { Color, Magenta, colorToCSS, Red, Green, Blue, OpaqueBlack } from "./Color";
 import { divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
@@ -375,12 +375,12 @@ export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y:
     if (options.outline) {
         const oldLineWidth = ctx.lineWidth;
         ctx.lineWidth = options.outline;
-        ctx.strokeStyle = 'black';
+        ctx.strokeStyle = colorToCSS(OpaqueBlack, color.a);
         ctx.strokeText(text, x, y);
         ctx.lineWidth = oldLineWidth;
     }
 
-    ctx.shadowColor = options.shadowColor ?? 'black';
+    ctx.shadowColor = options.shadowColor ?? colorToCSS(OpaqueBlack, color.a);
     ctx.shadowBlur = options.shadowBlur ?? 0;
     ctx.textAlign = options.align ?? 'start';
     ctx.fillText(text, x, y);
