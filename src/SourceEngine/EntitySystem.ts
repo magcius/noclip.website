@@ -183,6 +183,10 @@ export class BaseEntity {
         this.updateLightingData();
     }
 
+    private animindex = 0;
+    private animtime = 0;
+    private animplay: boolean = false;
+
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
         if (!this.visible || !this.enabled || !this.alive)
             return;
@@ -190,6 +194,10 @@ export class BaseEntity {
         if (this.modelBSP !== null) {
             // BSP models are rendered by the BSP system.
         } else if (this.modelStudio !== null) {
+            // idle animation pose?
+            if (this.animplay)
+                this.animtime += renderContext.globalDeltaTime * 60;
+            this.modelStudio.setupPoseFromAnimation(this.animindex, this.animtime);
             this.modelStudio.setSkin(renderContext, this.skin);
             this.modelStudio.prepareToRender(renderContext, renderInstManager);
 
