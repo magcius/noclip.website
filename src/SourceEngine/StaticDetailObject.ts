@@ -6,7 +6,7 @@ import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
-import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation } from "../MathHelpers";
+import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
@@ -349,6 +349,7 @@ interface StaticProp {
     index: number;
     pos: vec3;
     rot: vec3;
+    scale: number;
     flags: StaticPropFlags;
     skin: number;
     propName: string;
@@ -363,7 +364,7 @@ export interface StaticObjects {
 }
 
 export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number, bspVersion: number): StaticObjects | null {
-    assert(version === 4 || version === 5 || version === 6 || version === 9 || version === 10);
+    assert(version === 4 || version === 5 || version === 6 || version === 9 || version === 10 || version === 11);
     const sprp = buffer.createDataView();
     let idx = 0x00;
 
@@ -384,6 +385,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
     const staticObjectCount = sprp.getUint32(idx, true);
     idx += 0x04;
     for (let i = 0; i < staticObjectCount; i++) {
+        let propStartIdx = idx;
         const posX = sprp.getFloat32(idx + 0x00, true);
         const posY = sprp.getFloat32(idx + 0x04, true);
         const posZ = sprp.getFloat32(idx + 0x08, true);
@@ -417,12 +419,14 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         }
 
         if (version >= 8) {
-            minDXLevel = sprp.getUint8(idx + 0x00);
-            maxDXLevel = sprp.getUint8(idx + 0x01);
+            const minCPULevel = sprp.getUint8(idx + 0x00);
+            const maxCPULevel = sprp.getUint8(idx + 0x01);
             const minGPULevel = sprp.getUint8(idx + 0x02);
             const maxGPULevel = sprp.getUint8(idx + 0x03);
             idx += 0x04;
         }
+
+        let scale = 1.0;
 
         // The version seems to have significantly forked after this...
         // TF2's 7-10 seem to use this below, which is 8 bytes.
@@ -436,13 +440,20 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
                 idx += 0x04;
             }
 
-            if (version >= 9 && version <= 10) {
+            // TODO(jstpierre): Wiki says disableX360 was removed in V11 but that doesn't
+            // match the data I see on CS:GO de_dust2.
+            if (version >= 9) {
                 const disableX360 = sprp.getUint32(idx + 0x00, true);
                 idx += 0x04;
             }
 
             if (version >= 10) {
                 const flagsEx = sprp.getUint32(idx + 0x00, true);
+                idx += 0x04;
+            }
+
+            if (version >= 11) {
+                scale = sprp.getFloat32(idx + 0x00, true);
                 idx += 0x04;
             }
         } else if (bspVersion === 19 || bspVersion === 20) {
@@ -465,7 +476,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const rot = vec3.fromValues(rotX, rotY, rotZ);
         const propName = staticModelDict[propType];
         const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
-        staticProps.push({ index, pos, rot, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist, lightingOrigin });
+        staticProps.push({ index, pos, rot, scale, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist, lightingOrigin });
     }
 
     return { staticProps };
@@ -487,6 +498,7 @@ export class StaticPropRenderer {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
 
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
+        scaleMatrix(scratchMatrix, scratchMatrix, this.staticProp.scale);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
         if (this.staticProp.lightingOrigin !== null)
