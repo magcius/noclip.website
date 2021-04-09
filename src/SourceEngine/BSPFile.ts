@@ -110,8 +110,6 @@ interface Texinfo {
 
     // texdata
     texName: string;
-    width: number;
-    height: number;
 }
 
 interface TexinfoMapping {
@@ -614,7 +612,7 @@ export class BSPFile {
             const view_width = texdata.getUint32(texdataOffs + 0x18, true);
             const view_height = texdata.getUint32(texdataOffs + 0x1C, true);
             const texName = readString(texstrData, texstrTable[nameTableStringID]).toLowerCase();
-            texinfoa.push({ textureMapping, lightmapMapping, flags, width, height, texName });
+            texinfoa.push({ textureMapping, lightmapMapping, flags, texName });
         }
 
         // Parse materials.
@@ -1098,8 +1096,6 @@ export class BSPFile {
 
                         // Texture UV
                         calcTexCoord(scratchVec2, vertex.position, tex.textureMapping);
-                        scratchVec2[0] /= tex.width;
-                        scratchVec2[1] /= tex.height;
                         vertexData[dstOffsVertex++] = scratchVec2[0];
                         vertexData[dstOffsVertex++] = scratchVec2[1];
 
@@ -1173,8 +1169,6 @@ export class BSPFile {
 
                     // Texture UV
                     calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
-                    scratchVec2[0] /= tex.width;
-                    scratchVec2[1] /= tex.height;
                     vertexData[dstOffsVertex++] = scratchVec2[0];
                     vertexData[dstOffsVertex++] = scratchVec2[1];
 

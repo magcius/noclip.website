@@ -396,9 +396,9 @@ export class BSPModelRenderer {
         }
 
         const materialInstances = await Promise.all([...texNames].map(async (texName: string): Promise<[string, BaseMaterial]> => {
-            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texName);
-            if (this.entity !== null)
-                materialInstance.entityParams = this.entity.materialParams;
+            const entityParams = this.entity !== null ? this.entity.materialParams : null;
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texName, entityParams);
+            materialInstance.setIsForBSPSurface(true);
             return [texName, materialInstance];
         }));
 

@@ -6,13 +6,13 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, Gfx
 import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec4, vec3, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
+import { mat4, vec4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -385,6 +385,7 @@ export abstract class BaseMaterial {
     private visible = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
+    public wantsTexCoordScale = false;
     public isTranslucent = false;
     public isIndirect = false;
     public isToolMaterial = false;
@@ -393,12 +394,15 @@ export abstract class BaseMaterial {
 
     protected loaded = false;
     protected proxyDriver: MaterialProxyDriver | null = null;
+    protected representativeTexture: VTF | null = null;
+    protected mappingTexCoordScale = vec2.create();
 
     constructor(public vmt: VMT) {
     }
 
     public async init(renderContext: SourceRenderContext) {
         this.initParameters();
+        this.calcMappingTexCoordScale();
 
         this.setupParametersFromVMT();
         if (this.vmt.proxies !== undefined)
@@ -479,20 +483,29 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterVector);
     }
 
-    protected paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
+    protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
         // assert(m[1] === 0.0 && m[2] === 0.0);
-        const scaleS = m[0];
-        const scaleT = m[5];
+        let scaleS = m[0];
+        let scaleT = m[5];
+        if (useMappingTransform) {
+            scaleS *= this.mappingTexCoordScale[0];
+            scaleT *= this.mappingTexCoordScale[1];
+        }
         const transS = m[12];
         const transT = m[13];
         return fillVec4(d, offs, scaleS, scaleT, transS, transT);
     }
 
-    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string): number {
+    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
-        return fillMatrix4x2(d, offs, m);
+        if (useMappingTransform) {
+            scaleMatrix(scratchMatrix, m, this.mappingTexCoordScale[0], this.mappingTexCoordScale[1]);
+            return fillMatrix4x2(d, offs, scratchMatrix);
+        } else {
+            return fillMatrix4x2(d, offs, m);
+        }
     }
 
     protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
@@ -625,7 +638,56 @@ export abstract class BaseMaterial {
     protected initStaticBeforeResourceFetch(): void {
     }
 
+    private paramGetVTFPossiblyMissing(name: string): VTF | null {
+        if (this.param[name] === undefined || !(this.param[name] instanceof ParameterTexture))
+            return null;
+        return this.paramGetVTF(name);
+    }
+
+    private calcRepresentativeTexture(): VTF | null {
+        let texture: VTF | null = null;
+
+        texture = this.paramGetVTFPossiblyMissing('$basetexture');
+        if (texture !== null)
+            return texture;
+
+        texture = this.paramGetVTFPossiblyMissing('$envmapmask');
+        if (texture !== null)
+            return texture;
+
+        texture = this.paramGetVTFPossiblyMissing('$bumpmap');
+        if (texture !== null)
+            return texture;
+
+        texture = this.paramGetVTFPossiblyMissing('$normalmap');
+        if (texture !== null)
+            return texture;
+
+        return null;
+    }
+
+    private calcMappingTexCoordScale(): void {
+        let w: number, h: number;
+        if (!this.wantsTexCoordScale) {
+            w = h = 1;
+        } else if (this.representativeTexture === null) {
+            w = h = 64;
+        } else {
+            w = this.representativeTexture.width;
+            h = this.representativeTexture.height;
+        }
+
+        vec2.set(this.mappingTexCoordScale, 1 / w, 1 / h);
+    }
+
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+    }
+
+    public setIsForBSPSurface(v: boolean): void {
+        if (this.representativeTexture === null)
+            this.representativeTexture = this.calcRepresentativeTexture();
+        this.wantsTexCoordScale = v;
+        this.calcMappingTexCoordScale();
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -1501,6 +1563,8 @@ class Material_Generic extends BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        super.initStatic(device, cache);
+
         const shaderTypeStr = this.vmt._Root.toLowerCase();
 
         if (shaderTypeStr === 'lightmappedgeneric')
@@ -1835,6 +1899,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        super.initStatic(device, cache);
+
         this.program = new UnlitTwoTextureProgram();
 
         const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
@@ -2006,6 +2072,8 @@ class Material_Water extends BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        super.initStatic(device, cache);
+
         // Use Cheap water for now.
         this.program = new WaterCheapMaterialProgram();
         this.program.setDefineBool('USE_FRESNEL', !this.paramGetBoolean('$nofresnel'));
@@ -2256,6 +2324,8 @@ class Material_Refract extends BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        super.initStatic(device, cache);
+
         this.program = new RefractMaterialProgram();
 
         if (this.paramGetVTF('$basetexture') === null) {
