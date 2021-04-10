@@ -80,9 +80,13 @@ export interface Surface {
     indexCount: number;
     center: vec3 | null;
 
-    // Since our surfaces are merged together from multiple other surfaces,
-    // we can have multiple surface lightmaps, but they're guaranteed to have
-    // been packed into the same lightmap page.
+    // Whether we want TexCoord0 to be divided by the texture size. Needed for most BSP surfaces
+    // using Texinfo mapping, but *not* wanted for Overlay surfaces. This might get rearranged if
+    // we move overlays out of being BSP surfaces...
+    wantsTexCoord0Scale: boolean;
+
+    // Since our surfaces are merged together from multiple other surfaces, we can have multiple
+    // surface lightmaps, but they're guaranteed to have been packed into the same lightmap page.
     lightmapData: SurfaceLightmapData[];
     lightmapPageIndex: number;
 
@@ -1130,7 +1134,7 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb, overlays: [] };
+                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, wantsTexCoord0Scale: true, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb, overlays: [] };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -1218,7 +1222,7 @@ export class BSPFile {
                 let surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
+                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale: true, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
                     this.surfaces.push(surface);
                 }
 
@@ -1340,7 +1344,7 @@ export class BSPFile {
 
             const tex = texinfoa[nTexinfo];
             const texName = tex.texName;
-            const surface = { texName, onNode: false, startIndex, indexCount, center, lightmapData: [], lightmapPageIndex: 0, isDisplacement: false, bbox: null, overlays: [] };
+            const surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, isDisplacement: false, bbox: null, overlays: [] };
             const surfaceIndex = this.surfaces.push(surface) - 1;
             this.models[0].surfaces.push(surfaceIndex);
             this.overlays.push({ surfaceIndex });

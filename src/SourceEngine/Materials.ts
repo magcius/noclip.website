@@ -387,9 +387,10 @@ function colorGammaToLinear(c: Color, src: Color): void {
 
 export abstract class BaseMaterial {
     private visible = true;
+    public hasVertexColorInput = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
-    public wantsTexCoordScale = false;
+    public wantsTexCoord0Scale = false;
     public isTranslucent = false;
     public isIndirect = false;
     public isToolMaterial = false;
@@ -400,14 +401,13 @@ export abstract class BaseMaterial {
     protected loaded = false;
     protected proxyDriver: MaterialProxyDriver | null = null;
     protected representativeTexture: VTF | null = null;
-    protected mappingTexCoordScale = vec2.create();
+    protected texCoord0Scale = vec2.create();
 
     constructor(public vmt: VMT) {
     }
 
     public async init(renderContext: SourceRenderContext) {
         this.initParameters();
-        this.calcMappingTexCoordScale();
 
         this.setupParametersFromVMT();
         if (this.vmt.proxies !== undefined)
@@ -415,6 +415,7 @@ export abstract class BaseMaterial {
 
         this.initStaticBeforeResourceFetch();
         await this.fetchResources(renderContext.materialCache);
+        this.calcTexCoord0Scale();
         this.initStatic(renderContext.device, renderContext.renderCache);
     }
 
@@ -491,8 +492,8 @@ export abstract class BaseMaterial {
         let scaleS = m[0];
         let scaleT = m[5];
         if (useMappingTransform) {
-            scaleS *= this.mappingTexCoordScale[0];
-            scaleT *= this.mappingTexCoordScale[1];
+            scaleS *= this.texCoord0Scale[0];
+            scaleT *= this.texCoord0Scale[1];
         }
         const transS = m[12];
         const transT = m[13];
@@ -502,7 +503,7 @@ export abstract class BaseMaterial {
     protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         if (useMappingTransform) {
-            scaleMatrix(scratchMatrix, m, this.mappingTexCoordScale[0], this.mappingTexCoordScale[1]);
+            scaleMatrix(scratchMatrix, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
             return fillMatrix4x2(d, offs, scratchMatrix);
         } else {
             return fillMatrix4x2(d, offs, m);
@@ -589,7 +590,12 @@ export abstract class BaseMaterial {
         }
     }
 
-    protected getAlphaBlendModeFromTexture(isTranslucent: boolean): AlphaBlendMode {
+    protected getAlphaBlendMode(isTextureTranslucent: boolean): AlphaBlendMode {
+        let isTranslucent = isTextureTranslucent;
+
+        if (this.paramGetBoolean('$vertexalpha'))
+            isTranslucent = true;
+
         if (isTranslucent && this.paramGetBoolean('$additive'))
             return AlphaBlendMode.BlendAdd;
         else if (this.paramGetBoolean('$additive'))
@@ -667,9 +673,12 @@ export abstract class BaseMaterial {
         return null;
     }
 
-    private calcMappingTexCoordScale(): void {
+    private calcTexCoord0Scale(): void {
+        if (this.representativeTexture === null)
+            this.representativeTexture = this.calcRepresentativeTexture();
+
         let w: number, h: number;
-        if (!this.wantsTexCoordScale) {
+        if (!this.wantsTexCoord0Scale) {
             w = h = 1;
         } else if (this.representativeTexture === null) {
             w = h = 64;
@@ -678,17 +687,10 @@ export abstract class BaseMaterial {
             h = this.representativeTexture.height;
         }
 
-        vec2.set(this.mappingTexCoordScale, 1 / w, 1 / h);
+        vec2.set(this.texCoord0Scale, 1 / w, 1 / h);
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-    }
-
-    public setIsForBSPSurface(v: boolean): void {
-        if (this.representativeTexture === null)
-            this.representativeTexture = this.calcRepresentativeTexture();
-        this.wantsTexCoordScale = v;
-        this.calcMappingTexCoordScale();
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -1646,7 +1648,7 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', true);
         }
 
-        if (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha'))
+        if (this.hasVertexColorInput && (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha')))
             this.program.setDefineBool('USE_VERTEX_COLOR', true);
 
         if (this.paramGetBoolean('$basealphaenvmapmask'))
@@ -1675,7 +1677,7 @@ class Material_Generic extends BaseMaterial {
             if (this.textureIsTranslucent('$basetexture'))
                 isTranslucent = true;
 
-            this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+            this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
             const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
             this.sortKeyBase = makeSortKey(sortLayer);
         }
@@ -1895,7 +1897,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         this.program = new UnlitTwoTextureProgram();
 
         const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
-        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
@@ -2592,7 +2594,7 @@ class Material_Refract extends BaseMaterial {
         this.program.defines.set('BLUR_AMOUNT', '' + blurAmount);
 
         const isTranslucent = this.textureIsTranslucent('$basetexture');
-        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
         this.isIndirect = this.textureIsIndirect('$basetexture');

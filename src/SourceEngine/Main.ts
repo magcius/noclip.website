@@ -412,9 +412,16 @@ export class BSPModelRenderer {
         await Promise.all(materialInstances.map(async ([texName, materialInstance]) => {
             const entityParams = this.entity !== null ? this.entity.materialParams : null;
             materialInstance.entityParams = entityParams;
+
+            // We don't have vertex colors on BSP surfaces.
+            materialInstance.hasVertexColorInput = false;
+
+            // Look for the first surface with this name -- the theory being that overlays should be using
+            // separate texinfo's than regular surfaces (might not be true in practice)
+            const surface = assertExists(this.surfaces.find((surface) => surface.surface.texName === texName));
+            materialInstance.wantsTexCoord0Scale = surface.surface.wantsTexCoord0Scale;
+
             await materialInstance.init(renderContext);
-            // TODO(jstpierre): Move this to be before init?
-            materialInstance.setIsForBSPSurface(true);
         }));
 
         for (let i = 0; i < this.surfaces.length; i++) {
