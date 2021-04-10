@@ -678,6 +678,8 @@ export class BSPRenderer {
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         this.entitySystem = new EntitySystem(renderContext.entityFactoryRegistry);
 
+        // TODO(jtspierre): Ugly ugly ugly
+        renderContext.materialCache.usingHDR = this.bsp.usingHDR;
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
 
         const device = renderContext.device, cache = renderContext.renderCache;
