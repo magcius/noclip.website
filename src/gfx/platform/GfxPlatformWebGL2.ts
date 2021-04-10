@@ -535,6 +535,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
     private _EXT_texture_compression_rgtc: EXT_texture_compression_rgtc | null = null;
+    private _EXT_texture_filter_anisotropic: EXT_texture_filter_anisotropic | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
     private _uniformBufferMaxPageByteSize: number;
 
@@ -597,6 +598,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
+        this._EXT_texture_filter_anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
@@ -998,6 +1000,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_MAG_FILTER, translateFilterMode(descriptor.magFilter, GfxMipFilterMode.NO_MIP));
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MIN_LOD, descriptor.minLOD);
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MAX_LOD, descriptor.maxLOD);
+        if (this._EXT_texture_filter_anisotropic !== null)
+            gl.samplerParameterf(gl_sampler, this._EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, 16);
         const sampler: GfxSamplerP_GL = { _T: _T.Sampler, ResourceUniqueId: this.getNextUniqueId(), gl_sampler };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(sampler);
