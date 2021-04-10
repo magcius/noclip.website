@@ -2152,7 +2152,7 @@ void mainPS() {
 
     float t_NoV = saturate(dot(t_PositionToEye.xyz, t_NormalWorld.xyz));
     float t_Reflectance = 0.2;
-    float t_Fresnel = mix(1.0, CalcFresnelTerm5(t_NoV), t_Reflectance);
+    float t_Fresnel = mix(CalcFresnelTerm5(t_NoV), 1.0, t_Reflectance);
 
 #ifdef USE_BASETEXTURE
     // TODO(jstpierre): Sludge layer system
@@ -2167,8 +2167,7 @@ void mainPS() {
     vec3 t_LightmapColor = texture(SAMPLER_2D(u_Texture[1]), v_TexCoord0.zw).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
     t_LightmapColor *= t_LightmapScale;
-    // TODO(jstpierre): Why is this not working?
-    // t_FogColor *= t_LightmapColor;
+    t_FogColor *= t_LightmapColor;
 #endif
     t_RefractColor.rgb += t_FogColor;
 
@@ -2177,8 +2176,6 @@ void mainPS() {
 
     t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_Fresnel);
     t_FinalColor.a = 1.0;
-
-    // t_FinalColor.rgb = vec3(fract(t_FlowNormalLerp));
 
     OutputLinearColor(t_FinalColor);
 }
@@ -2245,8 +2242,10 @@ class Material_Water extends BaseMaterial {
             if (this.paramGetTexture('$basetexture') !== null)
                 this.program.setDefineBool('USE_BASETEXTURE', true);
 
-            if (this.paramGetBoolean('$lightmapwaterfog'))
+            if (this.paramGetBoolean('$lightmapwaterfog')) {
                 this.program.setDefineBool('USE_LIGHTMAP_WATER_FOG', true);
+                this.wantsLightmap = true;
+            }
 
             this.isTranslucent = false;
         } else {
