@@ -41,7 +41,8 @@ export class GfxRenderHelper {
     public debugThumbnails: DebugThumbnailDrawer;
     private debugTextDrawer: PromiseWithSavedValue<DebugTextDrawer | null>;
 
-    constructor(public device: GfxDevice, context: SceneContext | null = null) {
+    constructor(public device: GfxDevice, context: SceneContext | null = null, renderCache: GfxRenderCache | null = null) {
+        this.renderCache = renderCache !== null ? renderCache : new GfxRenderCache();
         this.renderInstManager = new GfxRenderInstManager(this.device, this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
         this.debugThumbnails = new DebugThumbnailDrawer(this);

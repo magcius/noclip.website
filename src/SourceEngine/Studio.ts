@@ -1311,7 +1311,7 @@ export class StudioModelData {
                             meshFirstIdx += numIndices;
                         }
 
-                        const device = renderContext.device, cache = renderContext.cache;
+                        const device = renderContext.device, cache = renderContext.renderCache;
                         const meshData = new StudioModelMeshData(device, cache, materialNames, meshVtxData.buffer, meshIdxData.buffer);
                         for (let i = 0; i < stripGroupDatas.length; i++)
                             meshData.stripGroupData.push(stripGroupDatas[i]);

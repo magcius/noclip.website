@@ -168,7 +168,7 @@ export class DetailPropLeafRenderer {
     private inputState: GfxInputState;
 
     constructor(renderContext: SourceRenderContext, private objects: DetailObjects, public leaf: number) {
-        const device = renderContext.device, cache = renderContext.cache;
+        const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },

@@ -410,7 +410,7 @@ export abstract class BaseMaterial {
 
         this.initStaticBeforeResourceFetch();
         await this.fetchResources(renderContext.materialCache);
-        this.initStatic(renderContext.device, renderContext.cache);
+        this.initStatic(renderContext.device, renderContext.renderCache);
     }
 
     public isMaterialLoaded(): boolean {
@@ -1730,7 +1730,7 @@ class Material_Generic extends BaseMaterial {
             this.textureMapping[3].gfxTexture = lightmapManager.getPageTexture(lightmapPageIndex);
             this.textureMapping[3].gfxSampler = lightmapManager.gfxSampler;
         }
-        this.recacheProgram(renderContext.device, renderContext.cache);
+        this.recacheProgram(renderContext.device, renderContext.renderCache);
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 132);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);

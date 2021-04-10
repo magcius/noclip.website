@@ -77,18 +77,8 @@ export class BaseEntity {
     public inputs = new Map<string, EntityInputFunc>();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
-        if (entity.model) {
-            this.materialParams = new EntityMaterialParameters();
-
-            if (entity.model.startsWith('*')) {
-                const index = parseInt(entity.model.slice(1), 10);
-                this.modelBSP = bspRenderer.models[index];
-                this.modelBSP.setEntity(this);
-            } else if (entity.model.endsWith('.mdl')) {
-                // External model reference.
-                this.fetchStudioModel(renderContext);
-            }
-        }
+        if (entity.model)
+            this.setModelName(renderContext, entity.model);
 
         if (entity.origin) {
             const origin = vmtParseVector(entity.origin);
@@ -120,6 +110,20 @@ export class BaseEntity {
         // Set up some defaults.
         if (this.entity.classname.startsWith('func_nav_'))
             this.visible = false;
+    }
+
+    public setModelName(renderContext: SourceRenderContext, modelName: string): void {
+        if (this.materialParams === null)
+            this.materialParams = new EntityMaterialParameters();
+
+        if (modelName.startsWith('*')) {
+            const index = parseInt(modelName.slice(1), 10);
+            this.modelBSP = this.bspRenderer.models[index];
+            this.modelBSP.setEntity(this);
+        } else if (modelName.endsWith('.mdl')) {
+            // External model reference.
+            this.fetchStudioModel(renderContext, modelName);
+        }
     }
 
     private input_enable(): void {
@@ -175,8 +179,8 @@ export class BaseEntity {
     protected modelUpdated(): void {
     }
 
-    private async fetchStudioModel(renderContext: SourceRenderContext) {
-        const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
+    private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.modelStudio.setSkin(renderContext, this.skin);
         this.modelUpdated();
@@ -993,12 +997,8 @@ interface QueuedOutputEvent {
     value: string;
 }
 
-export class EntitySystem {
+export class EntityFactoryRegistry {
     public classname = new Map<string, EntityFactory>();
-    public entities: BaseEntity[] = [];
-    public currentTime = 0;
-    public debugger = new EntityMessageDebugger();
-    private outputQueue: QueuedOutputEvent[] = [];
 
     constructor() {
         this.registerDefaultFactories();
@@ -1023,6 +1023,27 @@ export class EntitySystem {
 
     public registerFactory(factory: EntityFactory): void {
         this.classname.set(factory.classname, factory);
+    }
+
+    public createEntity(entitySystem: EntitySystem, renderContext: SourceRenderContext, renderer: BSPRenderer, bspEntity: BSPEntity): BaseEntity {
+        const factory = this.classname.get(bspEntity.classname);
+
+        if (factory !== undefined) {
+            return new factory(entitySystem, renderContext, renderer, bspEntity);
+        } else {
+            // Fallback
+            return new BaseEntity(entitySystem, renderContext, renderer, bspEntity);
+        }
+    }
+}
+
+export class EntitySystem {
+    public entities: BaseEntity[] = [];
+    public currentTime = 0;
+    public debugger = new EntityMessageDebugger();
+    private outputQueue: QueuedOutputEvent[] = [];
+
+    constructor(private registry: EntityFactoryRegistry) {
     }
 
     public entityMatchesTargetName(entity: BaseEntity, targetName: string): boolean {
@@ -1091,15 +1112,7 @@ export class EntitySystem {
     }
 
     private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, bspEntity: BSPEntity): void {
-        const factory = this.classname.get(bspEntity.classname);
-
-        let entity: BaseEntity;
-        if (factory !== undefined) {
-            entity = new factory(this, renderContext, renderer, bspEntity);
-        } else {
-            entity = new BaseEntity(this, renderContext, renderer, bspEntity);
-        }
-
+        const entity = this.registry.createEntity(this, renderContext, renderer, bspEntity);
         this.entities.push(entity);
     }
 

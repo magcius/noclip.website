@@ -1,11 +1,46 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
+import { BSPRenderer, SourceFileSystem, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
+import { BSPEntity } from "./VMT";
+
+class prop_button extends BaseEntity {
+    public static classname = 'prop_button';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props/switch001.mdl');
+    }
+}
+
+class prop_under_button extends prop_button {
+    public static classname = 'prop_under_button';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props_underground/underground_testchamber_button.mdl');
+    }
+}
+
+class prop_under_floor_button extends prop_button {
+    public static classname = 'prop_under_floor_button';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props_underground/underground_floor_button.mdl');
+    }
+}
 
 class Portal2SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
+    }
+
+    private registerEntityFactories(registry: EntityFactoryRegistry): void {
+        registry.registerFactory(prop_button);
+        registry.registerFactory(prop_under_button);
+        registry.registerFactory(prop_under_floor_button);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
@@ -18,7 +53,9 @@ class Portal2SceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`);
+        const renderContext = new SourceRenderContext(context.device, filesystem);
+        this.registerEntityFactories(renderContext.entityFactoryRegistry);
+        return createScene(context, filesystem, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, renderContext);
     }
 }
 

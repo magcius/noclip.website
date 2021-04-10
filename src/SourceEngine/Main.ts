@@ -23,7 +23,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, EntitySystem, sky_camera } from "./EntitySystem";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera } from "./EntitySystem";
 import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -157,7 +157,7 @@ export class SkyboxRenderer {
     private modelMatrix = mat4.create();
 
     constructor(renderContext: SourceRenderContext, private skyname: string) {
-        const device = renderContext.device, cache = renderContext.cache;
+        const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexData = new Float32Array(6 * 4 * 5);
         const indexData = new Uint16Array(6 * 6);
@@ -668,7 +668,7 @@ export class BSPRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private entitySystem = new EntitySystem();
+    private entitySystem: EntitySystem;
     public models: BSPModelRenderer[] = [];
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
@@ -676,9 +676,11 @@ export class BSPRenderer {
     private debugCube: DebugCube;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
+        this.entitySystem = new EntitySystem(renderContext.entityFactoryRegistry);
+
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
 
-        const device = renderContext.device, cache = renderContext.cache;
+        const device = renderContext.device, cache = renderContext.renderCache;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.bsp.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.bsp.indexData.buffer);
 
@@ -935,6 +937,7 @@ export class SourceColorCorrection {
 }
 
 export class SourceRenderContext {
+    public entityFactoryRegistry = new EntityFactoryRegistry();
     public lightmapManager: LightmapManager;
     public studioModelCache: StudioModelCache;
     public materialCache: MaterialCache;
@@ -948,12 +951,14 @@ export class SourceRenderContext {
     public showToolMaterials = false;
     public showTriggerDebug = false;
     public colorCorrection: SourceColorCorrection;
+    public renderCache: GfxRenderCache;
 
-    constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
-        this.lightmapManager = new LightmapManager(device, cache);
-        this.materialCache = new MaterialCache(device, cache, this.filesystem);
+    constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
+        this.renderCache = new GfxRenderCache();
+        this.lightmapManager = new LightmapManager(device, this.renderCache);
+        this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);
         this.studioModelCache = new StudioModelCache(this, this.filesystem);
-        this.colorCorrection = new SourceColorCorrection(device, cache);
+        this.colorCorrection = new SourceColorCorrection(device, this.renderCache);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1003,7 +1008,6 @@ export class SourceRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
-    public renderContext: SourceRenderContext;
 
     // Debug & Settings
     public drawSkybox2D = true;
@@ -1016,13 +1020,12 @@ export class SourceRenderer implements SceneGfx {
     public skyboxView = new SourceEngineView();
     public pvsScratch = new BitMap(65536);
 
-    constructor(context: SceneContext, filesystem: SourceFileSystem) {
-        const device = context.device;
-        this.renderHelper = new GfxRenderHelper(device);
+    constructor(context: SceneContext, public renderContext: SourceRenderContext) {
+        const device = renderContext.device;
+        this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
-        this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache(), filesystem);
 
-        this.textureMapping[0].gfxSampler = this.renderContext.cache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = this.renderContext.renderCache.createSampler(device, {
             magFilter: GfxTexFilterMode.BILINEAR,
             minFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.NO_MIP,
@@ -1194,7 +1197,7 @@ export class SourceRenderer implements SceneGfx {
         mainColorGammaDesc.copyDimensions(mainColorDesc);
         const mainColorGammaTargetID = builder.createRenderTargetID(mainColorGammaDesc, 'Main Color (Gamma)');
 
-        const cache = this.renderContext.cache;
+        const cache = this.renderContext.renderCache;
 
         builder.pushPass((pass) => {
             // Now do a fullscreen color-correction pass to output to our UNORM backbuffer.
