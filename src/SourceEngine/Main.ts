@@ -222,15 +222,21 @@ export class SkyboxRenderer {
         this.bindMaterial(renderContext);
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext) {
+    private async createMaterialInstance(renderContext: SourceRenderContext, path: string): Promise<BaseMaterial> {
         const materialCache = renderContext.materialCache;
+        const materialInstance = await materialCache.createMaterialInstance(path);
+        await materialInstance.init(renderContext);
+        return materialInstance;
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext) {
         this.materialInstances = await Promise.all([
-            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}rt`),
-            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}lf`),
-            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}bk`),
-            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}ft`),
-            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}up`),
-            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}dn`),
+            this.createMaterialInstance(renderContext, `skybox/${this.skyname}rt`),
+            this.createMaterialInstance(renderContext, `skybox/${this.skyname}lf`),
+            this.createMaterialInstance(renderContext, `skybox/${this.skyname}bk`),
+            this.createMaterialInstance(renderContext, `skybox/${this.skyname}ft`),
+            this.createMaterialInstance(renderContext, `skybox/${this.skyname}up`),
+            this.createMaterialInstance(renderContext, `skybox/${this.skyname}dn`),
         ]);
     }
 
@@ -396,10 +402,19 @@ export class BSPModelRenderer {
         }
 
         const materialInstances = await Promise.all([...texNames].map(async (texName: string): Promise<[string, BaseMaterial]> => {
-            const entityParams = this.entity !== null ? this.entity.materialParams : null;
-            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texName, entityParams);
-            materialInstance.setIsForBSPSurface(true);
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(texName);
             return [texName, materialInstance];
+        }));
+
+        // Now that we've created our materials, set our entity parameters and initialize the material...
+        // We have to do this as late as possible, as it's possible entity parameters were set between the
+        // fetching and now.
+        await Promise.all(materialInstances.map(async ([texName, materialInstance]) => {
+            const entityParams = this.entity !== null ? this.entity.materialParams : null;
+            materialInstance.entityParams = entityParams;
+            await materialInstance.init(renderContext);
+            // TODO(jstpierre): Move this to be before init?
+            materialInstance.setIsForBSPSurface(true);
         }));
 
         for (let i = 0; i < this.surfaces.length; i++) {

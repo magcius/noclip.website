@@ -330,7 +330,8 @@ export class DetailPropLeafRenderer {
 
     private async bindMaterial(renderContext: SourceRenderContext) {
         const materialCache = renderContext.materialCache;
-        this.materialInstance = await materialCache.createMaterialInstance(renderContext, `detail/detailsprites`);
+        this.materialInstance = await materialCache.createMaterialInstance(`detail/detailsprites`);
+        await this.materialInstance.init(renderContext);
     }
 }
 //#endregion

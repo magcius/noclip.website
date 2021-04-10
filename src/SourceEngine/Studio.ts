@@ -1511,12 +1511,16 @@ class StudioModelMeshInstance {
     }
 
     private async bindMaterial(renderContext: SourceRenderContext, skin: number = 0): Promise<void> {
-        this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialNames[skin], this.entityParams);
+        const materialInstance = await renderContext.materialCache.createMaterialInstance(this.meshData.materialNames[skin]);
+        materialInstance.entityParams = this.entityParams;
+        materialInstance.skinningMode = this.skinningMode;
+        await materialInstance.init(renderContext);
 
+        // Between the awaits, it's possible for the skin to change...
         if (this.currentSkin !== skin)
             return;
 
-        this.materialInstance.setSkinningMode(this.skinningMode);
+        this.materialInstance = materialInstance;
         this.syncMaterialInstanceStaticLightingMode();
     }
 

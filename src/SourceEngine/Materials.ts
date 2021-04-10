@@ -395,6 +395,7 @@ export abstract class BaseMaterial {
     public isToolMaterial = false;
     public param: ParameterMap = {};
     public entityParams: EntityMaterialParameters | null = null;
+    public skinningMode = SkinningMode.None;
 
     protected loaded = false;
     protected proxyDriver: MaterialProxyDriver | null = null;
@@ -432,10 +433,6 @@ export abstract class BaseMaterial {
             return false;
 
         return true;
-    }
-
-    public setSkinningMode(skinningMode: SkinningMode): void {
-        // Nothing by default.
     }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
@@ -1454,7 +1451,6 @@ class Material_Generic extends BaseMaterial {
     private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
     private wantsAmbientCube = false;
-    private skinningMode = SkinningMode.None;
     private shaderType: ShaderType;
 
     private program: Material_Generic_Program;
@@ -1462,12 +1458,6 @@ class Material_Generic extends BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
     private textureMapping: TextureMapping[] = nArray(9, () => new TextureMapping());
-
-    public setSkinningMode(skinningMode: SkinningMode): void {
-        this.skinningMode = skinningMode;
-        this.program.setDefineString('SKINNING_MODE', '' + skinningMode);
-        this.gfxProgram = null;
-    }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
         let wantsDynamicVertexLighting: boolean;
@@ -1585,7 +1575,8 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = ShaderType.Unknown;
     
         this.program = new Material_Generic_Program();
-        this.setSkinningMode(SkinningMode.None);
+
+        this.program.setDefineString('SKINNING_MODE', '' + this.skinningMode);
 
         if (this.shaderType === ShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
             // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
@@ -2724,15 +2715,11 @@ export class MaterialCache {
             return new Material_Generic(vmt);
     }
 
-    public async createMaterialInstance(renderContext: SourceRenderContext, path: string, entityParams: EntityMaterialParameters | null = null): Promise<BaseMaterial> {
+    public async createMaterialInstance(path: string): Promise<BaseMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
-        materialInstance.entityParams = entityParams;
-
         if (vmt['%compilesky'] || vmt['%compiletrigger'])
             materialInstance.isToolMaterial = true;
-
-        await materialInstance.init(renderContext);
         return materialInstance;
     }
 
