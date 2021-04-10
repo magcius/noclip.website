@@ -2063,15 +2063,16 @@ layout(std140) uniform ub_ObjectParams {
 #define u_FlowTexCoordScale                (u_Misc[0].x)
 #define u_FlowNormalTexCoordScale          (u_Misc[0].y)
 #define u_FlowNoiseTexCoordScale           (u_Misc[0].z)
-#define u_ColorFlowTexCoordScale           (u_Misc[0].w)
+#define u_FlowColorTexCoordScale           (u_Misc[0].w)
 
 #define u_FlowTimeInIntervals              (u_Misc[1].x)
-#define u_ColorFlowTimeInIntervals         (u_Misc[1].y)
+#define u_FlowColorTimeInIntervals         (u_Misc[1].y)
 #define u_FlowNormalTexCoordScrollDistance (u_Misc[1].z)
-#define u_ColorFlowTexCoordScrollDistance  (u_Misc[1].w)
+#define u_FlowColorTexCoordScrollDistance  (u_Misc[1].w)
 
 #define u_FlowBumpStrength                 (u_Misc[2].x)
-#define u_ColorFlowDisplacementStrength    (u_Misc[2].y)
+#define u_FlowColorDisplacementStrength    (u_Misc[2].y)
+#define u_FlowColorLerpExp                 (u_Misc[2].z)
 
 // Base Texture, Lightmap
 varying vec4 v_TexCoord0;
@@ -2118,63 +2119,103 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
     return vec3(t_NormalXY.xy, t_NormalZ);
 }
 
-void mainPS() {
-    vec4 t_FinalColor;
-
-    vec2 t_FlowTexCoord = v_TexCoord0.xy * u_FlowTexCoordScale;
-
-    vec2 t_FlowNoiseTexCoord = vec2(v_PositionWorld.x, -v_PositionWorld.y) * u_FlowNoiseTexCoordScale;
-    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_Texture[4]), t_FlowNoiseTexCoord.xy);
-
-    vec4 t_FlowSample = texture(SAMPLER_2D(u_Texture[3]), t_FlowTexCoord.xy);
-    vec2 t_FlowVectorTangent = UnpackUnsignedNormalMap(t_FlowSample).rg;
-
-    float t_FlowTimeInIntervals = u_FlowTimeInIntervals + t_FlowNoiseSample.g;
+vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp)
+{
     float t_ScrollTime1 = fract(t_FlowTimeInIntervals + 0.0);
     float t_ScrollTime2 = fract(t_FlowTimeInIntervals + 0.5);
     float t_ScrollPhase1 = floor(t_FlowTimeInIntervals) * 0.311;
     float t_ScrollPhase2 = floor(t_FlowTimeInIntervals + 0.5) * 0.311 + 0.5;
 
-    vec2 t_FlowNormalTexCoordBase = vec2(v_PositionWorld.x, -v_PositionWorld.y) * u_FlowNormalTexCoordScale;
-    vec2 t_FlowNormalTexCoordDisp = u_FlowNormalTexCoordScrollDistance * t_FlowVectorTangent.xy;
-    vec2 t_FlowNormalTexCoord1 = t_FlowNormalTexCoordBase + t_ScrollPhase1 + (t_ScrollTime1 * t_FlowNormalTexCoordDisp.xy);
-    vec2 t_FlowNormalTexCoord2 = t_FlowNormalTexCoordBase + t_ScrollPhase2 + (t_ScrollTime2 * t_FlowNormalTexCoordDisp.xy);
+    vec2 t_FlowMapTexCoordDisp = t_TexCoordScrollDistance * t_FlowVectorTangent.xy;
+    vec2 t_FlowMapTexCoord1 = t_TexCoordBase + t_ScrollPhase1 + (t_ScrollTime1 * t_FlowMapTexCoordDisp.xy);
+    vec2 t_FlowMapTexCoord2 = t_TexCoordBase + t_ScrollPhase2 + (t_ScrollTime2 * t_FlowMapTexCoordDisp.xy);
 
-    vec4 t_FlowNormalSample1 = texture(SAMPLER_2D(u_Texture[2], t_FlowNormalTexCoord1.xy));
-    vec4 t_FlowNormalSample2 = texture(SAMPLER_2D(u_Texture[2], t_FlowNormalTexCoord2.xy));
-    float t_FlowNormalLerp = abs(t_ScrollTime1 * 2.0 - 1.0);
-    vec4 t_FlowNormalSample = mix(t_FlowNormalSample1, t_FlowNormalSample2, t_FlowNormalLerp);
+    vec4 t_FlowMapSample1 = texture(PU_SAMPLER_2D(t_FlowMapTexture), t_FlowMapTexCoord1.xy);
+    vec4 t_FlowMapSample2 = texture(PU_SAMPLER_2D(t_FlowMapTexture), t_FlowMapTexCoord2.xy);
+    float t_FlowMapWeight1 = pow(abs(t_ScrollTime2 * 2.0 - 1.0), t_LerpExp);
+    float t_FlowMapWeight2 = pow(abs(t_ScrollTime1 * 2.0 - 1.0), t_LerpExp);
+    vec4 t_FlowMapSample = vec4(0.0);
+    t_FlowMapSample.rgba += t_FlowMapSample1.rgba * t_FlowMapWeight1;
+    t_FlowMapSample.rgba += t_FlowMapSample2.rgba * t_FlowMapWeight2;
+
+    return t_FlowMapSample;
+}
+
+void mainPS() {
+    vec4 t_FinalColor;
+
+    vec2 t_FlowTexCoord = v_TexCoord0.xy * u_FlowTexCoordScale;
+
+    vec2 t_TexCoordWorldBase = vec2(v_PositionWorld.x, -v_PositionWorld.y);
+    vec2 t_FlowNoiseTexCoord = t_TexCoordWorldBase * u_FlowNoiseTexCoordScale;
+    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_Texture[4]), t_FlowNoiseTexCoord.xy);
+
+    vec4 t_FlowSample = texture(SAMPLER_2D(u_Texture[3]), t_FlowTexCoord.xy);
+    vec2 t_FlowVectorTangent = UnpackUnsignedNormalMap(t_FlowSample).rg;
+
+    vec2 t_FlowNormalTexCoordBase = t_TexCoordWorldBase * u_FlowNormalTexCoordScale;
+    float t_FlowTimeInIntervals = u_FlowTimeInIntervals + t_FlowNoiseSample.g;
+    float t_FlowNormalLerpExp = 1.0;
+    vec4 t_FlowNormalSample = SampleFlowMap(PP_SAMPLER_2D(u_Texture[2]), t_FlowNormalTexCoordBase.xy, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, t_FlowNormalLerpExp);
 
     vec2 t_FlowNormalXY = UnpackUnsignedNormalMap(t_FlowNormalSample).xy * (length(t_FlowVectorTangent.xy) + 0.1) * u_FlowBumpStrength;
     vec4 t_NormalWorld = vec4(ReconstructNormal(t_FlowNormalXY), 1.0);
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_LookDir = normalize(t_PositionToEye.xyz);
 
-    float t_NoV = saturate(dot(t_PositionToEye.xyz, t_NormalWorld.xyz));
+    float t_NoV = saturate(dot(t_LookDir.xyz, t_NormalWorld.xyz));
     float t_Reflectance = 0.2;
     float t_Fresnel = mix(CalcFresnelTerm5(t_NoV), 1.0, t_Reflectance);
-
-#ifdef USE_BASETEXTURE
-    // TODO(jstpierre): Sludge layer system
-#endif
 
     // Compute reflection and refraction colors...
     vec4 t_ReflectColor = vec4(0.0);
     vec4 t_RefractColor = vec4(0.0);
 
+    vec3 t_DiffuseLight = vec3(1.0, 1.0, 1.0);
     vec3 t_FogColor = u_FogColor.rgb;
+
 #ifdef USE_LIGHTMAP_WATER_FOG
     vec3 t_LightmapColor = texture(SAMPLER_2D(u_Texture[1]), v_TexCoord0.zw).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
     t_LightmapColor *= t_LightmapScale;
-    t_FogColor *= t_LightmapColor;
+
+    t_DiffuseLight *= t_LightmapColor;
 #endif
+
+    t_FogColor *= t_DiffuseLight;
     t_RefractColor.rgb += t_FogColor;
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld.xyz, t_PositionToEye.xyz);
     t_ReflectColor += texture(u_TextureCube[0], t_Reflection).rgba;
 
-    t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_Fresnel);
+    float t_RefractAmount = t_Fresnel;
+
+#ifdef USE_BASETEXTURE
+    // Parallax scum layer
+    float t_ParallaxStrength = t_FlowNormalSample.a * u_FlowColorDisplacementStrength;
+    vec3 t_InteriorDirection = t_ParallaxStrength * (t_LookDir.xyz - t_NormalWorld.xyz);
+    vec2 t_FlowColorTexCoordBase = t_TexCoordWorldBase.xy * u_FlowColorTexCoordScale + t_InteriorDirection.xy;
+    float t_FlowColorTimeInIntervals = u_FlowColorTimeInIntervals + t_FlowNoiseSample.g;
+    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_Texture[0]), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
+
+    vec4 t_FlowColor = t_FlowColorSample.rgba;
+
+    // Mask by flowmap alpha and apply light
+    t_FlowColor.rgba *= t_FlowSample.a;
+    t_FlowColor.rgb *= t_DiffuseLight.rgb;
+
+    // Sludge can either be below or on top of the water, according to base texture alpha.
+    //   0.0 - 0.5 = translucency, and 0.5 - 1.0 = above water
+    // Compute transparency from 
+    t_RefractColor.rgb = mix(t_RefractColor.rgb, t_FlowColor.rgb, saturate(invlerp(0.0, 0.5, t_FlowColor.a)));
+
+    // Now compute above water
+    float t_AboveWater = 1.0 - smoothstep(0.5, 0.7, t_FlowColor.a);
+    t_RefractAmount = saturate(t_Fresnel * t_AboveWater);
+#endif
+
+    t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_RefractAmount);
     t_FinalColor.a = 1.0;
 
     OutputLinearColor(t_FinalColor);
