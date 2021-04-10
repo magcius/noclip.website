@@ -2,16 +2,16 @@
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
-import { colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
+import { Color, colorCopy, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
-import { BaseMaterial, EntityMaterialParameters, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
-import { BSPEntity, vmtParseNumber, vmtParseVector } from './VMT';
+import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
 interface EntityOutputAction {
     targetName: string;
@@ -295,6 +295,23 @@ export class BaseEntity {
     }
 }
 
+class player extends BaseEntity {
+    public currentFogController: env_fog_controller | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer) {
+        super(entitySystem, renderContext, bspRenderer, {
+            classname: 'player',
+            targetname: '!player',
+        });
+
+        this.registerInput('setfogcontroller', this.input_setfogcontroller.bind(this));
+    }
+
+    public input_setfogcontroller(entitySystem: EntitySystem, value: string): void {
+        this.currentFogController = entitySystem.findEntityByTargetName(value) as env_fog_controller;
+    }
+}
+
 export class sky_camera extends BaseEntity {
     public static classname = 'sky_camera';
     public area: number = -1;
@@ -544,6 +561,19 @@ class func_door extends BaseToggle {
             this.goToTop(entitySystem);
         else if (this.toggleState === ToggleState.Bottom)
             this.goToBottom(entitySystem);
+    }
+}
+
+class func_areaportalwindow extends BaseEntity {
+    public static classname = `func_areaportalwindow`;
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        // We don't support areaportals yet, so just hide the replacement target entity.
+        const targetEntity = entitySystem.findEntityByTargetName(this.entity.target);
+        if (targetEntity !== null)
+            targetEntity.visible = false;
     }
 }
 
@@ -811,6 +841,37 @@ class trigger_once extends trigger_multiple {
     }
 }
 
+class env_fog_controller extends BaseEntity {
+    public static classname = `env_fog_controller`;
+    private fogStart: number;
+    private fogEnd: number;
+    private fogMaxDensity: number;
+    private fogColor1 = colorNewCopy(White);
+    private fogColor2 = colorNewCopy(White);
+    private fogDirection: number[];
+    private farZ: number = -1;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        vmtParseColor(this.fogColor1, this.entity.fogcolor);
+        vmtParseColor(this.fogColor2, this.entity.fogcolor2);
+        this.fogDirection = vmtParseVector(this.entity.fogdir);
+        this.farZ = Number(this.entity.farz);
+        this.fogStart = Number(this.entity.fogstart);
+        this.fogEnd = Number(this.entity.fogend);
+        this.fogMaxDensity = Number(this.entity.fogmaxdensity);
+    }
+
+    public fillFogParams(dst: FogParams): void {
+        dst.start = this.fogStart;
+        dst.end = this.fogEnd;
+        dst.maxdensity = this.fogMaxDensity;
+        // TODO(jstpierre): Color blending
+        colorCopy(dst.color, this.fogColor1);
+    }
+}
+
 class env_texturetoggle extends BaseEntity {
     public static classname = `env_texturetoggle`;
 
@@ -1009,6 +1070,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(water_lod_control);
         this.registerFactory(func_movelinear);
         this.registerFactory(func_door);
+        this.registerFactory(func_areaportalwindow);
         this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
@@ -1016,6 +1078,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(math_counter);
         this.registerFactory(trigger_multiple);
         this.registerFactory(trigger_once);
+        this.registerFactory(env_fog_controller);
         this.registerFactory(env_texturetoggle);
         this.registerFactory(material_modify_control);
         this.registerFactory(color_correction);
@@ -1117,9 +1180,16 @@ export class EntitySystem {
     }
 
     public createEntities(renderContext: SourceRenderContext, renderer: BSPRenderer, entities: BSPEntity[]): void {
+        // Create our hardcoded entities like the player entity.
+        this.entities.push(new player(this, renderContext, renderer));
+
         for (let i = 0; i < entities.length; i++)
             this.createEntity(renderContext, renderer, entities[i]);
         this.spawn();
+    }
+
+    public getLocalPlayer(): player {
+        return this.findEntityByTargetName('!player')! as player;
     }
 }
 

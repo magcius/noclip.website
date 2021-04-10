@@ -514,7 +514,9 @@ export class StaticPropRenderer {
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
-            const staticLightingData = await renderContext.filesystem.fetchFileData(`sp_${this.staticProp.index}.vhv`);
+            // TODO(HDR)
+            const spPrefix = (false && this.bsp.usingHDR) ? `sp_hdr` : `sp`;
+            const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
             if (staticLightingData !== null) {
                 this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);
                 this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);

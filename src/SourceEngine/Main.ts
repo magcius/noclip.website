@@ -24,7 +24,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera } from "./EntitySystem";
-import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
+import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
@@ -251,11 +251,7 @@ export class SkyboxRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
-
-        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
-        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
-        offs += fillVec3v(d, offs, view.cameraPos);
+        fillSceneParamsOnRenderInst(template, view);
 
         for (let i = 0; i < 6; i++) {
             const materialInstance = this.materialInstances[i];
@@ -542,6 +538,8 @@ export class SourceEngineView {
     public mainList = new GfxRenderInstList();
     public indirectList = new GfxRenderInstList(null);
 
+    public fogParams = new FogParams();
+
     public setupFromCamera(camera: Camera, extraTransformInSourceEngineSpace: mat4 | null = null): void {
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         if (extraTransformInSourceEngineSpace !== null)
@@ -690,7 +688,7 @@ export class BSPRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private entitySystem: EntitySystem;
+    public entitySystem: EntitySystem;
     public models: BSPModelRenderer[] = [];
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
@@ -764,13 +762,9 @@ export class BSPRenderer {
 
     public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, kinds: RenderObjectKind): void {
         const template = renderInstManager.pushTemplateRenderInst();
-
-        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
-        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
-        offs += fillVec3v(d, offs, view.cameraPos);
-
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
+
+        fillSceneParamsOnRenderInst(template, view);
 
         // Render the world-spawn model.
         if (!!(kinds & RenderObjectKind.WorldSpawn))
@@ -1083,9 +1077,16 @@ export class SourceRenderer implements SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        const renderContext = this.renderContext;
+
         // globalTime is in seconds.
-        this.renderContext.globalTime = viewerInput.time / 1000.0;
-        this.renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
+        renderContext.globalTime = viewerInput.time / 1000.0;
+        renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
+
+        // Calculate our fog parameters from the local player's fog controller.
+        const localPlayer = this.bspRenderers[0].entitySystem.getLocalPlayer();
+        if (localPlayer.currentFogController !== null)
+            localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
 
         // Set up our views.
         this.mainView.setupFromCamera(viewerInput.camera);
@@ -1096,7 +1097,7 @@ export class SourceRenderer implements SceneGfx {
         this.skyboxView.setupFromCamera(viewerInput.camera, scratchMatrix);
 
         // Fill in the current view with the main view. This is what's used for material proxies.
-        this.renderContext.currentView = this.mainView;
+        renderContext.currentView = this.mainView;
 
         this.movement();
 
@@ -1107,7 +1108,7 @@ export class SourceRenderer implements SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         if (this.skyboxRenderer !== null && this.drawSkybox2D)
-            this.skyboxRenderer.prepareToRender(this.renderContext, renderInstManager, this.skyboxView);
+            this.skyboxRenderer.prepareToRender(renderContext, renderInstManager, this.skyboxView);
 
         if (this.drawSkybox3D) {
             for (let i = 0; i < this.bspRenderers.length; i++) {
@@ -1123,7 +1124,7 @@ export class SourceRenderer implements SceneGfx {
                 if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
                     continue;
 
-                bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
             }
         }
 
@@ -1136,15 +1137,15 @@ export class SourceRenderer implements SceneGfx {
                     this.pvsScratch.fill(true);
                 }
 
-                bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
             }
         }
 
         renderInstManager.popTemplateRenderInst();
 
         // Update our lightmaps right before rendering.
-        this.renderContext.lightmapManager.prepareToRender(device);
-        this.renderContext.colorCorrection.prepareToRender(device);
+        renderContext.lightmapManager.prepareToRender(device);
+        renderContext.colorCorrection.prepareToRender(device);
 
         this.renderHelper.prepareToRender(device);
     }

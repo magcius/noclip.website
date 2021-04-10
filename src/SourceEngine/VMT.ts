@@ -273,6 +273,14 @@ export function vmtParseVector(S: string): number[] {
     return S.split(/\s+/).map((item) => Number(item) * scale);
 }
 
+export function vmtParseColor(dst: Color, S: string): void {
+    const v = vmtParseVector(S);
+    dst.r = v[0] / 255.0;
+    dst.g = v[1] / 255.0;
+    dst.b = v[2] / 255.0;
+    dst.a = 1.0;
+}
+
 export function vmtParseNumber(S: string | undefined, fallback: number): number {
     if (S !== undefined) {
         const v = vmtParseVector(S);

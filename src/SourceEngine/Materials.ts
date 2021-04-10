@@ -7,7 +7,7 @@ import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -38,6 +38,13 @@ export const enum LateBindingTexture {
     FramebufferTexture = 'framebuffer-texture',
 }
 
+export class FogParams {
+    public color = colorNewCopy(White);
+    public start: number = 0;
+    public end: number = 0;
+    public maxdensity: number = 0;
+}
+
 export class MaterialProgramBase extends DeviceProgram {
     public static a_Position = 0;
     public static a_Normal = 1;
@@ -54,7 +61,13 @@ export class MaterialProgramBase extends DeviceProgram {
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
+    vec4 u_FogColor;
+    vec4 u_FogParams;
 };
+
+#define u_FogStart      (u_FogParams.x)
+#define u_FogEnd        (u_FogParams.y)
+#define u_FogMaxDensity (u_FogParams.z)
 
 // Utilities.
 ${GfxShaderLibrary.saturate}
@@ -102,6 +115,17 @@ vec3 GammaToLinear(in vec3 t_Color) {
     return pow(t_Color, vec3(2.2));
 }
 
+void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
+    float t_DistanceWorld = distance(t_PositionWorld.xyz, u_CameraPosWorld.xyz);
+    float t_FogFactor = saturate(invlerp(u_FogStart, u_FogEnd, t_DistanceWorld));
+    t_FogFactor = min(t_FogFactor, u_FogMaxDensity);
+
+    // Square the fog factor to better approximate fixed-function HW (which happens all in clip space)
+    t_FogFactor *= t_FogFactor;
+
+    t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
+}
+
 #ifdef FRAG
 void OutputLinearColor(in vec4 t_Color) {
     // We do gamma correction in post now, as we need linear blending.
@@ -109,6 +133,27 @@ void OutputLinearColor(in vec4 t_Color) {
 }
 #endif
 `;
+}
+
+function fillFogParams(d: Float32Array, offs: number, params: Readonly<FogParams>): number {
+    const baseOffs = offs;
+    offs += fillColor(d, offs, params.color);
+    offs += fillVec4(d, offs, params.start, params.end, params.maxdensity);
+    return offs - baseOffs;
+}
+
+function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEngineView>): number {
+    const baseOffs = offs;
+    offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
+    offs += fillVec3v(d, offs, view.cameraPos);
+    offs += fillFogParams(d, offs, view.fogParams);
+    return offs - baseOffs;
+}
+
+export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>): void {
+    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
+    const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
+    fillSceneParams(d, offs, view);
 }
 
 function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
@@ -415,7 +460,6 @@ export abstract class BaseMaterial {
 
         this.initStaticBeforeResourceFetch();
         await this.fetchResources(renderContext.materialCache);
-        this.calcTexCoord0Scale();
         this.initStatic(renderContext.device, renderContext.renderCache);
     }
 
@@ -691,6 +735,7 @@ export abstract class BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        this.calcTexCoord0Scale();
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -1432,14 +1477,15 @@ void mainPS() {
     t_FinalColor.a = t_BaseTexture.a;
 #endif
 
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
 }
 #endif
 `;
 }
 
-const enum ShaderType {
-    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, Unknown,
+const enum GenericShaderType {
+    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, DecalModulate, Unknown,
 };
 
 class Material_Generic extends BaseMaterial {
@@ -1453,7 +1499,7 @@ class Material_Generic extends BaseMaterial {
     private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
     private wantsAmbientCube = false;
-    private shaderType: ShaderType;
+    private shaderType: GenericShaderType;
 
     private program: Material_Generic_Program;
     private gfxProgram: GfxProgram | null = null;
@@ -1465,12 +1511,12 @@ class Material_Generic extends BaseMaterial {
         let wantsDynamicVertexLighting: boolean;
         let wantsDynamicPixelLighting: boolean;
 
-        if (this.shaderType === ShaderType.VertexLitGeneric) {
+        if (this.shaderType === GenericShaderType.VertexLitGeneric) {
             this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
             this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicPixelLighting = false;
-        } else if (this.shaderType === ShaderType.Skin) {
+        } else if (this.shaderType === GenericShaderType.Skin) {
             this.wantsStaticVertexLighting = false;
             this.wantsAmbientCube = false;
             wantsDynamicVertexLighting = false;
@@ -1553,36 +1599,41 @@ class Material_Generic extends BaseMaterial {
     }
 
     protected initStaticBeforeResourceFetch() {
+        const shaderTypeStr = this.vmt._Root.toLowerCase();
+        if (shaderTypeStr === 'lightmappedgeneric')
+            this.shaderType = GenericShaderType.LightmappedGeneric;
+        else if (shaderTypeStr === 'vertexlitgeneric')
+            this.shaderType = GenericShaderType.VertexLitGeneric;
+        else if (shaderTypeStr === 'unlitgeneric')
+            this.shaderType = GenericShaderType.UnlitGeneric;
+        else if (shaderTypeStr === 'worldvertextransition')
+            this.shaderType = GenericShaderType.WorldVertexTransition;
+        else if (shaderTypeStr === 'black')
+            this.shaderType = GenericShaderType.Black;
+        else if (shaderTypeStr === 'decalmodulate')
+            this.shaderType = GenericShaderType.DecalModulate;
+        else
+            this.shaderType = GenericShaderType.Unknown;
+
         // The detailBlendMode parameter determines whether we load an SRGB texture or not.
         const detailBlendMode = this.paramGetNumber('$detailblendmode');
         this.paramGetTexture('$detail').isSRGB = (detailBlendMode === 1);
+
+        // decalmodulate doesn't load basetexture as sRGB.
+        if (this.shaderType === GenericShaderType.DecalModulate)
+            this.paramGetTexture('$basetexture').isSRGB = false;
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         super.initStatic(device, cache);
 
-        const shaderTypeStr = this.vmt._Root.toLowerCase();
-
-        if (shaderTypeStr === 'lightmappedgeneric')
-            this.shaderType = ShaderType.LightmappedGeneric;
-        else if (shaderTypeStr === 'vertexlitgeneric')
-            this.shaderType = ShaderType.VertexLitGeneric;
-        else if (shaderTypeStr === 'unlitgeneric')
-            this.shaderType = ShaderType.UnlitGeneric;
-        else if (shaderTypeStr === 'worldvertextransition')
-            this.shaderType = ShaderType.WorldVertexTransition;
-        else if (shaderTypeStr === 'black')
-            this.shaderType = ShaderType.Black;
-        else
-            this.shaderType = ShaderType.Unknown;
-    
         this.program = new Material_Generic_Program();
 
         this.program.setDefineString('SKINNING_MODE', '' + this.skinningMode);
 
-        if (this.shaderType === ShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
+        if (this.shaderType === GenericShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
             // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
-            this.shaderType = ShaderType.Skin;
+            this.shaderType = GenericShaderType.Skin;
             this.wantsPhong = true;
             this.program.setDefineBool('USE_PHONG', true);
         }
@@ -1623,12 +1674,12 @@ class Material_Generic extends BaseMaterial {
             }
         }
 
-        if (this.shaderType === ShaderType.LightmappedGeneric || this.shaderType === ShaderType.WorldVertexTransition) {
+        if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
             this.wantsLightmap = true;
             this.program.setDefineBool('USE_LIGHTMAP', true);
         }
 
-        if (this.shaderType === ShaderType.WorldVertexTransition) {
+        if (this.shaderType === GenericShaderType.WorldVertexTransition) {
             this.wantsBaseTexture2 = true;
             this.program.setDefineBool('USE_BASETEXTURE2', true);
         }
@@ -1671,6 +1722,15 @@ class Material_Generic extends BaseMaterial {
 
         if (this.paramGetBoolean('$alphatest')) {
             this.program.setDefineBool('USE_ALPHATEST', true);
+        } else if (this.shaderType === GenericShaderType.DecalModulate) {
+            this.isTranslucent = true;
+
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.DST_COLOR,
+                blendDstFactor: GfxBlendFactor.SRC_COLOR,
+            });
+            this.megaStateFlags.depthWrite = false;
         } else {
             let isTranslucent = false;
 
@@ -1678,9 +1738,10 @@ class Material_Generic extends BaseMaterial {
                 isTranslucent = true;
 
             this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
-            const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-            this.sortKeyBase = makeSortKey(sortLayer);
         }
+
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
 
         this.setCullMode(this.megaStateFlags);
 
@@ -1771,7 +1832,7 @@ class Material_Generic extends BaseMaterial {
         }
 
         // Compute modulation color.
-        if (this.shaderType === ShaderType.Black) {
+        if (this.shaderType === GenericShaderType.Black) {
             colorCopy(scratchColor, OpaqueBlack);
         } else {
             colorCopy(scratchColor, White);
@@ -1841,6 +1902,7 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_ModulationColor;
 };
 
+varying vec3 v_PositionWorld;
 // Texture1, Texture2
 varying vec4 v_TexCoord0;
 
@@ -1853,6 +1915,7 @@ layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
 
 void mainVS() {
     vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     // TODO(jstpierre): BaseTransform
@@ -1866,6 +1929,8 @@ void mainPS() {
     vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
     vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw));
     vec4 t_FinalColor = t_Texture1 * t_Texture2 * u_ModulationColor;
+
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
 }
 #endif
@@ -2032,6 +2097,7 @@ void mainPS() {
 
     // TODO(jstpierre): RefractWater
 
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
 }
 #endif
@@ -2049,7 +2115,7 @@ ${this.Common}
 layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
     vec4 u_BaseTextureScaleBias;
-    vec4 u_FogColor;
+    vec4 u_WaterFogColor;
     vec4 u_Misc[3];
 };
 
@@ -2166,7 +2232,7 @@ void mainPS() {
     vec4 t_RefractColor = vec4(0.0);
 
     vec3 t_DiffuseLight = vec3(1.0, 1.0, 1.0);
-    vec3 t_FogColor = u_FogColor.rgb;
+    vec3 t_WaterFogColor = u_WaterFogColor.rgb;
 
 #ifdef USE_LIGHTMAP_WATER_FOG
     vec3 t_LightmapColor = texture(SAMPLER_2D(u_Texture[1]), v_TexCoord0.zw).rgb;
@@ -2176,8 +2242,8 @@ void mainPS() {
     t_DiffuseLight *= t_LightmapColor;
 #endif
 
-    t_FogColor *= t_DiffuseLight;
-    t_RefractColor.rgb += t_FogColor;
+    t_WaterFogColor *= t_DiffuseLight;
+    t_RefractColor.rgb += t_WaterFogColor;
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld.xyz, t_PositionToEye.xyz);
     t_ReflectColor += texture(u_TextureCube[0], t_Reflection).rgba;
@@ -2211,6 +2277,7 @@ void mainPS() {
     t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_RefractAmount);
     t_FinalColor.a = 1.0;
 
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
 }
 #endif
@@ -2527,6 +2594,8 @@ void mainPS() {
 #endif
 
     t_FinalColor.a = t_BumpmapSample.a;
+
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
 }
 #endif
