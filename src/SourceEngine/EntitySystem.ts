@@ -2,11 +2,11 @@
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
-import { Color, colorCopy, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { colorCopy, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1, Vec3Zero } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
@@ -210,7 +210,7 @@ export class BaseEntity {
         }
     }
 
-    protected setAbsOrigin(v: ReadonlyVec3): void {
+    public setAbsOrigin(v: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
             if (parentModelMatrix !== null) {
@@ -298,6 +298,8 @@ export class BaseEntity {
 class player extends BaseEntity {
     public currentFogController: env_fog_controller | null = null;
 
+    public lookDir = vec3.create();
+
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer) {
         super(entitySystem, renderContext, bspRenderer, {
             classname: 'player',
@@ -309,6 +311,16 @@ class player extends BaseEntity {
 
     public input_setfogcontroller(entitySystem: EntitySystem, value: string): void {
         this.currentFogController = entitySystem.findEntityByTargetName(value) as env_fog_controller;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        const view = renderContext.currentView;
+        this.setAbsOrigin(view.cameraPos);
+        // Get forward vector
+        getMatrixAxisZ(this.lookDir, view.worldFromViewMatrix);
+        vec3.negate(this.lookDir, this.lookDir);
     }
 }
 
@@ -787,12 +799,25 @@ class trigger_multiple extends BaseEntity {
             return null;
     }
 
-    protected onTouch(entitySystem: EntitySystem): void {
+    protected activateTrigger(entitySystem: EntitySystem): void {
         this.output_onTrigger.fire(entitySystem, this);
-        this.output_onStartTouch.fire(entitySystem, this);
     }
 
-    protected onUnTouch(entitySystem: EntitySystem): void {
+    protected multiStartTouch(entitySystem: EntitySystem): void {
+        this.activateTrigger(entitySystem);
+    }
+
+    protected onStartTouch(entitySystem: EntitySystem): void {
+        this.output_onStartTouch.fire(entitySystem, this);
+
+        // TODO(jstpierre): wait
+        this.multiStartTouch(entitySystem);
+    }
+
+    protected onTouch(entitySystem: EntitySystem): void {
+    }
+
+    protected onEndTouch(entitySystem: EntitySystem): void {
         this.output_onEndTouch.fire(entitySystem, this);
         this.output_onEndTouchAll.fire(entitySystem, this);
     }
@@ -803,22 +828,25 @@ class trigger_multiple extends BaseEntity {
         const aabb = this.getAABB();
         const modelMatrix = this.getModelMatrix();
         if (aabb !== null && modelMatrix !== null) {
-            // Test if the "player" (camera) is inside N units from our AABB.
             mat4.invert(scratchMat4a, modelMatrix);
-            transformVec3Mat4w1(scratchVec3a, scratchMat4a, renderContext.currentView.cameraPos);
+            entitySystem.getLocalPlayer().getAbsOrigin(scratchVec3a);
+            transformVec3Mat4w1(scratchVec3a, scratchMat4a, scratchVec3a);
 
             const playerSize = 24;
             const isPlayerTouching = aabb.containsSphere(scratchVec3a, playerSize);
 
-            if (this.isPlayerTouching !== isPlayerTouching) {
-                this.isPlayerTouching = isPlayerTouching;
-
-                if (this.enabled) {
+            if (this.enabled) {
+                if (this.isPlayerTouching !== isPlayerTouching) {
+                    this.isPlayerTouching = isPlayerTouching;
+    
                     if (this.isPlayerTouching)
-                        this.onTouch(entitySystem);
+                        this.onStartTouch(entitySystem);
                     else
-                        this.onUnTouch(entitySystem);
+                        this.onEndTouch(entitySystem);
                 }
+
+                if (this.isPlayerTouching)
+                    this.onTouch(entitySystem);
             }
 
             if (renderContext.showTriggerDebug) {
@@ -835,9 +863,77 @@ class trigger_multiple extends BaseEntity {
 class trigger_once extends trigger_multiple {
     public static classname = `trigger_once`;
 
-    protected onUnTouch(entitySystem: EntitySystem): void {
-        super.onUnTouch(entitySystem);
+    protected activateTrigger(entitySystem: EntitySystem): void {
+        super.activateTrigger(entitySystem);
         this.remove();
+    }
+}
+
+class trigger_look extends trigger_once {
+    public static classname = `trigger_look`;
+
+    private fieldOfView: number = 0;
+    private lookTimeAmount: number = 0;
+    private target: BaseEntity | null = null;
+
+    private startLookTime: number = -1;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.fieldOfView = Number(this.entity.fieldofview);
+        this.lookTimeAmount = Number(this.entity.looktime);
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        this.target = entitySystem.findEntityByTargetName(this.entity.target);
+    }
+
+    protected multiStartTouch(entitySystem: EntitySystem): void {
+        // Do nothing.
+    }
+
+    private reset(): void {
+        this.startLookTime = -1;
+    }
+
+    protected onTouch(entitySystem: EntitySystem): void {
+        super.onTouch(entitySystem);
+
+        if (this.target === null)
+            return;
+
+        const player = entitySystem.getLocalPlayer();
+
+        // Compute target looking direction.
+        this.target.getAbsOrigin(scratchVec3a);
+        player.getAbsOrigin(scratchVec3b);
+        vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        const dot = vec3.dot(player.lookDir, scratchVec3a);
+        if (dot < this.fieldOfView) {
+            // Not in view, reset.
+            this.reset();
+            return;
+        }
+
+        if (this.startLookTime < 0) {
+            // Starting a new look.
+            this.startLookTime = entitySystem.currentTime;
+        }
+
+        const delta = entitySystem.currentTime - this.startLookTime;
+        if (delta >= this.lookTimeAmount) {
+            this.activateTrigger(entitySystem);
+        }
+    }
+
+    protected onEndTouch(entitySystem: EntitySystem): void {
+        super.onEndTouch(entitySystem);
+        this.reset();
     }
 }
 
@@ -1078,6 +1174,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(math_counter);
         this.registerFactory(trigger_multiple);
         this.registerFactory(trigger_once);
+        this.registerFactory(trigger_look);
         this.registerFactory(env_fog_controller);
         this.registerFactory(env_texturetoggle);
         this.registerFactory(material_modify_control);
