@@ -485,10 +485,16 @@ export abstract class BaseMaterial {
     }
 
     private findFallbackBlock(shaderTypeName: string): any | null {
-        const fallbackSuffixes = [`>=dx90_20b`, `>=dx90`, `>dx90`, `ldr`, `srgb`, `dx9`];
+        const fallbackSuffixes = [`gpu>=1`, `gpu>=2`, `>=dx90_20b`, `>=dx90`, `>dx90`, `ldr`, `srgb`, `dx9`];
         for (let i = 0; i < fallbackSuffixes.length; i++) {
-            const blockName = `${shaderTypeName}_${fallbackSuffixes[i]}`;
-            const block = this.vmt[blockName];
+            const suffix = fallbackSuffixes[i];
+            let block: any;
+
+            block = this.vmt[suffix];
+            if (block !== undefined)
+                return block;
+
+            block = this.vmt[`${shaderTypeName}_${suffix}`];
             if (block !== undefined)
                 return block;
         }
