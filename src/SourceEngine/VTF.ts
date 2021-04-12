@@ -219,7 +219,7 @@ export class VTF {
         this.versionMajor = view.getUint32(0x04, true);
         assert(this.versionMajor === 7);
         this.versionMinor = view.getUint32(0x08, true);
-        assert(this.versionMinor >= 1 && this.versionMinor <= 5);
+        assert(this.versionMinor >= 0 && this.versionMinor <= 5);
         const headerSize = view.getUint32(0x0C, true);
 
         let dataIdx: number;
