@@ -175,7 +175,7 @@ class MarioKartWiiRenderer {
             });
         });
 
-        if (this.enablePostProcessing) {
+        if (this.enablePostProcessing && (this.eggDOF !== null || this.eggBloom !== null)) {
             const mainResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
             if (this.eggDOF !== null)
