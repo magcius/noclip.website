@@ -263,6 +263,17 @@ class ParameterBoolean extends ParameterNumber {
     }
 }
 
+function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
+    const results: RegExpExecArray[] = [];
+    while (true) {
+        const result = needle.exec(haystack);
+        if (!result)
+            break;
+        results.push(result);
+    }
+    return results;
+}
+
 const scratchMatrix = mat4.create();
 class ParameterMatrix {
     public matrix = mat4.create();
@@ -283,7 +294,28 @@ class ParameterMatrix {
 
     public parse(S: string): void {
         // "center {} {} scale {} {} rotate {} translate {} {}"
-        const [, cx, cy, sx, sy, r, tx, ty] = assertExists(/center (.+) (.+) scale (.+) (.+) rotate (.+) translate (.+) (.+)/.exec(S)).map((v) => Number(v));
+        const sections = findall(S, /([a-z]+) ([^a-z]+)/g);
+
+        let cx = 0, cy = 0, sx = 1, sy = 1, r = 0, tx = 0, ty = 0;
+        sections.forEach(([mode, items]) => {
+            let values = items.split(' ').map((v) => parseFloat(v));
+            if (values[1] === undefined)
+                values[1] = values[0];
+
+            if (mode === 'center') {
+                cx = values[0];
+                cy = values[1];
+            } else if (mode === 'scale') {
+                sx = values[0];
+                sy = values[1];
+            } else if (mode === 'rotate') {
+                r = values[0];
+            } else if (mode === 'translate') {
+                tx = values[0];
+                ty = values[1];
+            }
+        });
+
         this.setMatrix(cx, cy, sx, sy, r, tx, ty);
     }
 
