@@ -7,7 +7,7 @@ import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldS
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1, Vec3Zero } from '../MathHelpers';
-import { assert, assertExists, fallbackUndefined } from '../util';
+import { arrayRemove, assert, assertExists, fallbackUndefined } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
@@ -70,6 +70,7 @@ export class BaseEntity {
 
     public targetName: string | null = null;
     public parentEntity: BaseEntity | null = null;
+    public modelMatrix = mat4.create();
     public alive = true;
     public enabled = true;
 
@@ -110,6 +111,11 @@ export class BaseEntity {
         // Set up some defaults.
         if (this.entity.classname.startsWith('func_nav_'))
             this.visible = false;
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        if (this.entity.parentname)
+            this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
     }
 
     public setModelName(renderContext: SourceRenderContext, modelName: string): void {
@@ -197,7 +203,9 @@ export class BaseEntity {
 
         if (this.modelBSP !== null) {
             // BSP models are rendered by the BSP system.
+            mat4.copy(this.modelBSP.modelMatrix, this.modelMatrix);
         } else if (this.modelStudio !== null) {
+            mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
             // idle animation pose?
             if (this.animplay)
                 this.animtime += renderContext.globalDeltaTime * 60;
@@ -248,34 +256,16 @@ export class BaseEntity {
         this.setAbsOrigin(this.localOrigin);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
-        if (this.entity.parentname)
-            this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
-    }
-
-    protected getModelMatrix(): mat4 | null {
-        if (this.modelBSP !== null)
-            return this.modelBSP.modelMatrix;
-        else if (this.modelStudio !== null)
-            return this.modelStudio.modelMatrix;
-        else
-            return null;
-    }
-
-    protected updateModelMatrix(): mat4 | null {
-        const modelMatrix = this.getModelMatrix();
-        if (modelMatrix === null)
-            return null;
-
-        computeModelMatrixPosQAngle(modelMatrix, this.localOrigin, this.angles);
+    protected updateModelMatrix(): mat4 {
+        computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.angles);
 
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
             if (parentModelMatrix !== null)
-                mat4.mul(modelMatrix, parentModelMatrix, modelMatrix);
+                mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
         }
 
-        return modelMatrix;
+        return this.modelMatrix;
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -539,6 +529,7 @@ class func_door extends BaseToggle {
     }
 
     protected modelUpdated(): void {
+        super.modelUpdated();
         this.updateExtents();
     }
 
@@ -847,9 +838,8 @@ class trigger_multiple extends BaseEntity {
         super.movement(entitySystem, renderContext);
 
         const aabb = this.getAABB();
-        const modelMatrix = this.getModelMatrix();
-        if (aabb !== null && modelMatrix !== null) {
-            mat4.invert(scratchMat4a, modelMatrix);
+        if (aabb !== null) {
+            mat4.invert(scratchMat4a, this.modelMatrix);
             entitySystem.getLocalPlayer().getAbsOrigin(scratchVec3a);
             transformVec3Mat4w1(scratchVec3a, scratchMat4a, scratchVec3a);
 
@@ -872,9 +862,9 @@ class trigger_multiple extends BaseEntity {
 
             if (renderContext.showTriggerDebug) {
                 const color = this.enabled ? (isPlayerTouching ? Green : Magenta) : Cyan;
-                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, modelMatrix, color);
+                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, this.modelMatrix, color);
 
-                getMatrixTranslation(scratchVec3a, modelMatrix);
+                getMatrixTranslation(scratchVec3a, this.modelMatrix);
                 drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
             }
         }
