@@ -746,9 +746,9 @@ export class BSPRenderer {
         this.debugCube = new DebugCube(device, cache);
     }
 
-    public getSkyCameraModelMatrix(): mat4 | null {
+    public getSkyCamera(): sky_camera | null {
         const skyCameraEntity = this.entitySystem.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
-        return skyCameraEntity !== undefined ? skyCameraEntity.modelMatrix : null;
+        return skyCameraEntity !== undefined ? skyCameraEntity : null;
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -1083,11 +1083,6 @@ export class SourceRenderer implements SceneGfx {
         renderContext.globalTime = viewerInput.time / 1000.0;
         renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
 
-        // Calculate our fog parameters from the local player's fog controller.
-        const localPlayer = this.bspRenderers[0].entitySystem.getLocalPlayer();
-        if (localPlayer.currentFogController !== null)
-            localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
-
         // Set up our views.
         this.mainView.setupFromCamera(viewerInput.camera);
 
@@ -1115,10 +1110,11 @@ export class SourceRenderer implements SceneGfx {
                 const bspRenderer = this.bspRenderers[i];
 
                 // Draw the skybox by positioning us inside the skybox area.
-                const skyCameraModelMatrix = bspRenderer.getSkyCameraModelMatrix();
-                if (skyCameraModelMatrix === null)
+                const skyCamera = bspRenderer.getSkyCamera();
+                if (skyCamera === null)
                     continue;
-                this.skyboxView.setupFromCamera(viewerInput.camera, skyCameraModelMatrix);
+                this.skyboxView.setupFromCamera(viewerInput.camera, skyCamera.modelMatrix);
+                skyCamera.fillFogParams(this.skyboxView.fogParams);
 
                 // If our skybox is not in a useful spot, then don't render it.
                 if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
@@ -1136,6 +1132,11 @@ export class SourceRenderer implements SceneGfx {
                     // No valid PVS, mark everything visible.
                     this.pvsScratch.fill(true);
                 }
+
+                // Calculate our fog parameters from the local player's fog controller.
+                const localPlayer = bspRenderer.entitySystem.getLocalPlayer();
+                if (localPlayer.currentFogController !== null)
+                    localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
 
                 bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
             }

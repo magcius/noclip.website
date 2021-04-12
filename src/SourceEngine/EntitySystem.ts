@@ -329,6 +329,12 @@ export class sky_camera extends BaseEntity {
     public area: number = -1;
     public scale: number = 1;
     public modelMatrix = mat4.create();
+    private fogStart: number;
+    private fogEnd: number;
+    private fogMaxDensity: number;
+    private fogColor1 = colorNewCopy(White);
+    private fogColor2 = colorNewCopy(White);
+    private fogDirection: number[];
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -339,6 +345,21 @@ export class sky_camera extends BaseEntity {
             this.scale * -this.localOrigin[0],
             this.scale * -this.localOrigin[1],
             this.scale * -this.localOrigin[2]);
+
+        vmtParseColor(this.fogColor1, this.entity.fogcolor);
+        vmtParseColor(this.fogColor2, this.entity.fogcolor2);
+        this.fogDirection = vmtParseVector(this.entity.fogdir);
+        this.fogStart = Number(this.entity.fogstart);
+        this.fogEnd = Number(this.entity.fogend);
+        this.fogMaxDensity = Number(this.entity.fogmaxdensity);
+    }
+
+    public fillFogParams(dst: FogParams): void {
+        dst.start = this.fogStart;
+        dst.end = this.fogEnd;
+        dst.maxdensity = this.fogMaxDensity;
+        // TODO(jstpierre): Color blending
+        colorCopy(dst.color, this.fogColor1);
     }
 }
 
