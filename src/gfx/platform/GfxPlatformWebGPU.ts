@@ -1,8 +1,7 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxUniformBuffer } from "./GfxPlatformImpl";
-import { getFormatByteSize } from "./GfxPlatformFormat";
-import { assertExists, assert, leftPad, align } from "../../util";
+import { assertExists, assert, leftPad } from "../../util";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
@@ -33,8 +32,8 @@ interface GfxSamplerP_WebGPU extends GfxSampler {
 
 interface GfxProgramP_WebGPU extends GfxProgram {
     descriptor: GfxProgramDescriptorSimple;
-    vertexStage: GPUProgrammableStageDescriptor | null;
-    fragmentStage: GPUProgrammableStageDescriptor | null;
+    vertexStage: GPUProgrammableStage | null;
+    fragmentStage: GPUProgrammableStage | null;
 }
 
 interface GfxBindingsP_WebGPU extends GfxBindings {
@@ -44,7 +43,7 @@ interface GfxBindingsP_WebGPU extends GfxBindings {
 }
 
 interface GfxInputLayoutP_WebGPU extends GfxInputLayout {
-    gpuVertexStateDescriptor: GPUVertexStateDescriptor;
+    buffers: GPUVertexBufferLayout[];
     indexFormat: GPUIndexFormat | undefined;
 }
 
@@ -115,7 +114,20 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
     else if (format === GfxFormat.D24_S8)
         return 'depth24plus-stencil8';
     else if (format === GfxFormat.D32F_S8)
-        return 'depth24plus-stencil8'; // HACK FOR NOW
+        return 'depth32float-stencil8';
+    else
+        throw "whoops";
+}
+
+function translateTextureDimension(dimension: GfxTextureDimension): GPUTextureDimension {
+    if (dimension === GfxTextureDimension.n2D)
+        return '2d';
+    else if (dimension === GfxTextureDimension.Cube)
+        return '3d';
+    else if (dimension === GfxTextureDimension.n2DArray)
+        return '3d';
+    else if (dimension === GfxTextureDimension.n3D)
+        return '3d';
     else
         throw "whoops";
 }
@@ -161,8 +173,9 @@ function translateFrontFace(frontFaceMode: GfxFrontFaceMode): GPUFrontFace {
         throw "whoops";
 }
 
-function translateRasterizationState(megaStateDescriptor: GfxMegaStateDescriptor): GPURasterizationStateDescriptor {
+function translatePrimitiveState(topology: GfxPrimitiveTopology, megaStateDescriptor: GfxMegaStateDescriptor): GPUPrimitiveState {
     return {
+        topology: translateTopology(topology),
         cullMode: translateCullMode(megaStateDescriptor.cullMode),
         frontFace: translateFrontFace(megaStateDescriptor.frontFace),
     };
@@ -204,7 +217,7 @@ function translateBlendMode(mode: GfxBlendMode): GPUBlendOperation {
         throw "whoops";
 }
 
-function translateBlendState(blendState: GfxChannelBlendState): GPUBlendDescriptor {
+function translateBlendState(blendState: GfxChannelBlendState): GPUBlendComponent {
     return {
         operation: translateBlendMode(blendState.blendMode),
         srcFactor: translateBlendFactor(blendState.blendSrcFactor),
@@ -212,16 +225,18 @@ function translateBlendState(blendState: GfxChannelBlendState): GPUBlendDescript
     };
 }
 
-function translateColorState(attachmentState: GfxAttachmentState): GPUColorStateDescriptor {
+function translateColorState(attachmentState: GfxAttachmentState): GPUColorTargetState {
     return { 
         format: 'bgra8unorm',
-        colorBlend: translateBlendState(attachmentState.rgbBlendState),
-        alphaBlend: translateBlendState(attachmentState.alphaBlendState),
+        blend: {
+            color: translateBlendState(attachmentState.rgbBlendState),
+            alpha: translateBlendState(attachmentState.alphaBlendState),
+        },
         writeMask: attachmentState.colorWriteMask,
     };
 }
 
-function translateColorStates(megaStateDescriptor: GfxMegaStateDescriptor): GPUColorStateDescriptor[] {
+function translateTargets(megaStateDescriptor: GfxMegaStateDescriptor): GPUColorTargetState[] {
     // TODO(jstpierre): Remove legacy blend states.
     return megaStateDescriptor.attachmentsState!.map(translateColorState);
 }
@@ -247,7 +262,7 @@ function translateCompareMode(compareMode: GfxCompareMode): GPUCompareFunction {
         throw "whoops";
 }
 
-function translateDepthStencilState(megaStateDescriptor: GfxMegaStateDescriptor): GPUDepthStencilStateDescriptor {
+function translateDepthStencilState(megaStateDescriptor: GfxMegaStateDescriptor): GPUDepthStencilState {
     return {
         format: 'depth24plus-stencil8',
 
@@ -280,29 +295,29 @@ function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GP
 
 function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
     if (format === GfxFormat.U8_R)
-        return 'uchar2';
+        return 'uint8x2';
     else if (format === GfxFormat.U8_RG)
-        return 'uchar2';
+        return 'uint8x2';
     else if (format === GfxFormat.U8_RGB)
-        return 'uchar4';
+        return 'uint8x4';
     else if (format === GfxFormat.U8_RGBA)
-        return 'uchar4';
+        return 'uint8x4';
     else if (format === GfxFormat.U8_RGBA_NORM)
-        return 'uchar4norm';
+        return 'unorm8x4';
     else if (format === GfxFormat.S8_RGB_NORM)
-        return 'char4norm';
+        return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)
-        return 'char4norm';
+        return 'snorm8x4';
     else if (format === GfxFormat.S16_RG)
-        return 'short2';
+        return 'uint16x2';
     else if (format === GfxFormat.F32_R)
-        return 'float';
+        return 'float32';
     else if (format === GfxFormat.F32_RG)
-        return 'float2';
+        return 'float32x2';
     else if (format === GfxFormat.F32_RGB)
-        return 'float3';
+        return 'float32x3';
     else if (format === GfxFormat.F32_RGBA)
-        return 'float4';
+        return 'float32x4';
     else
         throw "whoops";
 }
@@ -403,18 +418,19 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public descriptor: GfxRenderPassDescriptor;
     private renderPassEncoder: GPURenderPassEncoder | null = null;
     private renderPassDescriptor: GPURenderPassDescriptor;
-    private colorAttachments: GPURenderPassColorAttachmentDescriptor[];
-    private depthStencilAttachment: GPURenderPassDepthStencilAttachmentDescriptor;
+    private colorAttachments: GPURenderPassColorAttachmentNew[];
+    private depthStencilAttachment: GPURenderPassDepthStencilAttachmentNew;
     private debugPointer: any;
 
     constructor(private device: GPUDevice) {
         this.colorAttachments = [{
-            attachment: null!,
+            view: null!,
             loadValue: 'load',
+            storeOp: 'store',
         }];
 
         this.depthStencilAttachment = {
-            attachment: null!,
+            view: null!,
             depthLoadValue: 'load',
             depthStoreOp: 'store',
             stencilLoadValue: 'load',
@@ -433,7 +449,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         if (descriptor.colorAttachment !== null) {
             const colorAttachment = descriptor.colorAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.colorAttachments[0];
-            dstAttachment.attachment = colorAttachment.gpuTextureView;
+            dstAttachment.view = colorAttachment.gpuTextureView;
             dstAttachment.loadValue = descriptor.colorClearColor;
             dstAttachment.storeOp = 'store';
             dstAttachment.resolveTarget = undefined;
@@ -449,7 +465,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         if (descriptor.depthStencilAttachment !== null) {
             const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.depthStencilAttachment;
-            dstAttachment.attachment = dsAttachment.gpuTextureView;
+            dstAttachment.view = dsAttachment.gpuTextureView;
             dstAttachment.depthLoadValue = descriptor.depthClearValue;
             dstAttachment.stencilLoadValue = descriptor.stencilClearValue;
             dstAttachment.depthStoreOp = 'store';
@@ -535,8 +551,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             if (colorAttachment.sampleCount === 1) {
                 const colorResolveTo = descriptor.colorResolveTo as GfxTextureP_WebGPU;
 
-                const srcCopy: GPUTextureCopyView = { texture: colorAttachment.gpuTexture, mipLevel: 0, origin: [0, 0, 0] };
-                const dstCopy: GPUTextureCopyView = { texture: colorResolveTo.gpuTexture, mipLevel: 0, origin: [0, 0, 0] };
+                const srcCopy: GPUImageCopyTexture = { texture: colorAttachment.gpuTexture };
+                const dstCopy: GPUImageCopyTexture = { texture: colorResolveTo.gpuTexture };
                 this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [colorResolveTo.width, colorResolveTo.height, 1]);
             }
         }
@@ -628,7 +644,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const size: GPUExtent3D = [descriptor.width, descriptor.height, descriptor.depth];
         const mipLevelCount = descriptor.numLevels;
         const format = translateTextureFormat(descriptor.pixelFormat);
-        const dimension = '2d';
+        const dimension = translateTextureDimension(descriptor.dimension);
         const usage = GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED;
 
         const gpuTexture = this.device.createTexture({ size, mipLevelCount, format, dimension, usage });
@@ -665,7 +681,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             size: [width, height, 1],
             sampleCount,
             format: translateTextureFormat(pixelFormat),
-            usage: GPUTextureUsage.OUTPUT_ATTACHMENT,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
         const gpuTextureView = gpuTexture.createView();
 
@@ -686,7 +702,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return attachment;
     }
 
-    private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStageDescriptor> {
+    private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStage> {
         let res: Uint32Array;
         try {
             res = this.glslang.compileGLSL(sourceText, shaderStage, true);
@@ -773,33 +789,31 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
         // GfxInputLayout is not a platform object, it's a descriptor in WebGPU.
 
-        const vertexBuffers: GPUVertexBufferLayoutDescriptor[] = [];
+        const buffers: GPUVertexBufferLayout[] = [];
         for (let i = 0; i < inputLayoutDescriptor.vertexBufferDescriptors.length; i++) {
             const b = inputLayoutDescriptor.vertexBufferDescriptors[i];
             if (b === null)
                 continue;
             const arrayStride = b.byteStride;
             const stepMode = translateVertexBufferFrequency(b.frequency);
-            const attributes: GPUVertexAttributeDescriptor[] = [];
-            vertexBuffers[i] = { arrayStride, stepMode, attributes };
+            const attributes: GPUVertexAttribute[] = [];
+            buffers[i] = { arrayStride, stepMode, attributes };
         }
 
         for (let i = 0; i < inputLayoutDescriptor.vertexAttributeDescriptors.length; i++) {
             const attr = inputLayoutDescriptor.vertexAttributeDescriptors[i];
-            const b = assertExists(vertexBuffers[attr.bufferIndex]);
-            const attribute: GPUVertexAttributeDescriptor = {
+            const b = assertExists(buffers[attr.bufferIndex]);
+            const attribute: GPUVertexAttribute = {
                 shaderLocation: attr.location,
                 format: translateVertexFormat(attr.format),
                 offset: attr.bufferByteOffset,
             };
-            (b.attributes as GPUVertexAttributeDescriptor[]).push(attribute);
+            (b.attributes as GPUVertexAttribute[]).push(attribute);
         }
 
         const indexFormat = translateIndexFormat(inputLayoutDescriptor.indexBufferFormat);
 
-        const gpuVertexStateDescriptor: GPUVertexStateDescriptor = { vertexBuffers };
-
-        const inputLayout: GfxInputLayoutP_WebGPU = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), gpuVertexStateDescriptor, indexFormat };
+        const inputLayout: GfxInputLayoutP_WebGPU = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), buffers, indexFormat };
         return inputLayout;
     }
 
@@ -813,7 +827,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _createPipelineLayout(bindingLayouts: GfxBindingLayoutDescriptor[]): GPUPipelineLayout {
         const bindGroupLayouts = bindingLayouts.map((bindingLayout) => this._createBindGroupLayout(bindingLayout));
-        return this.device.createPipelineLayout({ bindGroupLayouts })
+        return this.device.createPipelineLayout({ bindGroupLayouts });
     }
 
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
@@ -840,27 +854,37 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             return;
 
         const layout = this._createPipelineLayout(descriptor.bindingLayouts);
-
-        const primitiveTopology = translateTopology(descriptor.topology);
-        const rasterizationState = translateRasterizationState(descriptor.megaStateDescriptor);
-        const colorStates = translateColorStates(descriptor.megaStateDescriptor);
-        const depthStencilState = translateDepthStencilState(descriptor.megaStateDescriptor);
+        const primitive = translatePrimitiveState(descriptor.topology, descriptor.megaStateDescriptor);
+        const targets = translateTargets(descriptor.megaStateDescriptor);
+        const depthStencil = translateDepthStencilState(descriptor.megaStateDescriptor);
 
         const vertexStage = program.vertexStage, fragmentStage = program.fragmentStage;
 
-        let vertexState: GPUVertexStateDescriptor | undefined = undefined;
+        let buffers: GPUVertexBufferLayout[] | undefined = undefined;
         if (descriptor.inputLayout !== null)
-            vertexState = (descriptor.inputLayout as GfxInputLayoutP_WebGPU).gpuVertexStateDescriptor;
+            buffers = (descriptor.inputLayout as GfxInputLayoutP_WebGPU).buffers;
         const sampleCount = descriptor.sampleCount;
 
         renderPipeline.isCreating = true;
         // this.device.pushErrorScope('none');
-        renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline({
+
+        const gpuRenderPipeline: GPURenderPipelineDescriptorNew = {
             layout,
-            vertexStage, fragmentStage,
-            primitiveTopology, rasterizationState, colorStates, depthStencilState, vertexState,
-            sampleCount,
-        });
+            vertex: {
+                ... vertexStage,
+                buffers,
+            },
+            primitive,
+            depthStencil,
+            multisample: {
+                count: sampleCount,
+            },
+            fragment: {
+                ... fragmentStage,
+                targets,
+            },
+        };
+        renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipeline);
         // await this.device.popErrorScope();
 
         if (renderPipeline.ResourceName !== undefined)
@@ -926,7 +950,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public submitPass(o: GfxPass): void {
-        const queue = this.device.defaultQueue;
+        const queue = this.device.queue;
 
         const pass = o as GfxRenderPassP_WebGPU;
         const b = pass.finish()!;
