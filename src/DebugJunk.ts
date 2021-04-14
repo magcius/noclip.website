@@ -157,14 +157,14 @@ export function prepareFrameDebugOverlayCanvas2D(): void {
     }
 }
 
-const p = nArray(8, () => vec4.create());
+const p = nArray(10, () => vec4.create());
 
 function transformToClipSpace(m: ReadonlyMat4, p: vec4[], nPoints: number): void {
     for (let i = 0; i < nPoints; i++)
         vec4.transformMat4(p[i], p[i], m);
 }
 
-function clipLineToPlane(a: vec4, b: vec4, plane: ReadonlyVec4): boolean {
+function clipLineToPlane(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4, plane: ReadonlyVec4): boolean {
     const dotA = vec4.dot(a, plane);
     const dotB = vec4.dot(b, plane);
 
@@ -174,33 +174,36 @@ function clipLineToPlane(a: vec4, b: vec4, plane: ReadonlyVec4): boolean {
     }
 
     const t = dotA / (dotA - dotB);
-    if (dotA < 0.0) {
-        vec4.lerp(a, a, b, t);
-    } else if (dotB < 0.0) {
-        vec4.lerp(b, a, b, t);
-    }
+    if (dotA < 0.0)
+        vec4.lerp(da, a, b, t);
+    else
+        vec4.copy(da, a);
+
+    if (dotB < 0.0)
+        vec4.lerp(db, a, b, t);
+    else
+        vec4.copy(db, b);
 
     return true;
 }
 
 const nearPlane = vec4.fromValues(0, 0, -1, 1);
-function clipLineAndDivide(a: vec4, b: vec4): boolean {
-    if (!clipLineToPlane(a, b, nearPlane))
+function clipLineAndDivide(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4): boolean {
+    if (!clipLineToPlane(da, db, a, b, nearPlane))
         return false;
 
-    divideByW(a, a);
-    divideByW(b, b);
-
+    divideByW(da, da);
+    divideByW(db, db);
     return true;
 }
 
-function drawClipSpaceLine(ctx: CanvasRenderingContext2D, p0: vec4, p1: vec4): void {
-    if (!clipLineAndDivide(p0, p1))
+function drawClipSpaceLine(ctx: CanvasRenderingContext2D, p0: ReadonlyVec4, p1: ReadonlyVec4, s0: vec4, s1: vec4): void {
+    if (!clipLineAndDivide(s0, s1, p0, p1))
         return;
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
-    ctx.moveTo((p0[0] + 1) * cw / 2, ((-p0[1] + 1) * ch / 2));
-    ctx.lineTo((p1[0] + 1) * cw / 2, ((-p1[1] + 1) * ch / 2));
+    ctx.moveTo((s0[0] + 1) * cw / 2, ((-s0[1] + 1) * ch / 2));
+    ctx.lineTo((s1[0] + 1) * cw / 2, ((-s1[1] + 1) * ch / 2));
 }
 
 export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v0: ReadonlyVec3, v1: ReadonlyVec3, color: Color = Magenta, thickness = 2): void {
@@ -209,7 +212,7 @@ export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, clipFromWorldM
     transformToClipSpace(clipFromWorldMatrix, p, 2);
 
     ctx.beginPath();
-    drawClipSpaceLine(ctx, p[0], p[1]);
+    drawClipSpaceLine(ctx, p[0], p[1], p[8], p[9]);
     ctx.closePath();
     ctx.lineWidth = thickness;
     ctx.strokeStyle = colorToCSS(color);
@@ -253,18 +256,18 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldM
     transformToClipSpace(clipFromWorldMatrix, p, 8);
 
     ctx.beginPath();
-    drawClipSpaceLine(ctx, p[0], p[1]);
-    drawClipSpaceLine(ctx, p[1], p[3]);
-    drawClipSpaceLine(ctx, p[3], p[2]);
-    drawClipSpaceLine(ctx, p[2], p[0]);
-    drawClipSpaceLine(ctx, p[4], p[5]);
-    drawClipSpaceLine(ctx, p[5], p[7]);
-    drawClipSpaceLine(ctx, p[7], p[6]);
-    drawClipSpaceLine(ctx, p[6], p[4]);
-    drawClipSpaceLine(ctx, p[0], p[4]);
-    drawClipSpaceLine(ctx, p[1], p[5]);
-    drawClipSpaceLine(ctx, p[2], p[6]);
-    drawClipSpaceLine(ctx, p[3], p[7]);
+    drawClipSpaceLine(ctx, p[0], p[1], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[1], p[3], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[3], p[2], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[2], p[0], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[4], p[5], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[5], p[7], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[7], p[6], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[6], p[4], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[0], p[4], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[1], p[5], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[2], p[6], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[3], p[7], p[8], p[9]);
     ctx.closePath();
     ctx.lineWidth = 2;
     ctx.strokeStyle = colorToCSS(color);

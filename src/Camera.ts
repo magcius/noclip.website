@@ -1,5 +1,5 @@
 
-import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
+import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
@@ -192,7 +192,7 @@ export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix
     return -v_[2];
 }
 
-export function divideByW(dst: vec4, src: vec4): void {
+export function divideByW(dst: vec4, src: ReadonlyVec4): void {
     dst[0] = src[0] / src[3];
     dst[1] = src[1] / src[3];
     dst[2] = src[2] / src[3];
