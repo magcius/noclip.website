@@ -622,18 +622,17 @@ export class MaterialInstance {
     public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1], ColorKind.MAT1, material.colorMatRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0], ColorKind.AMB0, material.colorAmbRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1], ColorKind.AMB1, material.colorAmbRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],   ColorKind.K0,   material.colorConstants[0], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],   ColorKind.K1,   material.colorConstants[1], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],   ColorKind.K2,   material.colorConstants[2], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],   ColorKind.K3,   material.colorConstants[3], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],   ColorKind.C0,   material.colorRegisters[0], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],   ColorKind.C1,   material.colorRegisters[1], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],   ColorKind.C2,   material.colorRegisters[2], ColorRegType.S10);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
