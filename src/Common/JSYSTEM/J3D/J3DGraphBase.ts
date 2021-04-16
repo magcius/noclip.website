@@ -15,7 +15,7 @@ import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat, GfxNor
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
-import { colorCopy, Color, colorClamp, colorClampLDR } from '../../../Color';
+import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color';
 import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
@@ -633,6 +633,7 @@ export class MaterialInstance {
         this.calcColor(materialParams.u_Color[ColorKind.C0],   ColorKind.C0,   material.colorRegisters[0], ColorRegType.S10);
         this.calcColor(materialParams.u_Color[ColorKind.C1],   ColorKind.C1,   material.colorRegisters[1], ColorRegType.S10);
         this.calcColor(materialParams.u_Color[ColorKind.C2],   ColorKind.C2,   material.colorRegisters[2], ColorRegType.S10);
+        colorCopy(materialParams.u_Color[ColorKind.CPREV], White);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
