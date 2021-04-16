@@ -42,6 +42,7 @@ export class JSystemFileReaderHelper {
     public magic: string;
     public size: number;
     public numChunks: number;
+    public subversion: string;
     public offs: number = 0x20;
 
     constructor(public buffer: ArrayBufferSlice) {
@@ -49,6 +50,7 @@ export class JSystemFileReaderHelper {
         this.magic = readString(this.buffer, 0, 8);
         this.size = this.view.getUint32(0x08);
         this.numChunks = this.view.getUint32(0x0C);
+        this.subversion = readString(this.buffer, 0x10, 0x10);
         this.offs = 0x20;
     }
 
@@ -1260,6 +1262,7 @@ export class BMD {
     public static parseReader(j3d: JSystemFileReaderHelper): BMD {
         const bmd = new BMD();
 
+        bmd.subversion = j3d.subversion;
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
         bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
         bmd.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
@@ -1281,6 +1284,7 @@ export class BMD {
         return this.parseReader(j3d);
     }
 
+    public subversion: string;
     public inf1: INF1;
     public vtx1: VTX1;
     public evp1: EVP1;

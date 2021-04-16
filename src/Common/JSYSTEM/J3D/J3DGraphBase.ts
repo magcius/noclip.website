@@ -16,7 +16,7 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
 import { colorCopy, Color, colorClamp, colorClampLDR } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, setMatrixTranslation } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { translateSampler } from '../JUTTexture';
@@ -953,7 +953,16 @@ export class J3DModelInstance {
 
         // DRW1 seems to specify each envelope twice. J3D runtime actually corrects for this in J3DModelLoader::readDraw().
         // This appears to be a runtime fix for a toolchain bug.
-        const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length - bmd.evp1.envelopes.length;
+
+        // Don't do this for community tooling, which might not have replicated this bug.
+        let hasEVP1DoubleCountBug = true;
+        if (bmd.subversion === 'SuperBMD - Gamma')
+            hasEVP1DoubleCountBug = false;
+
+        let drawViewMatrixCount = bmd.drw1.matrixDefinitions.length;
+        if (hasEVP1DoubleCountBug)
+            drawViewMatrixCount -= bmd.evp1.envelopes.length;
+
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
     }

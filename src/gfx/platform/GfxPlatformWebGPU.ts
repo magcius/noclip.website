@@ -722,12 +722,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public createProgramSimple(deviceProgram: GfxProgramDescriptorSimple): GfxProgram {
-        const vertexStage: GPUProgrammableStageDescriptor | null = null;
-        const fragmentStage: GPUProgrammableStageDescriptor | null = null;
+        const vertexStage: GPUProgrammableStage | null = null;
+        const fragmentStage: GPUProgrammableStage | null = null;
         const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor: deviceProgram, vertexStage, fragmentStage };
-
         this._createProgram(program);
-
         return program;
     }
 
@@ -738,8 +736,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _createBindGroupLayout(bindingLayout: GfxBindingLayoutDescriptor): GPUBindGroupLayout {
         const entries: GPUBindGroupLayoutEntry[] = [];
-        // XXX(jstpierre): HACK FOR DAWN/GX
-        bindingLayout.numSamplers = Math.min(bindingLayout.numSamplers, 6);
 
         for (let i = 0; i < bindingLayout.numUniformBuffers; i++)
             entries.push({ binding: entries.length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, type: 'uniform-buffer', hasDynamicOffset: true });
@@ -754,8 +750,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings {
         const bindingLayout = bindingsDescriptor.bindingLayout;
-        // XXX(jstpierre): HACK FOR DAWN/GX
-        bindingLayout.numSamplers = Math.min(bindingLayout.numSamplers, 6);
         const gpuBindGroupLayout = this._createBindGroupLayout(bindingLayout);
 
         const gpuBindGroupEntries: GPUBindGroupEntry[] = [];
