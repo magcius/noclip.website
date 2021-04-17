@@ -2046,6 +2046,7 @@ ${this.Common}
 
 layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
+    vec4 u_BumpScaleBias;
 #ifdef USE_TEXSCROLL
     vec4 u_TexScroll;
 #endif
@@ -2090,7 +2091,7 @@ void mainVS() {
     v_TangentSpaceBasis1 = t_TangentTWorld;
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = a_TexCoord.xy;
+    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
 }
 #endif
 
@@ -2374,11 +2375,11 @@ class Material_Water extends BaseMaterial {
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         super.initStatic(device, cache);
 
-        if (this.paramGetTexture('$flowmap') !== null) {
+        if (this.paramGetVTF('$flowmap') !== null) {
             this.shaderType = WaterShaderType.Flow;
             this.program = new WaterFlowMaterialProgram();
 
-            if (this.paramGetTexture('$basetexture') !== null)
+            if (this.paramGetVTF('$basetexture') !== null)
                 this.program.setDefineBool('USE_BASETEXTURE', true);
 
             if (this.paramGetBoolean('$lightmapwaterfog')) {
@@ -2456,6 +2457,7 @@ class Material_Water extends BaseMaterial {
             let offs = renderInst.allocateUniformBuffer(WaterCheapMaterialProgram.ub_ObjectParams, 64);
             const d = renderInst.mapUniformBufferF32(WaterCheapMaterialProgram.ub_ObjectParams);
             offs += fillMatrix4x3(d, offs, modelMatrix!);
+            offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
             if (this.wantsTexScroll) {
                 const scroll1x = this.paramGetVector('$scroll1').get(0) * renderContext.globalTime;
