@@ -46,7 +46,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.1);
+        c.setSceneMoveSpeedMult(0.01);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
