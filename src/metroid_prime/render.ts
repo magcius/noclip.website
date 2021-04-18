@@ -19,24 +19,17 @@ import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx
 import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix, GX_Program } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
-import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
+import { texEnvMtx, computeNormalMatrix, setMatrixTranslation, getMatrixTranslation } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { areaCollisionLineCheck } from './collision';
 
-const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
+const noclipSpaceFromPrimeSpace = mat4.fromValues(
     1, 0,  0, 0,
     0, 0, -1, 0,
     0, 1,  0, 0,
     0, 0,  0, 1,
 );
-
-// Cheap way to scale up.
-const posScale = 1;
-const posMtx = mat4.create();
-mat4.mul(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, mat4.fromScaling(mat4.create(), [posScale, posScale, posScale]));
-
-const posMtxSkybox = mat4.clone(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong);
 
 export class RetroTextureHolder extends GXTextureHolder<TXTR> {
     public addMaterialSetTextures(device: GfxDevice, materialSet: MaterialSet): void {
@@ -118,6 +111,7 @@ class SurfaceData {
 
 class SurfaceInstance {
     private materialTextureKey: number;
+    private visible = true;
     public packetParams = new PacketParams();
 
     constructor(public surfaceData: SurfaceData, public materialInstance: MaterialInstance, public materialGroupInstance: MaterialGroupInstance, public modelMatrix: mat4) {
@@ -125,18 +119,12 @@ class SurfaceInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
-        if (!this.materialInstance.visible)
+        if (!this.visible || !this.materialInstance.visible)
             return;
 
-        let posModelMtx;
+        mat4.mul(modelMatrixScratch, noclipSpaceFromPrimeSpace, this.modelMatrix);
 
-        if (isSkybox) {
-            posModelMtx = posMtxSkybox;
-            mat4.mul(modelMatrixScratch, posModelMtx, this.modelMatrix);
-        } else {
-            posModelMtx = posMtx;
-            mat4.mul(modelMatrixScratch, posModelMtx, this.modelMatrix);
-
+        if (!isSkybox) {
             bboxScratch.transform(this.surfaceData.bbox, modelMatrixScratch);
             if (!viewerInput.camera.frustum.contains(bboxScratch))
                 return;
@@ -213,7 +201,7 @@ class MaterialGroupInstance {
                 colorCopy(materialParams.u_Color[ColorKind.AMB0], worldAmbientColor);
 
             const viewMatrix = scratchMatrix;
-            mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
+            mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromPrimeSpace);
 
             for (let i = 0; i < 8; i++) {
                 if (actorLights !== null && i < actorLights.lights.length) {
@@ -244,17 +232,18 @@ class MaterialGroupInstance {
                 continue;
 
             if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, noclipSpaceFromPrimeSpace);
                 mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, noclipSpaceFromPrimeSpace);
                 mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
-                mat4.invert(scratchMatrix, viewerInput.camera.viewMatrix);
+                getMatrixTranslation(scratchVec3, modelMatrix);
                 vec3.set(scratchVec3, modelMatrix[12], modelMatrix[13], modelMatrix[14]);
-                vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+                vec3.transformMat4(scratchVec3, scratchVec3, viewerInput.camera.worldMatrix);
+                setMatrixTranslation(modelMatrix, scratchVec3);
                 texMtx[12] = scratchVec3[0];
                 texMtx[13] = scratchVec3[1];
                 texMtx[14] = scratchVec3[2];
@@ -290,8 +279,8 @@ class MaterialGroupInstance {
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_CYLINDER) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                mat4.mul(texMtx, texMtx, modelMatrix);
+                mat4.mul(scratchMatrix, viewerInput.camera.worldMatrix, noclipSpaceFromPrimeSpace);
+                mat4.mul(texMtx, scratchMatrix, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 const xy = ((scratchMatrix[12] + scratchMatrix[14]) * 0.025 * uvAnimation.phi) % 1.0;
                 const z = (scratchMatrix[13] * 0.05 * uvAnimation.phi) % 1.0;
