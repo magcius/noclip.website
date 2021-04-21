@@ -186,9 +186,9 @@ class MaterialInstance {
             const mipmapAV = sampler.mipmapAV;
 
             // Color
-            let colorInA = GX.CC.TEXC;
-            let colorInB = GX.CC.ZERO;
-            let colorInC = GX.CC.ZERO;
+            let colorInA = GX.CC.ZERO;
+            let colorInB = GX.CC.TEXC;
+            let colorInC = ( (material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0) ? GX.CC.RASC : GX.CC.KONST;
             let colorInD = GX.CC.ZERO;
             let colorOp = GX.TevOp.ADD;
             let TevOp = GX.TevBias.ZERO;
@@ -196,35 +196,20 @@ class MaterialInstance {
             let colorRegId = GX.Register.PREV;
             let sel = GX.KonstColorSel.KCSEL_1;
 
-            
-
-            if (i === 0 && ( (material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0) ){
-                // vertex color
-                colorInA = GX.CC.ZERO;
-                colorInB = GX.CC.TEXC;
-                colorInC = GX.CC.RASC;
-            }
-            if (i > 0 && (colorType === 0) ){
+            if (i > 0){
                 // tev stage more than 1
-                colorInA = GX.CC.ZERO;
-                colorInB = GX.CC.TEXC;
                 colorInC = GX.CC.CPREV;
             }
             if ( (colorType & 1) !== 0 ){
                 // 0x1
-                colorInA = GX.CC.TEXC;
-                colorInB = GX.CC.TEXC;
-                colorInC = GX.CC.TEXA;
+                colorInC = GX.CC.KONST;
                 colorInD = GX.CC.CPREV;
-
-                // colorInB = GX.CC.TEXA;
-                // colorInC = GX.CC.TEXC;
             }
             if ( (colorType & (1 << 1)) !== 0 ){
                 // 0x2 sub
-                colorInA = GX.CC.CPREV;
-                colorInB = GX.CC.ZERO;
-                colorInC = GX.CC.TEXC;
+                colorInA = GX.CC.TEXC;
+                colorInD = GX.CC.CPREV;
+                colorOp = GX.TevOp.SUB;
             }
             if ( (colorType & (1 << 2)) !== 0 ){
                 // 0x4
@@ -245,43 +230,6 @@ class MaterialInstance {
             // colorScale = GX.TevScale.SCALE_1;
             // colorRegId = GX.Register.PREV;
             // sel = GX.KonstColorSel.KCSEL_1;
-                
-                
-            // }
-
-            // switch (colorType){
-            //     case(0):
-            //         if (i === 0){
-            //             colorInD = GX.CC.TEXC;
-            //         } else {
-            //             colorInA = GX.CC.TEXC;
-            //             colorInC = GX.CC.KONST;
-            //             colorInD = GX.CC.CPREV;
-            //             TevOp = GX.TevBias.SUBHALF;
-            //             sel = GX.KonstColorSel.KCSEL_4_8;
-            //         }
-            //         break;
-            //     case(1):
-            //         colorInA = GX.CC.TEXC;
-            //         colorInD = GX.CC.CPREV;
-            //         break;
-            //     case(2):
-            //         colorInA = GX.CC.TEXC;
-            //         colorInD = GX.CC.CPREV;
-            //         colorOp = GX.TevOp.SUB;
-            //         break;
-            //     case(3):
-            //         colorInD = GX.CC.CPREV;
-            //         break;
-            //     case(4):
-            //         colorInA = GX.CC.CPREV;
-            //         colorInB = GX.CC.TEXC;
-            //         colorInC = GX.CC.TEXA;
-            //         break;
-            //     default:
-            //         colorInD = GX.CC.TEXC;
-            //         break;
-            // }
             
             mb.setTevKColorSel(i, sel);
             mb.setTevColorIn(i, colorInA, colorInB, colorInC, colorInD);
@@ -297,16 +245,16 @@ class MaterialInstance {
             let alphaScale = GX.TevScale.SCALE_1;
             let alphaRegId = GX.Register.PREV;
 
+            if ( (alphaType & (1 << 0)) !== 0 ){
+                alphaInD = GX.CA.APREV;
+            }
             if ( (alphaType & (1 << 1)) !== 0 ){
                 // colorInD = GX.CC.CPREV;
                 alphaInD = GX.CA.APREV;
             }
             if ( (alphaType & (1 << 2)) !== 0 ){
-                alphaOp = GX.TevOp.SUB;
-            }
-            if ( (alphaType & (1 << 0)) !== 0 ){
                 // input swap?
-                alphaInD = GX.CA.APREV;
+                alphaOp = GX.TevOp.SUB;
             }
             // switch (alphaType){
             //     case(0):
@@ -425,11 +373,28 @@ class MaterialInstance {
             return;
         }
         let texIdx = 0;
-        texIdx = this.samplers[samplerIdx].texIdx;
+        const sampler = this.samplers[samplerIdx]
+        texIdx = sampler.texIdx;
         const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[i];
-        dst.lodBias = this.samplers[samplerIdx].lodBias;
+        let lodBias = 0;
+        switch (sampler.anisotropy){
+            case 1:
+                lodBias = -2;
+                break;
+            case 2:
+                lodBias = -4;
+                break;
+            case 4:
+                lodBias = -8;
+                break;
+            case 0:
+            default:
+                lodBias = 0;
+                break;
+        }
+        dst.lodBias = lodBias;
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
