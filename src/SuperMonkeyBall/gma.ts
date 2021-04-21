@@ -31,7 +31,7 @@ export interface GcmfMaterial{
     vtxAttr: GX.Attr,
     unk0x14: number, // sort index?? shader index?
     unk0x15: number,
-    unk0x40: number // relates "blending"?
+    unk0x40: number // relates "TEV"
 }
 
 // GCMF VertexControlHeader
@@ -80,14 +80,17 @@ interface GcmfDisplaylistHeader{
 
 // GCMF Sampler
 export interface GcmfSampler{
+    unk0x00: number,
     mipmapAV: number,
-    wrapS: GX.WrapMode,
-    wrapT: GX.WrapMode,
+    uvWrap: number,
     texIdx: number, // index of tpl
     lodBias: number,
     anisotropy: number,
+    unk0x0C: number, // TEV?
     idx: number, // index of GcmfTexture
-    unk0x10: number
+    unk0x10: number // TEV
+    alphaType: number,
+    colorType: number
 }
 
 interface GcmfEntryOffset{
@@ -123,9 +126,7 @@ function parseSampler(buffer: ArrayBufferSlice): GcmfSampler{
 
     const unk0x00 = view.getInt16(0x00);
     const mipmapAV = view.getInt8(0x02);
-    let uvWrap = view.getInt8(0x03);
-    const wrapS: GX.WrapMode = (uvWrap >> 2) & 0x03;
-    const wrapT: GX.WrapMode = (uvWrap >> 4) & 0x03;
+    const uvWrap = view.getInt8(0x03);
     const texIdx = view.getInt16(0x04);
     const lodBias = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
@@ -133,8 +134,11 @@ function parseSampler(buffer: ArrayBufferSlice): GcmfSampler{
     const isSwappable = ((view.getUint8(0x0D) & 0x01) == 1); // swapping textures in game
     const idx = view.getInt16(0x0E);
     const unk0x10 = view.getInt32(0x10);
+    let type = view.getUint8(0x13);
+    const alphaType = (type >> 4) & 0x07;
+    const colorType = type & 0x0F;
 
-    return { mipmapAV, wrapS, wrapT, texIdx, lodBias, anisotropy, idx, unk0x10 };
+    return { unk0x00, mipmapAV, uvWrap, texIdx, lodBias, anisotropy, unk0x0C, idx, unk0x10, alphaType, colorType };
 }
 
 function parseMatrix(buffer: ArrayBufferSlice): mat4{

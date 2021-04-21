@@ -1,54 +1,54 @@
 // List of F-ZERo GX's stage BackGround Names
 export const backGroundMap = [
-    "",         // 00
+    "",         // (00)
+    "mut",      // MCTR
+    "mut",      // MCSG
     "mut",
     "mut",
-    "mut",
-    "mut",
-    "tow",
-    "por",
-    "por",
-    "lig",
-    "por",
-    "for",      // 10
-    "for",
-    "lig",
-    "por",
-    "big",
-    "fir",
-    "cas",
-    "fir",
+    "tow",      // AM
+    "por",      // PTAD
+    "por",      // PTLP
+    "lig",      // LHP
+    "lig",      // LLC
+    "for",      // GPI (10)
+    "for",      // GPMR
+    "lig",      
+    "por",      // PTLP
+    "big",      // BBDH
+    "fir",      // FFCK
+    "cas",      // CPSO
+    "fir",      // FFU
     "fir",
     "met",
-    "met",      // 20
-    "tow",
+    "met",      // (20)
+    "tow",      // ADS
     "ele",
     "lig",
     "ele",
-    "san",
-    "san",
-    "big",
-    "rai",
-    "cas",
-    "san",      // 30
-    "tow",
-    "met",
-    "por",
-    "lig",
-    "for",
-    "com",
-    "com_s",
-    "san_s",
-    "cas",
-    "big_s",    // 40
-    "lig",
-    "por_s",
-    "mut",
-    "fir_s",
-    "rai",
+    "san",      // SOLS
+    "san",      // SOSS
+    "big",      // BBO
+    "rai",      // PRSLS
+    "cas",      // CPDB
+    "san",      // (30)
+    "tow",      // ASD
+    "met",      // OSMS
+    "por",      // PTCW
+    "lig",      // LTR
+    "for",      // GPS
+    "com",      // MCSO
+    "com_s",    // Story Chapter 1
+    "san_s",    // Story Chapter 2
+    "cas",      // Story Chapter 3
+    "big_s",    // Story Chapter 4 (40)
+    "lig",      // Story Chapter 5
+    "por_s",    // Story Chapter 6
+    "mut",      // Story Chapter 7
+    "fir_s",    // Story Chapter 8
+    "rai",      // Story Chapter 9
     "",
     "",
     "",
-    "com",
-    "com",      // 50
+    "com",      // Interview
+    "com",      // Victor (50)
 ];

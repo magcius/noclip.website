@@ -53,21 +53,21 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
         //load stage Model
         const checkJP = this.id.substring(this.id.length-3);
         const stageID = checkJP === `_jp` ? this.id.substring(0, this.id.length-3) : this.id;
-        let modelID = 0;
-        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${stageID}`, modelID, AVLZ.AVLZ_Type.FZGX);
-        sceneRender.modelCache.registGcmf(device, sceneRender, stageModel, modelID++);
+        let prefix = 0;
+        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${stageID}`, prefix, AVLZ.AVLZ_Type.FZGX);
+        sceneRender.modelCache.registGcmf(device, sceneRender, stageModel, prefix++);
 
         const stageIdx =  parseInt(stageID);
         const backGroundName = BG.backGroundMap[stageIdx];
 
         //load stage BackGround Model
         const path = checkJP === `_jp` ? `${pathBase}/jp/bg/bg_${backGroundName}` : `${pathBase}/bg/bg_${backGroundName}`;
-        const backGroundModel = await super.loadGMA(dataFetcher, path, modelID, AVLZ.AVLZ_Type.FZGX);
-        sceneRender.modelCache.registGcmf(device, sceneRender, backGroundModel, modelID++);
+        const backGroundModel = await super.loadGMA(dataFetcher, path, prefix, AVLZ.AVLZ_Type.FZGX);
+        sceneRender.modelCache.registGcmf(device, sceneRender, backGroundModel, prefix++);
         
         //load race Model
-        const commonModel = await super.loadGMA(dataFetcher, `${pathBase}/init/race`, modelID);
-        sceneRender.modelCache.registGcmf(device, sceneRender, commonModel, modelID++);
+        const commonModel = await super.loadGMA(dataFetcher, `${pathBase}/init/race`, prefix);
+        sceneRender.modelCache.registGcmf(device, sceneRender, commonModel, prefix++);
         
         //load COLI_COURSE (named "ColiScene")
         const coliSceneData = await dataFetcher.fetchData(`${pathBase}/stage/COLI_COURSE${stageID}.lz`);

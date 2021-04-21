@@ -134,9 +134,9 @@ export class AmusementVisionSceneDesc {
         const dataFetcher = context.dataFetcher;
 
         //load Model
-        let modelID = 0;
-        const model = await this.loadGMA(dataFetcher, `${this.id}`, modelID, this.type);
-        sceneRender.modelCache.registGcmf(device, sceneRender, model, modelID++);
+        let prefix = 0;
+        const model = await this.loadGMA(dataFetcher, `${this.id}`, prefix, this.type);
+        sceneRender.modelCache.registGcmf(device, sceneRender, model, prefix++);
         
         // only show gma
         model.gma.gcmfEntrys.forEach(gcmfEntry => {
@@ -147,7 +147,7 @@ export class AmusementVisionSceneDesc {
         return sceneRender;
     }
 
-    public async loadGMA(dataFetcher: DataFetcher, path: string, modelID: number, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
+    public async loadGMA(dataFetcher: DataFetcher, path: string, prefix: number, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
         let gmaPath = `${path}.gma`;
         let tplPath = `${path}.tpl`;
         const compress = type !== AVLZ_Type.NONE;
@@ -163,7 +163,7 @@ export class AmusementVisionSceneDesc {
             rawTpl = decompressLZSS(tplData, type);
             rawGma = decompressLZSS(gmaData, type);
         }
-        const tpl = AVtpl.parseAvTpl(rawTpl, modelID);
+        const tpl = AVtpl.parseAvTpl(rawTpl, prefix);
         const gma = GMA.parse(rawGma);
 
         return { gma, tpl }
