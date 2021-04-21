@@ -1,6 +1,6 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxUniformBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxUniformBuffer } from "./GfxPlatformImpl";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, range, assert, assertExists, leftPad, gfxColorCopy, nullify } from './GfxPlatformUtil';
@@ -10,17 +10,12 @@ import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescript
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
 const UBO_PAGE_MAX_BYTE_SIZE = 0x10000;
 
-interface GfxUniformBufferP_GL extends GfxUniformBuffer {
-    gl_buffer_pages: WebGLBuffer[];
-    byteSize: number;
-    pageByteSize: number;
-}
-
 interface GfxBufferP_GL extends GfxBuffer {
-    gl_buffer: WebGLBuffer;
+    gl_buffer_pages: WebGLBuffer[];
     gl_target: GLenum;
     usage: GfxBufferUsage;
     byteSize: number;
+    pageByteSize: number;
 }
 
 interface GfxTextureP_GL extends GfxTexture {
@@ -62,7 +57,7 @@ interface GfxProgramP_GL extends GfxProgram {
 }
 
 interface GfxBindingsP_GL extends GfxBindings {
-    uniformBufferBindings: GfxUniformBufferBinding[];
+    uniformBufferBindings: GfxBufferBinding[];
     samplerBindings: (GfxSamplerBinding | null)[];
 }
 
@@ -202,6 +197,8 @@ function translateBufferUsageToTarget(usage: GfxBufferUsage): GLenum {
         return WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER;
     case GfxBufferUsage.VERTEX:
         return WebGL2RenderingContext.ARRAY_BUFFER;
+    case GfxBufferUsage.UNIFORM:
+        return WebGL2RenderingContext.UNIFORM_BUFFER;
     }
 }
 
@@ -243,13 +240,8 @@ function translatePrimitiveTopology(topology: GfxPrimitiveTopology): GLenum {
     }
 }
 
-function getPlatformBuffer(buffer_: GfxBuffer): WebGLBuffer {
+function getPlatformBuffer(buffer_: GfxBuffer, byteOffset: number = 0): WebGLBuffer {
     const buffer = buffer_ as GfxBufferP_GL;
-    return buffer.gl_buffer;
-}
-
-function getPlatformUniformBuffer(buffer_: GfxUniformBuffer, byteOffset: number): WebGLBuffer {
-    const buffer = buffer_ as GfxUniformBufferP_GL;
     return buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
 }
 
@@ -564,7 +556,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
     private _currentSamplers: (WebGLSampler | null)[] = [];
     private _currentTextures: (WebGLTexture | null)[] = [];
-    private _currentUniformBuffers: GfxUniformBuffer[] = [];
+    private _currentUniformBuffers: GfxBuffer[] = [];
     private _currentUniformBufferByteOffsets: number[] = [];
     private _currentUniformBufferByteSizes: number[] = [];
 
@@ -899,9 +891,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _createBufferPage(byteSize: number, gl_target: GLenum, hint: GfxBufferFrequencyHint): WebGLBuffer {
+    private _createBufferPage(byteSize: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): WebGLBuffer {
         const gl = this.gl;
         const gl_buffer = this.ensureResourceExists(gl.createBuffer());
+        const gl_target = translateBufferUsageToTarget(usage);
         const gl_hint = translateBufferHint(hint);
         gl.bindBuffer(gl_target, gl_buffer);
         gl.bufferData(gl_target, byteSize, gl_hint);
@@ -912,33 +905,35 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return ++this._resourceUniqueId;
     }
 
-    public createUniformBuffer(): GfxUniformBuffer {
-        const gl_buffer_pages: WebGLBuffer[] = [];
-
-        const byteSize = 0;
-        const pageByteSize = this._uniformBufferMaxPageByteSize;
-        const buffer: GfxUniformBufferP_GL = { _T: _T.UniformBuffer, ResourceUniqueId: this.getNextUniqueId(), gl_buffer_pages, byteSize, pageByteSize };
-
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(buffer);
-
-        return buffer;
-    }
-
     public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
         // Temporarily unbind VAO when creating buffers to not stomp on the VAO configuration.
         this.gl.bindVertexArray(null);
 
         const byteSize = wordCount * 4;
+        const gl_buffer_pages: WebGLBuffer[] = [];
+
+        let pageByteSize: number;
+        if (usage === GfxBufferUsage.UNIFORM) {
+            assert((byteSize % this._uniformBufferMaxPageByteSize) === 0);
+            let byteSizeLeft = byteSize;
+            while (byteSizeLeft > 0) {
+                gl_buffer_pages.push(this._createBufferPage(Math.min(byteSizeLeft, this._uniformBufferMaxPageByteSize), usage, hint));
+                byteSizeLeft -= this._uniformBufferMaxPageByteSize;
+            }
+
+            pageByteSize = this._uniformBufferMaxPageByteSize;
+        } else {
+            gl_buffer_pages.push(this._createBufferPage(byteSize, usage, hint));
+            pageByteSize = byteSize;
+        }
 
         const gl_target = translateBufferUsageToTarget(usage);
-        const gl_buffer = this._createBufferPage(byteSize, gl_target, hint);
-
-        const buffer: GfxBufferP_GL = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gl_buffer, gl_target, usage, byteSize };
+        const buffer: GfxBufferP_GL = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gl_buffer_pages, gl_target, usage, byteSize, pageByteSize };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(buffer);
 
         this.gl.bindVertexArray(this._currentBoundVAO);
+
         return buffer;
     }
 
@@ -1178,17 +1173,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return new XRWebGLLayer(webXRSession, this.gl);
     }
 
-    public destroyUniformBuffer(o: GfxUniformBuffer): void {
-        const { gl_buffer_pages } = o as GfxUniformBufferP_GL;
+    public destroyBuffer(o: GfxBuffer): void {
+        const { gl_buffer_pages } = o as GfxBufferP_GL;
         for (let i = 0; i < gl_buffer_pages.length; i++)
             this.gl.deleteBuffer(gl_buffer_pages[i]);
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceDestroyed(o);
-    }
-
-    public destroyBuffer(o: GfxBuffer): void {
-        const { gl_buffer } = o as GfxBufferP_GL;
-        this.gl.deleteBuffer(gl_buffer);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1315,36 +1303,30 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public uploadUniformBufferData(buffer_: GfxUniformBuffer, srcData: Uint8Array, srcByteCount: number): void {
+    public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
         const gl = this.gl;
-        const buffer = buffer_ as GfxUniformBufferP_GL;
-
-        // Uniform buffer data be aligned to the page byte size.
-        assert((srcByteCount % buffer.pageByteSize) === 0);
-
-        while (srcByteCount > buffer.byteSize) {
-            // Ensure we have enough pages to meet the demand.
-            const gl_buffer = this._createBufferPage(buffer.pageByteSize, WebGL2RenderingContext.UNIFORM_BUFFER, GfxBufferFrequencyHint.DYNAMIC);
-            buffer.gl_buffer_pages.push(gl_buffer);
-            buffer.byteSize += buffer.pageByteSize;
+        const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
+        if (gl_target === gl.UNIFORM_BUFFER) {
+            // Manually check asserts for speed.
+            if (!((dstByteOffset % dstPageByteSize) === 0))
+                throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
+            if (!((byteSize % dstPageByteSize) === 0))
+                throw new Error(`Assert fail: (byteSize [${byteSize}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
         }
+        if (!((dstByteOffset + byteSize) <= dstByteSize))
+            throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] + byteSize [${byteSize}]) <= dstByteSize [${dstByteSize}], gl_target ${gl_target}`);
 
-        for (let srcByteOffset = 0; srcByteOffset < srcByteCount; srcByteOffset += buffer.pageByteSize) {
-            gl.bindBuffer(gl.COPY_WRITE_BUFFER, getPlatformUniformBuffer(buffer, srcByteOffset));
-            gl.bufferSubData(gl.COPY_WRITE_BUFFER, 0, srcData, srcByteOffset, buffer.pageByteSize);
+        const virtBufferByteOffsetEnd = dstByteOffset + byteSize;
+        let virtBufferByteOffset = dstByteOffset;
+        let physBufferByteOffset = dstByteOffset % dstPageByteSize;
+        while (virtBufferByteOffset < virtBufferByteOffsetEnd) {
+            gl.bindBuffer(gl.COPY_WRITE_BUFFER, getPlatformBuffer(buffer, virtBufferByteOffset));
+            gl.bufferSubData(gl.COPY_WRITE_BUFFER, physBufferByteOffset, data, srcByteOffset, Math.min(virtBufferByteOffsetEnd - virtBufferByteOffset, dstPageByteSize));
+            virtBufferByteOffset += dstPageByteSize;
+            physBufferByteOffset = 0;
+            srcByteOffset += dstPageByteSize;
             this._debugGroupStatisticsBufferUpload();
         }
-    }
-
-    public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, srcData: Uint8Array, srcByteOffset: number = 0, srcByteCount: number = srcData.byteLength - srcByteOffset): void {
-        const gl = this.gl;
-        const { byteSize: dstByteSize } = buffer as GfxBufferP_GL;
-        if (!((dstByteOffset + srcByteCount) <= dstByteSize))
-            throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] + byteSize [${srcByteCount}]) <= dstByteSize [${dstByteSize}]`);
-
-        gl.bindBuffer(gl.COPY_WRITE_BUFFER, getPlatformBuffer(buffer));
-        gl.bufferSubData(gl.COPY_WRITE_BUFFER, dstByteOffset, srcData, srcByteOffset, srcByteCount);
-        this._debugGroupStatisticsBufferUpload();
     }
 
     private uploadTextureDataInternal(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[], levelDatasOffs: number, levelDatasSize: number): void {
@@ -1524,15 +1506,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     //#endregion
 
     //#region Debugging
+
     public setResourceName(o: GfxResource, name: string): void {
         o.ResourceName = name;
 
-        if (o._T === _T.UniformBuffer) {
-            const { gl_buffer_pages } = o as GfxUniformBufferP_GL;
+        if (o._T === _T.Buffer) {
+            const { gl_buffer_pages } = o as GfxBufferP_GL;
             for (let i = 0; i < gl_buffer_pages.length; i++)
                 assignPlatformName(gl_buffer_pages[i], `${name} Page ${i}`);
-        } else if (o._T === _T.Buffer) {
-            assignPlatformName(getPlatformBuffer(o), name);
         } else if (o._T === _T.Texture) {
             assignPlatformName(getPlatformTexture(o), name);
         } else if (o._T === _T.Sampler) {
@@ -1579,7 +1560,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView, wordOffset: number = 0): void {
         const gl = this.gl;
-        gl.bindBuffer(gl.COPY_READ_BUFFER, getPlatformBuffer(buffer));
+        gl.bindBuffer(gl.COPY_READ_BUFFER, getPlatformBuffer(buffer, wordOffset * 4));
         gl.getBufferSubData(gl.COPY_READ_BUFFER, wordOffset * 4, dstBuffer);
     }
     //#endregion
@@ -1858,12 +1839,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (binding.wordCount === 0)
                 continue;
             const index = bindingLayoutTable.firstUniformBuffer + i;
-            const buffer = binding.buffer as GfxUniformBufferP_GL;
+            const buffer = binding.buffer as GfxBufferP_GL;
             const byteOffset = dynamicByteOffsets[dynamicByteOffsetsStart + i];
             const byteSize = (binding.wordCount * 4);
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index] || byteSize !== this._currentUniformBufferByteSizes[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
-                const platformBuffer = getPlatformUniformBuffer(buffer, byteOffset);
+                const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
                 assert(platformBufferByteOffset + byteSize <= buffer.pageByteSize);
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;

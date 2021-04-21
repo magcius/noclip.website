@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxUniformBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
@@ -32,7 +32,7 @@ export function gfxSamplerBindingNew(): GfxSamplerBinding {
     return { gfxSampler: null, gfxTexture: null, lateBinding: null };
 }
 
-export function gfxUniformBufferBindingCopy(a: Readonly<GfxUniformBufferBinding>): GfxUniformBufferBinding {
+export function gfxBufferBindingCopy(a: Readonly<GfxBufferBinding>): GfxBufferBinding {
     const buffer = a.buffer;
     const wordCount = a.wordCount;
     return { buffer, wordCount };
@@ -41,7 +41,7 @@ export function gfxUniformBufferBindingCopy(a: Readonly<GfxUniformBufferBinding>
 export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): GfxBindingsDescriptor {
     const bindingLayout = a.bindingLayout;
     const samplerBindings = arrayCopy(a.samplerBindings, gfxSamplerBindingCopy);
-    const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxUniformBufferBindingCopy);
+    const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxBufferBindingCopy);
     return { bindingLayout, samplerBindings, uniformBufferBindings };
 }
 
@@ -88,7 +88,7 @@ export function gfxInputLayoutDescriptorCopy(a: Readonly<GfxInputLayoutDescripto
     return { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
 }
 
-function gfxUniformBufferBindingEquals(a: Readonly<GfxUniformBufferBinding>, b: Readonly<GfxUniformBufferBinding>): boolean {
+function gfxBufferBindingEquals(a: Readonly<GfxBufferBinding>, b: Readonly<GfxBufferBinding>): boolean {
     return a.buffer === b.buffer && a.wordCount === b.wordCount;
 }
 
@@ -101,7 +101,7 @@ function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Reado
 export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, b: Readonly<GfxBindingsDescriptor>): boolean {
     if (a.samplerBindings.length !== b.samplerBindings.length) return false;
     if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
-    if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxUniformBufferBindingEquals)) return false;
+    if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxBufferBindingEquals)) return false;
     if (!gfxBindingLayoutEquals(a.bindingLayout, b.bindingLayout)) return false;
     return true;
 }

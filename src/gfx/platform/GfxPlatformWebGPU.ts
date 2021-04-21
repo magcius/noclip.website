@@ -1,7 +1,7 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
-import { _T, GfxResource, GfxReadback, GfxUniformBuffer } from "./GfxPlatformImpl";
-import { assertExists, assert, leftPad } from "../../util";
+import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import { assertExists, assert, leftPad, align } from "../../util";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
@@ -67,6 +67,8 @@ function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
         return GPUBufferUsage.INDEX;
     else if (usage === GfxBufferUsage.VERTEX)
         return GPUBufferUsage.VERTEX;
+    else if (usage === GfxBufferUsage.UNIFORM)
+        return GPUBufferUsage.UNIFORM;
     else
         throw "whoops";
 }
@@ -130,10 +132,6 @@ function translateTextureDimension(dimension: GfxTextureDimension): GPUTextureDi
         return '3d';
     else
         throw "whoops";
-}
-
-function getPlatformUniformBuffer(buffer_: GfxUniformBuffer): GPUBuffer {
-    return null!;
 }
 
 function getPlatformBuffer(buffer_: GfxBuffer): GPUBuffer {
@@ -627,10 +625,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return ++this._resourceUniqueId;
     }
 
-    public createUniformBuffer(): GfxUniformBuffer {
-        return null!;
-    }
-
     public createBuffer(wordCount: number, usage_: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
         let usage = translateBufferUsage(usage_);
         usage |= GPUBufferUsage.COPY_DST;
@@ -757,7 +751,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         for (let i = 0; i < bindingLayout.numUniformBuffers; i++) {
             const gfxBinding = bindingsDescriptor.uniformBufferBindings[i];
             const gpuBufferBinding: GPUBufferBinding = {
-                buffer: getPlatformUniformBuffer(gfxBinding.buffer),
+                buffer: getPlatformBuffer(gfxBinding.buffer),
                 offset: 0,
                 size: gfxBinding.wordCount << 2,
             };
@@ -896,9 +890,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         throw "createWebXRLayer not implemented on WebGPU";
     }
 
-    public destroyUniformBuffer(o: GfxUniformBuffer): void {
-    }
-
     public destroyBuffer(o: GfxBuffer): void {
         getPlatformBuffer(o).destroy();
     }
@@ -956,11 +947,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public uploadUniformBufferData(buffer: GfxUniformBuffer, srcData: Uint8Array, srcByteCount: number): void {
-        // TODO(jstpierre)
-    }
-
-    public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, srcByteCount?: number): void {
+    public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void {
         // TODO(jstpierre)
     }
 
