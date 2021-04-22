@@ -1,6 +1,6 @@
 
 import { Color } from "../../Color";
-import { GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
+import { GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
 import { assert, assertExists } from "../../util";
 
 // GfxrRenderGraph is a simple, automatically managed "frame graph".
@@ -290,6 +290,7 @@ class RenderTarget {
     public width: number = 0;
     public height: number = 0;
     public sampleCount: number = 0;
+    public usage: GfxTextureUsage = GfxTextureUsage.RenderTarget;
 
     public needsClear: boolean = true;
     public texture: GfxTexture | null = null;
@@ -340,6 +341,7 @@ class SingleSampledTexture {
     public readonly dimension = GfxTextureDimension.n2D;
     public readonly depth = 1;
     public readonly numLevels = 1;
+    public readonly usage = GfxTextureUsage.RenderTarget;
 
     public pixelFormat: GfxFormat;
     public width: number = 0;

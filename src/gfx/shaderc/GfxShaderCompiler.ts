@@ -35,6 +35,10 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
             return `layout(${layout2}set = ${set}, binding = ${binding++}) uniform ${rest}`;
         });
 
+        // XXX(jstpierre): WebGPU now binds UBOs and textures in different sets as a porting hack, hrm...
+        set++;
+        binding = 0;
+
         assert(vendorInfo.separateSamplerTextures);
         rest = rest.replace(/uniform sampler2D (.*);/g, (substr, samplerName) => {
             // Can't have samplers in vertex for some reason.
@@ -69,6 +73,10 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return `sampler2D(T_${samplerName}, S_${samplerName})`;
         });
+
+        rest = rest.replace(/\bTEXTURE_REF\((.*?)\)/g, (substr, samplerName) => {
+            return `T_${samplerName}`;
+        });
     } else {
         rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return `sampler2D P_${samplerName}`;
@@ -83,6 +91,10 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         });
 
         rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return samplerName;
+        });
+        
+        rest = rest.replace(/\bTEXTURE_REF\((.*?)\)/g, (substr, samplerName) => {
             return samplerName;
         });
     }

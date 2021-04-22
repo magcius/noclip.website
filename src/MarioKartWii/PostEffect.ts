@@ -128,7 +128,7 @@ ${funcs}
 in vec2 v_TexCoord;
 
 void main() {
-    vec2 t_Size = vec2(textureSize(u_Texture, 0));
+    vec2 t_Size = vec2(textureSize(TEXTURE_REF(u_Texture), 0));
     vec2 t_Aspect = vec2(1.0) / t_Size;
 
     vec3 c = vec3(0.0);
@@ -148,7 +148,7 @@ class EggBloomCombineProgram extends EggBloomBaseProgram {
         let code = ``;
         for (let i = 0; i < numPasses; i++) {
             code += `
-    c += saturate(texture(PP_SAMPLER_2D(${passTextureName[i]}), v_TexCoord).rgb) * u_CompositeColor.rgb * u_CompositeColorScale[${i}];`;
+    c += saturate(texture(SAMPLER_2D(${passTextureName[i]}), v_TexCoord).rgb) * u_CompositeColor.rgb * u_CompositeColorScale[${i}];`;
         }
 
         this.frag = `
@@ -453,7 +453,7 @@ ${generateBlurFunction(`BlurPass0`, tapCount, glslGenerateFloat(radius), glslGen
 in vec2 v_TexCoord;
 
 void main() {
-    vec2 t_Size = vec2(textureSize(u_Texture, 0));
+    vec2 t_Size = vec2(textureSize(TEXTURE_REF(u_Texture), 0));
     vec2 t_Aspect = vec2(1.0) / t_Size;
 
     gl_FragColor.rgb = saturate(BlurPass0(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));
@@ -492,11 +492,11 @@ void main() {
 #ifdef USE_IND_WARP_TEX
     // Handcoded indtex pipeline...
     vec2 t_WarpTexCoord = Mul(u_IndTexMat, vec4(v_TexCoord, 0.0, 1.0));
-    vec2 t_IndTexOffs = ((255.0 * texture(u_Texture2, t_WarpTexCoord).ba) - 128.0) * u_IndTexIndScale;
+    vec2 t_IndTexOffs = ((255.0 * texture(SAMPLER_2D(u_Texture2), t_WarpTexCoord).ba) - 128.0) * u_IndTexIndScale;
     t_TexCoord += t_IndTexOffs;
 #endif
 
-    gl_FragColor.rgb = texture(u_Texture, t_TexCoord).rgb;
+    gl_FragColor.rgb = texture(SAMPLER_2D(u_Texture), t_TexCoord).rgb;
     gl_FragColor.a = 1.0;
 }
 `;

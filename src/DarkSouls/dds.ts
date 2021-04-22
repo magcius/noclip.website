@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { TextureHolder, LoadedTexture } from "../TextureHolder";
-import { GfxDevice, GfxTextureDimension, GfxFormat } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTextureDimension, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture";
 
 export interface Level {
@@ -146,11 +146,7 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
             // Delete expensive data
             level.data = null as unknown as ArrayBufferSlice;
         }
-        const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D, pixelFormat,
-            width: textureEntry.width, height: textureEntry.height, depth: 1, numLevels: textureEntry.levels.length,
-        });
-
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(pixelFormat, textureEntry.width, textureEntry.height, textureEntry.levels.length));
         device.uploadTextureData(gfxTexture, 0, levelDatas);
 
         const extraInfo = new Map<string, string>();

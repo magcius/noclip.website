@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZ4 from "../Common/Compression/LZ4";
 import { assert, nArray } from "../util";
 import { ZipFile, parseZipFile } from "../ZipFile";
-import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { Color } from "../Color";
 import { _T, GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
@@ -134,6 +134,7 @@ class Texture_Asset {
             depth: this.depth,
             numLevels: this.mipmap_count,
             pixelFormat: get_gfx_format(d3d_format, !!(this.flags & Texture_Asset_Flags.Is_sRGB)),
+            usage: GfxTextureUsage.Sampled,
         });
         device.setResourceName(this.texture, name);
 

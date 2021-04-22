@@ -800,12 +800,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.FLOAT;
         case FormatTypeFlags.U16_PACKED_5551:
             return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
-        case FormatTypeFlags.D32:
+        case FormatTypeFlags.D32F:
             return WebGL2RenderingContext.FLOAT;
         case FormatTypeFlags.D24:
         case FormatTypeFlags.D24S8:
             return WebGL2RenderingContext.UNSIGNED_INT_24_8;
-        case FormatTypeFlags.D32S8:
+        case FormatTypeFlags.D32FS8:
             return WebGL2RenderingContext.FLOAT_32_UNSIGNED_INT_24_8_REV;
         default:
             throw "whoops";

@@ -2,7 +2,7 @@
 // Valve Texture File
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { readString, assert, nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -285,6 +285,7 @@ export class VTF {
             height: this.height,
             numLevels: this.numLevels,
             depth: this.depth * faceCount,
+            usage: GfxTextureUsage.Sampled,
         };
 
         for (let i = 0; i < this.numFrames; i++) {

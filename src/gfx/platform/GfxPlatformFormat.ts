@@ -25,9 +25,9 @@ export const enum FormatTypeFlags {
 
     // Depth/stencil texture formats.
     D24 = 0x81,
-    D32,
+    D32F,
     D24S8,
-    D32S8,
+    D32FS8,
 };
 
 export const enum FormatCompFlags {
@@ -109,10 +109,10 @@ export enum GfxFormat {
     BC5_SNORM      = makeFormat(FormatTypeFlags.BC5_SNORM, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
 
     // Depth/Stencil
-    D24             = makeFormat(FormatTypeFlags.D24,   FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
-    D24_S8          = makeFormat(FormatTypeFlags.D24S8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
-    D32F            = makeFormat(FormatTypeFlags.D32,   FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
-    D32F_S8         = makeFormat(FormatTypeFlags.D32S8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
+    D24             = makeFormat(FormatTypeFlags.D24,    FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
+    D24_S8          = makeFormat(FormatTypeFlags.D24S8,  FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
+    D32F            = makeFormat(FormatTypeFlags.D32F,   FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
+    D32F_S8         = makeFormat(FormatTypeFlags.D32FS8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
 
     // Special RT formats for preferred backend support.
     U8_RGB_RT       = makeFormat(FormatTypeFlags.U8,    FormatCompFlags.COMP_RGB,  FormatFlags.RT),

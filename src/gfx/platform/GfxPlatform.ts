@@ -94,6 +94,11 @@ export const enum GfxTextureDimension {
     n2D, n2DArray, n3D, Cube,
 }
 
+export const enum GfxTextureUsage {
+    Sampled      = 0x01,
+    RenderTarget = 0x02,
+}
+
 export interface GfxTextureDescriptor {
     dimension: GfxTextureDimension;
     pixelFormat: GfxFormat;
@@ -101,11 +106,13 @@ export interface GfxTextureDescriptor {
     height: number;
     depth: number;
     numLevels: number;
+    usage: GfxTextureUsage;
 }
 
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
-    return { dimension, pixelFormat, width, height, depth, numLevels };
+    const usage = GfxTextureUsage.Sampled;
+    return { dimension, pixelFormat, width, height, depth, numLevels, usage };
 }
 
 export interface GfxSamplerDescriptor {

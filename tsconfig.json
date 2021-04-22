@@ -16,7 +16,8 @@
             "es2015.promise",
             "es2016.array.include",
             "es2017.sharedmemory",
-            "ESNext.BigInt",
+            "es2019.array",
+            "esnext.BigInt",
             "dom"
         ],
         "sourceMap": true,
