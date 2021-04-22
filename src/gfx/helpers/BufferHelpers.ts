@@ -21,7 +21,7 @@ export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: 
     const buffer = device.createBuffer(wordCount, usage, GfxBufferFrequencyHint.STATIC);
 
     const coalescedBuffers: GfxCoalescedBuffer[] = [];
-    const combinedData = new Uint8Array(dataLength);
+    const combinedData = new Uint8Array(wordCount * 4);
     let byteOffset: number = 0;
     for (let i = 0; i < datas.length; i++) {
         const data = datas[i];
