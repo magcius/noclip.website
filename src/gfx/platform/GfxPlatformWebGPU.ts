@@ -232,21 +232,21 @@ function translateBlendFactor(factor: GfxBlendFactor): GPUBlendFactor {
     else if (factor === GfxBlendFactor.ONE)
         return 'one';
     else if (factor === GfxBlendFactor.SRC_COLOR)
-        return 'src-color';
+        return 'src';
     else if (factor === GfxBlendFactor.ONE_MINUS_SRC_COLOR)
-        return 'one-minus-src-color';
+        return 'one-minus-src';
     else if (factor === GfxBlendFactor.DST_COLOR)
-        return 'dst-color';
+        return 'dst';
     else if (factor === GfxBlendFactor.ONE_MINUS_DST_COLOR)
-        return 'one-minus-dst-color';
+        return 'one-minus-dst';
     else if (factor === GfxBlendFactor.SRC_ALPHA)
         return 'src-alpha';
     else if (factor === GfxBlendFactor.ONE_MINUS_SRC_ALPHA)
-        return 'one-minus-src-alpha';
+        return 'one-minus-src';
     else if (factor === GfxBlendFactor.DST_ALPHA)
         return 'dst-alpha';
     else if (factor === GfxBlendFactor.ONE_MINUS_DST_ALPHA)
-        return 'one-minus-dst-alpha';
+        return 'one-minus-dst';
     else
         throw "whoops";
 }
