@@ -700,7 +700,7 @@ class SepdData {
         const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
             const format = translateDataType(vertexAttrib.dataType, size, normalized);
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: bufferOffs + vertexAttrib.start });
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1, bufferByteOffset: bufferOffs + vertexAttrib.start });
             } else {
                 vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset * 0x04 });
                 perInstanceBufferData.set(vertexAttrib.constant, perInstanceBufferWordOffset);
@@ -731,15 +731,7 @@ class SepdData {
 
         const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
             { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // position
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // normal
-            null, // tangent
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // color
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord0
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord1
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord2
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneIndices
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneWeights
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
 
         let indexBufferCount = 0;
@@ -769,14 +761,6 @@ class SepdData {
 
         this.inputState = device.createInputState(this.inputLayout, [
             perInstanceBinding,
-            { buffer: vertexBuffer, byteOffset: 0 },
-            { buffer: vertexBuffer, byteOffset: 0 },
-            null, // tangent
-            { buffer: vertexBuffer, byteOffset: 0 },
-            { buffer: vertexBuffer, byteOffset: 0 },
-            { buffer: vertexBuffer, byteOffset: 0 },
-            { buffer: vertexBuffer, byteOffset: 0 },
-            { buffer: vertexBuffer, byteOffset: 0 },
             { buffer: vertexBuffer, byteOffset: 0 },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
