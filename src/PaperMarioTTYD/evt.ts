@@ -3,7 +3,8 @@
 // https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/docs/ttyd-opc-summary.txt
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { hexzero0x, hexzero, decodeString, fallbackUndefined, readString, assert, nullify } from "../util";
+import { MathConstants } from "../MathHelpers";
+import { hexzero0x, hexzero, decodeString, readString, assert, nullify } from "../util";
 import { WorldRenderer } from "./render";
 
 enum op {
@@ -232,36 +233,36 @@ export class evt_disasm_ctx {
         return `$${hexzero0x(addr, 8)}`;
     }
 
-    private disasm_expr(uv: number, type: evt_disasm_ptype): string {
-        const v = (uv | 0);
-        if (v <= -250000000)
-            return this.disasm_addr(uv, type);
-        else if (v >= -230000000 && v <= -210000000)
-            return `${(v - -230000000) / 1024.0}`;
-        else if (v >= -210000000 && v < -200000000)
-            return `UF(${v - -210000000})`;
-        else if (v >= -190000000 && v < -180000000)
-            return `UW(${v - -190000000})`;
-        else if (v >= -170000000 && v < -160000000)
-            return `GSW(${v - -170000000})`;
-        else if (v >= -150000000 && v < -140000000)
-            return `LSW(${v - -150000000})`;
-        else if (v >= -130000000 && v < -120000000)
-            return `GSWF(${v - -130000000})`;
-        else if (v >= -110000000 && v < -100000000)
-            return `LSWF(${v - -110000000})`;
-        else if (v >= -90000000 && v < -80000000)
-            return `GF(${v - -90000000})`;
-        else if (v >= -70000000 && v < -60000000)
-            return `LF(${v - -70000000})`;
-        else if (v >= -50000000 && v < -40000000)
-            return `GW(${v - -50000000})`;
-        else if (v >= -30000000 && v < -20000000)
-            return `LW(${v - -30000000})`;
+    private disasm_expr(uexpr: number, type: evt_disasm_ptype): string {
+        const expr = (uexpr | 0);
+        if (expr <= -250000000)
+            return this.disasm_addr(uexpr, type);
+        else if (expr >= -230000000 && expr <= -210000000)
+            return `${(expr - -230000000) / 1024.0}`;
+        else if (expr >= -210000000 && expr < -200000000)
+            return `UF(${expr - -210000000})`;
+        else if (expr >= -190000000 && expr < -180000000)
+            return `UW(${expr - -190000000})`;
+        else if (expr >= -170000000 && expr < -160000000)
+            return `GSW(${expr - -170000000})`;
+        else if (expr >= -150000000 && expr < -140000000)
+            return `LSW(${expr - -150000000})`;
+        else if (expr >= -130000000 && expr < -120000000)
+            return `GSWF(${expr - -130000000})`;
+        else if (expr >= -110000000 && expr < -100000000)
+            return `LSWF(${expr - -110000000})`;
+        else if (expr >= -90000000 && expr < -80000000)
+            return `GF(${expr - -90000000})`;
+        else if (expr >= -70000000 && expr < -60000000)
+            return `LF(${expr - -70000000})`;
+        else if (expr >= -50000000 && expr < -40000000)
+            return `GW(${expr - -50000000})`;
+        else if (expr >= -30000000 && expr < -20000000)
+            return `LW(${expr - -30000000})`;
         else if (type === evt_disasm_ptype.Hex)
-            return `${hexzero0x(v)}`;
+            return `${hexzero0x(expr)}`;
         else
-            return `${v}`;
+            return `${expr}`;
     }
 
     private disasm_sub(sub: evt_disasm_sub, view: DataView): string {
@@ -740,6 +741,8 @@ export class evtmgr {
             const loopRecord = evt.loopRecord[0]!;
             if (loopRecord.count === null || loopRecord.count-- > 0)
                 this.do_go_start(evt);
+            else
+                evt.loopRecord.shift();
         } break;
         case op.wait_frm: {
             evt.state = evt_state.waitonfrm;
@@ -1154,7 +1157,12 @@ export class evt_handler_ttyd extends evt_handler {
             // 0 = Japanese, 1 = English, 2 = German, 3 = French, 4 = Spanish, 5 = Italian
             ctx.evt_set_arg(evt, 1, 1);
             return evt_user_func_ret.advance;
-        } if (sym.name === 'evt_map_playanim') {
+        } else if (sym.name === 'evt_sub_get_sincos') {
+            const theta = ctx.evt_eval_arg(evt, 1) * MathConstants.DEG_TO_RAD;
+            ctx.evt_set_arg(evt, 2, Math.sin(theta));
+            ctx.evt_set_arg(evt, 3, Math.cos(theta));
+            return evt_user_func_ret.advance;
+        } else if (sym.name === 'evt_map_playanim') {
             const animName = ctx.evt_eval_string_arg(evt, 1);
             this.renderer.playAnimationName(animName);
             return evt_user_func_ret.advance;
