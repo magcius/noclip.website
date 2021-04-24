@@ -700,7 +700,7 @@ class SepdData {
         const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
             const format = translateDataType(vertexAttrib.dataType, size, normalized);
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: vertexAttrib.start });
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: bufferOffs + vertexAttrib.start });
             } else {
                 vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset * 0x04 });
                 perInstanceBufferData.set(vertexAttrib.constant, perInstanceBufferWordOffset);
@@ -769,15 +769,15 @@ class SepdData {
 
         this.inputState = device.createInputState(this.inputLayout, [
             perInstanceBinding,
-            { buffer: vertexBuffer, byteOffset: vatr.positionByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.normalByteOffset },
+            { buffer: vertexBuffer, byteOffset: 0 },
+            { buffer: vertexBuffer, byteOffset: 0 },
             null, // tangent
-            { buffer: vertexBuffer, byteOffset: vatr.colorByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord0ByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord1ByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord2ByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.boneIndicesByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.boneWeightsByteOffset },
+            { buffer: vertexBuffer, byteOffset: 0 },
+            { buffer: vertexBuffer, byteOffset: 0 },
+            { buffer: vertexBuffer, byteOffset: 0 },
+            { buffer: vertexBuffer, byteOffset: 0 },
+            { buffer: vertexBuffer, byteOffset: 0 },
+            { buffer: vertexBuffer, byteOffset: 0 },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
