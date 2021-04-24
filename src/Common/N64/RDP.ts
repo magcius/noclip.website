@@ -8,6 +8,7 @@ import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, 
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { mat4 } from "gl-matrix";
+import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -481,13 +482,13 @@ export const enum ZMode {
 
 function translateZMode(zmode: ZMode): GfxCompareMode {
     if (zmode === ZMode.ZMODE_OPA)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.LESS;
     if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.LESS;
     if (zmode === ZMode.ZMODE_XLU)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.LESS;
     if (zmode === ZMode.ZMODE_DEC)
-        return GfxCompareMode.GEQUAL;
+        return GfxCompareMode.LEQUAL;
     throw "Unknown Z mode: " + zmode;
 }
 
@@ -570,7 +571,7 @@ export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDes
 
     if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
         const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
-        out.depthCompare = translateZMode(zmode);
+        out.depthCompare = reverseDepthForCompareMode(translateZMode(zmode));
     }
 
     const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;

@@ -1,8 +1,9 @@
+
 import * as RDP from '../Common/N64/RDP';
 
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
-    GfxRenderPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
+    GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
     GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
@@ -1885,9 +1886,11 @@ class MaterialInstance {
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
             }
-            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
-            const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        }
 
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
+        const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        if (this.hasTexture) {
             if (this.uvtx.primitive)
                 fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
             if (this.uvtx.environment)
