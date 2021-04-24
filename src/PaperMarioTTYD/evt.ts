@@ -728,7 +728,7 @@ export class evtmgr {
         case op.do: {
             const rawCount = this.evt_eval_arg(evt, 0);
             const count = rawCount === 0 ? null : rawCount;
-            evt.loopRecord.push({ pc: evt.pc, count });
+            evt.loopRecord.unshift({ pc: nextpc, count });
         } break;
         case op.do_break: {
             this.do_go_break(evt);
