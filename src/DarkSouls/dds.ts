@@ -21,9 +21,9 @@ export interface DDS {
 }
 
 function getBufferSize(format: 'DXT1' | 'DXT3' | 'DXT5' | 'RGB', width: number, height: number): number {
-    var numBlocksX = (width + 3) >> 2;
-    var numBlocksY = (height + 3) >> 2;
-    var numBlocks = numBlocksX * numBlocksY;
+    const numBlocksX = (width + 3) >> 2;
+    const numBlocksY = (height + 3) >> 2;
+    const numBlocks = numBlocksX * numBlocksY;
 
     if (format === "DXT1")
         return numBlocks * 8;

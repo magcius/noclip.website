@@ -554,6 +554,51 @@ function isFormatTextureCompressionBC(format: GfxFormat): boolean {
     return false;
 }
 
+function getFormatByteSizePerBlock(format: GfxFormat): number {
+    const formatTypeFlags = getFormatTypeFlags(format);
+
+    switch (formatTypeFlags) {
+    case FormatTypeFlags.BC1:
+    case FormatTypeFlags.BC4_SNORM:
+    case FormatTypeFlags.BC4_UNORM:
+        return 8;
+    case FormatTypeFlags.BC2:
+    case FormatTypeFlags.BC3:
+    case FormatTypeFlags.BC5_SNORM:
+    case FormatTypeFlags.BC5_UNORM:
+        return 16;
+    }
+
+    return getFormatByteSize(format);
+}
+
+function getFormatBlockSize(format: GfxFormat): number {
+    const formatTypeFlags = getFormatTypeFlags(format);
+
+    switch (formatTypeFlags) {
+    case FormatTypeFlags.BC1:
+    case FormatTypeFlags.BC2:
+    case FormatTypeFlags.BC3:
+    case FormatTypeFlags.BC4_SNORM:
+    case FormatTypeFlags.BC4_UNORM:
+    case FormatTypeFlags.BC5_SNORM:
+    case FormatTypeFlags.BC5_UNORM:
+        return 4;
+    }
+
+    return 1;
+}
+
+function translateImageLayout(layout: GPUImageDataLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
+    const blockSize = getFormatBlockSize(format);
+
+    const numBlocksX = align(mipWidth, blockSize);
+    const numBlocksY = align(mipHeight, blockSize);
+
+    layout.bytesPerRow = numBlocksX * getFormatByteSizePerBlock(format);
+    layout.rowsPerImage = numBlocksY;
+}
+
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChain: GPUSwapChain;
     private _swapChainWidth = 0;
@@ -587,8 +632,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             mipFilter: GfxMipFilterMode.NO_MIP,
         });
 
-        // TODO(jstpierre): Firefox doesn't have support for device.features yet...
-        this._featureTextureCompressionBC = false; // this.device.features.has('texture-compression-bc');
+        this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
     }
 
     // GfxSwapChain
@@ -1005,9 +1049,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             size.width = mipWidth;
             size.height = mipHeight;
 
-            // TODO(jstpierre): Handle block-compressed uploads
-            layout.bytesPerRow = mipWidth * getFormatByteSize(texture.pixelFormat);
-            layout.rowsPerImage = mipHeight;
+            translateImageLayout(layout, texture.pixelFormat, mipWidth, mipHeight);
 
             this.device.queue.writeTexture(destination, levelDatas[i], layout, size);
         }
