@@ -241,3 +241,9 @@ export function nArray<T>(n: number, c: () => T): T[] {
 export function nullify<T>(v: T | undefined | null): T | null {
     return v === undefined ? null : v;
 }
+
+// Requires that multiple is a power of two.
+export function align(n: number, multiple: number): number {
+    const mask = (multiple - 1);
+    return (n + mask) & ~mask;
+}
