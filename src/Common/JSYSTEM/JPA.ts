@@ -669,7 +669,7 @@ class JPAGlobalRes {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3*4+2*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3*4+2*4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -788,7 +788,7 @@ class JPAGlobalRes {
         const n0 =  25;
         const n1 = -25;
 
-        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
+        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
             n0, n0, 0, 1, 0,
             n0, n1, 0, 1, 1,
             n1, n0, 0, 0, 0,
@@ -799,7 +799,7 @@ class JPAGlobalRes {
             0, n0, n1, 0, 0,
             0, n1, n1, 0, 1,
         ]).buffer);
-        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
+        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([
             0, 1, 2, 2, 1, 3,
             4, 5, 6, 6, 5, 7,
         ]).buffer);
@@ -943,7 +943,7 @@ class StripeBufferManager {
 
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
         const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, MAX_STRIPE_VERTEX_COUNT);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, tristripIndexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, tristripIndexData.buffer);
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
@@ -961,7 +961,7 @@ class StripeBufferManager {
             }
         }
 
-        const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+        const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const inputState = device.createInputState(this.inputLayout, [
             { buffer: gfxBuffer, byteOffset: 0, },
         ], this.indexBufferDescriptor);

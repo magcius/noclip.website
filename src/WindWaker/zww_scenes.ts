@@ -17,7 +17,7 @@ import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask, GfxProgram, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxChannelWriteMask, GfxProgram, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -186,8 +186,8 @@ class dDlst_alphaModel_c {
         frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
         this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
 
-        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
-        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
+        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
+        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
 
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);
 

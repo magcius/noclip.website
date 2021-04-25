@@ -42,9 +42,9 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Tex
     return cache.createSampler(device, {
         wrapS: translateCM(texture.tile.cms),
         wrapT: translateCM(texture.tile.cmt),
-        minFilter: GfxTexFilterMode.POINT,
-        magFilter: GfxTexFilterMode.POINT,
-        mipFilter: GfxMipFilterMode.NO_MIP,
+        minFilter: GfxTexFilterMode.Point,
+        magFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.NoMip,
         minLOD: 0, maxLOD: 0,
     });
 }
@@ -128,7 +128,7 @@ class DrawCallInstance {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.None;
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -238,16 +238,16 @@ export class RenderData {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Dynamic
             );
         } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -256,7 +256,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -350,9 +350,9 @@ export class RootMeshRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, private geometryData: MeshData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         const geo = this.geometryData.mesh;

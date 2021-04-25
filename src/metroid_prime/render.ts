@@ -161,13 +161,13 @@ class MaterialGroupInstance {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial, materialHacks);
 
         this.gfxSampler = device.createSampler({
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.LINEAR,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
             minLOD: 0,
             maxLOD: 100,
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
         });
     }
 

@@ -1395,7 +1395,7 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, of
     const projectedZ = v[2] * 0.5 + 0.5;
 
     // Point is visible if our projected Z is in front of the depth buffer.
-    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.LESS);
+    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
 
     return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
 }

@@ -103,8 +103,8 @@ class StudioModelMeshData {
     public stripGroupData: StudioModelStripGroupData[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public materialNames: string[], vertexData: ArrayBufferLike, indexData: ArrayBufferLike) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
 
         // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -116,7 +116,7 @@ class StudioModelMeshData {
             { location: MaterialProgramBase.a_BoneIDs,     bufferIndex: 0, bufferByteOffset: 17*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+4+4+2+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+4+4+2+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayoutWithoutColorMesh = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -126,7 +126,7 @@ class StudioModelMeshData {
             { location: MaterialProgramBase.a_StaticVertexLighting, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
         );
         vertexBufferDescriptors.push(
-            { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PerVertex, },
         );
         this.inputLayoutWithColorMesh = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
@@ -1424,7 +1424,7 @@ export class HardwareVertData {
             meshHeaderIdx += 0x1C;
         }
 
-        this.buffer = makeStaticDataBuffer(renderContext.device, GfxBufferUsage.VERTEX, vertexData.buffer);
+        this.buffer = makeStaticDataBuffer(renderContext.device, GfxBufferUsage.Vertex, vertexData.buffer);
     }
 
     public destroy(device: GfxDevice): void {

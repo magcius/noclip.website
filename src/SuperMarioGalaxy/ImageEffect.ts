@@ -225,9 +225,9 @@ export class BloomEffect extends ImageEffectBase {
     private blitProgram: GfxProgram;
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
-        blendMode: GfxBlendMode.ADD,
-        blendSrcFactor: GfxBlendFactor.ONE,
-        blendDstFactor: GfxBlendFactor.ONE,
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.One,
     }), fullscreenMegaState);
 
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -244,11 +244,11 @@ export class BloomEffect extends ImageEffectBase {
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
         const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -474,9 +474,9 @@ export class BloomEffectSimple extends ImageEffectBase {
     private blurProgram: GfxProgram;
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
-        blendMode: GfxBlendMode.ADD,
-        blendSrcFactor: GfxBlendFactor.ONE,
-        blendDstFactor: GfxBlendFactor.ONE,
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.One,
     }), fullscreenMegaState);
 
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -491,11 +491,11 @@ export class BloomEffectSimple extends ImageEffectBase {
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
         const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -632,9 +632,9 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
-        blendMode: GfxBlendMode.ADD,
-        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-        blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
     }), fullscreenMegaState);
 
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -650,22 +650,22 @@ export class DepthOfFieldBlur extends ImageEffectBase {
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
         const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
         this.textureMapping[0].gfxSampler = linearSampler;
 
         const nearestSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });

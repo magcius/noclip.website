@@ -150,8 +150,8 @@ export class LevelModelData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public model: BIN.LevelModel) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.model.vertexData.buffer as ArrayBuffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.model.indexData.buffer as ArrayBuffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.model.vertexData.buffer as ArrayBuffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.model.indexData.buffer as ArrayBuffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: FFXProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RGB },
@@ -161,7 +161,7 @@ export class LevelModelData {
         ];
         const VERTEX_STRIDE = 3 + 4 + 2 + 4;
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: VERTEX_STRIDE * 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: VERTEX_STRIDE * 4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
 
@@ -184,37 +184,37 @@ function translateWrapMode(wm: GSWrapMode): GfxWrapMode {
         // region_ modes are handled by modifying the texture, so ignore them here
         case GSWrapMode.REGION_CLAMP:
         case GSWrapMode.CLAMP:
-            return GfxWrapMode.CLAMP;
+            return GfxWrapMode.Clamp;
         case GSWrapMode.REGION_REPEAT:
         case GSWrapMode.REPEAT:
-            return GfxWrapMode.REPEAT;
+            return GfxWrapMode.Repeat;
     }
 }
 
 function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
     switch (cmp) {
-        case GSDepthCompareMode.NEVER: return GfxCompareMode.NEVER;
-        case GSDepthCompareMode.ALWAYS: return GfxCompareMode.ALWAYS;
+        case GSDepthCompareMode.NEVER: return GfxCompareMode.Never;
+        case GSDepthCompareMode.ALWAYS: return GfxCompareMode.Always;
         // We use a LESS-style depth buffer.
-        case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LEQUAL;
-        case GSDepthCompareMode.GREATER: return GfxCompareMode.LESS;
+        case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LessEqual;
+        case GSDepthCompareMode.GREATER: return GfxCompareMode.Less;
     }
 }
 
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
         case GSTextureFilter.NEAREST:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.NoMip];
         case GSTextureFilter.LINEAR:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
         case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Nearest];
         case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Linear];
         case GSTextureFilter.LINEAR_MIPMAP_NEAREST:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
         case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         default: throw new Error();
     }
 }
@@ -237,30 +237,30 @@ export class DrawCallInstance {
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
             depthWrite: gsConfiguration.depthWrite,
-            cullMode: gsConfiguration.cullingEnabled ? GfxCullMode.FRONT : GfxCullMode.NONE,
+            cullMode: gsConfiguration.cullingEnabled ? GfxCullMode.Front : GfxCullMode.None,
         };
 
         if ((gsConfiguration.prim & 0x40) !== 0 && gsConfiguration.alpha_data0 !== 0) {
             if (gsConfiguration.alpha_data0 === 0x44) {
                 setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                 });
             } else if (gsConfiguration.alpha_data0 === 0x48) {
                 setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE,
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.One,
                 });
             } else {
                 throw `unknown alpha blend setting ${hexzero(gsConfiguration.alpha_data0, 2)}`;
             }
         } else { // alpha blending disabled
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.ONE,
-                blendDstFactor: GfxBlendFactor.ZERO,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.Zero,
             });
         }
 

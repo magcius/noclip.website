@@ -1436,8 +1436,8 @@ class MeshData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, mesh.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
@@ -1445,7 +1445,7 @@ class MeshData {
             { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -1911,9 +1911,9 @@ const enum TexCM {
 
 function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-        case TexCM.WRAP: return GfxWrapMode.REPEAT;
-        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
+        case TexCM.WRAP: return GfxWrapMode.Repeat;
+        case TexCM.MIRROR: return GfxWrapMode.Mirror;
+        case TexCM.CLAMP: return GfxWrapMode.Clamp;
     }
 }
 
@@ -1953,9 +1953,9 @@ class TextureData {
         this.gfxSampler = device.createSampler({
             wrapS: translateCM(texture.cms),
             wrapT: translateCM(texture.cmt),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
 
@@ -2375,14 +2375,14 @@ class SnowRenderer {
             flakeIndices[6 * i + 5] = 4 * i + 3;
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, flakeVertices.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, flakeIndices.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, flakeVertices.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, flakeIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -2836,9 +2836,9 @@ class Pilotwings64Renderer implements SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(setAttachmentStateSimple({}, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         }));
 
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);

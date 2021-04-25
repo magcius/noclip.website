@@ -35,7 +35,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         const enableCullingCheckbox = new UI.Checkbox('Force Backfacing Culling', false);
         enableCullingCheckbox.onchanged = () => {
             for (let i = 0; i < this.meshRenderers.length; i++)
-                this.meshRenderers[i].setCullModeOverride(enableCullingCheckbox.checked ? GfxCullMode.BACK : GfxCullMode.NONE);
+                this.meshRenderers[i].setCullModeOverride(enableCullingCheckbox.checked ? GfxCullMode.Back : GfxCullMode.None);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
 

@@ -138,7 +138,7 @@ export class BrightObjBase {
             // Put projected coordinate in 0-1 normalized space.
             const projectedZ = scratchVec4[2] * 0.5 + 0.5;
 
-            const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.LESS);
+            const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.Less);
 
             if (visible) {
                 checkArg.pointsVisibleNum++;

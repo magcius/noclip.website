@@ -362,14 +362,14 @@ export class ParticleManager {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private level: ParticleSystem, private common: ParticleSystem) {
         // build shared particle sprite buffers
-        const vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
-        const indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([0, 2, 3, 0, 1, 3]).buffer);
+        const vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
+        const indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([0, 2, 3, 0, 1, 3]).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: ParticleProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         const inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
@@ -403,14 +403,14 @@ export class ParticleManager {
         }
 
         this.megaStateFlags = {
-            depthCompare: GfxCompareMode.GREATER,
+            depthCompare: GfxCompareMode.Greater,
             depthWrite: false,
-            cullMode: GfxCullMode.NONE,
+            cullMode: GfxCullMode.None,
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
     }
 

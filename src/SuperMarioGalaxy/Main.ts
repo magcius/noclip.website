@@ -87,13 +87,13 @@ class SpecialTextureBinder {
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.mirrorSampler = cache.createSampler(device, {
-            magFilter: GfxTexFilterMode.BILINEAR,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             maxLOD: 100,
             minLOD: 0,
-            wrapS: GfxWrapMode.MIRROR,
-            wrapT: GfxWrapMode.MIRROR,
+            wrapS: GfxWrapMode.Mirror,
+            wrapT: GfxWrapMode.Mirror,
         });
 
         this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);

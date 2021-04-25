@@ -117,12 +117,12 @@ class MeshFragData {
     public indexCount: number;
 
     constructor(device: GfxDevice, public meshFrag: EMeshFrag) {
-        this.posNrmBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, meshFrag.streamPosNrm);
-        this.colorBuffer = meshFrag.streamColor ? makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, meshFrag.streamColor) : null;
+        this.posNrmBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshFrag.streamPosNrm);
+        this.colorBuffer = meshFrag.streamColor ? makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshFrag.streamColor) : null;
 
         if (meshFrag.streamUVCount > 0) {
             const uvData = decodeStreamUV(meshFrag.streamUV!, meshFrag.iVertCount, meshFrag.streamUVCount, meshFrag.uvCoordScale);
-            this.uvBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, uvData.buffer);
+            this.uvBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, uvData.buffer);
         } else {
             this.uvBuffer = null;
         }
@@ -130,7 +130,7 @@ class MeshFragData {
         const numIndexes = meshFrag.streamIdx.byteLength / 2;
         const triIdxData = convertToTriangleIndexBuffer(meshFrag.topology, meshFrag.streamIdx.createTypedArray(Uint16Array, 0, numIndexes));
         const idxData = filterDegenerateTriangleIndexBuffer(triIdxData);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, idxData.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, idxData.buffer);
         this.indexCount = idxData.length;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -139,9 +139,9 @@ class MeshFragData {
             { location: PsychonautsProgram.a_TexCoord, bufferIndex: 2, bufferByteOffset: 0, format: GfxFormat.F32_RG },
         ];
         const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
-            { byteStride: 0x10, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX } : null,
-            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PER_VERTEX } : null,
+            { byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, },
+            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerVertex } : null,
+            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PerVertex } : null,
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -233,13 +233,13 @@ class MeshFragInstance {
             }
 
             const gfxSampler = device.createSampler({
-                magFilter: GfxTexFilterMode.BILINEAR,
-                minFilter: GfxTexFilterMode.BILINEAR,
-                mipFilter: GfxMipFilterMode.LINEAR,
+                magFilter: GfxTexFilterMode.Bilinear,
+                minFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.Linear,
                 minLOD: 0,
                 maxLOD: 1000,
-                wrapS: GfxWrapMode.REPEAT,
-                wrapT: GfxWrapMode.REPEAT,
+                wrapS: GfxWrapMode.Repeat,
+                wrapT: GfxWrapMode.Repeat,
             });
             this.gfxSamplers.push(gfxSampler);
 

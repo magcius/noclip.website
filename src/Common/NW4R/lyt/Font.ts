@@ -363,11 +363,11 @@ export class CharWriter {
         const cache = renderInstManager.gfxRenderCache;
 
         this.textureMapping[0].gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });

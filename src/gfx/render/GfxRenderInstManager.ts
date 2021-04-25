@@ -175,7 +175,7 @@ export class GfxRenderInst {
             inputLayout: null,
             megaStateDescriptor: copyMegaState(defaultMegaState),
             program: null!,
-            topology: GfxPrimitiveTopology.TRIANGLES,
+            topology: GfxPrimitiveTopology.Triangles,
             colorAttachmentFormats: [],
             depthStencilAttachmentFormat: null,
             sampleCount: 1,

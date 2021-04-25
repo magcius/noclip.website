@@ -85,7 +85,7 @@ export class GfxRenderDynamicUniformBuffer {
             if (this.gfxBuffer !== null)
                 device.destroyBuffer(this.gfxBuffer);
 
-            this.gfxBuffer = device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+            this.gfxBuffer = device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.Uniform, GfxBufferFrequencyHint.Dynamic);
         }
 
         const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);

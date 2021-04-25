@@ -43,9 +43,9 @@ export class DkrTexture {
         const sampler = cache.createSampler(device, {
             wrapS: translateCM(wrapS),
             wrapT: translateCM(wrapT),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.LINEAR,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Linear,
             minLOD: 0, maxLOD: 0,
         });
 

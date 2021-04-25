@@ -36,8 +36,8 @@ class MyShapeHelper {
 
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
-                dynamicVertices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
+                dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
 
             buffers.push({
@@ -48,7 +48,7 @@ class MyShapeHelper {
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
             buffers.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
@@ -57,8 +57,8 @@ class MyShapeHelper {
 
         this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
 
-        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
-            dynamicIndices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
+            dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
         const indexBufferDesc: GfxIndexBufferDescriptor = {
             buffer: this.indexBuffer,

@@ -11,7 +11,7 @@ import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex 
 import { TextureMapping } from '../../../TextureHolder';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
@@ -346,11 +346,11 @@ export class MaterialInstance {
     }
 
     public setColorWriteEnabled(v: boolean): void {
-        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
+        setChanWriteEnabled(this.materialHelper, GfxChannelWriteMask.RGB, v);
     }
 
     public setAlphaWriteEnabled(v: boolean): void {
-        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
+        setChanWriteEnabled(this.materialHelper, GfxChannelWriteMask.Alpha, v);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer, transparent: boolean = this.materialData.material.translucent): void {

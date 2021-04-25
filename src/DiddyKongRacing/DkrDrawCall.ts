@@ -92,7 +92,7 @@ export class DkrDrawCall {
             { location: F3DDKR_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 10 * 0x04, },
         ];
         this.vertexBufferDescriptors = [
-            { byteStride: VERTEX_BYTE_STRIDE * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: VERTEX_BYTE_STRIDE * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.defaultInputLayout = this.cache.createInputLayout(this.device, {
             indexBufferFormat: GfxFormat.U16_R,
@@ -133,8 +133,8 @@ export class DkrDrawCall {
         }
 
         // Create the buffers
-        this.defaultVertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.VERTEX, verticesAB.buffer as ArrayBuffer);
-        this.defaultIndexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.INDEX, indicesAB.buffer as ArrayBuffer);
+        this.defaultVertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer as ArrayBuffer);
+        this.defaultIndexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer as ArrayBuffer);
         
         // Set default input state
         this.defaultInputState = this.device.createInputState(
@@ -176,8 +176,8 @@ export class DkrDrawCall {
             }
 
             // Create the buffers
-            const vertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.VERTEX, verticesAB.buffer as ArrayBuffer);
-            const indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.INDEX, indicesAB.buffer as ArrayBuffer);
+            const vertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer as ArrayBuffer);
+            const indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer as ArrayBuffer);
 
             // Store the buffers into an array so I can destroy them later.
             this.objAnimInputStateBuffers.push(vertexBuffer);
@@ -228,9 +228,9 @@ export class DkrDrawCall {
             if(!!this.texture) {
                 if(params.isSkydome) {
                     template.setMegaStateFlags(setAttachmentStateSimple({}, {
-                        blendMode: GfxBlendMode.ADD,
-                        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                        blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                     }));
                     template.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
                 } else {
@@ -244,17 +244,17 @@ export class DkrDrawCall {
                         template.setMegaStateFlags(setAttachmentStateSimple({
                             depthWrite: true
                         }, {
-                            blendMode: GfxBlendMode.ADD,
-                            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                            blendMode: GfxBlendMode.Add,
+                            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                         }));
                     } else if(texLayer == GfxRendererLayer.TRANSLUCENT) {
                         template.setMegaStateFlags(setAttachmentStateSimple({
                             depthWrite: isFlagSet(this.flags, FLAG_ENABLE_DEPTH_WRITE)
                         }, {
-                            blendMode: GfxBlendMode.ADD,
-                            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                            blendMode: GfxBlendMode.Add,
+                            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                         }));
                     }
                     template.sortKey = makeSortKey(texLayer);
@@ -332,7 +332,7 @@ export class DkrDrawCall {
             renderInst.setGfxProgram(this.gfxProgram);
             renderInst.drawIndexesInstanced(this.indices.length, params.modelMatrices.length);
             renderInst.setMegaStateFlags({
-                cullMode: DkrControlGlobals.ADV2_MIRROR.on ? GfxCullMode.FRONT : GfxCullMode.BACK
+                cullMode: DkrControlGlobals.ADV2_MIRROR.on ? GfxCullMode.Front : GfxCullMode.Back
             });
     
             renderInstManager.submitRenderInst(renderInst);

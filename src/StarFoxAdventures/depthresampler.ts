@@ -42,11 +42,11 @@ export class DepthResampler {
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.program = cache.createProgram(device, new DepthResamplerProgram());
         this.textureMapping.gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         })

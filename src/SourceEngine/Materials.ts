@@ -631,39 +631,39 @@ export abstract class BaseMaterial {
         megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
         if (this.paramGetBoolean('$nocull'))
-            megaStateFlags.cullMode = GfxCullMode.NONE;
+            megaStateFlags.cullMode = GfxCullMode.None;
     }
 
     protected setAlphaBlendMode(megaStateFlags: Partial<GfxMegaStateDescriptor>, alphaBlendMode: AlphaBlendMode): boolean {
         if (alphaBlendMode === AlphaBlendMode.BlendAdd) {
             setAttachmentStateSimple(megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.One,
             });
             megaStateFlags.depthWrite = false;
             return true;
         } else if (alphaBlendMode === AlphaBlendMode.Blend) {
             setAttachmentStateSimple(megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
             megaStateFlags.depthWrite = false;
             return true;
         } else if (alphaBlendMode === AlphaBlendMode.Add) {
             setAttachmentStateSimple(megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.ONE,
-                blendDstFactor: GfxBlendFactor.ONE,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.One,
             });
             megaStateFlags.depthWrite = false;
             return true;
         } else if (alphaBlendMode === AlphaBlendMode.None) {
             setAttachmentStateSimple(megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.ONE,
-                blendDstFactor: GfxBlendFactor.ZERO,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.Zero,
             });
             megaStateFlags.depthWrite = true;
             return false;
@@ -1764,9 +1764,9 @@ class Material_Generic extends BaseMaterial {
             this.isTranslucent = true;
 
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.DST_COLOR,
-                blendDstFactor: GfxBlendFactor.SRC_COLOR,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.Dst,
+                blendDstFactor: GfxBlendFactor.Src,
             });
             this.megaStateFlags.depthWrite = false;
         } else {
@@ -3214,12 +3214,12 @@ export class LightmapManager {
 
     constructor(private device: GfxDevice, cache: GfxRenderCache) {
         this.gfxSampler = cache.createSampler(device, {
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 100,
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
         });
     }
 

@@ -312,14 +312,14 @@ export class VTF {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.uploadTextureData(this.gfxTextures[i], 0, levelDatas[i]);
 
-        const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
-        const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
+        const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.Clamp : GfxWrapMode.Repeat;
+        const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.Clamp : GfxWrapMode.Repeat;
 
-        const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.POINT : GfxTexFilterMode.BILINEAR;
+        const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.Point : GfxTexFilterMode.Bilinear;
         const minFilter = texFilter;
         const magFilter = texFilter;
         const forceTrilinear = true;
-        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NO_MIP : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NEAREST;
+        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NoMip : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
         this.gfxSampler = cache.createSampler(device, {
             wrapS, wrapT, minFilter, magFilter, mipFilter,
             minLOD: 0, maxLOD: 100,

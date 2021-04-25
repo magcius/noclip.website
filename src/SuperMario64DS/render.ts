@@ -107,8 +107,8 @@ export class VertexData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, public nitroVertexData: NITRO_GX.VertexData) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.nitroVertexData.packedVertexBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.nitroVertexData.indexBuffer.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.nitroVertexData.packedVertexBuffer.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.nitroVertexData.indexBuffer.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: NITRO_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*4 },
@@ -118,7 +118,7 @@ export class VertexData {
             { location: NITRO_Program.a_PosMtxIdx, format: GfxFormat.F32_R, bufferIndex: 0, bufferByteOffset: 12*4 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: NITRO_GX.VERTEX_BYTES, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: NITRO_GX.VERTEX_BYTES, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
@@ -191,9 +191,9 @@ class MaterialData {
             device.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
 
             this.gfxSampler = cache.createSampler(device, {
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.NoMip,
                 wrapS: parseTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -265,9 +265,9 @@ class MaterialInstance {
             cullMode: material.cullMode,
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
 
         this.createProgram();

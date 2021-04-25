@@ -97,14 +97,14 @@ export class DkrSprites {
                 1, 2, 3
             ]);
 
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertices.buffer as ArrayBuffer);
-            this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indices.buffer as ArrayBuffer);
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer as ArrayBuffer);
+            this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer as ArrayBuffer);
     
             const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
                 { location: F3DDKR_Sprite_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0 * 0x04, }
             ];
             const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-                { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+                { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
             ];
             
             this.inputLayout = device.createInputLayout({
@@ -121,11 +121,11 @@ export class DkrSprites {
 
             // Setup sprite sheet texture
             const sampler = cache.createSampler(device, {
-                wrapS: GfxWrapMode.CLAMP,
-                wrapT: GfxWrapMode.CLAMP,
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.LINEAR,
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.Linear,
                 minLOD: 0, maxLOD: 0,
             });
 
@@ -206,9 +206,9 @@ export class DkrSprites {
                 template.setMegaStateFlags(setAttachmentStateSimple({
                     depthWrite: true
                 }, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                 }));
                 template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
                 if(viewerInput.deltaTime > 0.0) {

@@ -63,8 +63,8 @@ class PlaneShape {
         vtx[18] = 2;
         vtx[19] = 2;
 
-        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GX_Material.getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
@@ -72,11 +72,11 @@ class PlaneShape {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
+            { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerInstance, },
         ];
 
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
         this.inputLayout = cache.createInputLayout(device, {
             vertexAttributeDescriptors,
             vertexBufferDescriptors,

@@ -5285,8 +5285,8 @@ class OceanRingPipe extends LiveActor {
             moveCoord(this, segmentSize);
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },
@@ -5294,7 +5294,7 @@ class OceanRingPipe extends LiveActor {
             { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = cache.createInputLayout(device, {

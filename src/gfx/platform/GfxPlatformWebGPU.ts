@@ -76,42 +76,42 @@ interface GfxReadbackP_WebGPU extends GfxReadback {
 }
 
 function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
-    if (usage === GfxBufferUsage.INDEX)
+    if (usage === GfxBufferUsage.Index)
         return GPUBufferUsage.INDEX;
-    else if (usage === GfxBufferUsage.VERTEX)
+    else if (usage === GfxBufferUsage.Vertex)
         return GPUBufferUsage.VERTEX;
-    else if (usage === GfxBufferUsage.UNIFORM)
+    else if (usage === GfxBufferUsage.Uniform)
         return GPUBufferUsage.UNIFORM;
     else
         throw "whoops";
 }
 
 function translateWrapMode(wrapMode: GfxWrapMode): GPUAddressMode {
-    if (wrapMode === GfxWrapMode.CLAMP)
+    if (wrapMode === GfxWrapMode.Clamp)
         return 'clamp-to-edge';
-    else if (wrapMode === GfxWrapMode.REPEAT)
+    else if (wrapMode === GfxWrapMode.Repeat)
         return 'repeat';
-    else if (wrapMode === GfxWrapMode.MIRROR)
+    else if (wrapMode === GfxWrapMode.Mirror)
         return 'mirror-repeat';
     else
         throw "whoops";
 }
 
 function translateMinMagFilter(texFilter: GfxTexFilterMode): GPUFilterMode {
-    if (texFilter === GfxTexFilterMode.BILINEAR)
+    if (texFilter === GfxTexFilterMode.Bilinear)
         return 'linear';
-    else if (texFilter === GfxTexFilterMode.POINT)
+    else if (texFilter === GfxTexFilterMode.Point)
         return 'nearest';
     else
         throw "whoops";
 }
 
 function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
-    if (mipFilter === GfxMipFilterMode.LINEAR)
+    if (mipFilter === GfxMipFilterMode.Linear)
         return 'linear';
-    else if (mipFilter === GfxMipFilterMode.NEAREST)
+    else if (mipFilter === GfxMipFilterMode.Nearest)
         return 'nearest';
-    else if (mipFilter === GfxMipFilterMode.NO_MIP)
+    else if (mipFilter === GfxMipFilterMode.NoMip)
         return 'nearest';
     else
         throw "whoops";
@@ -193,18 +193,18 @@ function getPlatformSampler(sampler_: GfxSampler): GPUSampler {
 }
 
 function translateTopology(topology: GfxPrimitiveTopology): GPUPrimitiveTopology {
-    if (topology === GfxPrimitiveTopology.TRIANGLES)
+    if (topology === GfxPrimitiveTopology.Triangles)
         return 'triangle-list';
     else
         throw "whoops";
 }
 
 function translateCullMode(cullMode: GfxCullMode): GPUCullMode {
-    if (cullMode === GfxCullMode.NONE)
+    if (cullMode === GfxCullMode.None)
         return 'none';
-    else if (cullMode === GfxCullMode.FRONT)
+    else if (cullMode === GfxCullMode.Front)
         return 'front';
-    else if (cullMode === GfxCullMode.BACK)
+    else if (cullMode === GfxCullMode.Back)
         return 'back';
     else
         throw "whoops";
@@ -228,36 +228,36 @@ function translatePrimitiveState(topology: GfxPrimitiveTopology, megaStateDescri
 }
 
 function translateBlendFactor(factor: GfxBlendFactor): GPUBlendFactor {
-    if (factor === GfxBlendFactor.ZERO)
+    if (factor === GfxBlendFactor.Zero)
         return 'zero';
-    else if (factor === GfxBlendFactor.ONE)
+    else if (factor === GfxBlendFactor.One)
         return 'one';
-    else if (factor === GfxBlendFactor.SRC_COLOR)
+    else if (factor === GfxBlendFactor.Src)
         return 'src';
-    else if (factor === GfxBlendFactor.ONE_MINUS_SRC_COLOR)
+    else if (factor === GfxBlendFactor.OneMinusSrc)
         return 'one-minus-src';
-    else if (factor === GfxBlendFactor.DST_COLOR)
+    else if (factor === GfxBlendFactor.Dst)
         return 'dst';
-    else if (factor === GfxBlendFactor.ONE_MINUS_DST_COLOR)
+    else if (factor === GfxBlendFactor.OneMinusDst)
         return 'one-minus-dst';
-    else if (factor === GfxBlendFactor.SRC_ALPHA)
+    else if (factor === GfxBlendFactor.SrcAlpha)
         return 'src-alpha';
-    else if (factor === GfxBlendFactor.ONE_MINUS_SRC_ALPHA)
+    else if (factor === GfxBlendFactor.OneMinusSrcAlpha)
         return 'one-minus-src-alpha';
-    else if (factor === GfxBlendFactor.DST_ALPHA)
+    else if (factor === GfxBlendFactor.DstAlpha)
         return 'dst-alpha';
-    else if (factor === GfxBlendFactor.ONE_MINUS_DST_ALPHA)
+    else if (factor === GfxBlendFactor.OneMinusDstAlpha)
         return 'one-minus-dst-alpha';
     else
         throw "whoops";
 }
 
 function translateBlendMode(mode: GfxBlendMode): GPUBlendOperation {
-    if (mode === GfxBlendMode.ADD)
+    if (mode === GfxBlendMode.Add)
         return 'add';
-    else if (mode === GfxBlendMode.SUBTRACT)
+    else if (mode === GfxBlendMode.Subtract)
         return 'subtract';
-    else if (mode === GfxBlendMode.REVERSE_SUBTRACT)
+    else if (mode === GfxBlendMode.ReverseSubtract)
         return 'reverse-subtract';
     else
         throw "whoops";
@@ -278,7 +278,7 @@ function translateColorState(attachmentState: GfxAttachmentState, format: GfxFor
             color: translateBlendState(attachmentState.rgbBlendState),
             alpha: translateBlendState(attachmentState.alphaBlendState),
         },
-        writeMask: attachmentState.colorWriteMask,
+        writeMask: attachmentState.channelWriteMask,
     };
 }
 
@@ -290,21 +290,21 @@ function translateTargets(colorAttachmentFormats: (GfxFormat | null)[], megaStat
 }
 
 function translateCompareMode(compareMode: GfxCompareMode): GPUCompareFunction {
-    if (compareMode === GfxCompareMode.NEVER)
+    if (compareMode === GfxCompareMode.Never)
         return 'never';
-    else if (compareMode === GfxCompareMode.LESS)
+    else if (compareMode === GfxCompareMode.Less)
         return 'less';
-    else if (compareMode === GfxCompareMode.EQUAL)
+    else if (compareMode === GfxCompareMode.Equal)
         return 'equal';
-    else if (compareMode === GfxCompareMode.LEQUAL)
+    else if (compareMode === GfxCompareMode.LessEqual)
         return 'less-equal';
-    else if (compareMode === GfxCompareMode.GREATER)
+    else if (compareMode === GfxCompareMode.Greater)
         return 'greater';
-    else if (compareMode === GfxCompareMode.NEQUAL)
+    else if (compareMode === GfxCompareMode.NotEqual)
         return 'not-equal';
-    else if (compareMode === GfxCompareMode.GEQUAL)
+    else if (compareMode === GfxCompareMode.GreaterEqual)
         return 'greater-equal';
-    else if (compareMode === GfxCompareMode.ALWAYS)
+    else if (compareMode === GfxCompareMode.Always)
         return 'always';
     else
         throw "whoops";
@@ -336,9 +336,9 @@ function translateIndexFormat(format: GfxFormat | null): GPUIndexFormat | undefi
 }
 
 function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GPUInputStepMode {
-    if (frequency === GfxVertexBufferFrequency.PER_VERTEX)
+    if (frequency === GfxVertexBufferFrequency.PerVertex)
         return 'vertex';
-    else if (frequency === GfxVertexBufferFrequency.PER_INSTANCE)
+    else if (frequency === GfxVertexBufferFrequency.PerInstance)
         return 'instance';
     else
         throw "whoops";
@@ -622,13 +622,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._swapChain = this.canvasContext.configureSwapChain({ device, format: 'bgra8unorm', usage: this._swapChainTextureUsage });
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
             minLOD: 0,
             maxLOD: 0,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
         });
 
         this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
@@ -721,10 +721,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {
         const lodMinClamp = descriptor.minLOD;
-        const lodMaxClamp = descriptor.mipFilter === GfxMipFilterMode.NO_MIP ? descriptor.minLOD : descriptor.maxLOD;
+        const lodMaxClamp = descriptor.mipFilter === GfxMipFilterMode.NoMip ? descriptor.minLOD : descriptor.maxLOD;
 
         // TODO(jstpierre): Expose this as a sampler parameter.
-        const maxAnisotropy = (descriptor.minFilter === GfxTexFilterMode.BILINEAR && descriptor.magFilter === GfxTexFilterMode.BILINEAR && descriptor.mipFilter === GfxMipFilterMode.LINEAR) ? 16 : 1;
+        const maxAnisotropy = (descriptor.minFilter === GfxTexFilterMode.Bilinear && descriptor.magFilter === GfxTexFilterMode.Bilinear && descriptor.mipFilter === GfxMipFilterMode.Linear) ? 16 : 1;
 
         const gpuSampler = this.device.createSampler({
             addressModeU: translateWrapMode(descriptor.wrapS),

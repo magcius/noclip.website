@@ -252,14 +252,14 @@ export class TranslucentPlaneRenderer {
         const vertexData = new Float32Array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5]);
         const indices = new Uint8Array([0, 1, 2, 0, 2, 3]);
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indices.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -279,12 +279,12 @@ export class TranslucentPlaneRenderer {
         const renderInst = renderInstManager.newRenderInst();
 
         renderInst.setMegaStateFlags(setAttachmentStateSimple({
-            cullMode: GfxCullMode.NONE,
+            cullMode: GfxCullMode.None,
             depthWrite: false // So that they wont block each other
         }, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         }));
 
         // Always draw these planes after everything else has been rendered

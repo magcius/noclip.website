@@ -213,8 +213,8 @@ export class MapData {
             n += submesh.vtx.length;
         });
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vBuf.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, iBuf.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vBuf.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, iBuf.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: KingdomHeartsProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, },
@@ -226,7 +226,7 @@ export class MapData {
             { location: KingdomHeartsProgram.a_TexScroll, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 19*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 21*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 21*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -355,11 +355,11 @@ export class MapData {
 
     private createSampler(device: GfxDevice) {
         return device.createSampler({
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
     }
@@ -391,14 +391,14 @@ class DrawCallInstance {
 
         this.megaStateFlags = {};
         if (!drawCall.cullBackfaces) {
-            this.megaStateFlags.cullMode = GfxCullMode.NONE;
+            this.megaStateFlags.cullMode = GfxCullMode.None;
         }
 
         if (drawCall.translucent) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
             this.megaStateFlags.depthWrite = false;
         }
@@ -484,9 +484,9 @@ export class SceneRenderer {
 
     constructor(device: GfxDevice, mapData: MapData, drawCalls: DrawCall[], private isSkybox: boolean) {
         this.megaStateFlags = {
-            cullMode: GfxCullMode.BACK,
+            cullMode: GfxCullMode.Back,
             depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual),
         };
 
         for (let i = 0; i < drawCalls.length; i++)

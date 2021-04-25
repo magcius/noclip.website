@@ -30,11 +30,11 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
 
 function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
     if (flip)
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     else if (repeat)
-        return GfxWrapMode.REPEAT;
+        return GfxWrapMode.Repeat;
     else
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
 }
 
 function parseMPHTexImageParamWrapModeS(w0: number): GfxWrapMode {
@@ -75,9 +75,9 @@ class MaterialInstance {
 
         if (this.gfxTextures.length > 0) {
             this.gfxSampler = device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.NoMip,
                 wrapS: parseMPHTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseMPHTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -104,9 +104,9 @@ class MaterialInstance {
         };
 
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
     }
 

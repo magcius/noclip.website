@@ -357,10 +357,10 @@ class Device_Mesh {
         this.vertex_count = sub_mesh_asset.vertex_count;
         this.index_count = sub_mesh_asset.index_count;
 
-        this.vertex_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, sub_mesh_asset.vertex_data);
+        this.vertex_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, sub_mesh_asset.vertex_data);
 
         if (this.index_count > 0) {
-            this.index_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, sub_mesh_asset.index_data);
+            this.index_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, sub_mesh_asset.index_data);
         } else {
             this.index_buffer = null;
         }
@@ -468,7 +468,7 @@ class Device_Mesh {
         }
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: sub_mesh_asset.vertex_size, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: sub_mesh_asset.vertex_size, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.input_layout = cache.createInputLayout(device, {

@@ -7,14 +7,14 @@ import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, Gf
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
-    NEVER   = WebGLRenderingContext.NEVER,
-    LESS    = WebGLRenderingContext.LESS,
-    EQUAL   = WebGLRenderingContext.EQUAL,
-    LEQUAL  = WebGLRenderingContext.LEQUAL,
-    GREATER = WebGLRenderingContext.GREATER,
-    NEQUAL  = WebGLRenderingContext.NOTEQUAL,
-    GEQUAL  = WebGLRenderingContext.GEQUAL,
-    ALWAYS  = WebGLRenderingContext.ALWAYS,
+    Never        = WebGLRenderingContext.NEVER,
+    Less         = WebGLRenderingContext.LESS,
+    Equal        = WebGLRenderingContext.EQUAL,
+    LessEqual    = WebGLRenderingContext.LEQUAL,
+    Greater      = WebGLRenderingContext.GREATER,
+    NotEqual     = WebGLRenderingContext.NOTEQUAL,
+    GreaterEqual = WebGLRenderingContext.GEQUAL,
+    Always       = WebGLRenderingContext.ALWAYS,
 }
 
 export enum GfxFrontFaceMode {
@@ -23,51 +23,82 @@ export enum GfxFrontFaceMode {
 }
 
 export const enum GfxCullMode {
-    NONE,
-    FRONT,
-    BACK,
-    FRONT_AND_BACK,
+    None,
+    Front,
+    Back,
+    FrontAndBack,
 }
 
 export enum GfxBlendFactor {
-    ZERO                = WebGLRenderingContext.ZERO,
-    ONE                 = WebGLRenderingContext.ONE,
-    SRC_COLOR           = WebGLRenderingContext.SRC_COLOR,
-    ONE_MINUS_SRC_COLOR = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
-    DST_COLOR           = WebGLRenderingContext.DST_COLOR,
-    ONE_MINUS_DST_COLOR = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
-    SRC_ALPHA           = WebGLRenderingContext.SRC_ALPHA,
-    ONE_MINUS_SRC_ALPHA = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
-    DST_ALPHA           = WebGLRenderingContext.DST_ALPHA,
-    ONE_MINUS_DST_ALPHA = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
+    Zero             = WebGLRenderingContext.ZERO,
+    One              = WebGLRenderingContext.ONE,
+    Src              = WebGLRenderingContext.SRC_COLOR,
+    OneMinusSrc      = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
+    Dst              = WebGLRenderingContext.DST_COLOR,
+    OneMinusDst      = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
+    SrcAlpha         = WebGLRenderingContext.SRC_ALPHA,
+    OneMinusSrcAlpha = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
+    DstAlpha         = WebGLRenderingContext.DST_ALPHA,
+    OneMinusDstAlpha = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
 }
 
 export enum GfxBlendMode {
-    ADD              = WebGLRenderingContext.FUNC_ADD,
-    SUBTRACT         = WebGLRenderingContext.FUNC_SUBTRACT,
-    REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
+    Add              = WebGLRenderingContext.FUNC_ADD,
+    Subtract         = WebGLRenderingContext.FUNC_SUBTRACT,
+    ReverseSubtract  = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
-export const enum GfxWrapMode { CLAMP, REPEAT, MIRROR }
-export const enum GfxTexFilterMode { POINT, BILINEAR }
-// TODO(jstpierre): remove NO_MIP
-export const enum GfxMipFilterMode { NO_MIP, NEAREST, LINEAR }
-export const enum GfxPrimitiveTopology { TRIANGLES }
+export const enum GfxWrapMode { Clamp, Repeat, Mirror }
+export const enum GfxTexFilterMode { Point, Bilinear }
+// TODO(jstpierre): remove NoMip
+export const enum GfxMipFilterMode { NoMip, Nearest, Linear }
+export const enum GfxPrimitiveTopology { Triangles }
 
 export const enum GfxBufferUsage {
-    INDEX   = 0x01,
-    VERTEX  = 0x02,
-    UNIFORM = 0x03,
+    Index   = 0x01,
+    Vertex  = 0x02,
+    Uniform = 0x03,
 }
 
 export const enum GfxBufferFrequencyHint {
-    STATIC = 0x01,
-    DYNAMIC = 0x02,
+    Static  = 0x01,
+    Dynamic = 0x02,
 }
 
 export const enum GfxVertexBufferFrequency {
-    PER_VERTEX = 0x01,
-    PER_INSTANCE = 0x02,
+    PerVertex   = 0x01,
+    PerInstance = 0x02,
+}
+
+export const enum GfxTextureDimension {
+    n2D, n2DArray, n3D, Cube,
+}
+
+export const enum GfxTextureUsage {
+    Sampled      = 0x01,
+    RenderTarget = 0x02,
+}
+
+export const enum GfxChannelWriteMask {
+    None        = 0x00,
+    Red         = 0x01,
+    Green       = 0x02,
+    Blue        = 0x04,
+    Alpha       = 0x08,
+
+    RGB         = 0x07,
+    AllChannels = 0x0F,
+}
+
+export enum GfxStencilOp {
+    Keep            = WebGLRenderingContext.KEEP,
+    Zero            = WebGLRenderingContext.ZERO,
+    Replace         = WebGLRenderingContext.REPLACE,
+    Invert          = WebGLRenderingContext.INVERT,
+    IncrementClamp  = WebGLRenderingContext.INCR,
+    DecrementClamp  = WebGLRenderingContext.DECR,
+    IncrementWrap   = WebGLRenderingContext.INCR_WRAP,
+    DecrementWrap   = WebGLRenderingContext.DECR_WRAP,
 }
 
 export interface GfxVertexBufferDescriptor {
@@ -88,15 +119,6 @@ export interface GfxVertexAttributeDescriptor {
 export interface GfxInputLayoutBufferDescriptor {
     byteStride: number;
     frequency: GfxVertexBufferFrequency;
-}
-
-export const enum GfxTextureDimension {
-    n2D, n2DArray, n3D, Cube,
-}
-
-export const enum GfxTextureUsage {
-    Sampled      = 0x01,
-    RenderTarget = 0x02,
 }
 
 export interface GfxTextureDescriptor {
@@ -170,35 +192,14 @@ export interface GfxInputLayoutDescriptor {
     indexBufferFormat: GfxFormat | null;
 }
 
-export enum GfxStencilOp {
-    KEEP            = WebGLRenderingContext.KEEP,
-    ZERO            = WebGLRenderingContext.ZERO,
-    REPLACE         = WebGLRenderingContext.REPLACE,
-    INVERT          = WebGLRenderingContext.INVERT,
-    INCREMENT_CLAMP = WebGLRenderingContext.INCR,
-    DECREMENT_CLAMP = WebGLRenderingContext.DECR,
-    INCREMENT_WRAP  = WebGLRenderingContext.INCR_WRAP,
-    DECREMENT_WRAP  = WebGLRenderingContext.DECR_WRAP,
-}
-
 export interface GfxChannelBlendState {
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
     blendDstFactor: GfxBlendFactor;
 }
 
-export const enum GfxColorWriteMask {
-    NONE  = 0x00,
-    RED   = 0x01,
-    GREEN = 0x02,
-    BLUE  = 0x04,
-    COLOR = 0x07,
-    ALPHA = 0x08,
-    ALL   = 0x0F,
-}
-
 export interface GfxAttachmentState {
-    colorWriteMask: GfxColorWriteMask;
+    channelWriteMask: GfxChannelWriteMask;
     rgbBlendState: GfxChannelBlendState;
     alphaBlendState: GfxChannelBlendState;
 }

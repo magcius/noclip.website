@@ -70,15 +70,15 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
     switch (addrMode) {
     case TextureAddressMode.Repeat:
-        return GfxWrapMode.REPEAT;
+        return GfxWrapMode.Repeat;
     case TextureAddressMode.ClampToEdge:
     case TextureAddressMode.ClampToBorder:
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
     case TextureAddressMode.Mirror:
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     case TextureAddressMode.MirrorClampToEdge:
         // TODO(jstpierre): This requires GL_ARB_texture_mirror_clamp_to_edge
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     default:
         throw "whoops";
     }
@@ -87,11 +87,11 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
 function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
     switch (filterMode) {
     case FilterMode.Linear:
-        return GfxMipFilterMode.LINEAR;
+        return GfxMipFilterMode.Linear;
     case FilterMode.Point:
-        return GfxMipFilterMode.NEAREST;
+        return GfxMipFilterMode.Nearest;
     case 0:
-        return GfxMipFilterMode.NO_MIP;
+        return GfxMipFilterMode.NoMip;
     default:
         throw "whoops";
     }
@@ -100,9 +100,9 @@ function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
 function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
     switch (filterMode) {
     case FilterMode.Linear:
-        return GfxTexFilterMode.BILINEAR;
+        return GfxTexFilterMode.Bilinear;
     case FilterMode.Point:
-        return GfxTexFilterMode.POINT;
+        return GfxTexFilterMode.Point;
     default:
         throw "whoops";
     }
@@ -375,11 +375,11 @@ function translateRenderInfoBoolean(renderInfo: FMAT_RenderInfo): boolean {
 function translateCullMode(fmat: FMAT): GfxCullMode {
     const display_face = translateRenderInfoSingleString(fmat.renderInfo.get('display_face')!);
     if (display_face === 'front')
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     else if (display_face === 'back')
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     else if (display_face === 'both')
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
     else
         throw "whoops";
 }
@@ -392,24 +392,24 @@ function translateDepthCompare(fmat: FMAT): GfxCompareMode {
     if (translateRenderInfoBoolean(fmat.renderInfo.get('enable_depth_test')!)) {
         const depth_test_func = translateRenderInfoSingleString(fmat.renderInfo.get('depth_test_func')!);
         if (depth_test_func === 'Lequal')
-            return GfxCompareMode.LEQUAL;
+            return GfxCompareMode.LessEqual;
         else
             throw "whoops";
     } else {
-        return GfxCompareMode.ALWAYS;
+        return GfxCompareMode.Always;
     }
 }
 
 function translateRenderInfoBlendFactor(renderInfo: FMAT_RenderInfo): GfxBlendFactor {
     const value = translateRenderInfoSingleString(renderInfo);
     if (value === 'src_alpha')
-        return GfxBlendFactor.SRC_ALPHA;
+        return GfxBlendFactor.SrcAlpha;
     else if (value === 'one_minus_src_alpha')
-        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        return GfxBlendFactor.OneMinusSrcAlpha;
     else if (value === 'one')
-        return GfxBlendFactor.ONE;
+        return GfxBlendFactor.One;
     else if (value === 'zero')
-        return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.Zero;
     else
         throw "whoops";
 }
@@ -465,9 +465,9 @@ class FMATInstance {
             depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: isTranslucent ? translateBlendSrcFactor(fmat) : GfxBlendFactor.ONE,
-            blendDstFactor: isTranslucent ? translateBlendDstFactor(fmat) : GfxBlendFactor.ZERO,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: isTranslucent ? translateBlendSrcFactor(fmat) : GfxBlendFactor.One,
+            blendDstFactor: isTranslucent ? translateBlendDstFactor(fmat) : GfxBlendFactor.Zero,
         });
     }
 
@@ -554,10 +554,10 @@ class FVTXData {
 
                 this.inputBufferDescriptors[attribBufferIndex] = {
                     byteStride: convertedAttribute.stride,
-                    frequency: GfxVertexBufferFrequency.PER_VERTEX,
+                    frequency: GfxVertexBufferFrequency.PerVertex,
                 };
 
-                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedAttribute.data);
+                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, convertedAttribute.data);
                 this.vertexBufferDescriptors[attribBufferIndex] = {
                     buffer: gfxBuffer,
                     byteOffset: 0,
@@ -572,11 +572,11 @@ class FVTXData {
                 });
 
                 if (!this.vertexBufferDescriptors[bufferIndex]) {
-                    const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, vertexBuffer.data);
+                    const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, vertexBuffer.data);
 
                     this.inputBufferDescriptors[bufferIndex] = {
                         byteStride: vertexBuffer.stride,
-                        frequency: GfxVertexBufferFrequency.PER_VERTEX,
+                        frequency: GfxVertexBufferFrequency.PerVertex,
                     };
 
                     this.vertexBufferDescriptors[bufferIndex] = {
@@ -641,7 +641,7 @@ export class FSHPMeshData {
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
     
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, mesh.indexBufferData);
+        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, mesh.indexBufferData);
         const indexBufferDescriptor: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, fvtxData.vertexBufferDescriptors, indexBufferDescriptor);
     }

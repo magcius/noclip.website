@@ -93,7 +93,7 @@ class DrawCallInstance {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? F3DEX2.translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        const cullMode = v ? F3DEX2.translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.None;
         this.megaStateFlags.cullMode = cullMode;
     }
 

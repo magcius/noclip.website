@@ -62,8 +62,8 @@ export class MaterialRenderer {
         // Create GPU stuff
         this.indexCount = material.indexData.length;
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, material.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, material.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, material.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
@@ -71,7 +71,7 @@ export class MaterialRenderer {
             { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -289,14 +289,14 @@ export class MaterialRenderer {
 
         if (renderOpts & RenderOptionsFlags.ENABLE_BACKFACE_CULLING) {
             if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
-                stateFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
+                stateFlags.cullMode = GfxCullMode.FrontAndBack;
             } else {
-                stateFlags.cullMode = GfxCullMode.BACK;
+                stateFlags.cullMode = GfxCullMode.Back;
             }
         } else if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
-            stateFlags.cullMode = GfxCullMode.FRONT;
+            stateFlags.cullMode = GfxCullMode.Front;
         } else {
-            stateFlags.cullMode = GfxCullMode.NONE;
+            stateFlags.cullMode = GfxCullMode.None;
         }
 
         return { stateFlags, otherModeLRenderMode };

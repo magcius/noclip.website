@@ -155,13 +155,13 @@ export class TextureArray extends TextureMapping {
         this.transparent = transparent;
 
         this.gfxSampler = device.createSampler({
-            magFilter: GfxTexFilterMode.BILINEAR,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NO_MIP,
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.Linear : GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 1000,
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
         });
     }
 
@@ -254,14 +254,14 @@ export class SkyRenderer extends BaseRenderer {
              1, -1, 1,
         ]);
         const ibuf = new Uint32Array([0,1,2,0,2,3]);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
+        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
         this.indices = ibuf.length;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = cache.createInputLayout(device, { indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
         const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
@@ -519,8 +519,8 @@ export class SceneRenderer extends BaseRenderer {
             }
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
+        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position,    bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset:  0 * 0x04 },
@@ -529,7 +529,7 @@ export class SceneRenderer extends BaseRenderer {
             { location: GTA3Program.a_TexScroll,   bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 10 * 0x04 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = cache.createInputLayout(device, { indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
         const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
@@ -537,12 +537,12 @@ export class SceneRenderer extends BaseRenderer {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
         this.megaStateFlags = {
             depthWrite: !dual,
-            cullMode: this.params.backface ? GfxCullMode.NONE : GfxCullMode.BACK,
+            cullMode: this.params.backface ? GfxCullMode.None : GfxCullMode.Back,
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: this.params.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: this.params.additive ? GfxBlendFactor.One : GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
 
         let renderLayer = this.params.renderLayer;

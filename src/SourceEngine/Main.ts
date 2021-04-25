@@ -202,15 +202,15 @@ export class SkyboxRenderer {
         buildPlaneData(0x205);
         buildPlaneData(0x304);
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -644,12 +644,12 @@ export class DebugCube {
             20, 21, 22, 21, 23, 22,
         ]);
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indxData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indxData.buffer);
 
         this.inputLayout = cache.createInputLayout(device, {
             vertexAttributeDescriptors: [{ format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 0, location: 0, }],
-            vertexBufferDescriptors: [{ byteStride: 4*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, }],
+            vertexBufferDescriptors: [{ byteStride: 4*4, frequency: GfxVertexBufferFrequency.PerVertex, }],
             indexBufferFormat: GfxFormat.U16_R,
         });
 
@@ -703,8 +703,8 @@ export class BSPRenderer {
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
 
         const device = renderContext.device, cache = renderContext.renderCache;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.bsp.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.bsp.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.bsp.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
@@ -713,7 +713,7 @@ export class BSPRenderer {
             { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U32_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -851,11 +851,11 @@ export class SourceColorCorrection {
         });
 
         this.gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -1044,13 +1044,13 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.textureMapping[0].gfxSampler = this.renderContext.renderCache.createSampler(device, {
-            magFilter: GfxTexFilterMode.BILINEAR,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
         });
     }
 
@@ -1099,7 +1099,7 @@ export class SourceRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
 
         if (this.skyboxRenderer !== null && this.drawSkybox2D)

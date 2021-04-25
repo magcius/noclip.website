@@ -64,10 +64,10 @@ export class N64Data {
 
     constructor(device: GfxDevice, public rspOutput: RSPOutput) {
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexBufferData);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexBufferData);
         assert(this.rspOutput.vertices.length <= 0xFFFF);
         const indexBufferData = new Uint16Array(this.rspOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: PaperMario64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, },
@@ -75,7 +75,7 @@ export class N64Data {
             { location: PaperMario64Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -168,13 +168,13 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x200);
     const cullBack = !!(m & 0x400);
     if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     else if (cullFront)
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     else if (cullBack)
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     else
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
 }
 
 const backgroundBillboardBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
@@ -279,9 +279,9 @@ class ModelTreeLeafInstance {
                 depthWrite: false,
             };
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
         }
 
@@ -296,9 +296,9 @@ class ModelTreeLeafInstance {
                 this.gfxSampler[i] = device.createSampler({
                     wrapS: translateCM(image.cms),
                     wrapT: translateCM(image.cmt),
-                    minFilter: GfxTexFilterMode.POINT,
-                    magFilter: GfxTexFilterMode.POINT,
-                    mipFilter: GfxMipFilterMode.LINEAR,
+                    minFilter: GfxTexFilterMode.Point,
+                    magFilter: GfxTexFilterMode.Point,
+                    mipFilter: GfxMipFilterMode.Linear,
                     minLOD: 0, maxLOD: 100,
                 });
 

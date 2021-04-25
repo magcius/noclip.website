@@ -266,7 +266,7 @@ export class FezObjectRenderer {
         this.textureMapping.gfxSampler = textureData.sampler;
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
-        this.megaStateFlags.cullMode = GfxCullMode.BACK;
+        this.megaStateFlags.cullMode = GfxCullMode.Back;
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -335,26 +335,26 @@ export class BackgroundPlaneRenderer {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
         if (backgroundPlane.doubleSided)
-            this.megaStateFlags.cullMode = GfxCullMode.NONE;
+            this.megaStateFlags.cullMode = GfxCullMode.None;
         else
-            this.megaStateFlags.cullMode = GfxCullMode.BACK;
+            this.megaStateFlags.cullMode = GfxCullMode.Back;
 
         this.xTextureRepeat = backgroundPlane.xTextureRepeat;
         this.yTextureRepeat = backgroundPlane.yTextureRepeat;
         this.clampTexture = backgroundPlane.clampTexture;
 
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         this.sampler = device.createSampler({
-            wrapS: this.xTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,
-            wrapT: this.yTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: this.xTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            wrapT: this.yTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
 

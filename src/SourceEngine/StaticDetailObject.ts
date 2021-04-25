@@ -176,7 +176,7 @@ export class DetailPropLeafRenderer {
             { location: MaterialProgramBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -217,8 +217,8 @@ export class DetailPropLeafRenderer {
         this.vertexData = new Float32Array(vertexCount * 9);
         this.indexData = new Uint16Array(indexCount);
 
-        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
-        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.INDEX, GfxBufferFrequencyHint.DYNAMIC);
+        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });

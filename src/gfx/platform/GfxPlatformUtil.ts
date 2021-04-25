@@ -113,7 +113,7 @@ function gfxChannelBlendStateEquals(a: Readonly<GfxChannelBlendState>, b: Readon
 function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<GfxAttachmentState>): boolean {
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
     if (!gfxChannelBlendStateEquals(a.alphaBlendState, b.alphaBlendState)) return false;
-    if (a.colorWriteMask !== b.colorWriteMask) return false;
+    if (a.channelWriteMask !== b.channelWriteMask) return false;
     return true;
 }
 

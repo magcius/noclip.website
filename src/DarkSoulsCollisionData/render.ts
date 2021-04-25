@@ -112,8 +112,8 @@ class Chunk {
             nrmData[(i + 2) * 3 + 2] = t[2];
         }
 
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posData.buffer);
-        this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, nrmData.buffer);
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, posData.buffer);
+        this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, nrmData.buffer);
 
         this.inputState = device.createInputState(inputLayout, [
             { buffer: this.posBuffer, byteOffset: 0, },
@@ -193,8 +193,8 @@ export class Scene implements Viewer.SceneGfx {
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat: GfxFormat | null = null;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -214,7 +214,7 @@ export class Scene implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
-        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(IVProgram.ub_SceneParams);

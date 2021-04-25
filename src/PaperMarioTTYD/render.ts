@@ -160,9 +160,9 @@ class MaterialInstance {
 
     private static translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: Sampler): GfxSampler {
         return cache.createSampler(device, {
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.LINEAR,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
             wrapS: translateWrapModeGfx(sampler.wrapS),
             wrapT: translateWrapModeGfx(sampler.wrapT),
             maxLOD: 100,
@@ -373,7 +373,7 @@ class NodeInstance {
         };
         this.collisionMaterialInstance = new MaterialInstance(device, cache, collisionMaterial);
         this.collisionMaterialInstance.materialHelper.megaStateFlags.polygonOffset = true;
-        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.NONE;
+        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.None;
         fillDebugColorFromCollisionFlags(this.collisionMaterialInstance.konst0, this.node.collisionFlags);
     }
 

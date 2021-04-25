@@ -1922,7 +1922,7 @@ class d_a_py_lk extends BMDObjectRenderer {
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.hat);
         hatMaterial.visible = true;
-        hatMaterial.materialHelper.megaStateFlags.cullMode = GfxCullMode.NONE;
+        hatMaterial.materialHelper.megaStateFlags.cullMode = GfxCullMode.None;
         hatMaterial.setAlphaWriteEnabled(true);
         hatMaterial.prepareToRenderShapes(device, renderInstManager, 0, viewerInput.camera, viewerInput.viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
     }

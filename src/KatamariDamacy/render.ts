@@ -145,8 +145,8 @@ export class BINModelData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sectorData: BINModelSectorData, public binModel: BINModel) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.binModel.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.binModel.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.binModel.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.binModel.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: KatamariDamacyProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*4, format: GfxFormat.F32_RGBA },
@@ -155,7 +155,7 @@ export class BINModelData {
         ];
         const VERTEX_STRIDE = 4+3+2;
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
 
@@ -179,38 +179,38 @@ enum CLAMP1_WM {
 
 function translateWrapMode(wm: CLAMP1_WM): GfxWrapMode {
     switch (wm) {
-    case CLAMP1_WM.REPEAT: return GfxWrapMode.REPEAT;
-    case CLAMP1_WM.CLAMP: return GfxWrapMode.CLAMP;
+    case CLAMP1_WM.REPEAT: return GfxWrapMode.Repeat;
+    case CLAMP1_WM.CLAMP: return GfxWrapMode.Clamp;
     // TODO(jstpierre): Support REGION_* clamp modes.
-    case CLAMP1_WM.REGION_REPEAT: return GfxWrapMode.REPEAT;
+    case CLAMP1_WM.REGION_REPEAT: return GfxWrapMode.Repeat;
     default: throw "whoops";
     }
 }
 
 function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
     switch (cmp) {
-    case GSDepthCompareMode.NEVER: return GfxCompareMode.NEVER;
-    case GSDepthCompareMode.ALWAYS: return GfxCompareMode.ALWAYS;
+    case GSDepthCompareMode.NEVER: return GfxCompareMode.Never;
+    case GSDepthCompareMode.ALWAYS: return GfxCompareMode.Always;
     // We use a LESS-style depth buffer.
-    case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LEQUAL;
-    case GSDepthCompareMode.GREATER: return GfxCompareMode.LESS;
+    case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LessEqual;
+    case GSDepthCompareMode.GREATER: return GfxCompareMode.Less;
     }
 }
 
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
     case GSTextureFilter.NEAREST:
-        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NO_MIP];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.NoMip];
     case GSTextureFilter.LINEAR:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
     case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
-        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NEAREST];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.Nearest];
     case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
-        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.LINEAR];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.Linear];
     case GSTextureFilter.LINEAR_MIPMAP_NEAREST:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
     case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
     default: throw new Error();
     }
 }
@@ -240,15 +240,15 @@ export class BINModelPartInstance {
 
         if (gsConfiguration.alpha_1_data0 === 0x44) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
         } else if (gsConfiguration.alpha_1_data0 === 0x48) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.One,
             });
         } else {
             throw "whoops";
@@ -307,7 +307,7 @@ const scratchModelViews = nArray(6, () => mat4.create());
 const scratchModelMatrices = nArray(6, () => mat4.create());
 const scratchAABB = new AABB();
 const cullModeFlags = {
-    cullMode: GfxCullMode.BACK,
+    cullMode: GfxCullMode.Back,
 };
 export class BINModelInstance {
     public modelMatrix = mat4.create();

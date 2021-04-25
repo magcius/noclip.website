@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
@@ -338,11 +338,11 @@ export class MapData {
 
     private createSampler(device: GfxDevice) {
         return device.createSampler({
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
     }
@@ -423,8 +423,8 @@ export class MapData {
             lastInd += mesh.vtx.length;
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, iBuffer.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vBuffer.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, iBuffer.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: KingdomHeartsIIProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, },
@@ -437,7 +437,7 @@ export class MapData {
             { location: KingdomHeartsIIProgram.a_Normal, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 21*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 24*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 24*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
@@ -475,22 +475,22 @@ class DrawCallInstance {
 
         this.megaStateFlags = {};
         if (!drawCall.cullBackfaces) {
-            this.megaStateFlags.cullMode = GfxCullMode.NONE;
+            this.megaStateFlags.cullMode = GfxCullMode.None;
         }
         if (drawCall.translucent) {
             this.megaStateFlags.depthWrite = false;
             this.megaStateFlags.attachmentsState = [
                 {
-                    colorWriteMask: GfxColorWriteMask.ALL ^ (drawCall.addAlpha ? GfxColorWriteMask.ALPHA : 0),
+                    channelWriteMask: GfxChannelWriteMask.AllChannels ^ (drawCall.addAlpha ? GfxChannelWriteMask.Alpha : 0),
                     rgbBlendState: {
-                        blendMode: GfxBlendMode.ADD,
-                        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                        blendDstFactor: drawCall.addAlpha ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                        blendDstFactor: drawCall.addAlpha ? GfxBlendFactor.One : GfxBlendFactor.OneMinusSrcAlpha,
                     },
                     alphaBlendState: {
-                        blendMode: GfxBlendMode.ADD,
-                        blendSrcFactor: GfxBlendFactor.ONE,
-                        blendDstFactor: GfxBlendFactor.ZERO,
+                        blendMode: GfxBlendMode.Add,
+                        blendSrcFactor: GfxBlendFactor.One,
+                        blendDstFactor: GfxBlendFactor.Zero,
                     },
                 }
             ];
@@ -571,9 +571,9 @@ class SceneRenderer {
 
     constructor(device: GfxDevice, mapData: MapData, drawCalls: DrawCall[]) {
         this.megaStateFlags = {
-            cullMode: GfxCullMode.BACK,
+            cullMode: GfxCullMode.Back,
             depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual),
         };
 
         for (let i = 0; i < drawCalls.length; i++) {

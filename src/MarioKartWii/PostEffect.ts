@@ -202,11 +202,11 @@ export class EggDrawPathBloom {
         const combineProgram = new EggBloomCombineProgram(numPasses);
 
         const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -220,11 +220,11 @@ export class EggDrawPathBloom {
         this.compositeProgram = cache.createProgram(device, combineProgram);
 
         const blendModeTable = [
-            { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.ONE, blendDstFactor: GfxBlendFactor.ONE },
-            { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.ONE_MINUS_DST_COLOR, blendDstFactor: GfxBlendFactor.ONE },
-            { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE },
-            { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA },
-            { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.DST_COLOR, blendDstFactor: GfxBlendFactor.ONE },
+            { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.One, blendDstFactor: GfxBlendFactor.One },
+            { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.OneMinusDst, blendDstFactor: GfxBlendFactor.One },
+            { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.One },
+            { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha },
+            { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.Dst, blendDstFactor: GfxBlendFactor.One },
         ];
         setAttachmentStateSimple(this.compositeMegaState, blendModeTable[pblm.compositeBlendMode]);
     }
@@ -533,11 +533,11 @@ export class EggDrawPathDOF {
         vec2.set(this.indTexIndScale, pdof.indTexIndScaleS, pdof.indTexIndScaleT);
 
         const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -647,7 +647,7 @@ export class EggDrawPathDOF {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.drawMode2CombineProgram);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
-                renderInst.setMegaStateFlags({ depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL) });
+                renderInst.setMegaStateFlags({ depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual) });
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, cache, passRenderer);

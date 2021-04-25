@@ -108,11 +108,11 @@ void main() {
             // According to the GLES spec, depth textures *must* be filtered as NEAREST.
             // https://github.com/google/angle/blob/49a53d684affafc0bbaa2d4c2414113fe95329ce/src/libANGLE/Texture.cpp#L362-L383
             this.depthSampler = device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
-                wrapS: GfxWrapMode.CLAMP,
-                wrapT: GfxWrapMode.CLAMP,
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.NoMip,
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
                 minLOD: 0,
                 maxLOD: 100,
             });
