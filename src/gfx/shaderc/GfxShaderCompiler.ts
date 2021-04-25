@@ -73,10 +73,6 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return `sampler2D(T_${samplerName}, S_${samplerName})`;
         });
-
-        rest = rest.replace(/\bTEXTURE_REF\((.*?)\)/g, (substr, samplerName) => {
-            return `T_${samplerName}`;
-        });
     } else {
         rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return `sampler2D P_${samplerName}`;
@@ -91,10 +87,6 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         });
 
         rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return samplerName;
-        });
-        
-        rest = rest.replace(/\bTEXTURE_REF\((.*?)\)/g, (substr, samplerName) => {
             return samplerName;
         });
     }

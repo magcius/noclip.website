@@ -128,7 +128,7 @@ ${funcs}
 in vec2 v_TexCoord;
 
 void main() {
-    vec2 t_Size = vec2(textureSize(TEXTURE_REF(u_Texture), 0));
+    vec2 t_Size = vec2(textureSize(SAMPLER_2D(u_Texture), 0));
     vec2 t_Aspect = vec2(1.0) / t_Size;
 
     vec3 c = vec3(0.0);
@@ -453,7 +453,7 @@ ${generateBlurFunction(`BlurPass0`, tapCount, glslGenerateFloat(radius), glslGen
 in vec2 v_TexCoord;
 
 void main() {
-    vec2 t_Size = vec2(textureSize(TEXTURE_REF(u_Texture), 0));
+    vec2 t_Size = vec2(textureSize(SAMPLER_2D(u_Texture), 0));
     vec2 t_Aspect = vec2(1.0) / t_Size;
 
     gl_FragColor.rgb = saturate(BlurPass0(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));

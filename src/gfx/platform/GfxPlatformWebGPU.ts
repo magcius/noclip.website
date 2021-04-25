@@ -613,8 +613,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
-    public readonly glslVersion = `#version 450
-#extension GL_EXT_samplerless_texture_functions : enable`;
+    public readonly glslVersion = `#version 440`;
     public readonly explicitBindingLocations = true;
     public readonly separateSamplerTextures = true;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
