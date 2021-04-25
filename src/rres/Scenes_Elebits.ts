@@ -72,7 +72,7 @@ class ElebitsRenderer extends BasicGXRendererHelper {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -80,7 +80,7 @@ class ElebitsRenderer extends BasicGXRendererHelper {
         super.destroy(device);
 
         this.textureHolder.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);

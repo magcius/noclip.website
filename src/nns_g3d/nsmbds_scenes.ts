@@ -9,7 +9,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
 import { assert, assertExists } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA } from './NNS_G3D';
@@ -17,7 +17,7 @@ import { CameraController } from '../Camera';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { NITRO_Program } from '../SuperMario64DS/render';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
@@ -53,7 +53,7 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -86,12 +86,12 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);

@@ -66,7 +66,7 @@ export class MeleeRenderer extends BasicGXRendererHelper {
         }
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {

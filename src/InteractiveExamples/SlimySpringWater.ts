@@ -20,7 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, SceneDesc } from '../SceneBase';
 import { assert } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { createModelInstance } from '../j3d/scenes';
 import { computeModelMatrixS } from '../MathHelpers';
 import { AABB } from '../Geometry';
@@ -28,7 +28,7 @@ import * as GX from '../gx/gx_enum';
 import { colorNewCopy, White } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dfUsePercent } from '../DebugFloaters';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -298,7 +298,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.waterModel.prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -322,12 +322,12 @@ class SlimySpringWaterRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.skybox.destroy(device);
         this.flowerBox.destroy(device);
         this.waterModel.destroy(device);

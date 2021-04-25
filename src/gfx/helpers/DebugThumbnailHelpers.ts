@@ -187,13 +187,13 @@ export class DebugThumbnailDrawer {
                     drawThumbnail(scope, passRenderer, drawOrder[i]);
                 if (debugTextDrawer !== null)
                     debugTextDrawer.endDraw(renderInstManager);
-                this.uniformBuffer.prepareToRender(renderInstManager.device);
+                this.uniformBuffer.prepareToRender();
             });
         });
     }
 
-    public destroy(device: GfxDevice): void {
-        this.uniformBuffer.destroy(device);
+    public destroy(): void {
+        this.uniformBuffer.destroy();
     }
 }
 //#endregion

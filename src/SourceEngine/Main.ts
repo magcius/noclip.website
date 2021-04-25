@@ -1148,7 +1148,7 @@ export class SourceRenderer implements SceneGfx {
         renderContext.lightmapManager.prepareToRender(device);
         renderContext.colorCorrection.prepareToRender(device);
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
@@ -1254,13 +1254,13 @@ export class SourceRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         this.resetViews();
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.renderContext.destroy(device);
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.destroy(device);

@@ -310,13 +310,13 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.prepareToRender();
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.temporalTexture.destroy(device);
     }
 }

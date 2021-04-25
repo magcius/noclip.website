@@ -608,7 +608,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
             this.mobj[i].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public createPanels(): UI.Panel[] {

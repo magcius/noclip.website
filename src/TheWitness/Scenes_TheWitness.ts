@@ -8,14 +8,14 @@ import { Entity } from "./Entity";
 import { mat4 } from "gl-matrix";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
 import { TheWitnessGlobals } from "./Globals";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 const pathBase = `TheWitness`;
 
@@ -224,7 +224,7 @@ class TheWitnessRenderer implements SceneGfx {
         for (let i = 0; i < this.mesh_instance_array.length; i++)
             this.mesh_instance_array[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -248,7 +248,7 @@ class TheWitnessRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
 
         /*
@@ -262,7 +262,7 @@ class TheWitnessRenderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
     }
 }
 

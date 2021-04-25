@@ -59,7 +59,7 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {

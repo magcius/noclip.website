@@ -1,15 +1,15 @@
 
 import * as Viewer from "./viewer";
-import { GfxDevice, GfxFormat } from "./gfx/platform/GfxPlatform";
+import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneContext } from "./SceneBase";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
 import { CtrTextureHolder } from "./oot3d/render";
 import * as NARC from "./nns_g3d/narc";
-import { standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderGraphHelpers";
 import { GfxRenderHelper } from "./gfx/render/GfxRenderHelper";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, makeBackbufferDescSimple } from "./gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "./gfx/render/GfxRenderGraph";
 
 const id = 'test';
 const name = "Test Scenes";
@@ -41,11 +41,11 @@ class EmptyClearScene implements Viewer.SceneGfx {
 
         builder.resolveRenderTargetToExternalTexture(mainColorID, viewerInput.onscreenTexture);
 
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
     }
 }
 

@@ -1,6 +1,6 @@
 import * as BIN from "./bin";
 import * as Viewer from '../viewer';
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
@@ -13,7 +13,7 @@ import { mat4 } from "gl-matrix";
 import AnimationController from "../AnimationController";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { activateEffect, EventScript, LevelObjectHolder } from "./script";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 const pathBase = `ffx`;
 
@@ -64,7 +64,7 @@ class FFXRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -115,11 +115,11 @@ class FFXRenderer implements Viewer.SceneGfx {
             this.levelObjects.parts[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, this.textureRemaps);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);

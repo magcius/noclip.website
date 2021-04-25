@@ -122,7 +122,7 @@ class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 }
 

@@ -1,6 +1,6 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
@@ -21,7 +21,7 @@ import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { FloatingPanel } from "../DebugFloaters";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 function setLateTextureMapping(m: TextureMapping, lateBinding: string): void {
     m.lateBinding = lateBinding;
@@ -455,7 +455,7 @@ export class Explorer implements SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -495,7 +495,7 @@ export class Explorer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 

@@ -34,17 +34,20 @@ class PromiseWithSavedValue<T> {
 }
 
 export class GfxRenderHelper {
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+    public renderCache: GfxRenderCache;
+    public renderGraph: GfxrRenderGraph;
     public renderInstManager: GfxRenderInstManager;
-    public renderCache = new GfxRenderCache();
-    public renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+
     public debugThumbnails: DebugThumbnailDrawer;
     private debugTextDrawer: PromiseWithSavedValue<DebugTextDrawer | null>;
 
     constructor(public device: GfxDevice, context: SceneContext | null = null, renderCache: GfxRenderCache | null = null) {
         this.renderCache = renderCache !== null ? renderCache : new GfxRenderCache();
+        this.renderGraph = new GfxrRenderGraphImpl(this.device);
         this.renderInstManager = new GfxRenderInstManager(this.device, this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
+
         this.debugThumbnails = new DebugThumbnailDrawer(this);
         this.debugTextDrawer = new PromiseWithSavedValue<DebugTextDrawer | null>(async () => {
             const { makeDebugTextDrawer } = await import('../helpers/DebugTextDrawer');
@@ -58,15 +61,16 @@ export class GfxRenderHelper {
         return template;
     }
 
-    public prepareToRender(device: GfxDevice): void {
-        this.uniformBuffer.prepareToRender(this.device);
+    public prepareToRender(): void {
+        this.uniformBuffer.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
-        this.uniformBuffer.destroy(this.device);
+    public destroy(): void {
+        this.uniformBuffer.destroy();
         this.renderInstManager.destroy(this.device);
         this.renderCache.destroy(this.device);
-        this.renderGraph.destroy(this.device);
+        this.renderGraph.destroy();
+        this.debugThumbnails.destroy();
     }
 
     public getCache(): GfxRenderCache {

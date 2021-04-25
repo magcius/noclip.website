@@ -1,8 +1,8 @@
 import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import InputManager from "../InputManager";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
@@ -252,7 +252,7 @@ class BARRenderer implements SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         // Upload uniform data to the GPU
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
 
         // For the extra track data display, check to see if we need to toggle the nearest plane on/off
         this.checkCheckpointPlaneToggle(viewerInput);
@@ -293,12 +293,12 @@ class BARRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         if (this.trackDataRenderer !== undefined)
             this.trackDataRenderer.destroy(device);
     }

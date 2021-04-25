@@ -14,9 +14,9 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, SingleSelect, Slider } from '../ui';
 import { DkrControlGlobals } from './DkrControlGlobals';
 import { IMG_LOADING_ASSETS } from './DkrLoadingMessage'
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { trackParams } from './scenes_TrackParams';
 
 const pathBase = `DiddyKongRacing`;
@@ -60,7 +60,7 @@ class DKRRenderer implements Viewer.SceneGfx {
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -96,12 +96,12 @@ class DKRRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         if(!!this.level) {
             this.level.destroy(device);
         }

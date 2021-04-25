@@ -5,7 +5,7 @@ import { Camera, CameraController } from '../Camera';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
@@ -21,7 +21,7 @@ import { GallerySceneRenderer } from './Gallery';
 import { ObjectRenderer, CameraGameState, updateCameraGameState, KDLayer } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { parseAnimationList, ObjectAnimationList } from './animation';
-import { GfxrAttachmentSlot, GfxrTemporalTexture, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -248,7 +248,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
 
         if (this.motionCache !== null && this.drawPaths) {
@@ -291,7 +291,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 this.currentPalette, this.cameraGameState);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public setCurrentAreaNo(areaNo: number): void {
@@ -336,7 +336,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);

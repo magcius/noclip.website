@@ -150,7 +150,7 @@ class MarioKartWiiRenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -192,12 +192,12 @@ class MarioKartWiiRenderer {
         renderInstManager.popTemplateRenderInst();
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.textureHolder.destroy(device);
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].destroy(device);
