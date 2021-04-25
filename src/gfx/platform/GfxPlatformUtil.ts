@@ -247,3 +247,7 @@ export function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
     return (n + mask) & ~mask;
 }
+
+export function alignNonPowerOfTwo(n: number, multiple: number): number {
+    return (((n + multiple - 1) / multiple) | 0) * multiple;
+}

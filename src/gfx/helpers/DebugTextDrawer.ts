@@ -2,18 +2,21 @@
 import { SceneContext } from "../../SceneBase";
 import { GfxDevice } from "../platform/GfxPlatform";
 
-import { decompress } from "../../Common/Compression/Yaz0";
-import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
 import * as GX from '../../gx/gx_enum';
-import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font";
 import { GfxRenderInst, GfxRenderInstManager } from "../render/GfxRenderInstManager";
-import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
-import { GX_Program } from "../../gx/gx_material";
 import { fillMatrix4x3 } from "./UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
 import { computeProjectionMatrixFromCuboid, MathConstants } from "../../MathHelpers";
 import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color";
+
+// TODO(jstpierre): Don't use the Super Mario Galaxy system for this... use our own font data,
+// or use HTML5 canvas? It would be helpful to have in any case...
+import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font";
+import { decompress } from "../../Common/Compression/Yaz0";
+import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
+import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
+import { GX_Program } from "../../gx/gx_material";
+import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();

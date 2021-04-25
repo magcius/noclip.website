@@ -1,7 +1,6 @@
 
-import { Color } from "../../Color";
-import { GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
-import { assert, assertExists } from "../../util";
+import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
+import { assert, assertExists } from "../platform/GfxPlatformUtil";
 
 // GfxrRenderGraph is a simple, automatically managed "frame graph".
 // The API is slightly in flux for improved ergonomics.
@@ -23,7 +22,7 @@ export class GfxrRenderTargetDescription {
     public height: number = 0;
     public sampleCount: number = 0;
 
-    public colorClearColor: Readonly<Color> | 'load' = 'load';
+    public colorClearColor: Readonly<GfxColor> | 'load' = 'load';
     public depthClearValue: number | 'load' = 'load';
     public stencilClearValue: number | 'load' = 'load';
 

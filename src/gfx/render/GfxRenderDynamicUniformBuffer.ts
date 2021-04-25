@@ -1,6 +1,6 @@
 
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
-import { assert, assertExists, alignNonPowerOfTwo } from "../../util";
+import { assert, assertExists, alignNonPowerOfTwo } from "../platform/GfxPlatformUtil";
 
 // TODO(jstpierre): Maybe this makes more sense as a native platform object
 

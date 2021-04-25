@@ -1,9 +1,8 @@
 
-import { GfxRenderPassDescriptor, GfxColor, GfxFormat, GfxTexture } from "../platform/GfxPlatform";
+import { GfxRenderPassDescriptor, GfxColor, GfxFormat } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../render/GfxRenderGraph";
-import { GfxRenderInstManager } from "../render/GfxRenderInstManager";
 import { pushFXAAPass } from "../passes/FXAA";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
