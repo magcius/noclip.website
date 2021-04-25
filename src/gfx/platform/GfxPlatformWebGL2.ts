@@ -995,8 +995,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_MAG_FILTER, translateFilterMode(descriptor.magFilter, GfxMipFilterMode.NO_MIP));
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MIN_LOD, descriptor.minLOD);
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MAX_LOD, descriptor.maxLOD);
-        if (this._EXT_texture_filter_anisotropic !== null)
-            gl.samplerParameterf(gl_sampler, this._EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, 16);
+        // TODO(jstpierre): Expose this as a sampler parameter.
+        if (this._EXT_texture_filter_anisotropic !== null) {
+            const maxAnisotropy = (descriptor.minFilter === GfxTexFilterMode.BILINEAR && descriptor.magFilter === GfxTexFilterMode.BILINEAR && descriptor.mipFilter === GfxMipFilterMode.LINEAR) ? 16 : 1;
+            gl.samplerParameterf(gl_sampler, this._EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
+        }
         const sampler: GfxSamplerP_GL = { _T: _T.Sampler, ResourceUniqueId: this.getNextUniqueId(), gl_sampler };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(sampler);

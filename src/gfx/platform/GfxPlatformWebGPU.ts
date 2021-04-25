@@ -723,15 +723,23 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {
         const lodMinClamp = descriptor.minLOD;
         const lodMaxClamp = descriptor.mipFilter === GfxMipFilterMode.NO_MIP ? descriptor.minLOD : descriptor.maxLOD;
+
+        // TODO(jstpierre): Expose this as a sampler parameter.
+        const maxAnisotropy = (descriptor.minFilter === GfxTexFilterMode.BILINEAR && descriptor.magFilter === GfxTexFilterMode.BILINEAR && descriptor.mipFilter === GfxMipFilterMode.LINEAR) ? 16 : 1;
+
         const gpuSampler = this.device.createSampler({
             addressModeU: translateWrapMode(descriptor.wrapS),
             addressModeV: translateWrapMode(descriptor.wrapT),
+            // TODO(jstpierre): Expose this as a sampler parameter.
+            addressModeW: 'clamp-to-edge',
             lodMinClamp,
             lodMaxClamp,
             minFilter: translateMinMagFilter(descriptor.minFilter),
             magFilter: translateMinMagFilter(descriptor.magFilter),
             mipmapFilter: translateMipFilter(descriptor.mipFilter),
+            maxAnisotropy,
         });
+
         const sampler: GfxSamplerP_WebGPU = { _T: _T.Sampler, ResourceUniqueId: this.getNextUniqueId(), gpuSampler };
         return sampler;
     }
