@@ -20,10 +20,11 @@ export class ModelCache {
     public artObjectDatas: ArtObjectData[] = [];
     public backgroundPlaneDatas: BackgroundPlaneData[] = [];
     public skyDatas: SkyData[] = [];
-    public gfxRenderCache = new GfxRenderCache();
+    public gfxRenderCache: GfxRenderCache;
     private fezTypeReaderManager = new FezContentTypeReaderManager();
 
-    constructor(private dataFetcher: DataFetcher) {
+    constructor(device: GfxDevice, private dataFetcher: DataFetcher) {
+        this.gfxRenderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {
@@ -102,7 +103,7 @@ class FezSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const cache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
-            return new ModelCache(context.dataFetcher);
+            return new ModelCache(device, context.dataFetcher);
         });
 
         const level = await cache.fetchXNB<Fez_Level>(`xnb/levels/${this.id}.xnb`);

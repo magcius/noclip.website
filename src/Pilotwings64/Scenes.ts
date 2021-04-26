@@ -2468,7 +2468,11 @@ class DataHolder {
     public uven: UVEN[] = [];
     public uvtp: UVTP[] = [];
     public splineData = new Map<number, SPTH>();
-    public gfxRenderCache = new GfxRenderCache();
+    public gfxRenderCache: GfxRenderCache;
+
+    constructor(device: GfxDevice) {
+        this.gfxRenderCache = new GfxRenderCache(device);
+    }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureData.length; i++)
@@ -2764,7 +2768,7 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     const fsBin = await dataFetcher.fetchData(`${pathBase}/fs.bin`);
     const fs = parsePilotwings64FS(fsBin);
 
-    const dataHolder = new DataHolder();
+    const dataHolder = new DataHolder(device);
     let userFileCounter = 0;
     for (let i = 0; i < fs.files.length; i++) {
         const file = fs.files[i];

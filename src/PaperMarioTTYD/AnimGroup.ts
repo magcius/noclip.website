@@ -975,9 +975,10 @@ export class AnimGroupInstance {
 export class AnimGroupDataCache {
     public animGroupDataCache = new Map<string, AnimGroupData>();
     public promiseCache = new Map<string, Promise<AnimGroupData>>();
-    private cache = new GfxRenderCache();
+    private cache: GfxRenderCache;
 
     constructor(private device: GfxDevice, private dataFetcher: DataFetcher, private pathBase: string) {
+        this.cache = new GfxRenderCache(device);
     }
 
     private async requestAnimGroupDataInternal(ag: string, abortedCallback: AbortedCallback): Promise<AnimGroupData> {

@@ -41,7 +41,7 @@ export class GfxRenderCache {
     private gfxProgramCache = new HashMap<GfxProgramDescriptorSimple, GfxProgram>(gfxProgramDescriptorSimpleEquals, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
 
-    constructor() {
+    constructor(public device: GfxDevice) {
     }
 
     public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {

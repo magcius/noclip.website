@@ -972,7 +972,7 @@ export class SourceRenderContext {
     public renderCache: GfxRenderCache;
 
     constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
-        this.renderCache = new GfxRenderCache();
+        this.renderCache = new GfxRenderCache(device);
         this.lightmapManager = new LightmapManager(device, this.renderCache);
         this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);
         this.studioModelCache = new StudioModelCache(this, this.filesystem);

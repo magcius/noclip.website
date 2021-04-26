@@ -43,7 +43,7 @@ export class GfxRenderHelper {
     private debugTextDrawer: PromiseWithSavedValue<DebugTextDrawer | null>;
 
     constructor(public device: GfxDevice, context: SceneContext | null = null, renderCache: GfxRenderCache | null = null) {
-        this.renderCache = renderCache !== null ? renderCache : new GfxRenderCache();
+        this.renderCache = renderCache !== null ? renderCache : new GfxRenderCache(device);
         this.renderGraph = new GfxrRenderGraphImpl(this.device);
         this.renderInstManager = new GfxRenderInstManager(this.device, this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);

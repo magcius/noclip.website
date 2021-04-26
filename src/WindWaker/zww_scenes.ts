@@ -803,13 +803,14 @@ export class ModelCache {
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archivePromiseCache = new Map<string, Promise<RARC.JKRArchive>>();
     private archiveCache = new Map<string, RARC.JKRArchive>();
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
 
     public resCtrl = new dRes_control_c();
     public currentStage: string;
     public onloadedcallback: (() => void) | null = null;
 
     constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private decompressor: RARC.JKRDecompressor) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<any> {

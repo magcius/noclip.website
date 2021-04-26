@@ -191,7 +191,7 @@ class ModelCache {
     public archivePromiseCache = new Map<string, Promise<ActorArchive | StaticArchive | CRG1File | null>>();
     public archiveCache = new Map<string, ActorArchive | StaticArchive | CRG1File | null>();
     public archiveDataHolder = new Map<number, GeometryData>();
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
 
     public static staticGeometryFlag = 0x1000;
     public static staticFlipbookFlag = 0x2000;
@@ -202,6 +202,7 @@ class ModelCache {
     }
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {

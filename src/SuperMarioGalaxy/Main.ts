@@ -679,10 +679,11 @@ export class ModelCache {
     public archiveLayoutHolder = new Map<string, LayoutHolder>();
     public extraDataPromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     public extraDataCache = new Map<string, ArrayBufferSlice>();
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
     public textureListHolder = new TextureListHolder();
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {

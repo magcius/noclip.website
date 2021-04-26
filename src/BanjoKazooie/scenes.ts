@@ -271,9 +271,10 @@ export function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
 
 class ObjectData {
     public geoData: (GeometryData | FlipbookData | null)[] = [];
-    public gfxCache = new GfxRenderCache();
+    public gfxCache: GfxRenderCache;
 
-    constructor(private objectSetupData: ObjectSetupData) {
+    constructor(device: GfxDevice, private objectSetupData: ObjectSetupData) {
+        this.gfxCache = new GfxRenderCache(device);
     }
 
     public ensureGeoData(device: GfxDevice, geoFileID: number, objectID = -1): GeometryData | FlipbookData | null {
@@ -474,7 +475,7 @@ class ObjectData {
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
     const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=10`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
-    return new ObjectData(objectSetup);
+    return new ObjectData(device, objectSetup);
 }
 
 interface MovementFactory {
