@@ -119,7 +119,7 @@ class StudioModelMeshData {
             { byteStride: (3+4+4+2+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayoutWithoutColorMesh = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayoutWithoutColorMesh = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         // Tack on the color mesh.
         vertexAttributeDescriptors.push(
@@ -128,7 +128,7 @@ class StudioModelMeshData {
         vertexBufferDescriptors.push(
             { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PerVertex, },
         );
-        this.inputLayoutWithColorMesh = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayoutWithColorMesh = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         // Create our base input state.
         this.inputStateWithoutColorMesh = device.createInputState(this.inputLayoutWithoutColorMesh, [

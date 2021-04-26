@@ -132,7 +132,7 @@ class BatchData {
             { byteStride: flverInputState.vertexSize, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -721,7 +721,7 @@ class BatchInstance {
         }
 
         this.program.ensurePreprocessed(device.queryVendorInfo());
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKey = makeSortKey(layer, 0);

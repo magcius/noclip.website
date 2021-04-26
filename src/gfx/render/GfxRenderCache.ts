@@ -54,37 +54,37 @@ export class GfxRenderCache {
         return bindings;
     }
 
-    public createRenderPipeline(device: GfxDevice, descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
+    public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         let renderPipeline = this.gfxRenderPipelinesCache.get(descriptor);
         if (renderPipeline === null) {
             const descriptorCopy = gfxRenderPipelineDescriptorCopy(descriptor);
-            renderPipeline = device.createRenderPipeline(descriptorCopy);
+            renderPipeline = this.device.createRenderPipeline(descriptorCopy);
             this.gfxRenderPipelinesCache.add(descriptorCopy, renderPipeline);
         }
         return renderPipeline;
     }
 
-    public createInputLayout(device: GfxDevice, descriptor: GfxInputLayoutDescriptor): GfxInputLayout {
+    public createInputLayout(descriptor: GfxInputLayoutDescriptor): GfxInputLayout {
         let inputLayout = this.gfxInputLayoutsCache.get(descriptor);
         if (inputLayout === null) {
             const descriptorCopy = gfxInputLayoutDescriptorCopy(descriptor);
-            inputLayout = device.createInputLayout(descriptorCopy);
+            inputLayout = this.device.createInputLayout(descriptorCopy);
             this.gfxInputLayoutsCache.add(descriptorCopy, inputLayout);
         }
         return inputLayout;
     }
 
-    public createProgramSimple(device: GfxDevice, gfxProgramDescriptorSimple: GfxProgramDescriptorSimple): GfxProgram {
+    public createProgramSimple(gfxProgramDescriptorSimple: GfxProgramDescriptorSimple): GfxProgram {
         let program = this.gfxProgramCache.get(gfxProgramDescriptorSimple);
         if (program === null) {
             const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptorSimple);
-            program = device.createProgramSimple(descriptorCopy);
+            program = this.device.createProgramSimple(descriptorCopy);
             this.gfxProgramCache.add(descriptorCopy, program);
 
             // TODO(jstpierre): Ugliness
             if ('associate' in (gfxProgramDescriptorSimple as any)) {
                 const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
-                gfxProgramDescriptor.associate(device, program);
+                gfxProgramDescriptor.associate(this.device, program);
                 (descriptorCopy as any).orig = gfxProgramDescriptor;
             }
         }
@@ -92,16 +92,16 @@ export class GfxRenderCache {
         return program;
     }
 
-    public createProgram(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptor): GfxProgram {
+    public createProgram(gfxProgramDescriptor: GfxProgramDescriptor): GfxProgram {
         // TODO(jstpierre): Remove the ensurePreprocessed here... this should be done by higher-level code.
-        gfxProgramDescriptor.ensurePreprocessed(device.queryVendorInfo());
-        return this.createProgramSimple(device, gfxProgramDescriptor);
+        gfxProgramDescriptor.ensurePreprocessed(this.device.queryVendorInfo());
+        return this.createProgramSimple(gfxProgramDescriptor);
     }
 
-    public createSampler(device: GfxDevice, descriptor: GfxSamplerDescriptor): GfxSampler {
+    public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {
         let sampler = this.gfxSamplerCache.get(descriptor);
         if (sampler === null) {
-            sampler = device.createSampler(descriptor);
+            sampler = this.device.createSampler(descriptor);
             this.gfxSamplerCache.add(descriptor, sampler);
         }
         return sampler;
@@ -111,17 +111,17 @@ export class GfxRenderCache {
         return this.gfxBindingsCache.size();
     }
 
-    public destroy(device: GfxDevice): void {
+    public destroy(): void {
         for (const bindings of this.gfxBindingsCache.values())
-            device.destroyBindings(bindings);
+            this.device.destroyBindings(bindings);
         for (const renderPipeline of this.gfxRenderPipelinesCache.values())
-            device.destroyRenderPipeline(renderPipeline);
+            this.device.destroyRenderPipeline(renderPipeline);
         for (const inputLayout of this.gfxInputLayoutsCache.values())
-            device.destroyInputLayout(inputLayout);
+            this.device.destroyInputLayout(inputLayout);
         for (const program of this.gfxProgramCache.values())
-            device.destroyProgram(program);
+            this.device.destroyProgram(program);
         for (const sampler of this.gfxSamplerCache.values())
-            device.destroySampler(sampler);
+            this.device.destroySampler(sampler);
         this.gfxBindingsCache.clear();
         this.gfxRenderPipelinesCache.clear();
         this.gfxInputLayoutsCache.clear();

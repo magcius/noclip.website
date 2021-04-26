@@ -67,8 +67,8 @@ export class GfxRenderHelper {
 
     public destroy(): void {
         this.uniformBuffer.destroy();
-        this.renderInstManager.destroy(this.device);
-        this.renderCache.destroy(this.device);
+        this.renderInstManager.destroy();
+        this.renderCache.destroy();
         this.renderGraph.destroy();
         this.debugThumbnails.destroy();
     }

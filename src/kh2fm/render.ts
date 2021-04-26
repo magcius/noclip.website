@@ -509,7 +509,7 @@ class DrawCallInstance {
         renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
         renderInst.sortKey = this.drawCallIndex;
         if (this.gfxProgram === null) {
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         }
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -673,7 +673,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, RenderPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, RenderPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

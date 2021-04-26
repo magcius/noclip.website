@@ -108,7 +108,7 @@ export class BackgroundPlaneStaticData {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,

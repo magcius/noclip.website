@@ -308,7 +308,7 @@ class WorldRenderer extends SFARenderer {
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.exec((passRenderer) => {
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }

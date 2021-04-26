@@ -471,7 +471,7 @@ class Device_Mesh {
             { byteStride: sub_mesh_asset.vertex_size, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.input_layout = cache.createInputLayout(device, {
+        this.input_layout = cache.createInputLayout({
             indexBufferFormat,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -595,11 +595,12 @@ function get_processed_filename(type: Asset_Type, source_name: string, options_h
 
 export class Asset_Manager {
     private bundles: ZipFile[] = [];
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
     private destroyables: Destroyable[] = [];
     private asset_cache = new Map<string, any>();
 
     constructor(public device: GfxDevice) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public add_bundle(bundle: ZipFile) {
@@ -636,7 +637,7 @@ export class Asset_Manager {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         for (let i = 0; i < this.destroyables.length; i++)
             this.destroyables[i].destroy(device);
     }

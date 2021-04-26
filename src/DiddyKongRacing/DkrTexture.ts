@@ -40,7 +40,7 @@ export class DkrTexture {
         const wrapS = (dataView.getUint8(7) & 0x40) ? TexCM.CLAMP : TexCM.WRAP;
         const wrapT = (dataView.getUint8(7) & 0x80) ? TexCM.CLAMP : TexCM.WRAP;
 
-        const sampler = cache.createSampler(device, {
+        const sampler = cache.createSampler({
             wrapS: translateCM(wrapS),
             wrapT: translateCM(wrapT),
             minFilter: GfxTexFilterMode.Point,

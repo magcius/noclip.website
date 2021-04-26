@@ -27,7 +27,7 @@ export class TrilesetData {
     constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, trileset: Fez_TrileSet) {
         this.texture = makeTextureFromXNA_Texture2D(device, trileset.textureAtlas);
 
-        this.sampler = cache.createSampler(device, {
+        this.sampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,

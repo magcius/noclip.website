@@ -1631,7 +1631,7 @@ class Material_Generic extends BaseMaterial {
 
     private recacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
+            this.gfxProgram = cache.createProgram(this.program);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
         }
     }
@@ -2006,7 +2006,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -2408,7 +2408,7 @@ class Material_Water extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -2710,7 +2710,7 @@ class Material_Refract extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -3213,7 +3213,7 @@ export class LightmapManager {
     public pageHeight = 2048;
 
     constructor(private device: GfxDevice, cache: GfxRenderCache) {
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,

@@ -438,8 +438,8 @@ export class GfxRenderInst {
      * to override this and force the render inst to draw, please use {@see setAllowSkippingIfPipelineNotReady}.
      */
     public queryPipelineReady(device: GfxDevice, cache: GfxRenderCache): boolean {
-        const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
-        return device.queryPipelineReady(gfxPipeline);
+        const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
+        return cache.device.queryPipelineReady(gfxPipeline);
     }
 
     /**
@@ -465,10 +465,11 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.sampleCount = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.sampleCount : depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.sampleCount : 0;
     }
 
-    public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
+    public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
+        const device = cache.device;
         this.setAttachmentFormatsFromRenderPass(device, passRenderer);
 
-        const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
+        const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
         if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady) && !device.queryPipelineReady(gfxPipeline))
             return false;
 
@@ -570,7 +571,7 @@ export class GfxRenderInstList {
             this.renderInsts[i].resolveLateSamplerBinding(name, binding);
     }
 
-    private drawOnPassRendererNoReset(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         if (this.renderInsts.length === 0)
             return;
 
@@ -581,10 +582,10 @@ export class GfxRenderInstList {
 
         if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
             for (let i = 0; i < this.renderInsts.length; i++)
-                this.renderInsts[i].drawOnPass(device, cache, passRenderer);
+                this.renderInsts[i].drawOnPass(cache, passRenderer);
         } else {
             for (let i = this.renderInsts.length - 1; i >= 0; i--)
-                this.renderInsts[i].drawOnPass(device, cache, passRenderer);
+                this.renderInsts[i].drawOnPass(cache, passRenderer);
         }
     }
 
@@ -597,8 +598,8 @@ export class GfxRenderInstList {
      * using {@param device} and {@param cache} to create any device-specific resources
      * necessary to complete the draws.
      */
-    public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        this.drawOnPassRendererNoReset(device, cache, passRenderer);
+    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+        this.drawOnPassRendererNoReset(cache, passRenderer);
         this.reset();
     }
 }
@@ -724,9 +725,9 @@ export class GfxRenderInstManager {
         assert(this.templatePool.allocCount === 0);
     }
 
-    public destroy(device: GfxDevice): void {
+    public destroy(): void {
         this.instPool.destroy();
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
     }
 
     /**
@@ -743,7 +744,7 @@ export class GfxRenderInstManager {
      * necessary to complete the draws.
      */
     public drawListOnPassRenderer(list: GfxRenderInstList, passRenderer: GfxRenderPass): void {
-        list.drawOnPassRenderer(this.device, this.gfxRenderCache, passRenderer);
+        list.drawOnPassRenderer(this.gfxRenderCache, passRenderer);
     }
     //#region Legacy render inst list management API.
 
@@ -777,9 +778,9 @@ export class GfxRenderInstManager {
         list.renderInsts.length = 0;
     }
 
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {
+    public drawOnPassRenderer(passRenderer: GfxRenderPass): void {
         const list = assertExists(this.simpleRenderInstList);
-        list.drawOnPassRenderer(this.device, this.gfxRenderCache, passRenderer);
+        list.drawOnPassRenderer(this.gfxRenderCache, passRenderer);
     }
     //#endregion
 }
@@ -787,9 +788,9 @@ export class GfxRenderInstManager {
 /**
  * {@deprecated}
  */
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, resetState: boolean = true): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, passRenderer: GfxRenderPass, passMask: number): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer);
+    renderInstManager.drawOnPassRenderer(passRenderer);
 }
 
 /**

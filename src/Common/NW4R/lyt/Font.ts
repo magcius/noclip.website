@@ -362,7 +362,7 @@ export class CharWriter {
     public drawString(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string): void {
         const cache = renderInstManager.gfxRenderCache;
 
-        this.textureMapping[0].gfxSampler = cache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,

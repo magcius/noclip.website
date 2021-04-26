@@ -356,7 +356,7 @@ export class MaterialRenderer {
 
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        let gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+        let gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(gfxProgram);
         renderInst.drawIndexes(this.indexCount, 0);
         renderInstManager.submitRenderInst(renderInst);

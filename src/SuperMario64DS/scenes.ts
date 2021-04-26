@@ -390,9 +390,10 @@ class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private modelCache = new Map<string, BMDData>();
-    private gfxRenderCache = new GfxRenderCache();
+    private gfxRenderCache: GfxRenderCache;
 
-    constructor(private dataFetcher: DataFetcher) {
+    constructor(device: GfxDevice, private dataFetcher: DataFetcher) {
+        this.gfxRenderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<any> {
@@ -461,7 +462,7 @@ class ModelCache {
     public destroy(device: GfxDevice): void {
         for (const model of this.modelCache.values())
             model.destroy(device);
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
     }
 }
 
@@ -518,7 +519,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SM64DSPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, SM64DSPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -527,7 +528,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SM64DSPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, SM64DSPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -1670,7 +1671,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
                 dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs4.narc`),
             ]);
     
-            const modelCache = new ModelCache(dataFetcher);
+            const modelCache = new ModelCache(device, dataFetcher);
             const crg1 = BYML.parse<Sm64DSCRG1>(crg1Buffer, BYML.FileType.CRG1);
 
             for (let i = 0; i < narcBuffers.length; i++)

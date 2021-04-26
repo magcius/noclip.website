@@ -94,7 +94,7 @@ export class DkrDrawCall {
         this.vertexBufferDescriptors = [
             { byteStride: VERTEX_BYTE_STRIDE * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.defaultInputLayout = this.cache.createInputLayout(this.device, {
+        this.defaultInputLayout = this.cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: this.vertexAttributeDescriptors,
             vertexBufferDescriptors: this.vertexBufferDescriptors,
@@ -264,7 +264,7 @@ export class DkrDrawCall {
             }
     
             if (this.gfxProgram === null) {
-                this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+                this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
             }
     
             const renderInst = renderInstManager.newRenderInst();

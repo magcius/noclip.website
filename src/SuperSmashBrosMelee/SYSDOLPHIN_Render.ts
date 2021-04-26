@@ -26,7 +26,7 @@ class HSD_TObj_Data {
         const [minFilter, mipFilter] = translateTexFilterGfx(this.tobj.minFilt);
         const [magFilter]            = translateTexFilterGfx(this.tobj.magFilt);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = cache.createSampler({
             wrapS: translateWrapModeGfx(this.tobj.wrapS),
             wrapT: translateWrapModeGfx(this.tobj.wrapT),
             minFilter, mipFilter, magFilter,

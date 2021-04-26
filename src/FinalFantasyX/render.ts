@@ -165,7 +165,7 @@ export class LevelModelData {
         ];
         const indexBufferFormat = GfxFormat.U16_R;
 
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
@@ -283,7 +283,7 @@ export class DrawCallInstance {
             const wrapT = translateWrapMode(gsConfiguration.clamp.wmt);
 
             this.textureMappings.push(new TextureMapping());
-            this.textureMappings[0].gfxSampler = cache.createSampler(device, {
+            this.textureMappings[0].gfxSampler = cache.createSampler({
                 minFilter, magFilter, mipFilter,
                 wrapS, wrapT,
                 minLOD: 0, maxLOD: 100,
@@ -305,7 +305,7 @@ export class DrawCallInstance {
             }
         }
 
-        this.gfxProgram = cache.createProgram(device, program);
+        this.gfxProgram = cache.createProgram(program);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrix: mat4, params: vec3, textureRemaps: GfxTexture[]): void {

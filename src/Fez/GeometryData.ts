@@ -46,7 +46,7 @@ export class GeometryData {
             { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
             { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,

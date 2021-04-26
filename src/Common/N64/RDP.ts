@@ -405,7 +405,7 @@ export function translateCM(cm: TexCM): GfxWrapMode {
 }
 
 export function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+    return cache.createSampler({
         // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
         // it should repeat within the coordinate range, and clamp outside
         // then ignore clamping here, and handle it in the shader

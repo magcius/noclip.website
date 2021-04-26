@@ -473,7 +473,7 @@ export class Explorer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, Pass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, Pass.MAIN);
             });
         });
 
@@ -488,7 +488,7 @@ export class Explorer implements SceneGfx {
                 const opaqueSceneTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
                 renderInstManager.setVisibleByFilterKeyExact(Pass.INDIRECT);
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null, lateBinding: null });
-                executeOnPass(renderInstManager, device, passRenderer, Pass.INDIRECT);
+                executeOnPass(renderInstManager, passRenderer, Pass.INDIRECT);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

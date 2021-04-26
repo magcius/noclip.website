@@ -40,8 +40,8 @@ export class DepthResampler {
     private targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT); // FIXME: use R-only format intead?
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.program = cache.createProgram(device, new DepthResamplerProgram());
-        this.textureMapping.gfxSampler = cache.createSampler(device, {
+        this.program = cache.createProgram(new DepthResamplerProgram());
+        this.textureMapping.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
@@ -76,7 +76,7 @@ export class DepthResampler {
             pass.exec((passRenderer, scope) => {
                 this.textureMapping.gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings([this.textureMapping]);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 

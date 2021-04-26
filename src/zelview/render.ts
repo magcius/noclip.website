@@ -72,7 +72,7 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
 }
 
 function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+    return cache.createSampler({
         wrapS: translateCM(texture.tile.cmS),
         wrapT: translateCM(texture.tile.cmT),
         minFilter: GfxTexFilterMode.Point,
@@ -241,7 +241,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);

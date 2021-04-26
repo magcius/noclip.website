@@ -97,7 +97,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         };
 
         const cache = this.renderHelper.getCache();
-        this.opaqueColorTextureMapping.gfxSampler = cache.createSampler(device, {
+        this.opaqueColorTextureMapping.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -106,7 +106,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             minLOD: 0,
             maxLOD: 100,
         });
-        this.opaqueDepthTextureMapping.gfxSampler = cache.createSampler(device, {
+        this.opaqueDepthTextureMapping.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
@@ -216,7 +216,7 @@ export class SFARenderer implements Viewer.SceneGfx {
                 renderInst.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
                 this.opaqueDepthTextureMapping.gfxTexture = scope.getResolveTextureForID(resampledDepthResolveTextureID);
                 renderInst.resolveLateSamplerBinding('opaque-depth-texture-downscale-2x', this.opaqueDepthTextureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }

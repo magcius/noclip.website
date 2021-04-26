@@ -1898,7 +1898,7 @@ class MaterialInstance {
         }
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
         renderInstManager.submitRenderInst(renderInst);
@@ -2432,7 +2432,7 @@ class SnowRenderer {
         fillVec3v(d, offs, this.snowShift, this.flakeScale);
 
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.snowProgram));
+        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(this.snowProgram));
         renderInst.drawIndexes(6 * this.flakeCount);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -2481,7 +2481,7 @@ class DataHolder {
             this.uvmdData[i].destroy(device);
         for (let i = 0; i < this.uvctData.length; i++)
             this.uvctData[i].destroy(device);
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
     }
 }
 
@@ -2891,7 +2891,7 @@ class Pilotwings64Renderer implements SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, PW64Pass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -2900,8 +2900,8 @@ class Pilotwings64Renderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, PW64Pass.NORMAL);
-                executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
+                executeOnPass(renderInstManager, passRenderer, PW64Pass.NORMAL);
+                executeOnPass(renderInstManager, passRenderer, PW64Pass.SNOW);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

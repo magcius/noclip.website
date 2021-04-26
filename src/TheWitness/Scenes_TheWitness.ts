@@ -138,7 +138,7 @@ class Device_Material {
         for (let i = 0; i < 4; i++)
             this.load_texture_into_texture_mapping(globals, 8 + i, this.render_material.blend_map_names[i]);
 
-        this.gfx_program = globals.asset_manager.cache.createProgram(globals.asset_manager.device, this.program);
+        this.gfx_program = globals.asset_manager.cache.createProgram(this.program);
     }
 
     private load_texture_into_texture_mapping(globals: TheWitnessGlobals, i: number, texture_name: string | null): void {
@@ -241,7 +241,7 @@ class TheWitnessRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

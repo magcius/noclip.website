@@ -213,7 +213,7 @@ export class SkyboxRenderer {
             { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
@@ -647,7 +647,7 @@ export class DebugCube {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indxData.buffer);
 
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [{ format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 0, location: 0, }],
             vertexBufferDescriptors: [{ byteStride: 4*4, frequency: GfxVertexBufferFrequency.PerVertex, }],
             indexBufferFormat: GfxFormat.U16_R,
@@ -662,7 +662,7 @@ export class DebugCube {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, view: SourceEngineView, position: ReadonlyVec3, ambientCube: AmbientCube): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 1 }]);
-        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.program));
+        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(this.program));
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(6*6);
         view.mainList.submitRenderInst(renderInst);
@@ -716,7 +716,7 @@ export class BSPRenderer {
             { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U32_R;
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
@@ -850,7 +850,7 @@ export class SourceColorCorrection {
             width, height, depth, numLevels: 1, usage: GfxTextureUsage.Sampled,
         });
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -1043,7 +1043,7 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
-        this.textureMapping[0].gfxSampler = this.renderContext.renderCache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = this.renderContext.renderCache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
@@ -1152,10 +1152,9 @@ export class SourceRenderer implements SceneGfx {
     }
 
     private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
-        const device = this.renderContext.device;
         const r = this.renderHelper.renderInstManager;
         list.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.textureMapping[0]);
-        list.drawOnPassRenderer(device, r.gfxRenderCache, passRenderer);
+        list.drawOnPassRenderer(r.gfxRenderCache, passRenderer);
     }
 
     private resetViews(): void {
@@ -1236,7 +1235,7 @@ export class SourceRenderer implements SceneGfx {
             const postRenderInst = this.renderHelper.renderInstManager.newRenderInst();
             postRenderInst.setBindingLayouts(bindingLayoutsPost);
             postRenderInst.setInputLayoutAndState(null, null);
-            const postProgram = cache.createProgram(device, this.postProgram);
+            const postProgram = cache.createProgram(this.postProgram);
             postRenderInst.setGfxProgram(postProgram);
             postRenderInst.setMegaStateFlags(fullscreenMegaState);
             postRenderInst.drawPrimitives(3);
@@ -1245,7 +1244,7 @@ export class SourceRenderer implements SceneGfx {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
                 postRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                postRenderInst.drawOnPass(device, cache, passRenderer);
+                postRenderInst.drawOnPass(cache, passRenderer);
             });
         });
 

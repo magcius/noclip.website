@@ -188,7 +188,7 @@ void main() {
                 const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: resolvedDepthTexture, gfxSampler: this.depthSampler, lateBinding: null }];
                 renderInst.setSamplerBindingsFromTextureMappings(samplerBindings);
 
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
 
             pass.post((scope) => {

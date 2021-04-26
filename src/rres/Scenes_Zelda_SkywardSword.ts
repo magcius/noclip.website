@@ -337,7 +337,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, ZSSPass.SKYBOX);
+                executeOnPass(this.renderHelper.renderInstManager, passRenderer, ZSSPass.SKYBOX);
             });
         });
 
@@ -347,7 +347,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, ZSSPass.OPAQUE);
+                executeOnPass(this.renderHelper.renderInstManager, passRenderer, ZSSPass.OPAQUE);
             });
         });
 
@@ -363,7 +363,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer, scope) => {
                     renderInstManager.setVisibleByFilterKeyExact(ZSSPass.INDIRECT);
                     renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    renderInstManager.drawOnPassRenderer(passRenderer);
                 });
             });
         }

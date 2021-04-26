@@ -86,7 +86,7 @@ class SpecialTextureBinder {
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.mirrorSampler = cache.createSampler(device, {
+        this.mirrorSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
@@ -788,7 +788,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         for (const resourceHolder of this.archiveResourceHolder.values())
             resourceHolder.destroy(device);
         for (const layoutHolder of this.archiveLayoutHolder.values())

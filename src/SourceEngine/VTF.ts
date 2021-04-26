@@ -320,7 +320,7 @@ export class VTF {
         const magFilter = texFilter;
         const forceTrilinear = true;
         const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NoMip : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = cache.createSampler({
             wrapS, wrapT, minFilter, magFilter, mipFilter,
             minLOD: 0, maxLOD: 100,
         });

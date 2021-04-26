@@ -544,7 +544,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
-        this.fullscreenBlitProgram = this.renderCache.createProgramSimple(device, preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS));
+        this.fullscreenBlitProgram = this.renderCache.createProgramSimple(preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS));
     }
 
     private setVisibleLayerMask(m: number): void {
@@ -927,7 +927,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         this.resCtrl.destroy(device);
     }
 }

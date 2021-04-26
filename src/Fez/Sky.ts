@@ -73,7 +73,7 @@ export class SkyData {
 
         this.backgroundTexture = makeTextureFromXNA_Texture2D(device, backgroundImage);
         this.backgroundTextureMapping[0].gfxTexture = this.backgroundTexture;
-        this.backgroundTextureMapping[0].gfxSampler = cache.createSampler(device, {
+        this.backgroundTextureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -84,7 +84,7 @@ export class SkyData {
 
         this.starsTexture = starsImage !== null ? makeTextureFromXNA_Texture2D(device, starsImage) : null;
         this.starsTextureMapping[0].gfxTexture = this.starsTexture;
-        this.starsTextureMapping[0].gfxSampler = cache.createSampler(device, {
+        this.starsTextureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -95,7 +95,7 @@ export class SkyData {
 
         this.shadowsTexture = shadowsImage !== null ? makeTextureFromXNA_Texture2D(device, shadowsImage) : null;
         this.shadowsTextureMapping[0].gfxTexture = this.shadowsTexture;
-        this.shadowsTextureMapping[0].gfxSampler = cache.createSampler(device, {
+        this.shadowsTextureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,

@@ -201,7 +201,7 @@ export class EggDrawPathBloom {
         const numPasses = (pblm.blurFlags & 1) ? 2 : 1;
         const combineProgram = new EggBloomCombineProgram(numPasses);
 
-        const linearSampler = cache.createSampler(device, {
+        const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -213,11 +213,11 @@ export class EggDrawPathBloom {
         this.textureMapping[0].gfxSampler = linearSampler;
         this.textureMapping[1].gfxSampler = linearSampler;
 
-        this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
-        this.thresholdProgram = cache.createProgram(device, new EggBloomThresholdProgram());
-        this.blur0Program = cache.createProgram(device, blur0Program);
-        this.blur1Program = cache.createProgram(device, blur1Program);
-        this.compositeProgram = cache.createProgram(device, combineProgram);
+        this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
+        this.thresholdProgram = cache.createProgram(new EggBloomThresholdProgram());
+        this.blur0Program = cache.createProgram(blur0Program);
+        this.blur1Program = cache.createProgram(blur1Program);
+        this.compositeProgram = cache.createProgram(combineProgram);
 
         const blendModeTable = [
             { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.One, blendDstFactor: GfxBlendFactor.One },
@@ -277,7 +277,7 @@ export class EggDrawPathBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -293,7 +293,7 @@ export class EggDrawPathBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -310,7 +310,7 @@ export class EggDrawPathBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -326,7 +326,7 @@ export class EggDrawPathBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsample4ColorResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -343,7 +343,7 @@ export class EggDrawPathBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -361,7 +361,7 @@ export class EggDrawPathBloom {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsample4ColorResolveTextureID);
                 this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(downsample8ColorResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
     }
@@ -532,7 +532,7 @@ export class EggDrawPathDOF {
         vec2.set(this.indTexScrollSpeed, pdof.indTexTransSScroll, pdof.indTexTransTScroll);
         vec2.set(this.indTexIndScale, pdof.indTexIndScaleS, pdof.indTexIndScaleT);
 
-        const linearSampler = cache.createSampler(device, {
+        const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -543,15 +543,15 @@ export class EggDrawPathDOF {
         });
         this.textureMapping[0].gfxSampler = linearSampler;
 
-        this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
+        this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
 
         const blurTapCountTable = [4, 2];
         const blurTapCount = assertExists(blurTapCountTable[pdof.blurDrawAmount]);
         const blurProgram = new EggDOFMode2BlurProgram(blurTapCount, pdof.blurRadius);
-        this.drawMode2BlurProgram = cache.createProgram(device, blurProgram);
+        this.drawMode2BlurProgram = cache.createProgram(blurProgram);
 
         const useIndWarpTex = !!(pdof.flags & 0x02);
-        this.drawMode2CombineProgram = cache.createProgram(device, new EggDOFDrawMode2CombineProgram(useIndWarpTex));
+        this.drawMode2CombineProgram = cache.createProgram(new EggDOFDrawMode2CombineProgram(useIndWarpTex));
     }
 
     public updateScroll(t: number): void {
@@ -615,7 +615,7 @@ export class EggDrawPathDOF {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -632,7 +632,7 @@ export class EggDrawPathDOF {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
 
@@ -650,7 +650,7 @@ export class EggDrawPathDOF {
                 renderInst.setMegaStateFlags({ depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual) });
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, cache, passRenderer);
+                renderInst.drawOnPass(cache, passRenderer);
             });
         });
     }

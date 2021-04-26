@@ -526,7 +526,7 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
-    const gfxSampler = cache.createSampler(device, {
+    const gfxSampler = cache.createSampler({
         wrapS: translateWrapModeGfx(wrapS),
         wrapT: translateWrapModeGfx(wrapT),
         minFilter, mipFilter, magFilter,
@@ -1010,7 +1010,7 @@ export class AnimGroupDataCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         for (const animGroupData of this.animGroupDataCache.values())
             animGroupData.destroy(device);
     }

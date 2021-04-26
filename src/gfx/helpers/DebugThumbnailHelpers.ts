@@ -54,7 +54,7 @@ export class DebugThumbnailDrawer {
         const device = helper.device, cache = helper.renderCache;
 
         const blitProgram = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS);
-        this.blitProgram = cache.createProgramSimple(device, blitProgram);
+        this.blitProgram = cache.createProgramSimple(blitProgram);
 
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
@@ -144,7 +144,7 @@ export class DebugThumbnailDrawer {
             passRenderer.setViewport(viewport.x1, viewport.y1, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-            renderInst.drawOnPass(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
+            renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
 
             if (debugTextDrawer !== null) {
                 const oldRenderInstList = renderInstManager.currentRenderInstList;
@@ -160,7 +160,7 @@ export class DebugThumbnailDrawer {
                 debugTextDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugName, vw / 2, vh - y);
 
                 renderInstManager.popTemplateRenderInst();
-                this.renderInstList.drawOnPassRenderer(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
+                this.renderInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
 
                 renderInstManager.currentRenderInstList = oldRenderInstList;
             }

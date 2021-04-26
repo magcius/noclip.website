@@ -71,7 +71,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, KlonoaPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, KlonoaPass.SKYBOX);
             });
         });
 
@@ -81,7 +81,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, KlonoaPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, KlonoaPass.MAIN);
             });
         });
 
@@ -97,7 +97,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer, scope) => {
                     const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
                     this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
-                    executeOnPass(renderInstManager, device, passRenderer, KlonoaPass.INDIRECT);
+                    executeOnPass(renderInstManager, passRenderer, KlonoaPass.INDIRECT);
                 });
             });
         }

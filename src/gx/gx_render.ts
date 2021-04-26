@@ -472,8 +472,8 @@ export class GXMaterialHelperGfx {
         this.megaStateFlags = translateGfxMegaState(this.material);
     }
 
-    public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
-        this.gfxProgram = cache.createProgram(device, this.program);
+    public cacheProgram(cache: GfxRenderCache): void {
+        this.gfxProgram = cache.createProgram(this.program);
         this.programKey = this.gfxProgram.ResourceUniqueId;
     }
 
@@ -511,7 +511,7 @@ export class GXMaterialHelperGfx {
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
-        this.cacheProgram(device, cache);
+        this.cacheProgram(cache);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setGfxProgram(this.gfxProgram!);
         setSortKeyProgramKey(renderInst.sortKey, this.programKey);
@@ -524,7 +524,7 @@ export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: G
     setAttachmentStateSimple(materialHelper.megaStateFlags, { channelWriteMask });
 }
 
-export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout): GfxInputLayout {
+export function createInputLayout(cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout): GfxInputLayout {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
     for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
@@ -547,7 +547,7 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
     }
 
     const indexBufferFormat = loadedVertexLayout.indexFormat;
-    return cache.createInputLayout(device, {
+    return cache.createInputLayout({
         vertexAttributeDescriptors,
         vertexBufferDescriptors,
         indexBufferFormat,
@@ -580,7 +580,7 @@ export class GXShapeHelperGfx {
             });
         }
 
-        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
@@ -654,7 +654,7 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

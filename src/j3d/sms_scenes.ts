@@ -344,7 +344,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SMSPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, SMSPass.SKYBOX);
             });
         });
 
@@ -354,7 +354,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SMSPass.OPAQUE);
+                executeOnPass(renderInstManager, passRenderer, SMSPass.OPAQUE);
             });
         });
 
@@ -370,7 +370,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer, scope) => {
                     renderInstManager.setVisibleByFilterKeyExact(SMSPass.INDIRECT);
                     renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    renderInstManager.drawOnPassRenderer(passRenderer);
                 });
             });
         }
@@ -380,7 +380,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SMSPass.TRANSPARENT);
+                executeOnPass(renderInstManager, passRenderer, SMSPass.TRANSPARENT);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

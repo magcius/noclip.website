@@ -190,7 +190,7 @@ class MaterialData {
 
             device.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
 
-            this.gfxSampler = cache.createSampler(device, {
+            this.gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
                 mipFilter: GfxMipFilterMode.NoMip,
@@ -296,7 +296,7 @@ class MaterialInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, template: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null): void {
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         template.setGfxProgram(gfxProgram);
         template.setMegaStateFlags(this.megaStateFlags);
 

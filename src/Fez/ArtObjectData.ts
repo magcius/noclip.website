@@ -13,7 +13,7 @@ export class ArtObjectData {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, data: Fez_ArtObject) {
         this.texture = makeTextureFromXNA_Texture2D(device, data.futureCubeMap);
-        this.sampler = cache.createSampler(device, {
+        this.sampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,

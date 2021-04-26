@@ -128,7 +128,7 @@ class MaterialInstance {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial);
         // Cull mode is set by the node
         this.materialHelper.megaStateFlags.cullMode = undefined;
-        this.materialHelper.cacheProgram(device, cache);
+        this.materialHelper.cacheProgram(cache);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
             return MaterialInstance.translateSampler(device, cache, sampler);
@@ -159,7 +159,7 @@ class MaterialInstance {
     }
 
     private static translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: Sampler): GfxSampler {
-        return cache.createSampler(device, {
+        return cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,

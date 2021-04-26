@@ -38,8 +38,8 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     return gfxTexture;
 }
 
-function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+function translateSampler(cache: GfxRenderCache, texture: Texture): GfxSampler {
+    return cache.createSampler({
         wrapS: translateCM(texture.tile.cms),
         wrapT: translateCM(texture.tile.cmt),
         minFilter: GfxTexFilterMode.Point,
@@ -85,7 +85,7 @@ class DrawCallInstance {
             if (tex) {
                 this.textureEntry[i] = tex;
                 this.textureMappings[i].gfxTexture = translateTexture(device, tex);
-                this.textureMappings[i].gfxSampler = translateSampler(device, cache, tex);
+                this.textureMappings[i].gfxSampler = translateSampler(cache, tex);
             }
         }
 
@@ -166,7 +166,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -479,7 +479,7 @@ class DK64Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

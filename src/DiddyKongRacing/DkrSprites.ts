@@ -120,7 +120,7 @@ export class DkrSprites {
             );
 
             // Setup sprite sheet texture
-            const sampler = cache.createSampler(device, {
+            const sampler = cache.createSampler({
                 wrapS: GfxWrapMode.Clamp,
                 wrapT: GfxWrapMode.Clamp,
                 minFilter: GfxTexFilterMode.Point,
@@ -217,7 +217,7 @@ export class DkrSprites {
             }
 
             if (this.gfxProgram === null) {
-                this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+                this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
             }
     
             const renderInst = renderInstManager.newRenderInst();

@@ -566,7 +566,7 @@ class MaterialInstance {
         template.setMegaStateFlags(this.material.renderFlags);
 
         if (this.gfxProgram === null)
-            this.gfxProgram = cache.createProgram(device, this.program!);
+            this.gfxProgram = cache.createProgram(this.program!);
         template.setGfxProgram(this.gfxProgram);
 
         const mapped = template.mapUniformBufferF32(DMPProgram.ub_MaterialParams);

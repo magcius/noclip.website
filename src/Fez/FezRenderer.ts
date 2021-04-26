@@ -190,7 +190,7 @@ export class FezRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(device, this.program);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         template.setGfxProgram(gfxProgram);
 
         let offs = template.allocateUniformBuffer(FezProgram.ub_SceneParams, 16);
@@ -231,7 +231,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

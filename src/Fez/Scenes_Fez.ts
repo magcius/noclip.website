@@ -85,7 +85,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
         for (let i = 0; i < this.trilesetDatas.length; i++)
             this.trilesetDatas[i].destroy(device);
         for (let i = 0; i < this.artObjectDatas.length; i++)

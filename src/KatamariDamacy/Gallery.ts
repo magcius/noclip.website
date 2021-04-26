@@ -71,7 +71,7 @@ class GalleryCircleRenderer {
     public colors = nArray(2, () => colorNewCopy(White));
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
     }
 
     public randomColor(): void {
@@ -270,7 +270,7 @@ export class GallerySceneRenderer implements SceneGfx {
             pass.exec((passRenderer) => {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
