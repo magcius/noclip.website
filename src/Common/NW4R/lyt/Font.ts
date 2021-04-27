@@ -350,16 +350,16 @@ export class CharWriter {
         ddraw.end();
     }
 
-    private drawStringFlush(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
+    private drawStringFlush(renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
         if (!ddraw.canMakeRenderInst())
             return;
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public drawString(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string): void {
+    public drawString(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string): void {
         const cache = renderInstManager.gfxRenderCache;
 
         this.textureMapping[0].gfxSampler = cache.createSampler({
@@ -373,7 +373,7 @@ export class CharWriter {
         });
 
         const template = renderInstManager.pushTemplateRenderInst();
-        this.font.materialHelper.setOnRenderInst(device, cache, template);
+        this.font.materialHelper.setOnRenderInst(cache.device, cache, template);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.color1);
         this.font.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -400,7 +400,7 @@ export class CharWriter {
             // If we're going to switch textures, flush the previous batch.
             const gfxTexture = this.font.gfxTextures[glyphInfo.textureIndex];
             if (gfxTexture !== this.textureMapping[0].gfxTexture) {
-                this.drawStringFlush(device, renderInstManager, ddraw);
+                this.drawStringFlush(renderInstManager, ddraw);
                 this.textureMapping[0].gfxTexture = gfxTexture;
             }
 
@@ -409,7 +409,7 @@ export class CharWriter {
             this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
         }
 
-        this.drawStringFlush(device, renderInstManager, ddraw);
+        this.drawStringFlush(renderInstManager, ddraw);
         renderInstManager.popTemplateRenderInst();
     }
 }

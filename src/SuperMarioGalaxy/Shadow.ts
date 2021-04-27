@@ -373,7 +373,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
-        this.ddraw.endAndUpload(sceneObjHolder.modelCache.device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -775,7 +775,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(device, renderInstManager);
+        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
         front.setFromTemplate(shapeRenderInst);
@@ -924,7 +924,7 @@ class AlphaShadow extends NameObj {
         this.orthoQuad.position3f32(0, 1, 0);
         this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 0, 1);
         this.orthoQuad.end();
-        this.orthoQuad.endDraw(device, cache);
+        this.orthoQuad.endDraw(cache);
 
         sceneObjHolder.specialTextureBinder.registerTextureMapping(this.textureMapping, SpecialTextureType.OpaqueSceneTexture);
     }

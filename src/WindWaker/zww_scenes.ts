@@ -215,7 +215,7 @@ class dDlst_alphaModel_c {
         this.orthoQuad.position3f32(1, 1, 0);
         this.orthoQuad.position3f32(0, 1, 0);
         this.orthoQuad.end();
-        this.orthoQuad.endDraw(device, cache);
+        this.orthoQuad.endDraw(cache);
     }
 
     private reset(): void {

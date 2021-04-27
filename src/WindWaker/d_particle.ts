@@ -301,7 +301,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             ddraw.end();
         }
 
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
         dKy_get_seacolor(this.globals.g_env_light, workData.materialParams.u_Color[ColorKind.C0], workData.materialParams.u_Color[ColorKind.C1]);
         workData.fillParticleRenderInst(device, renderInstManager, renderInst);
@@ -416,7 +416,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
         indTexMtx[5] = this.indScaleY;
         indTexMtx[13] = this.indTransY * emitter.age;
 
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
         workData.fillParticleRenderInst(device, renderInstManager, renderInst);
         renderInstManager.submitRenderInst(renderInst);

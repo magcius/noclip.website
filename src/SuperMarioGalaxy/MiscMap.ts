@@ -10,7 +10,7 @@ import { OceanRing, isEqualStageName, HeatHazeDirector, WhirlPoolAccelerator } f
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
-import { assert, fallback } from "../util";
+import { fallback } from "../util";
 import { OceanSphere } from "./Actors/OceanSphere";
 import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
@@ -360,7 +360,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, 1.0);
         ddraw.end();
 
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
 
         const materialParams = this.materialParams;
         computeRotationZAroundPoint(materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD, 0.5, 0.5);

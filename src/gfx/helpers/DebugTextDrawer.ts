@@ -29,7 +29,7 @@ export class DebugTextDrawer {
     public textColor = colorNewCopy(White);
     public strokeColor = colorNewCopy(OpaqueBlack);
 
-    constructor(context: SceneContext, private fontData: ResFont) {
+    constructor(private fontData: ResFont) {
         this.charWriter.setFont(fontData, 0, 0);
 
         const ddraw = this.ddraw;
@@ -60,7 +60,7 @@ export class DebugTextDrawer {
     }
 
     public endDraw(renderInstManager: GfxRenderInstManager): void {
-        this.ddraw.endAndUpload(renderInstManager.device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public setFontScale(scale: number): void {
@@ -87,13 +87,13 @@ export class DebugTextDrawer {
             const theta = i * MathConstants.TAU / strokeNum;
             const sy = strokeWidth * Math.sin(theta), sx = strokeWidth * Math.cos(theta);
             vec3.set(this.charWriter.cursor, x + sx, y + sy, 0);
-            this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
+            this.charWriter.drawString(renderInstManager, this.ddraw, str);
         }
 
         // Main fill
         colorCopy(this.charWriter.color1, this.textColor);
         vec3.set(this.charWriter.cursor, x, y, 0);
-        this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
+        this.charWriter.drawString(renderInstManager, this.ddraw, str);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -109,6 +109,6 @@ export async function makeDebugTextDrawer(context: SceneContext): Promise<DebugT
         const fontArcData = await context.dataFetcher.fetchData(`SuperMarioGalaxy/LayoutData/Font.arc`);
         const fontArc = JKRArchive.parse(await decompress(fontArcData));
         const fontData = new ResFont(context.device, parseBRFNT(fontArc.findFileData(`messagefont26.brfnt`)!));
-        return new DebugTextDrawer(context, fontData);
+        return new DebugTextDrawer(fontData);
     });
 }

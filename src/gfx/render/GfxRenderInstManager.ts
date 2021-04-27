@@ -645,7 +645,7 @@ export class GfxRenderInstManager {
     public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     public currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
-    constructor(public device: GfxDevice, public gfxRenderCache: GfxRenderCache) {
+    constructor(public gfxRenderCache: GfxRenderCache) {
     }
 
     /**

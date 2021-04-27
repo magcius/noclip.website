@@ -1,6 +1,6 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
-import { GfxDevice, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
+import { GfxColor, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
 import { GfxShaderLibrary } from '../helpers/ShaderHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -34,6 +34,14 @@ function rectFlipY(r: Rect, h: number): void {
     const y1 = r.y1;
     r.y1 = h - r.y2;
     r.y2 = h - y1;
+}
+
+export interface TextDrawer {
+    textColor: GfxColor;
+    setFontScale(v: number): void;
+    beginDraw(): void;
+    endDraw(renderInstManager: GfxRenderInstManager): void;
+    drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth?: number, strokeNum?: number): void;
 }
 
 export class DebugThumbnailDrawer {
@@ -85,7 +93,7 @@ export class DebugThumbnailDrawer {
         if (!this.enabled)
             return;
 
-        const debugTextDrawer = this.helper.getDebugTextDrawer();
+        const textDrawer = this.helper.getDebugTextDrawer() as TextDrawer | null;
 
         const builderDebug = builder.getDebug();
 
@@ -146,7 +154,7 @@ export class DebugThumbnailDrawer {
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
 
-            if (debugTextDrawer !== null) {
+            if (textDrawer !== null) {
                 const oldRenderInstList = renderInstManager.currentRenderInstList;
                 renderInstManager.currentRenderInstList = this.renderInstList;
 
@@ -154,10 +162,10 @@ export class DebugThumbnailDrawer {
                 template.setUniformBuffer(this.uniformBuffer);
 
                 const thumbnailDebugName = builderDebug.getRenderTargetIDDebugName(renderTargetIDs[i]);
-                debugTextDrawer.textColor.a = lerp(0.6, 1.0, t);
-                debugTextDrawer.setFontScale(lerp(0.5, 1.0, t));
+                textDrawer.textColor.a = lerp(0.6, 1.0, t);
+                textDrawer.setFontScale(lerp(0.5, 1.0, t));
                 const y = lerp(5, 20, t);
-                debugTextDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugName, vw / 2, vh - y);
+                textDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugName, vw / 2, vh - y);
 
                 renderInstManager.popTemplateRenderInst();
                 this.renderInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
@@ -181,12 +189,12 @@ export class DebugThumbnailDrawer {
                 pass.attachResolveTexture(resolveTextureIDs[i]);
 
             pass.exec((passRenderer, scope) => {
-                if (debugTextDrawer !== null)
-                    debugTextDrawer.beginDraw();
+                if (textDrawer !== null)
+                    textDrawer.beginDraw();
                 for (let i = 0; i < resolveTextureIDs.length; i++)
                     drawThumbnail(scope, passRenderer, drawOrder[i]);
-                if (debugTextDrawer !== null)
-                    debugTextDrawer.endDraw(renderInstManager);
+                if (textDrawer !== null)
+                    textDrawer.endDraw(renderInstManager);
                 this.uniformBuffer.prepareToRender();
             });
         });

@@ -253,7 +253,6 @@ export class EggDrawPathBloom {
         const downsample4ColorTargetID = builder.createRenderTargetID(this.target4ColorDesc, 'Bloom 1/4 Buffer');
         const downsample8ColorTargetID = builder.createRenderTargetID(this.target8ColorDesc, 'Bloom 1/8 Buffer');
 
-        const device = renderInstManager.device;
         const cache = renderInstManager.gfxRenderCache;
 
         const renderInst = renderInstManager.newRenderInst();
@@ -568,7 +567,6 @@ export class EggDrawPathDOF {
         const downsample2ColorTargetID = builder.createRenderTargetID(this.target2ColorDesc, `DOF 1/2 Buffer`);
         const blurColorTargetID = builder.createRenderTargetID(this.target2ColorDesc, `DOF 1/2 Blur Buffer`);
 
-        const device = renderInstManager.device;
         const cache = renderInstManager.gfxRenderCache;
 
         const renderInst = renderInstManager.newRenderInst();

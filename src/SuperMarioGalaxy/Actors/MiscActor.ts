@@ -2587,8 +2587,8 @@ class SpinDriverPathDrawer extends LiveActor {
         const texMtx0 = materialParams.u_TexMtx[0];
         mat4.identity(texMtx0);
 
-        const renderInst = ddraw.endDraw(renderInstManager.device, renderInstManager);
-        materialHelper.setOnRenderInst(renderInstManager.device, renderInstManager.gfxRenderCache, renderInst);
+        const renderInst = ddraw.endDraw(renderInstManager);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache.device, renderInstManager.gfxRenderCache, renderInst);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         packetParams.clear();
@@ -3599,7 +3599,7 @@ class WarpPodPathDrawer {
 
         this.ddraw.beginDraw();
         this.drawPath(viewerInput.camera);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();
@@ -3982,7 +3982,7 @@ export class WaterPlant extends LiveActor {
         }
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
         const materialHelper = waterPlantDrawInit.materialHelper;
@@ -4401,7 +4401,7 @@ export class SwingRope extends LiveActor {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
         swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -4638,7 +4638,7 @@ export class Trapeze extends LiveActor {
         this.drawRope(scratchVec3a, scratchVec3b, this.swingRopePoint.axisX, this.swingRopePoint.axisZ, 0.0, 0.003 * this.height);
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
         trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -4827,7 +4827,7 @@ export class Creeper extends LiveActor {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = this.materialHelper;
@@ -5019,7 +5019,7 @@ class OceanRingDrawer {
         }
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
         setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
@@ -5803,7 +5803,7 @@ export class Flag extends LiveActor {
         }
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
@@ -6248,7 +6248,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.drawPlane(this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const modelCache = sceneObjHolder.modelCache;
-        this.ddraw.endDraw(modelCache.device, modelCache.cache);
+        this.ddraw.endDraw(modelCache.cache);
     }
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
@@ -6500,7 +6500,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.drawPlane(sceneObjHolder, this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const modelCache = sceneObjHolder.modelCache;
-        this.ddraw.endDraw(modelCache.device, modelCache.cache);
+        this.ddraw.endDraw(modelCache.cache);
     }
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
@@ -7994,7 +7994,7 @@ class AstroDomeOrbit extends LiveActor {
         this.drawCeiling(ddraw, width, false, height);
         this.drawSide(ddraw, width, true, height);
         this.drawSide(ddraw, width, false, height);
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], color);
 
@@ -8899,7 +8899,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.drawPlane(this.ddraw, -0.5, -Math.SQRT1_2,  0.5, -Math.SQRT1_2, this.texCoordS + 3/6, this.texCoordS + 4/6);
         this.drawPlane(this.ddraw,  0.5, -Math.SQRT1_2,  1.0,  0.0,          this.texCoordS + 4/6, this.texCoordS + 5/6);
         this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);

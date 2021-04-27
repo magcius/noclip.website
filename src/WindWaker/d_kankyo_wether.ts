@@ -372,7 +372,7 @@ export class dKankyo_sun_Packet {
                     this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0, moonShineSize);
                 }
 
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+                const renderInst = ddraw.makeRenderInst(renderInstManager);
                 submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
         }
@@ -404,7 +404,7 @@ export class dKankyo_sun_Packet {
                 colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF9100FF);
 
                 this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+                const renderInst = ddraw.makeRenderInst(renderInstManager);
 
                 submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
@@ -497,7 +497,7 @@ export class dKankyo_sun_Packet {
         const lensflareAlpha = (80.0 * vizSq ** 3.0) / 0xFF;
         colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
 
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.lenzflareAngle);
@@ -531,7 +531,7 @@ export class dKankyo_sun_Packet {
             const scaleX = 1.0;
             const texCoordScale = i === 0 ? 1.0 : 2.0;
             this.drawSquare(ddraw, scratchMatrix, basePos, size, scaleX, texCoordScale);
-            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
 
             if (i === 0) {
                 envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -556,7 +556,7 @@ export class dKankyo_sun_Packet {
         this.ddraw.allocVertices(2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -765,11 +765,11 @@ export class dKankyo_vrkumo_Packet {
 
             ddraw.end();
 
-            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
             submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
 
-        ddraw.endAndUpload(device, renderInstManager);
+        ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -909,7 +909,7 @@ export class dKankyo_rain_Packet {
             ddraw.end();
         }
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperRain, renderInst, viewerInput);
     }
 
@@ -978,7 +978,7 @@ export class dKankyo_rain_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperSibuki, renderInst, viewerInput);
     }
 
@@ -992,7 +992,7 @@ export class dKankyo_rain_Packet {
         this.ddraw.beginDraw();
         this.drawRain(globals, renderInstManager, viewerInput);
         this.drawSibuki(globals, renderInstManager, viewerInput);
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1151,10 +1151,10 @@ export class dKankyo_wave_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
 
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1337,10 +1337,10 @@ export class dKankyo_star_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
 
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
