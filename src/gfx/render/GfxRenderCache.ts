@@ -1,5 +1,5 @@
 
-import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
+import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxColor, GfxAttachmentState, GfxChannelBlendState } from "../platform/GfxPlatform";
 import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals, gfxInputLayoutDescriptorCopy } from '../platform/GfxPlatformUtil';
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
 import { assert } from "../platform/GfxPlatformUtil";
@@ -16,20 +16,70 @@ function gfxProgramDescriptorSimpleCopy(a: GfxProgramDescriptorSimple): GfxProgr
     return { preprocessedVert, preprocessedFrag };
 }
 
-function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number {
-    let hash = 0;
-    // Hash on the shader -- should be the thing we change the most.
-    hash = hashCodeNumberUpdate(hash, a.program.ResourceUniqueId);
+function gfxRenderBindingLayoutHash(hash: number, a: GfxBindingLayoutDescriptor): number {
+    hash = hashCodeNumberUpdate(hash, a.numUniformBuffers);
+    hash = hashCodeNumberUpdate(hash, a.numSamplers);
     return hash;
 }
 
+function gfxBlendStateHash(hash: number, a: GfxChannelBlendState): number {
+    hash = hashCodeNumberUpdate(hash, a.blendMode);
+    hash = hashCodeNumberUpdate(hash, a.blendSrcFactor);
+    hash = hashCodeNumberUpdate(hash, a.blendDstFactor);
+    return hash;
+}
+
+function gfxAttachmentStateHash(hash: number, a: GfxAttachmentState): number {
+    hash = gfxBlendStateHash(hash, a.rgbBlendState);
+    hash = gfxBlendStateHash(hash, a.alphaBlendState);
+    hash = hashCodeNumberUpdate(hash, a.channelWriteMask);
+    return hash;
+}
+
+function gfxColorHash(hash: number, a: GfxColor): number {
+    hash = hashCodeNumberUpdate(hash, (a.r << 24) | (a.g << 16) | (a.b << 8) | a.a);
+    return hash;
+}
+
+function gfxMegaStateDescriptorHash(hash: number, a: GfxMegaStateDescriptor): number {
+    for (let i = 0; i < a.attachmentsState.length; i++)
+        hash = gfxAttachmentStateHash(hash, a.attachmentsState[i]);
+    hash = gfxColorHash(hash, a.blendConstant);
+    hash = hashCodeNumberUpdate(hash, a.depthCompare);
+    hash = hashCodeNumberUpdate(hash, a.depthWrite ? 1 : 0);
+    hash = hashCodeNumberUpdate(hash, a.stencilCompare);
+    hash = hashCodeNumberUpdate(hash, a.stencilPassOp);
+    hash = hashCodeNumberUpdate(hash, a.stencilWrite ? 1 : 0);
+    hash = hashCodeNumberUpdate(hash, a.cullMode);
+    hash = hashCodeNumberUpdate(hash, a.frontFace ? 1 : 0);
+    hash = hashCodeNumberUpdate(hash, a.polygonOffset ? 1 : 0);
+    return hash;
+}
+
+function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number {
+    let hash = 0;
+    hash = hashCodeNumberUpdate(hash, a.program.ResourceUniqueId);
+    if (a.inputLayout !== null)
+        hash = hashCodeNumberUpdate(hash, a.inputLayout.ResourceUniqueId);
+    for (let i = 0; i < a.bindingLayouts.length; i++)
+        hash = gfxRenderBindingLayoutHash(hash, a.bindingLayouts[i]);
+    hash = gfxMegaStateDescriptorHash(hash, a.megaStateDescriptor);
+    return hashCodeNumberFinish(hash);
+}
+
 function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
-    // Hash on textures bindings.
     let hash: number = 0;
     for (let i = 0; i < a.samplerBindings.length; i++) {
         const binding = a.samplerBindings[i];
         if (binding !== null && binding.gfxTexture !== null)
             hash = hashCodeNumberUpdate(hash, binding.gfxTexture.ResourceUniqueId);
+    }
+    for (let i = 0; i < a.uniformBufferBindings.length; i++) {
+        const binding = a.uniformBufferBindings[i];
+        if (binding !== null) {
+            hash = hashCodeNumberUpdate(hash, binding.buffer.ResourceUniqueId);
+            hash = hashCodeNumberUpdate(hash, binding.wordCount);
+        }
     }
     return hashCodeNumberFinish(hash);
 }
