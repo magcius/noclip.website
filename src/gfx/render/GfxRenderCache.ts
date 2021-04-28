@@ -94,11 +94,11 @@ export class GfxRenderCache {
     constructor(public device: GfxDevice) {
     }
 
-    public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {
+    public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
         let bindings = this.gfxBindingsCache.get(descriptor);
         if (bindings === null) {
             const descriptorCopy = gfxBindingsDescriptorCopy(descriptor);
-            bindings = device.createBindings(descriptorCopy);
+            bindings = this.device.createBindings(descriptorCopy);
             this.gfxBindingsCache.add(descriptorCopy, bindings);
         }
         return bindings;

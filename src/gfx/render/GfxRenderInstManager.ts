@@ -484,7 +484,7 @@ export class GfxRenderInst {
             this._bindingDescriptors[0].uniformBufferBindings[i].buffer = this._uniformBuffer.gfxBuffer!;
 
         // TODO(jstpierre): Support multiple binding descriptors.
-        const gfxBindings = cache.createBindings(device, this._bindingDescriptors[0]);
+        const gfxBindings = cache.createBindings(this._bindingDescriptors[0]);
         passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferByteOffsets);
 
         if (this._drawInstanceCount > 1) {
