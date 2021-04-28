@@ -76,7 +76,7 @@ function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
     }
     for (let i = 0; i < a.uniformBufferBindings.length; i++) {
         const binding = a.uniformBufferBindings[i];
-        if (binding !== null) {
+        if (binding !== null && binding.buffer !== null) {
             hash = hashCodeNumberUpdate(hash, binding.buffer.ResourceUniqueId);
             hash = hashCodeNumberUpdate(hash, binding.wordCount);
         }
