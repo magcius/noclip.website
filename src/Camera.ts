@@ -715,11 +715,11 @@ export class OrbitCameraController implements CameraController {
     public x: number = -Math.PI / 2;
     public y: number = 2;
     public z: number = -150;
+    public zTarget: number = -150;
     public orbitSpeed: number = -0.05;
     public orbitXVel: number = 0;
     public xVel: number = 0;
     public yVel: number = 0;
-    public zVel: number = 0;
 
     public translation = vec3.create();
     public txVel: number = 0;
@@ -761,7 +761,7 @@ export class OrbitCameraController implements CameraController {
             this.shouldOrbit = false;
             this.xVel = this.yVel = 0;
             this.txVel = this.tyVel = 0;
-            this.xVel = this.yVel = this.zVel = 0;
+            this.xVel = this.yVel = 0;
             vec3.zero(this.translation);
         }
 
@@ -804,17 +804,20 @@ export class OrbitCameraController implements CameraController {
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
-        let zAccel = inputManager.dz * 5;
+        let zTargetAdjAmt = inputManager.dz * 80.0;
         if (inputManager.isKeyDown('KeyQ'))
-            zAccel += 1.0;
+            zTargetAdjAmt -= 80.0;
         if (inputManager.isKeyDown('KeyE'))
-            zAccel -= 1.0;
-        this.zVel += zAccel;
+            zTargetAdjAmt += 80.0;
+        this.zTarget += zTargetAdjAmt * this.sceneMoveSpeedMult;
+        if (this.zTarget > -10)
+            this.zTarget = -10;
+        let zTargetDelta = this.zTarget - this.z;
 
-        const updated = this.forceUpdate || this.xVel !== 0 || this.orbitXVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        const updated = this.forceUpdate || this.xVel !== 0 || this.orbitXVel !== 0 || this.yVel !== 0 || zTargetDelta !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
-            const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
+            const drag = (inputManager.isDragging() || isShiftPressed) ? 0.86 : 0.94;
 
             this.x += -(this.xVel + (this.orbitXVel * sceneTimeScale)) / 10;
             this.xVel *= drag;
@@ -826,13 +829,8 @@ export class OrbitCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += this.zVel * this.sceneMoveSpeedMult;
-            if (zAccel === 0)
-                this.zVel *= drag * 0.98;
-            if (this.z > -10) {
-                this.z = -10;
-                this.zVel = 0;
-            }
+            const kSpringZ = 0.1;
+            this.z += zTargetDelta * kSpringZ;
 
             vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel);
