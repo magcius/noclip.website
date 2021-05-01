@@ -781,7 +781,6 @@ export class OrbitCameraController implements CameraController {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
                 this.orbitXVel += (this.orbitSpeed * 1/50);
         }
-        this.zVel += inputManager.dz * 5;
         let keyVelX = 0, keyVelY = 0;
         if (inputManager.isKeyDown('KeyA'))
             keyVelX += 0.02;
@@ -805,6 +804,13 @@ export class OrbitCameraController implements CameraController {
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
+        let zAccel = inputManager.dz * 5;
+        if (inputManager.isKeyDown('KeyQ'))
+            zAccel += 1.0;
+        if (inputManager.isKeyDown('KeyE'))
+            zAccel -= 1.0;
+        this.zVel += zAccel;
+
         const updated = this.forceUpdate || this.xVel !== 0 || this.orbitXVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
@@ -820,9 +826,9 @@ export class OrbitCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 5 * Math.sign(this.zVel) * this.sceneMoveSpeedMult;
-            if (inputManager.dz === 0)
-                this.zVel *= 0.85;
+            this.z += this.zVel * this.sceneMoveSpeedMult;
+            if (zAccel === 0)
+                this.zVel *= drag * 0.98;
             if (this.z > -10) {
                 this.z = -10;
                 this.zVel = 0;
@@ -946,8 +952,13 @@ export class OrthoCameraController implements CameraController {
         } else if (shouldOrbit) {
             this.xTarget += this.orbitSpeed * 1/25;
         }
-        let hasZVel = inputManager.dz !== 0;
-        this.zVel += inputManager.dz * -1;
+
+        let zAccel = inputManager.dz * -1;
+        if (inputManager.isKeyDown('KeyQ'))
+            zAccel += 1.0;
+        if (inputManager.isKeyDown('KeyE'))
+            zAccel -= 1.0;
+        this.zVel += zAccel;
 
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
         if (!isShiftPressed) {
@@ -979,15 +990,6 @@ export class OrthoCameraController implements CameraController {
         this.xTarget = this.xTarget % MathConstants.TAU;
         this.yTarget = this.yTarget % MathConstants.TAU;
 
-        if (inputManager.isKeyDown('KeyQ')) {
-            this.zVel += 1.0;
-            hasZVel = true;
-        }
-        if (inputManager.isKeyDown('KeyE')) {
-            this.zVel -= 1.0;
-            hasZVel = true;
-        }
-
         const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             this.x = lerpAngle(this.x, this.xTarget, 0.1);
@@ -998,9 +1000,9 @@ export class OrthoCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 4 * Math.sign(this.zVel);
-            if (!hasZVel)
-                this.zVel *= 0.85;
+            this.z += this.zVel;
+            if (zAccel === 0)
+                this.zVel *= drag * 0.98;
             if (this.z < 1) {
                 this.z = 1;
                 this.zVel = 0;

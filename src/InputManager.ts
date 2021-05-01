@@ -227,7 +227,8 @@ export default class InputManager {
 
     private _onWheel = (e: WheelEvent) => {
         e.preventDefault();
-        this.dz += Math.sign(e.deltaY) * -4;
+        const scale = (e.deltaMode === WheelEvent.DOM_DELTA_LINE) ? 40 : 1;
+        this.dz += Math.sign(e.deltaY) * -4 * scale;
         this.callScrollListeners();
     };
 
