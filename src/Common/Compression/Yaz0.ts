@@ -60,7 +60,7 @@ export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
             }
 
             if (uncompressedSize <= 0)
-                return new ArrayBufferSlice(dstBuffer.buffer as ArrayBuffer);
+                return new ArrayBufferSlice(dstBuffer.buffer);
         }
     }
 }

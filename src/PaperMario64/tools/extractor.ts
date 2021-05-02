@@ -7,7 +7,7 @@ import * as BYML from "../../byml";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer);
 }
 
 const pathBaseIn  = `../../../data/pm64_raw`;

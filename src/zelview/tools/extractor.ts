@@ -8,7 +8,7 @@ import { assert, leftPad } from "../../util";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+    return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
 const pathBaseIn  = `../../../data/zelview_beta_raw`;

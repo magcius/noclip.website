@@ -7,7 +7,7 @@ import * as BYML from "../../byml";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer);
 }
 
 const pathBaseIn  = `../../../data/BanjoKazooie_Raw`;
@@ -47,7 +47,7 @@ function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
 
     let srcOffs = 0x06;
     const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs), { raw: true });
-    return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(decompressed.buffer);
 }
 
 // the second file table at 3ffe10 in RAM has a list of start and end addresses of compressed files
@@ -62,7 +62,7 @@ function decompressPairedFiles(buffer: ArrayBufferSlice, ram: number): RAMRegion
 
     const inflator = new Pako.Inflate({ raw: true });
     inflator.push(buffer.createTypedArray(Uint8Array, srcOffs), true);
-    out.push({ data: new ArrayBufferSlice((inflator.result as Uint8Array).buffer as ArrayBuffer), start: ram });
+    out.push({ data: new ArrayBufferSlice((inflator.result as Uint8Array).buffer), start: ram });
 
     const startPoint = srcOffs + ((inflator as any).strm.next_in as number); // read internal zlib stream state to find the next file
     const dataFile = decompress(buffer.slice(startPoint));

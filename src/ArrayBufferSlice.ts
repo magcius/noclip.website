@@ -146,7 +146,7 @@ export default class ArrayBufferSlice {
             o[i+0] = a[i+1];
             o[i+1] = a[i+0];
         }
-        return new ArrayBufferSlice(o.buffer as ArrayBuffer);
+        return new ArrayBufferSlice(o.buffer);
     }
 
     private bswap32(): ArrayBufferSlice {
@@ -159,7 +159,7 @@ export default class ArrayBufferSlice {
             o[i+2] = a[i+1];
             o[i+3] = a[i+0];
         }
-        return new ArrayBufferSlice(o.buffer as ArrayBuffer);
+        return new ArrayBufferSlice(o.buffer);
     }
 
     private bswap(componentSize: 2 | 4): ArrayBufferSlice {

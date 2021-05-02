@@ -9,7 +9,7 @@ import { readFileSync, openSync, readSync, closeSync, fstat, writeFileSync } fro
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer);
 }
 
 function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: number): ArrayBufferSlice {
@@ -17,7 +17,7 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     const b = Buffer.alloc(byteLength);
     readSync(fd, b, 0, byteLength, byteOffset);
     closeSync(fd);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer);
 }
 
 const pathBaseIn  = `../../../data/dks_raw`;

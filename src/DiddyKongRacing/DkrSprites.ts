@@ -97,8 +97,8 @@ export class DkrSprites {
                 1, 2, 3
             ]);
 
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer as ArrayBuffer);
-            this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer as ArrayBuffer);
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer);
+            this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
     
             const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
                 { location: F3DDKR_Sprite_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0 * 0x04, }

@@ -45,16 +45,15 @@ function decompressFile(data: ArrayBufferSlice, format: number, length: number):
         }
     }
     assert(writeOffs === length, `length mismatch ${hexzero(writeOffs, 8)} ${hexzero(length, 8)}`);
-    return new ArrayBufferSlice(out.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(out.buffer);
 }
-
 
 function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: number): ArrayBufferSlice {
     const fd = openSync(path, 'r');
     const b = Buffer.alloc(byteLength);
     readSync(fd, b, 0, byteLength, byteOffset);
     closeSync(fd);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+    return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
 const pathBaseIn  = `../../../data/ffx_raw`;

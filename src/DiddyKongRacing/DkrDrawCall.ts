@@ -133,8 +133,8 @@ export class DkrDrawCall {
         }
 
         // Create the buffers
-        this.defaultVertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer as ArrayBuffer);
-        this.defaultIndexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer as ArrayBuffer);
+        this.defaultVertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer);
+        this.defaultIndexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer);
         
         // Set default input state
         this.defaultInputState = this.device.createInputState(
@@ -176,8 +176,8 @@ export class DkrDrawCall {
             }
 
             // Create the buffers
-            const vertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer as ArrayBuffer);
-            const indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer as ArrayBuffer);
+            const vertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer);
+            const indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer);
 
             // Store the buffers into an array so I can destroy them later.
             this.objAnimInputStateBuffers.push(vertexBuffer);
