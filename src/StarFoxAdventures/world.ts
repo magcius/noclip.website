@@ -82,7 +82,7 @@ export class World {
         this.mapInstance = mapInstance;
     }
 
-    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance {
+    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance | null {
         const typeNum = objParams.getUint16(0x0);
         const pos = readVec3(objParams, 0x8);
 
@@ -93,16 +93,22 @@ export class World {
         obj.setParent(parent);
         this.objectInstances.push(obj);
 
-        obj.mount();
+        try {
+            obj.mount();
+        } catch (e) {
+            console.warn("Mounting object failed with exception:");
+            console.error(e);
+            this.objectInstances.pop();
+            return null;
+        }
 
         return obj;
     }
 
     public spawnObjectsFromRomlist(romlist: DataView, parent: ObjectInstance | null = null) {
         const mapObjectOrigin = vec3.create();
-        if (this.mapInstance !== null) {
+        if (this.mapInstance !== null)
             vec3.set(mapObjectOrigin, 640 * this.mapInstance.info.getOrigin()[0], 0, 640 * this.mapInstance.info.getOrigin()[1]);
-        }
 
         let offs = 0;
         let i = 0;
@@ -111,7 +117,8 @@ export class World {
             const objParams = dataSubarray(romlist, offs, entrySize);
 
             const obj = this.spawnObject(objParams, parent, mapObjectOrigin);
-            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} romlist-type 0x${obj.commonObjectParams.objType.toString(16)} class ${obj.getType().objClass} id 0x${obj.commonObjectParams.id.toString(16)})`);
+            if (obj !== null)
+                console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} romlist-type 0x${obj.commonObjectParams.objType.toString(16)} class ${obj.getType().objClass} id 0x${obj.commonObjectParams.id.toString(16)})`);
 
             offs += entrySize;
             i++;
