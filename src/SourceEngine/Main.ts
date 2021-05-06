@@ -703,8 +703,8 @@ export class BSPRenderer {
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
 
         const device = renderContext.device, cache = renderContext.renderCache;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.bsp.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.bsp.indexData);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },

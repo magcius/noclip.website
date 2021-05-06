@@ -1,7 +1,7 @@
 
 // Source Engine BSP.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice";
 import { readString, assertExists, assert, nArray } from "../util";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
@@ -321,6 +321,9 @@ class DisplacementBuilder {
     }
 }
 
+class OverlayBuilder {
+}
+
 function magicint(S: string): number {
     const n0 = S.charCodeAt(0);
     const n1 = S.charCodeAt(1);
@@ -478,6 +481,49 @@ function ensureInList<T>(L: T[], v: T): void {
         L.push(v);
 }
 
+
+class ResizableArrayBuffer {
+    private buffer: ArrayBuffer;
+    private byteSize: number;
+    private byteCapacity: number;
+
+    constructor(initialSize: number = 0x400) {
+        this.byteSize = 0;
+        this.byteCapacity = initialSize;
+        this.buffer = new ArrayBuffer(initialSize);
+    }
+
+    public ensureSize(byteSize: number): void {
+        this.byteSize = byteSize;
+
+        if (byteSize > this.byteCapacity) {
+            this.byteCapacity = Math.max(byteSize, this.byteCapacity * 2);
+            const oldBuffer = this.buffer;
+            const newBuffer = new ArrayBuffer(this.byteCapacity);
+            new Uint8Array(newBuffer).set(new Uint8Array(oldBuffer));
+            this.buffer = newBuffer;
+        }
+    }
+
+    public addByteSize(byteSize: number): void {
+        this.ensureSize(this.byteSize + byteSize);
+    }
+
+    public addUint32(count: number): Uint32Array {
+        this.addByteSize(count << 2);
+        return new Uint32Array(this.buffer);
+    }
+
+    public addFloat32(count: number): Float32Array {
+        this.addByteSize(count << 2);
+        return new Float32Array(this.buffer);
+    }
+
+    public finalize(): ArrayBuffer {
+        return ArrayBuffer_slice.call(this.buffer, 0, this.byteSize);
+    }
+}
+
 const scratchVec3 = vec3.create();
 export class BSPFile {
     public version: number;
@@ -497,8 +543,8 @@ export class BSPFile {
     public visibility: BSPVisibility;
     public lightmapPackerManager = new LightmapPackerManager();
 
-    public indexData: Uint32Array;
-    public vertexData: Float32Array;
+    public indexData: ArrayBuffer;
+    public vertexData: ArrayBuffer;
 
     constructor(buffer: ArrayBufferSlice, mapname: string) {
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
@@ -669,7 +715,7 @@ export class BSPFile {
 
             // compute for easy access
             const sideLength = (1 << power) + 1;
-            const vertexCount = sideLength * sideLength;
+            const vertexCount = sideLength ** 2;
 
             dispinfolist.push({ startPos, dispVertStart: m_iDispVertStart, power, sideLength, vertexCount });
         }
@@ -696,9 +742,7 @@ export class BSPFile {
         // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
         let vertnormalIdx = 0;
 
-        // Do some initial surface parsing, pack lightmaps, and count up the number of vertices we need.
-        let vertCount = 0;
-        let indexCount = 0;
+        // Do some initial surface parsing, pack lightmaps.
         for (let i = 0; i < faceCount; i++) {
             const idx = i * 0x38;
 
@@ -706,32 +750,10 @@ export class BSPFile {
             const tex = texinfoa[texinfo];
 
             const numedges = faces.getUint16(idx + 0x08, true);
-            const dispinfo = faces.getInt16(idx + 0x0C, true);
 
             // Normals are stored in the data for all surfaces, even for displacements.
             const vertnormalBase = vertnormalIdx;
             vertnormalIdx += numedges;
-
-            // Count vertices.
-            if (dispinfo >= 0) {
-                const disp = dispinfolist[dispinfo];
-                vertCount += disp.vertexCount;
-
-                indexCount += ((disp.sideLength - 1) ** 2) * 6;
-            } else {
-                vertCount += numedges;
-
-                const m_NumPrimsRaw = faces.getUint16(idx + 0x30, true);
-                const m_NumPrims = m_NumPrimsRaw & 0x7FFF;
-                const firstPrimID = faces.getUint16(idx + 0x32, true);
-                if (m_NumPrims !== 0) {
-                    const primOffs = firstPrimID * 0x0A;
-                    const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
-                    indexCount += primIndexCount;
-                } else {
-                    indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
-                }
-            }
 
             const lightofs = faces.getInt32(idx + 0x14, true);
             const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
@@ -929,9 +951,6 @@ export class BSPFile {
         for (let i = 0; i < surfaceToLeafIdx.length; i++)
             surfaceToLeafIdx[i].sort((a, b) => a - b);
 
-        interface OverlayInfo {
-        }
-
         function readVec3(view: DataView, offs: number): vec3 {
             const x = view.getFloat32(offs + 0x00, true);
             const y = view.getFloat32(offs + 0x04, true);
@@ -939,26 +958,13 @@ export class BSPFile {
             return vec3.fromValues(x, y, z);
         }
 
-        // Unpack overlays
-        const overlays = getLumpData(LumpType.OVERLAYS).createDataView();
-        const overlaycount = overlays.byteLength / 0x160;
-        const overlayinfolist: OverlayInfo[] = [];
-
-        const testOverlayHacks = false;
-        // TEST HACKS: Testing overlays in general
-        // Quad per overlay
-        if (testOverlayHacks) {
-            indexCount += 6 * overlaycount;
-            vertCount += 4 * overlaycount;
-        }
-
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         basicSurfaces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
         // 3 pos, 4 normal, 4 tangent, 4 uv
         const vertexSize = (3+4+4+4);
-        const vertexData = new Float32Array(vertCount * vertexSize);
-        const indexData = new Uint32Array(indexCount);
+        const vertexBuffer = new ResizableArrayBuffer();
+        const indexBuffer = new ResizableArrayBuffer();
 
         const planes = getLumpData(LumpType.PLANES).createDataView();
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
@@ -1075,6 +1081,8 @@ export class BSPFile {
                     corners = corners.slice(startIndex).concat(corners.slice(0, startIndex));
 
                 const builder = new DisplacementBuilder(disp, corners, disp_verts);
+
+                const vertexData = vertexBuffer.addFloat32(disp.vertexCount * vertexSize);
                 for (let y = 0; y < disp.sideLength; y++) {
                     for (let x = 0; x < disp.sideLength; x++) {
                         const vertex = builder.vertex[y * disp.sideLength + x];
@@ -1118,6 +1126,7 @@ export class BSPFile {
                 }
 
                 // Build grid index buffer.
+                const indexData = indexBuffer.addUint32(((disp.sideLength - 1) ** 2) * 6);
                 let m = 0;
                 for (let y = 0; y < disp.sideLength - 1; y++) {
                     for (let x = 0; x < disp.sideLength - 1; x++) {
@@ -1142,6 +1151,7 @@ export class BSPFile {
                 dstOffsIndex += m;
                 dstIndexBase += disp.vertexCount;
             } else {
+                const vertexData = vertexBuffer.addFloat32(numedges * vertexSize);
                 for (let j = 0; j < numedges; j++) {
                     // Position
                     const vertIndex = vertindices[firstedge + j];
@@ -1196,6 +1206,7 @@ export class BSPFile {
 
                 // index buffer
                 const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                const indexData = indexBuffer.addUint32(indexCount);
                 if (m_NumPrims !== 0) {
                     const primOffs = firstPrimID * 0x0A;
                     const primType = primitives.getUint8(primOffs + 0x00);
@@ -1243,6 +1254,10 @@ export class BSPFile {
             for (let j = 0; j < surfleaflist.length; j++)
                 ensureInList(this.leaflist[surfleaflist[j]].surfaces, surfaceIndex);
         }
+
+        // Slice up overlays
+        const overlays = getLumpData(LumpType.OVERLAYS).createDataView();
+        const testOverlayHacks = false;
 
         for (let idx = 0; testOverlayHacks && idx < overlays.byteLength;) {
             const nId = overlays.getUint32(idx + 0x00, true);
@@ -1293,7 +1308,11 @@ export class BSPFile {
 
             const center = vec3.create();
 
-            for (let j = 0; j < 4; j++) {
+            const indexCount = 6;
+            const vertexCount = 4;
+
+            const vertexData = vertexBuffer.addFloat32(vertexCount * vertexSize);
+            for (let j = 0; j < vertexCount; j++) {
                 vec3.copy(scratchPosition, vecOrigin);
                 vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal0, vecUVPoints[j * 2 + 0]);
                 vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal1, vecUVPoints[j * 2 + 1]);
@@ -1336,8 +1355,7 @@ export class BSPFile {
             }
 
             const startIndex = dstOffsIndex;
-            const indexCount = 6;
-            const vertexCount = 4;
+            const indexData = indexBuffer.addUint32(indexCount);
             convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, vertexCount);
             dstOffsIndex += indexCount;
             dstIndexBase += vertexCount;
@@ -1350,8 +1368,8 @@ export class BSPFile {
             this.overlays.push({ surfaceIndex });
         }
 
-        this.vertexData = vertexData;
-        this.indexData = indexData;
+        this.vertexData = vertexBuffer.finalize();
+        this.indexData = indexBuffer.finalize();
 
         // Parse out BSP tree.
         const nodes = getLumpData(LumpType.NODES).createDataView();
