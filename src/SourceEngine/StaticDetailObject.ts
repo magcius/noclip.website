@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
-import { Color, colorNewFromRGBA } from "../Color";
+import { Color, colorClampLDR, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
@@ -85,7 +85,7 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
     const detailModels: DetailModel[] = [];
     const detailModelCount = dprp.getUint32(idx, true);
     idx += 0x04;
-    for (let i = 0; i < detailModelCount; i++) {
+    for (let i = 0; i < detailModelCount; i++, idx += 0x34) {
         const posX = dprp.getFloat32(idx + 0x00, true);
         const posY = dprp.getFloat32(idx + 0x04, true);
         const posZ = dprp.getFloat32(idx + 0x08, true);
@@ -110,7 +110,6 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
         const rot = vec3.fromValues(rotX, rotY, rotZ);
         const lighting = colorNewFromRGBA(lightingR, lightingG, lightingB);
         detailModels.push({ pos, rot, detailModel, leaf, lighting, lightStyles, lightStyleCount, swayAmount, shapeAngle, shapeSize, orientation, type, scale });
-        idx += 0x34;
     }
 
     const leafDetailModels = new Map<number, DetailModel[]>();
@@ -150,6 +149,20 @@ function computeMatrixForForwardDir(dst: mat4, fwd: vec3, pos: vec3): void {
     }
 
     computeModelMatrixSRT(dst, 1, 1, 1, 0, pitch, yaw, pos[0], pos[1], pos[2]);
+}
+
+function linearToTexGamma(v: number): number {
+    const texGamma = 2.2;
+    return Math.pow(v, 1.0 / texGamma);
+}
+
+function colorLinearToTexGamma(c: Color): Color {
+    const r = linearToTexGamma(c.r);
+    const g = linearToTexGamma(c.g);
+    const b = linearToTexGamma(c.b);
+    const ret = colorNewFromRGBA(r, g, b, c.a);
+    colorClampLDR(ret, ret);
+    return ret;
 }
 
 const scratchVec3 = vec3.create();
@@ -206,7 +219,7 @@ export class DetailPropLeafRenderer {
                 entry.origin[2] -= entry.height * 0.5;
                 entry.pos = detailModel.pos;
                 entry.texcoord = desc.texcoord;
-                entry.color = detailModel.lighting;
+                entry.color = colorLinearToTexGamma(detailModel.lighting);
 
                 this.spriteEntries.push(entry);
             }
