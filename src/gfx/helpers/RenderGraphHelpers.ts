@@ -6,20 +6,16 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } fro
 import { pushFXAAPass } from "../passes/FXAA";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
-export function makeClearRenderPassDescriptor(clearColor: Readonly<GfxColor> | 'load'): GfxRenderPassDescriptor {
+export function makeAttachmentClearDescriptor(clearColor: Readonly<GfxColor> | 'load'): GfxrAttachmentClearDescriptor {
     return {
-        colorAttachment: null,
-        colorResolveTo: null,
-        depthStencilAttachment: null,
         colorClearColor: clearColor,
-        depthStencilResolveTo: null,
         depthClearValue: reverseDepthForClearValue(1.0),
         stencilClearValue: 0.0,
     }
 }
 
-export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
-export const opaqueBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
+export const standardFullClearRenderPassDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
+export const opaqueBlackFullClearRenderPassDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
 
 export const enum AntialiasingMode {
     None, FXAA, MSAAx4,
@@ -52,7 +48,13 @@ export function setBackbufferDescSimple(desc: GfxrRenderTargetDescription, rende
     desc.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, sampleCount);
 }
 
-export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxRenderPassDescriptor): GfxrRenderTargetDescription {
+export interface GfxrAttachmentClearDescriptor {
+    colorClearColor: Readonly<GfxColor> | 'load';
+    depthClearValue: number;
+    stencilClearValue: number;
+}
+
+export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxrAttachmentClearDescriptor): GfxrRenderTargetDescription {
     const pixelFormat = selectFormatSimple(slot);
     const desc = new GfxrRenderTargetDescription(pixelFormat);
 

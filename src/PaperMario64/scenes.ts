@@ -5,7 +5,7 @@ import * as MapShape from './map_shape';
 import * as Tex from './tex';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
@@ -17,7 +17,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 const pathBase = `pm64`;
 
 class PaperMario64Renderer implements Viewer.SceneGfx {
-    private clearRenderPassDescriptor: GfxRenderPassDescriptor;
+    private attachmentClearDescriptor: GfxrAttachmentClearDescriptor;
 
     public textureHolder = new PaperMario64TextureHolder();
     public modelTreeRenderers: PaperMario64ModelTreeRenderer[] = [];
@@ -28,7 +28,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
+        this.attachmentClearDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -53,8 +53,8 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.attachmentClearDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.attachmentClearDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -85,7 +85,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
 
     // ScriptHost
     public setBGColor(color: Color): void {
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(color);
+        this.attachmentClearDescriptor = makeAttachmentClearDescriptor(color);
     }
 
     public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {

@@ -237,11 +237,10 @@ export interface GfxColor {
     a: number;
 }
 
-// TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
-    colorAttachment: GfxRenderTarget | null;
-    colorResolveTo: GfxTexture | null;
-    colorClearColor: GfxColor | 'load';
+    colorAttachment: (GfxRenderTarget | null)[];
+    colorClearColor: (GfxColor | 'load')[];
+    colorResolveTo: (GfxTexture | null)[];
     depthStencilAttachment: GfxRenderTarget | null;
     depthStencilResolveTo: GfxTexture | null;
     depthClearValue: number | 'load';

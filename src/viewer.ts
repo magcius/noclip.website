@@ -4,12 +4,12 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { AntialiasingMode, makeClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
@@ -100,7 +100,15 @@ export class Viewer {
 
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-    private clearDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
+    private renderPassDescriptor: GfxRenderPassDescriptor = {
+        colorAttachment: [],
+        colorResolveTo: [null],
+        colorClearColor: [OpaqueBlack],
+        depthClearValue: 'load',
+        stencilClearValue: 'load',
+        depthStencilAttachment: null,
+        depthStencilResolveTo: null,
+    };
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -147,10 +155,9 @@ export class Viewer {
             this.scene.render(this.gfxDevice, this.viewerRenderInput);
         } else {
             // Clear to black.
-            this.clearDescriptor.colorAttachment = null;
-            this.clearDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+            this.renderPassDescriptor.colorResolveTo[0] = this.viewerRenderInput.onscreenTexture;
 
-            const emptyRenderPass = this.gfxDevice.createRenderPass(this.clearDescriptor);
+            const emptyRenderPass = this.gfxDevice.createRenderPass(this.renderPassDescriptor);
             this.gfxDevice.submitPass(emptyRenderPass);
         }
     }

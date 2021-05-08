@@ -9,6 +9,7 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { IS_DEVELOPMENT } from "../../BuildVersion";
+import { GfxrAttachmentSlot } from "./GfxRenderGraph";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -457,12 +458,22 @@ export class GfxRenderInst {
     private setAttachmentFormatsFromRenderPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
         const passDescriptor = device.queryRenderPass(passRenderer);
 
-        const colorAttachmentDescriptor = passDescriptor.colorAttachment !== null ? device.queryRenderTarget(passDescriptor.colorAttachment) : null;
         const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
 
-        this._renderPipelineDescriptor.colorAttachmentFormats[0] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
+        let sampleCount = -1;
+        for (let slot = GfxrAttachmentSlot.Color0; slot <= GfxrAttachmentSlot.ColorMax; slot++) {
+            const colorAttachmentDescriptor = passDescriptor.colorAttachment[slot] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[slot]!) : null;
+            this._renderPipelineDescriptor.colorAttachmentFormats[slot] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
+            if (colorAttachmentDescriptor !== null) {
+                if (sampleCount === -1)
+                    sampleCount = colorAttachmentDescriptor.sampleCount;
+                else
+                    assert(sampleCount === colorAttachmentDescriptor.sampleCount);
+            }
+        }
+
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
-        this._renderPipelineDescriptor.sampleCount = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.sampleCount : depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.sampleCount : 0;
+        this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 
     public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {

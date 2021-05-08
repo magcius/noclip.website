@@ -20,7 +20,7 @@ import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from '../Ca
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { RWAtomicStruct, RWChunk, parseRWAtomic, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
 import { EventID } from './enums';
@@ -1078,7 +1078,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         const fogEnabled = this.renderHacks.fog && this.fog;
         this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
 
-        const clearColorPassDescriptor = makeClearRenderPassDescriptor(this.clearColor);
+        const clearColorPassDescriptor = makeAttachmentClearDescriptor(this.clearColor);
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearColorPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearColorPassDescriptor);
 

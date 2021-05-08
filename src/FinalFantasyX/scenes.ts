@@ -1,6 +1,6 @@
 import * as BIN from "./bin";
 import * as Viewer from '../viewer';
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
@@ -161,7 +161,7 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
 
         const renderer = new FFXRenderer(device, levelData);
         const cache = renderer.renderHelper.getCache();
-        renderer.clearPass = makeClearRenderPassDescriptor(level.clearColor);
+        renderer.clearPass = makeAttachmentClearDescriptor(level.clearColor);
         mat4.copy(renderer.lightDirection, level.lightDirection);
 
         for (let tex of level.textures) {

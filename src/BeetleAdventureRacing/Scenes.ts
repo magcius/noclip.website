@@ -1,6 +1,6 @@
 import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -55,7 +55,7 @@ class BARRenderer implements SceneGfx {
     private texScrollAnims: TexScrollAnim[];
     private texSeqAnims: TexSeqAnim[];
 
-    private renderPassDescriptor: GfxRenderPassDescriptor;
+    private attachmentClearDescriptor: GfxrAttachmentClearDescriptor;
 
     private trackDataRenderer: TrackDataRenderer;
 
@@ -86,9 +86,9 @@ class BARRenderer implements SceneGfx {
         }
 
         if (uven === null) {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.1, 0.1, 0.1));
+            this.attachmentClearDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(0.1, 0.1, 0.1));
         } else {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
+            this.attachmentClearDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
 
         // TODO: should this be lazy?
@@ -273,8 +273,8 @@ class BARRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.attachmentClearDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.attachmentClearDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');

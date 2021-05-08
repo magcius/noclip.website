@@ -17,7 +17,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, g
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { standardFullClearRenderPassDescriptor, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers";
+import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers";
 import { CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
 import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
@@ -3087,7 +3087,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const renderer = new Pilotwings64Renderer(device, dataHolder, modelBuilder);
         const clearColor = colorNewFromRGBA(skybox.clearColor[0], skybox.clearColor[1], skybox.clearColor[2]);
-        renderer.renderPassDescriptor = makeClearRenderPassDescriptor(clearColor);
+        renderer.renderPassDescriptor = makeAttachmentClearDescriptor(clearColor);
         const isMap = this.weatherConditions < 0;
 
         if (skybox.skyboxModel !== undefined) {

@@ -13,7 +13,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
 import { Melee_map_headData_Load } from "./Melee_map_head";
 import { CameraController } from "../Camera";
-import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -254,7 +254,7 @@ class MeleeTitleDesc implements SceneDesc {
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/GmTtAll.usd`));
 
         const scene = new MeleeRenderer(device);
-        scene.clearRenderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA8(0x262626FF));
+        scene.clearRenderPassDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA8(0x262626FF));
 
         const ctx = new HSD_LoadContext(arc);
         const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))!));

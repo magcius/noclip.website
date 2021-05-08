@@ -1,6 +1,6 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
@@ -194,7 +194,7 @@ function makeDataList(strings: string[]): HTMLDataListElement {
 
 const enum Pass { MAIN, INDIRECT }
 
-const clearPass = makeClearRenderPassDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
+const clearPass = makeAttachmentClearDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class Explorer implements SceneGfx {

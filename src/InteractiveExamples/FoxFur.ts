@@ -5,7 +5,7 @@ import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
 import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureMapping } from '../TextureHolder';
@@ -396,7 +396,7 @@ class FurObj {
     }
 }
 
-const clearPass = makeClearRenderPassDescriptor(TransparentBlack);
+const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
 export class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;

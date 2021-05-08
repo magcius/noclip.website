@@ -283,7 +283,6 @@ function translateColorState(attachmentState: GfxAttachmentState, format: GfxFor
 }
 
 function translateTargets(colorAttachmentFormats: (GfxFormat | null)[], megaStateDescriptor: GfxMegaStateDescriptor): GPUColorTargetState[] {
-    // TODO(jstpierre): Remove legacy blend states.
     return megaStateDescriptor.attachmentsState!.map((attachmentState, i) => {
         return translateColorState(attachmentState, colorAttachmentFormats[i]!);
     });
@@ -380,8 +379,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private renderPassDescriptor: GPURenderPassDescriptor;
     private colorAttachments: GPURenderPassColorAttachmentNew[];
     private depthStencilAttachment: GPURenderPassDepthStencilAttachmentNew;
-    private colorAttachment: GfxTextureSharedP_WebGPU | null = null;
-    private colorResolveTo: GfxTextureSharedP_WebGPU | null = null;
+    private colorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
+    private colorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private debugPointer: any;
 
     constructor(private device: GPUDevice) {
@@ -408,31 +407,36 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private setRenderPassDescriptor(descriptor: GfxRenderPassDescriptor): void {
         this.descriptor = descriptor;
 
-        let colorAttachment: GfxTextureSharedP_WebGPU | null = descriptor.colorAttachment as GfxAttachmentP_WebGPU;
-        let colorResolveTo: GfxTextureSharedP_WebGPU | null = descriptor.colorResolveTo as GfxTextureP_WebGPU;
+        const numColorAttachments = descriptor.colorAttachment.length;
+        this.colorAttachment.length = numColorAttachments;
+        this.colorResolveTo.length = numColorAttachments;
+        for (let i = 0; i < descriptor.colorAttachment.length; i++) {
+            let colorAttachment: GfxTextureSharedP_WebGPU | null = descriptor.colorAttachment[i] as GfxAttachmentP_WebGPU;
+            let colorResolveTo: GfxTextureSharedP_WebGPU | null = descriptor.colorResolveTo[i] as GfxTextureP_WebGPU;
 
-        // Do some dumb juggling...
-        if (colorAttachment === null && colorResolveTo !== null) {
-            colorAttachment = colorResolveTo as GfxTextureP_WebGPU;
-            colorResolveTo = null;
+            // Do some dumb juggling...
+            if (colorAttachment === null && colorResolveTo !== null) {
+                colorAttachment = colorResolveTo as GfxTextureP_WebGPU;
+                colorResolveTo = null;
+            }
+
+            if (colorAttachment !== null) {
+                const dstAttachment = this.colorAttachments[0];
+                dstAttachment.view = colorAttachment.gpuTextureView;
+                dstAttachment.loadValue = descriptor.colorClearColor[i];
+                dstAttachment.storeOp = 'store';
+                dstAttachment.resolveTarget = undefined;
+                this.renderPassDescriptor.colorAttachments = this.colorAttachments;
+
+                if (colorResolveTo !== null && colorAttachment.sampleCount > 1)
+                    dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
+            } else {
+                this.renderPassDescriptor.colorAttachments = [];
+            }
+
+            this.colorAttachment[i] = colorAttachment;
+            this.colorResolveTo[i] = colorResolveTo;
         }
-
-        if (colorAttachment !== null) {
-            const dstAttachment = this.colorAttachments[0];
-            dstAttachment.view = colorAttachment.gpuTextureView;
-            dstAttachment.loadValue = descriptor.colorClearColor;
-            dstAttachment.storeOp = 'store';
-            dstAttachment.resolveTarget = undefined;
-            this.renderPassDescriptor.colorAttachments = this.colorAttachments;
-
-            if (colorResolveTo !== null && colorAttachment.sampleCount > 1)
-                dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
-        } else {
-            this.renderPassDescriptor.colorAttachments = [];
-        }
-
-        this.colorAttachment = colorAttachment;
-        this.colorResolveTo = colorResolveTo;
 
         if (descriptor.depthStencilAttachment !== null) {
             const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
@@ -518,14 +522,19 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.renderPassEncoder = null;
 
         // Fake a resolve with a copy for non-MSAA.
-        if (this.colorAttachment !== null && this.colorResolveTo !== null && this.colorAttachment.sampleCount === 1) {
-            const srcCopy: GPUImageCopyTexture = { texture: this.colorAttachment.gpuTexture };
-            const dstCopy: GPUImageCopyTexture = { texture: this.colorResolveTo.gpuTexture };
-            assert(this.colorAttachment.width === this.colorResolveTo.width);
-            assert(this.colorAttachment.height === this.colorResolveTo.height);
-            assert(!!(this.colorAttachment.usage & GPUTextureUsage.COPY_SRC));
-            assert(!!(this.colorResolveTo.usage & GPUTextureUsage.COPY_DST));
-            this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [this.colorResolveTo.width, this.colorResolveTo.height, 1]);
+        for (let i = 0; i < this.colorAttachment.length; i++) {
+            const colorAttachment = this.colorAttachment[i];
+            const colorResolveTo = this.colorResolveTo[i];
+
+            if (colorAttachment !== null && colorResolveTo !== null && colorAttachment.sampleCount === 1) {
+                const srcCopy: GPUImageCopyTexture = { texture: colorAttachment.gpuTexture };
+                const dstCopy: GPUImageCopyTexture = { texture: colorResolveTo.gpuTexture };
+                assert(colorAttachment.width === colorResolveTo.width);
+                assert(colorAttachment.height === colorResolveTo.height);
+                assert(!!(colorAttachment.usage & GPUTextureUsage.COPY_SRC));
+                assert(!!(colorResolveTo.usage & GPUTextureUsage.COPY_DST));
+                this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [colorResolveTo.width, colorResolveTo.height, 1]);
+            }
         }
 
         return this.commandEncoder!.finish();

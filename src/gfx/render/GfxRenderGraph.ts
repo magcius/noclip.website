@@ -46,7 +46,12 @@ export class GfxrRenderTargetDescription {
 }
 
 export const enum GfxrAttachmentSlot {
-    Color0, DepthStencil,
+    Color0 = 0,
+    Color1 = 1,
+    Color2 = 2,
+    Color3 = 3,
+    ColorMax = Color3,
+    DepthStencil,
 }
 
 export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x: 0, y: 0, w: 1, h: 1 };
@@ -117,11 +122,11 @@ class PassImpl implements GfxrPass {
 
     // Execution state computed by scheduling.
     public descriptor: GfxRenderPassDescriptor = {
-        colorAttachment: null,
-        colorResolveTo: null,
+        colorAttachment: [],
+        colorResolveTo: [],
         depthStencilAttachment: null,
         depthStencilResolveTo: null,
-        colorClearColor: 'load',
+        colorClearColor: ['load'],
         depthClearValue: 'load',
         stencilClearValue: 'load',
     };
@@ -683,22 +688,23 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     }
 
     private schedulePass(graph: GraphImpl, pass: PassImpl) {
-        const color0RenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlot.Color0];
         const depthStencilRenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlot.DepthStencil];
 
-        const color0RenderTarget = this.acquireRenderTargetForID(graph, color0RenderTargetID);
-        pass.renderTargets[GfxrAttachmentSlot.Color0] = color0RenderTarget;
-        pass.descriptor.colorAttachment = color0RenderTarget !== null ? color0RenderTarget.attachment : null;
-        pass.descriptor.colorClearColor = (color0RenderTarget !== null && color0RenderTarget.needsClear) ? graph.renderTargetDescriptions[color0RenderTargetID].colorClearColor : 'load';
+        for (let slot = GfxrAttachmentSlot.Color0; slot <= GfxrAttachmentSlot.ColorMax; slot++) {
+            const colorRenderTargetID = pass.renderTargetIDs[slot];
+            const colorRenderTarget = this.acquireRenderTargetForID(graph, colorRenderTargetID);
+            pass.renderTargets[slot] = colorRenderTarget;
+            pass.descriptor.colorAttachment[slot] = colorRenderTarget !== null ? colorRenderTarget.attachment : null;
+            pass.descriptor.colorResolveTo[slot] = this.determineResolveToTexture(graph, pass, slot);
+            pass.descriptor.colorClearColor[slot] = (colorRenderTarget !== null && colorRenderTarget.needsClear) ? graph.renderTargetDescriptions[colorRenderTargetID].colorClearColor : 'load';
+        }
 
         const depthStencilRenderTarget = this.acquireRenderTargetForID(graph, depthStencilRenderTargetID);
         pass.renderTargets[GfxrAttachmentSlot.DepthStencil] = depthStencilRenderTarget;
         pass.descriptor.depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
+        pass.descriptor.depthStencilResolveTo = this.determineResolveToTexture(graph, pass, GfxrAttachmentSlot.DepthStencil);
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
-
-        pass.descriptor.colorResolveTo = this.determineResolveToTexture(graph, pass, GfxrAttachmentSlot.Color0);
-        pass.descriptor.depthStencilResolveTo = this.determineResolveToTexture(graph, pass, GfxrAttachmentSlot.DepthStencil);
 
         let rtWidth = 0, rtHeight = 0, rtSampleCount = 0;
         for (let i = 0; i < pass.renderTargets.length; i++) {

@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxRenderPassDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
@@ -15,7 +15,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 const pathBase = `zelview`;
 
 class ZelviewRenderer implements Viewer.SceneGfx {
-    private clearRenderPassDescriptor: GfxRenderPassDescriptor;
+    private clearAttachmentDescriptor: GfxrAttachmentClearDescriptor;
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -24,7 +24,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private zelview: ZELVIEW0) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
+        this.clearAttachmentDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
     }
 
     public createPanels(): UI.Panel[] {
@@ -60,8 +60,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearAttachmentDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearAttachmentDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');

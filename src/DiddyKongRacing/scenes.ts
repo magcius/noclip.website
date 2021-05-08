@@ -14,7 +14,7 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, SingleSelect, Slider } from '../ui';
 import { DkrControlGlobals } from './DkrControlGlobals';
 import { IMG_LOADING_ASSETS } from './DkrLoadingMessage'
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { trackParams } from './scenes_TrackParams';
@@ -32,7 +32,7 @@ class DKRRenderer implements Viewer.SceneGfx {
     public isInteractive = true;
     private hasStarted = false;
 
-    public renderPassDescriptor: GfxRenderPassDescriptor;
+    public renderPassDescriptor: GfxrAttachmentClearDescriptor;
 
     private level: DkrLevel | null = null;
 
@@ -79,7 +79,7 @@ class DKRRenderer implements Viewer.SceneGfx {
         if(!!this.level) {
             clearColor = this.level.getClearColor();
         }
-        this.renderPassDescriptor = makeClearRenderPassDescriptor(clearColor);
+        this.renderPassDescriptor = makeAttachmentClearDescriptor(clearColor);
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);

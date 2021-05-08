@@ -13,7 +13,7 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { makeBackbufferDescSimple, makeClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { colorNewCopy, OpaqueBlack } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -276,7 +276,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();
-    private clearDescriptor = makeClearRenderPassDescriptor(colorNewCopy(OpaqueBlack));
+    private clearDescriptor = makeAttachmentClearDescriptor(colorNewCopy(OpaqueBlack));
 
     constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
