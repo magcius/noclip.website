@@ -93,9 +93,6 @@ export interface Surface {
     // displacement info
     isDisplacement: boolean;
     bbox: AABB | null;
-
-    // overlay data
-    overlays: Overlay[];
 }
 
 const enum TexinfoFlags {
@@ -1154,7 +1151,7 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: result.aabb, overlays: [] };
+                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: result.aabb };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -1218,7 +1215,7 @@ export class BSPFile {
                 let surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
+                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null };
                     this.surfaces.push(surface);
                 }
 
@@ -1242,7 +1239,7 @@ export class BSPFile {
 
         // Slice up overlays
         const overlays = getLumpData(LumpType.OVERLAYS).createDataView();
-        const testOverlayHacks = false;
+        const testOverlayHacks = true;
 
         for (let idx = 0; testOverlayHacks && idx < overlays.byteLength;) {
             const nId = overlays.getUint32(idx + 0x00, true);
@@ -1295,10 +1292,6 @@ export class BSPFile {
 
             const indexCount = 6;
             const vertexCount = 4;
-
-            // Go through each face listed and slice the overlay to the relevant portion of the face...
-            for (let j = 0; j < m_nFaceCount; j++) {
-            }
 
             const vertexData = vertexBuffer.addFloat32(vertexCount * vertexSize);
             let dstOffsVertex = 0;

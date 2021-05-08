@@ -37,6 +37,7 @@ export const enum SkinningMode {
 export const enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     FramebufferDepth = `framebuffer-depth`,
+    DeferredLightmap = `deferred-lightmap`,
 }
 
 export class FogParams {
@@ -130,9 +131,13 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 }
 
 #ifdef FRAG
+layout(location = 0) out vec4 o_Color0;
+layout(location = 1) out vec4 o_Color1;
+
 void OutputLinearColor(in vec4 t_Color) {
     // We do gamma correction in post now, as we need linear blending.
-    gl_FragColor.rgba = t_Color.rgba;
+    o_Color0.rgba = t_Color.rgba;
+    o_Color1.rgba = vec4(0.0);
 }
 #endif
 `;
@@ -470,6 +475,7 @@ export abstract class BaseMaterial {
     public hasVertexColorInput = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
+    public wantsDeferredLightmap = false;
     public wantsTexCoord0Scale = false;
     public isTranslucent = false;
     public isIndirect = false;
@@ -821,6 +827,9 @@ export abstract class BaseMaterial {
         if (this.isIndirect)
             return view.indirectList;
 
+        if (this.wantsDeferredLightmap)
+            return view.deferredDecalList;
+
         return view.mainList;
     }
 }
@@ -904,6 +913,9 @@ layout(std140) uniform ub_SkinningParams {
 };
 #endif
 
+#define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
+#define HAS_PROJECTED_TEXCOORD (USE_DEFERRED_LIGHTMAP)
+
 // Base, Detail
 varying vec4 v_TexCoord0;
 // Lightmap (0), Envmap Mask
@@ -911,12 +923,15 @@ varying vec4 v_TexCoord1;
 // Bumpmap
 varying vec4 v_TexCoord2;
 
+#ifdef HAS_PROJECTED_TEXCOORD
+// Projected TexCoord
+varying vec3 v_TexCoord3;
+#endif
+
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
 varying vec4 v_Color;
 varying vec3 v_DiffuseLighting;
-
-#define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
 #ifdef HAS_FULL_TANGENTSPACE
 // 3x3 matrix for our tangent space basis.
@@ -1173,6 +1188,12 @@ void mainVS() {
     v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
+
+#ifdef HAS_PROJECTED_TEXCOORD
+    // Convert from projected position to texture space.
+    vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
+    v_TexCoord3.xyz = vec3(t_ProjTexCoord, gl_Position.w);
+#endif
 }
 #endif
 
@@ -1343,14 +1364,14 @@ void mainPS() {
     t_NormalWorld = v_TangentSpaceBasis2;
 #endif
 
-    vec3 t_DiffuseLighting = vec3(1.0);
+    vec3 t_DiffuseLighting = vec3(0.0);
 
-    // Multiply in diffuse lighting from vertex shader.
-    t_DiffuseLighting.rgb *= v_DiffuseLighting.rgb;
+    vec3 t_DeferredLightmapOutput = vec3(0.0);
 
 #ifdef USE_LIGHTMAP
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
+    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy)).rgb;
 #ifdef USE_DIFFUSE_BUMPMAP
     vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
     vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
@@ -1391,11 +1412,21 @@ void mainPS() {
     t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
     t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
 #else
-    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy)).rgb;
-    t_DiffuseLighting = t_LightmapColor1;
+    t_DiffuseLighting.rgb = t_LightmapColor0;
 #endif
 
-    t_DiffuseLighting *= t_DiffuseLightingScale;
+    t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * t_DiffuseLightingScale;
+
+    // Decals can't get bumpmapping, I don't believe...
+    t_DeferredLightmapOutput.rgb = t_LightmapColor0.rgb;
+#else
+    // Diffuse lighting comes from vertex shader.
+    t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
+#endif
+
+#ifdef USE_DEFERRED_LIGHTMAP
+    vec2 t_ProjTexCoord = v_TexCoord3.xy / v_TexCoord3.z;
+    t_DiffuseLighting.rgb = texture(SAMPLER_2D(u_Texture[3]), t_ProjTexCoord).rgb;
 #endif
 
     t_Albedo *= v_Color;
@@ -1534,6 +1565,7 @@ void mainPS() {
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
+    o_Color1.rgba = vec4(t_DeferredLightmapOutput.rgb, 0.0);
 }
 #endif
 `;
@@ -1730,8 +1762,15 @@ class Material_Generic extends BaseMaterial {
         }
 
         if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
-            this.wantsLightmap = true;
-            this.program.setDefineBool('USE_LIGHTMAP', true);
+            if (this.wantsDeferredLightmap) {
+                this.wantsLightmap = false;
+                this.program.setDefineBool('USE_DEFERRED_LIGHTMAP', true);
+            } else {
+                this.wantsLightmap = true;
+                this.program.setDefineBool('USE_LIGHTMAP', true);
+            }
+        } else {
+            this.wantsDeferredLightmap = false;
         }
 
         if (this.shaderType === GenericShaderType.WorldVertexTransition) {
@@ -1841,7 +1880,10 @@ class Material_Generic extends BaseMaterial {
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(renderContext);
-        renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
+        if (this.wantsLightmap)
+            renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
+        else if (this.wantsDeferredLightmap)
+            this.textureMapping[3].lateBinding = LateBindingTexture.DeferredLightmap;
         this.recacheProgram(renderContext.device, renderContext.renderCache);
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 132);

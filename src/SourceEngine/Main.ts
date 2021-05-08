@@ -29,6 +29,7 @@ import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { OpaqueBlack } from "../Color";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
@@ -417,6 +418,9 @@ export class BSPModelRenderer {
             const surface = assertExists(this.surfaces.find((surface) => surface.surface.texName === texName));
             materialInstance.wantsTexCoord0Scale = surface.surface.wantsTexCoord0Scale;
 
+            const isOverlay = !surface.surface.wantsTexCoord0Scale;
+            materialInstance.wantsDeferredLightmap = isOverlay;
+
             await materialInstance.init(renderContext);
         }));
 
@@ -538,6 +542,7 @@ export class SourceEngineView {
     public frustum = new Frustum();
 
     public mainList = new GfxRenderInstList();
+    public deferredDecalList = new GfxRenderInstList();
     public indirectList = new GfxRenderInstList(null);
 
     public fogParams = new FogParams();
@@ -559,6 +564,7 @@ export class SourceEngineView {
 
     public reset(): void {
         this.mainList.reset();
+        this.deferredDecalList.reset();
         this.indirectList.reset();
     }
 }
@@ -1024,7 +1030,7 @@ void main() {
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
-    private textureMapping = nArray(2, () => new TextureMapping());
+    private textureMapping = nArray(3, () => new TextureMapping());
     private linearSampler: GfxSampler;
     private pointSampler: GfxSampler;
     private postProgram = new FullscreenPostProgram();
@@ -1169,6 +1175,7 @@ export class SourceRenderer implements SceneGfx {
         const r = this.renderHelper.renderInstManager;
         list.resolveLateSamplerBinding(LateBindingTexture.FramebufferColor, this.textureMapping[0]);
         list.resolveLateSamplerBinding(LateBindingTexture.FramebufferDepth, this.textureMapping[1]);
+        list.resolveLateSamplerBinding(LateBindingTexture.DeferredLightmap, this.textureMapping[2]);
         list.drawOnPassRenderer(r.gfxRenderCache, passRenderer);
     }
 
@@ -1187,16 +1194,22 @@ export class SourceRenderer implements SceneGfx {
 
         this.textureMapping[0].reset();
         this.textureMapping[1].reset();
+        this.textureMapping[2].reset();
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
         mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+
+        const lightColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        setBackbufferDescSimple(lightColorDesc, viewerInput);
+        lightColorDesc.colorClearColor = OpaqueBlack;
 
         const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
         mainDepthDesc.copyDimensions(mainColorDesc);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color (sRGB)');
+        const lightColorTargetID = builder.createRenderTargetID(lightColorDesc, 'Light Color (sRGB)');
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skybox');
@@ -1214,10 +1227,26 @@ export class SourceRenderer implements SceneGfx {
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color1, lightColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
             pass.exec((passRenderer) => {
                 this.executeOnPass(passRenderer, this.mainView.mainList);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Deferred Decals');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            const lightColorResolveTextureID = builder.resolveRenderTarget(lightColorTargetID);
+            pass.attachResolveTexture(lightColorResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                this.textureMapping[2].gfxTexture = scope.getResolveTextureForID(lightColorResolveTextureID);
+                this.textureMapping[2].gfxSampler = this.linearSampler;
+                this.executeOnPass(passRenderer, this.mainView.deferredDecalList);
             });
         });
 
@@ -1252,7 +1281,7 @@ export class SourceRenderer implements SceneGfx {
             pass.setDebugName('Color Correction & Gamma Correction');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorGammaTargetID);
 
-            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            const mainColorResolveTextureID = builder.resolveRenderTarget(lightColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             const postRenderInst = this.renderHelper.renderInstManager.newRenderInst();
