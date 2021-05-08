@@ -54,7 +54,6 @@ export class Plane {
         vec3.copy(dst, p0);
         vec3.scaleAndAdd(dst, dst, p0_p1, t);
     }
-    
 }
 
 const scratchVec3a = vec3.create();

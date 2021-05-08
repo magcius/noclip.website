@@ -9,7 +9,7 @@ import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillColor, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
@@ -166,7 +166,7 @@ export class SkyboxRenderer {
         let dstIdx = 0;
 
         function buildPlaneVert(pb: number, s: number, t: number): void {
-            const side = 5000000;
+            const side = 30000 * Math.sqrt(1/3);
             const g = [-s*side, s*side, -t*side, t*side, -side, side];
             vertexData[dstVert++] = g[(pb >>> 8) & 0x0F];
             vertexData[dstVert++] = g[(pb >>> 4) & 0x0F];
@@ -529,6 +529,8 @@ export class SourceEngineView {
     public worldFromViewMatrix = mat4.create();
     public clipFromWorldMatrix = mat4.create();
 
+    public clipFromViewMatrix: ReadonlyMat4;
+
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
 
@@ -545,7 +547,8 @@ export class SourceEngineView {
         if (extraTransformInSourceEngineSpace !== null)
             mat4.mul(this.viewFromWorldMatrix, this.viewFromWorldMatrix, extraTransformInSourceEngineSpace);
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
-        mat4.mul(this.clipFromWorldMatrix, camera.projectionMatrix, this.viewFromWorldMatrix);
+        this.clipFromViewMatrix = camera.projectionMatrix;
+        mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
         this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
 
@@ -998,7 +1001,7 @@ const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
 class FullscreenPostProgram extends DeviceProgram {
     public both = `
 precision mediump float; precision lowp sampler3D;
-uniform sampler2D u_FramebufferTexture;
+uniform sampler2D u_FramebufferColor;
 uniform sampler3D u_ColorCorrectTexture;
 `;
     public vert: string = GfxShaderLibrary.fullscreenVS;
@@ -1006,7 +1009,7 @@ uniform sampler3D u_ColorCorrectTexture;
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 t_Color = texture(SAMPLER_2D(u_FramebufferTexture), v_TexCoord);
+    vec4 t_Color = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord);
     t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
 
     vec3 t_Size = vec3(textureSize(u_ColorCorrectTexture, 0));
@@ -1022,6 +1025,8 @@ const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
     private textureMapping = nArray(2, () => new TextureMapping());
+    private linearSampler: GfxSampler;
+    private pointSampler: GfxSampler;
     private postProgram = new FullscreenPostProgram();
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
@@ -1039,13 +1044,22 @@ export class SourceRenderer implements SceneGfx {
     public pvsScratch = new BitMap(65536);
 
     constructor(context: SceneContext, public renderContext: SourceRenderContext) {
-        const device = renderContext.device;
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
-        this.textureMapping[0].gfxSampler = this.renderContext.renderCache.createSampler({
+        this.linearSampler = this.renderContext.renderCache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+        });
+
+        this.pointSampler = this.renderContext.renderCache.createSampler({
+            magFilter: GfxTexFilterMode.Point,
+            minFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
@@ -1153,7 +1167,8 @@ export class SourceRenderer implements SceneGfx {
 
     private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
         const r = this.renderHelper.renderInstManager;
-        list.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.textureMapping[0]);
+        list.resolveLateSamplerBinding(LateBindingTexture.FramebufferColor, this.textureMapping[0]);
+        list.resolveLateSamplerBinding(LateBindingTexture.FramebufferDepth, this.textureMapping[1]);
         list.drawOnPassRenderer(r.gfxRenderCache, passRenderer);
     }
 
@@ -1169,6 +1184,9 @@ export class SourceRenderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        this.textureMapping[0].reset();
+        this.textureMapping[1].reset();
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
@@ -1188,7 +1206,6 @@ export class SourceRenderer implements SceneGfx {
 
             pass.exec((passRenderer) => {
                 this.executeOnPass(passRenderer, this.skyboxView.mainList);
-                this.executeOnPass(passRenderer, this.skyboxView.indirectList);
             });
         });
 
@@ -1212,8 +1229,14 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
+            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+            pass.attachResolveTexture(mainDepthResolveTextureID);
+
             pass.exec((passRenderer, scope) => {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.textureMapping[0].gfxSampler = this.linearSampler;
+                this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                this.textureMapping[1].gfxSampler = this.pointSampler;
                 this.executeOnPass(passRenderer, this.mainView.indirectList);
             });
         });

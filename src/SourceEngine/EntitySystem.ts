@@ -339,9 +339,9 @@ export class sky_camera extends BaseEntity {
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
-        this.fogStart = Number(this.entity.fogstart);
-        this.fogEnd = Number(this.entity.fogend);
-        this.fogMaxDensity = Number(this.entity.fogmaxdensity);
+        this.fogStart = Number(this.entity.fogstart) / this.scale;
+        this.fogEnd = Number(this.entity.fogend) / this.scale;
+        this.fogMaxDensity = Number(fallbackUndefined(this.entity.fogmaxdensity, '1'));
     }
 
     public fillFogParams(dst: FogParams): void {

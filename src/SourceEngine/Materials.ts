@@ -35,7 +35,8 @@ export const enum SkinningMode {
 };
 
 export const enum LateBindingTexture {
-    FramebufferTexture = 'framebuffer-texture',
+    FramebufferColor = `framebuffer-color`,
+    FramebufferDepth = `framebuffer-depth`,
 }
 
 export class FogParams {
@@ -116,6 +117,7 @@ vec3 GammaToLinear(in vec3 t_Color) {
 }
 
 void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
+#ifdef USE_FOG
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_CameraPosWorld.xyz);
     float t_FogFactor = saturate(invlerp(u_FogStart, u_FogEnd, t_DistanceWorld));
     t_FogFactor = min(t_FogFactor, u_FogMaxDensity);
@@ -124,6 +126,7 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
     t_FogFactor *= t_FogFactor;
 
     t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
+#endif
 }
 
 #ifdef FRAG
@@ -457,6 +460,11 @@ function colorGammaToLinear(c: Color, src: Color): void {
     c.a = src.a;
 }
 
+function fillGammaColor(d: Float32Array, offs: number, c: Color): number {
+    colorGammaToLinear(scratchColor, c);
+    return fillColor(d, offs, scratchColor);
+}
+
 export abstract class BaseMaterial {
     private visible = true;
     public hasVertexColorInput = true;
@@ -590,12 +598,11 @@ export abstract class BaseMaterial {
     protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
         const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
         this.paramGetVector(name).fillColor(scratchColor, alpha);
-        colorGammaToLinear(scratchColor, scratchColor);
-        return fillColor(d, offs, scratchColor);
+        return fillGammaColor(d, offs, scratchColor);
     }
 
     protected vtfIsIndirect(vtf: VTF): boolean {
-        return vtf.lateBinding === LateBindingTexture.FramebufferTexture;
+        return vtf.lateBinding === LateBindingTexture.FramebufferColor;
     }
 
     protected textureIsIndirect(name: string): boolean {
@@ -701,6 +708,7 @@ export abstract class BaseMaterial {
         p['$vertexcolor']                  = new ParameterBoolean(false, false);
         p['$vertexalpha']                  = new ParameterBoolean(false, false);
         p['$nocull']                       = new ParameterBoolean(false, false);
+        p['$nofog']                        = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture(true);
@@ -1787,6 +1795,9 @@ class Material_Generic extends BaseMaterial {
             this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         }
 
+        if (!this.paramGetBoolean('$nofog'))
+            this.program.setDefineBool('USE_FOG', true);
+
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
@@ -2015,6 +2026,9 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
+        if (!this.paramGetBoolean('$nofog'))
+            this.program.setDefineBool('USE_FOG', true);
+
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
@@ -2043,9 +2057,36 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 //#endregion
 
 //#region Water
-const enum WaterShaderType { Cheap, Flow }
+function fillUnprojectParams(d: Float32Array, offs: number, projectionMatrix: ReadonlyMat4): number {
+    // Take the bottom-right quadrant of the projection matrix, and calculate the inverse.
+    const ZZ = projectionMatrix[10];
+    const ZW = projectionMatrix[14];
+    const WZ = projectionMatrix[11];
+    const WW = projectionMatrix[15];
+    const invdet = 1 / (ZZ*WW - ZW*WZ);
+    const UnprojMtxZZ = invdet * WW;
+    const UnprojMtxZW = invdet * -ZW;
+    const UnprojMtxWZ = invdet * -WZ;
+    const UnprojMtxWW = invdet * ZZ;
 
-class WaterCheapMaterialProgram extends MaterialProgramBase {
+    const testI = vec4.fromValues(0, 0, 50, 1);
+    const testM = vec4.transformMat4(vec4.create(), testI, projectionMatrix);
+    const testG = vec4.create();
+    // Double-check our sanity
+    testG[2] = ZZ*testI[2] + ZW*testI[3];
+    testG[3] = WZ*testI[2] + WW*testI[3];
+    assert(testM[2] === testG[2]);
+    assert(testM[3] === testG[3]);
+
+    testG[2] /= testG[3];
+    const TestZ = (testG[2]*UnprojMtxZZ + UnprojMtxZW) / (testG[2]*UnprojMtxWZ + UnprojMtxWW);
+
+    return fillVec4(d, offs, UnprojMtxZZ, UnprojMtxZW, UnprojMtxWZ, UnprojMtxWW);
+}
+
+const enum WaterShaderType { Normal, Flow }
+
+class WaterMaterialProgram extends MaterialProgramBase {
     public static ub_ObjectParams = 1;
 
     public both = `
@@ -2059,24 +2100,27 @@ layout(std140) uniform ub_ObjectParams {
 #ifdef USE_TEXSCROLL
     vec4 u_TexScroll;
 #endif
+    vec4 u_RefractTint;
     vec4 u_ReflectTint;
-    vec4 u_Misc[1];
+    vec4 u_WaterFogColor;
+    Mat4x4 u_ProjectedDepthToWorld;
 };
 
-#define u_DistanceStart (u_Misc[0].x)
-#define u_DistanceEnd   (u_Misc[0].y)
+#define u_WaterFogRange (u_WaterFogColor.a)
 
+// Refract Coordinates
+varying vec3 v_TexCoord0;
 // Normal Map Coordinates
-varying vec2 v_TexCoord0;
-varying vec3 v_PositionWorld;
+varying vec2 v_TexCoord1;
+varying vec4 v_PositionWorld;
 
 // 3x3 matrix for our tangent space basis.
 varying vec3 v_TangentSpaceBasis0;
 varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
-// Normalmap
-uniform sampler2D u_Texture[1];
+// Refract Texture, Normalmap, Framebuffer Depth Texture
+uniform sampler2D u_Texture[3];
 // Envmap
 uniform samplerCube u_TextureCube[1];
 
@@ -2091,6 +2135,7 @@ void mainVS() {
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     v_PositionWorld.xyz = t_PositionWorld;
+    v_PositionWorld.w = gl_Position.z; // Clip-space Z
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
@@ -2100,25 +2145,103 @@ void mainVS() {
     v_TangentSpaceBasis1 = t_TangentTWorld;
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
+    // Convert from projected position to texture space.
+    vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
+    v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
+
+    v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
 }
 #endif
 
 #ifdef FRAG
+/*
+float UnprojectViewSpaceDepth(float t_DepthSample) {
+    float Viewport_Z = t_DepthSample;
+    float NDC_Z = Viewport_Z * 2.0 - 1.0; // Expand from 0..1 to -1..1
+
+    // To get the view-space depth from NDC depth, we calculate the inverse of the bottom-right quadrant
+    // of the projection matrix, and apply it here.
+    float UnprojMtxZZ = u_UnprojectParams[0];
+    float UnprojMtxZW = u_UnprojectParams[1];
+    float UnprojMtxWZ = u_UnprojectParams[2];
+    float UnprojMtxWW = u_UnprojectParams[3];
+
+    float ViewSpaceZ = (NDC_Z*UnprojMtxZZ + UnprojMtxZW) / (NDC_Z*UnprojMtxWZ + UnprojMtxWW);
+    return -ViewSpaceZ;
+}
+
+vec3 ViewSpaceFromScreenCoordAndDepth(vec2 t_ScreenCoord, float t_ViewSpaceDepth) {
+    vec2 t_ViewSpaceCoord = t_ScreenCoord * 2.0 - 1.0; // Expand from 0..1 to -1..1
+    // TODO(jstpierre): I don't think this is quite right? We need to take the near plane position into account...
+    vec2 t_ViewSpaceRay = vec2(u_ProjectionMatrixXX, u_ProjectionMatrixYY) * t_ViewSpaceCoord.xy;
+    // Point the ray out the camera lens.
+    vec3 t_Near = vec3(t_ViewSpaceRay.xy, u_ProjectionNearZ);
+    // Traverse down the ray by Z units.
+    return t_Near * t_ViewSpaceDepth;
+}
+*/
+
+float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
+    float t_DepthSample = texture(SAMPLER_2D(u_Texture[2]), t_ProjTexCoord).r;
+
+    // Reconstruct world-space position for the sample.
+    vec3 t_DepthSamplePos01 = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
+    vec4 t_DepthSamplePosClip = vec4(t_DepthSamplePos01 * vec3(2.0) - vec3(1.0), 1.0);
+    vec4 t_DepthSamplePosWorld = Mul(u_ProjectedDepthToWorld, t_DepthSamplePosClip);
+    // Divide by W.
+    t_DepthSamplePosWorld.xyz /= t_DepthSamplePosWorld.www;
+
+    // Now retrieve the height different (+Z is up in Source Engine BSP space)
+    float t_HeightDifference = v_PositionWorld.z - t_DepthSamplePosWorld.z;
+
+    // Also account for the distance from the eye (emulate "traditional" scattering fog)
+    float t_DistanceFromEye = u_CameraPosWorld.z - v_PositionWorld.z;
+    float t_FogDepth = saturate(t_HeightDifference / t_DistanceFromEye);
+
+    float t_PositionClipZ = v_PositionWorld.w;
+    float t_FogAmount = saturate((t_FogDepth * -t_PositionClipZ) / u_WaterFogRange);
+
+    return t_FogAmount;
+}
+
 void mainPS() {
     // Sample our normal map with scroll offsets.
-    vec2 t_BumpmapCoord0 = v_TexCoord0.xy;
-    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord0));
+    vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
+    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord0));
 #ifdef USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
-    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord1));
+    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord1));
     vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
-    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord2));
+    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord2));
     vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
 #else
     vec4 t_BumpmapSample = t_BumpmapSample0;
 #endif
     vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
+    float t_BumpmapStrength = t_BumpmapSample.a;
+
+    vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
+
+    /*
+    float t_DepthWater = gl_FragCoord.z;
+
+    float t_ViewSpaceDepthSample = UnprojectViewSpaceDepth(t_DepthSample);
+    float t_ViewSpaceDepthWater = UnprojectViewSpaceDepth(t_DepthWater);
+
+    vec3 t_ViewSpacePosSample = ViewSpaceFromScreenCoordAndDepth(t_ProjTexCoord.xy, t_ViewSpaceDepthSample);
+    vec3 t_ViewSpacePosWater = ViewSpaceFromScreenCoordAndDepth(t_ProjTexCoord.xy, t_ViewSpaceDepthWater);
+    float t_HeightDifference = max(t_ViewSpacePosSample.y - t_ViewSpacePosWater.y, 0.0);
+    */
+
+    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
+    float t_RefractAmount = u_RefractTint.a * t_RefractFogBendAmount;
+    vec2 t_RefractTexCoordOffs = t_BumpmapNormal.xy * t_BumpmapStrength;
+    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_RefractTexCoordOffs.xy * t_RefractAmount);
+    vec4 t_RefractSample = texture(SAMPLER_2D(u_Texture[0], t_RefractTexCoord));
+    vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
+
+    float t_RefractFogAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord + (t_RefractTexCoordOffs.xy * -t_RefractAmount));
+    t_RefractColor.rgb = mix(t_RefractColor.rgb, u_WaterFogColor.rgb, t_RefractFogAmount);
 
     vec3 t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 
@@ -2127,23 +2250,12 @@ void mainPS() {
 
     vec4 t_FinalColor;
 
-    vec3 t_SpecularLighting = vec3(0.0);
-    t_SpecularLighting = texture(u_TextureCube[0], t_Reflection).rgb;
-    t_SpecularLighting *= u_ReflectTint.rgb;
-    t_FinalColor.rgb = t_SpecularLighting;
+    vec4 t_ReflectSample = texture(u_TextureCube[0], t_Reflection);
+    vec3 t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 
-#ifdef USE_FRESNEL
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-    float t_Fresnel = CalcFresnelTerm2(dot(t_NormalWorld, t_WorldDirectionToEye));
-#else
-    float t_Fresnel = u_ReflectTint.a;
-#endif
-
-    float t_Distance = length(t_PositionToEye);
-    float t_ReflectAmount = (t_Distance - u_DistanceStart) / (u_DistanceEnd - u_DistanceStart);
-    t_FinalColor.a = clamp(t_Fresnel + t_ReflectAmount, 0.0, 1.0);
-
-    // TODO(jstpierre): RefractWater
+    float t_Fresnel = CalcFresnelTerm5(dot(t_NormalWorld, t_WorldDirectionToEye));
+    t_FinalColor.rgb = mix(t_RefractColor, t_ReflectColor, t_Fresnel);
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -2352,11 +2464,13 @@ class Material_Water extends BaseMaterial {
         p['$bumptransform']                = new ParameterMatrix();
         p['$envmap']                       = new ParameterTexture(true, true);
         p['$envmapframe']                  = new ParameterNumber(0);
+        p['$refracttexture']               = new ParameterTexture(true, false);
+        p['$refracttint']                  = new ParameterColor(1, 1, 1);
+        p['$refractamount']                = new ParameterNumber(0);
         p['$reflecttint']                  = new ParameterColor(1, 1, 1);
         p['$reflectamount']                = new ParameterNumber(0.8);
         p['$scroll1']                      = new ParameterVector(3);
         p['$scroll2']                      = new ParameterVector(3);
-        p['$nofresnel']                    = new ParameterBoolean(false, false);
         p['$cheapwaterstartdistance']      = new ParameterNumber(500.0);
         p['$cheapwaterenddistance']        = new ParameterNumber(1000.0);
 
@@ -2379,6 +2493,10 @@ class Material_Water extends BaseMaterial {
 
         p['$lightmapwaterfog']             = new ParameterBoolean(false, false);
         p['$fogcolor']                     = new ParameterColor(0, 0, 0);
+
+        // Hacky way to get RT depth
+        p['$depthtexture']                 = new ParameterTexture(false, false);
+        this.paramGetTexture('$depthtexture').ref = '_rt_Depth';
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
@@ -2399,23 +2517,25 @@ class Material_Water extends BaseMaterial {
             this.isTranslucent = false;
         } else {
             // Use Cheap water for now.
-            this.shaderType = WaterShaderType.Cheap;
-            this.program = new WaterCheapMaterialProgram();
+            this.shaderType = WaterShaderType.Normal;
+            this.program = new WaterMaterialProgram();
 
-            this.program.setDefineBool('USE_FRESNEL', !this.paramGetBoolean('$nofresnel'));
-    
             if (this.paramGetVector('$scroll1').get(0) !== 0) {
                 this.wantsTexScroll = true;
                 this.program.setDefineBool('USE_TEXSCROLL', true);
             }
 
-            this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
+            // this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
+            this.isIndirect = this.textureIsIndirect('$refracttexture');
         }
 
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
         this.setCullMode(this.megaStateFlags);
+
+        if (!this.paramGetBoolean('$nofog'))
+            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -2459,12 +2579,14 @@ class Material_Water extends BaseMaterial {
                 this.paramGetNumber('$flow_bumpstrength'),
                 this.paramGetNumber('$color_flow_displacebynormalstrength'),
                 this.paramGetNumber('$color_flow_lerpexp'));
-        } else if (this.shaderType === WaterShaderType.Cheap) {
-            this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$bumpframe'));
-            this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$envmapframe'));
+        } else if (this.shaderType === WaterShaderType.Normal) {
+            this.paramGetTexture('$refracttexture').fillTextureMapping(this.textureMapping[0], 0);
+            this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
+            this.paramGetTexture('$depthtexture').fillTextureMapping(this.textureMapping[2], 0);
+            this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[3], this.paramGetInt('$envmapframe'));
 
-            let offs = renderInst.allocateUniformBuffer(WaterCheapMaterialProgram.ub_ObjectParams, 64);
-            const d = renderInst.mapUniformBufferF32(WaterCheapMaterialProgram.ub_ObjectParams);
+            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
+            const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
             offs += fillMatrix4x3(d, offs, modelMatrix!);
             offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
@@ -2476,11 +2598,20 @@ class Material_Water extends BaseMaterial {
                 offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
             }
 
+            offs += this.paramFillColor(d, offs, '$refracttint', '$refractamount');
             offs += this.paramFillColor(d, offs, '$reflecttint', '$reflectamount');
 
-            const cheapwaterstartdistance = this.paramGetNumber('$cheapwaterstartdistance');
-            const cheapwaterenddistance = this.paramGetNumber('$cheapwaterenddistance');
-            offs += fillVec4(d, offs, cheapwaterstartdistance, cheapwaterenddistance);
+            const fogStart = this.paramGetNumber('$fogstart');
+            const fogEnd = this.paramGetNumber('$fogend');
+            // The start is actually unused, only the range is used...
+            const fogRange = fogEnd - fogStart;
+
+            this.paramGetVector('$fogcolor').fillColor(scratchColor, fogRange);
+            offs += fillGammaColor(d, offs, scratchColor);
+
+            // This will take us from -1...1 to world space position.
+            mat4.invert(scratchMatrix, renderContext.currentView.clipFromWorldMatrix);
+            offs += fillMatrix4x4(d, offs, scratchMatrix);
         }
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2716,6 +2847,9 @@ class Material_Refract extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
+        if (!this.paramGetBoolean('$nofog'))
+            this.program.setDefineBool('USE_FOG', true);
+
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
@@ -2794,7 +2928,9 @@ export class MaterialCache {
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
-        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.FramebufferTexture));
+        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.FramebufferColor));
+        this.textureCache.set('_rt_WaterRefraction', new VTF(device, cache, null, '_rt_WaterRefraction', false, LateBindingTexture.FramebufferColor));
+        this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.systemTextures = new SystemTextures(device);
     }
 
