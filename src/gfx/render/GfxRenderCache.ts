@@ -64,6 +64,9 @@ function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number
     for (let i = 0; i < a.bindingLayouts.length; i++)
         hash = gfxRenderBindingLayoutHash(hash, a.bindingLayouts[i]);
     hash = gfxMegaStateDescriptorHash(hash, a.megaStateDescriptor);
+    for (let i = 0; i < a.colorAttachmentFormats.length; i++)
+        hash = hashCodeNumberUpdate(hash, a.colorAttachmentFormats[i] || 0);
+    hash = hashCodeNumberUpdate(hash, a.depthStencilAttachmentFormat || 0);
     return hashCodeNumberFinish(hash);
 }
 

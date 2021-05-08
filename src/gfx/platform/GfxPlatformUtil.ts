@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxFormat } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
@@ -143,6 +143,10 @@ function gfxProgramEquals(a: Readonly<GfxProgram>, b: Readonly<GfxProgram>): boo
     return a.ResourceUniqueId === b.ResourceUniqueId;
 }
 
+function gfxFormatEquals(a: GfxFormat | null, b: GfxFormat | null): boolean {
+    return a === b;
+}
+
 export function gfxRenderPipelineDescriptorEquals(a: Readonly<GfxRenderPipelineDescriptor>, b: Readonly<GfxRenderPipelineDescriptor>): boolean {
     if (a.topology !== b.topology) return false;
     if (a.inputLayout !== b.inputLayout) return false;
@@ -150,6 +154,8 @@ export function gfxRenderPipelineDescriptorEquals(a: Readonly<GfxRenderPipelineD
     if (!gfxMegaStateDescriptorEquals(a.megaStateDescriptor, b.megaStateDescriptor)) return false;
     if (!gfxProgramEquals(a.program, b.program)) return false;
     if (!arrayEqual(a.bindingLayouts, b.bindingLayouts, gfxBindingLayoutEquals)) return false;
+    if (!arrayEqual(a.colorAttachmentFormats, b.colorAttachmentFormats, gfxFormatEquals)) return false;
+    if (a.depthStencilAttachmentFormat !== b.depthStencilAttachmentFormat) return false;
     return true;
 }
 

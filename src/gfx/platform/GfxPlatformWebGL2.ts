@@ -1476,7 +1476,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             if (cmd === RenderPassCmd.setRenderPassParameters) {
                 const numColorAttachments = u32[iu32++];
-                if (this.gl.getError() !== this.gl.NO_ERROR) debugger;
                 this._setRenderPassParametersBegin(numColorAttachments);
                 for (let i = 0; i < numColorAttachments; i++)
                     this._setRenderPassParametersColor(i, gfxr[igfxr++] as GfxRenderTargetP_GL | null, gfxr[igfxr++] as GfxTextureP_GL | null);
@@ -1675,9 +1674,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
         }
         this._currentColorAttachments.length = numColorAttachments;
-        if (gl.getError() !== gl.NO_ERROR) debugger;
-        // gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
-        if (gl.getError() !== gl.NO_ERROR) debugger;
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
     }
 
     private _setRenderPassParametersColor(i: number, colorAttachment: GfxRenderTargetP_GL | null, colorResolveTo: GfxTextureP_GL | null): void {
@@ -1726,9 +1723,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         gl.disable(gl.SCISSOR_TEST);
-        if (gl.getError() !== gl.NO_ERROR) debugger;
         gl.clearBufferfv(gl.COLOR, slot, [r, g, b, a]);
-        if (gl.getError() !== gl.NO_ERROR) debugger;
     }
 
     private _setRenderPassParametersClearDepthStencil(depthClearValue: number, stencilClearValue: number): void {
