@@ -117,7 +117,7 @@ interface Texinfo {
 }
 
 interface TexinfoMapping {
-    // 4x2 matrix for texture coordinates
+    // 2x4 matrix for texture coordinates
     s: ReadonlyVec4;
     t: ReadonlyVec4;
 }
@@ -191,137 +191,138 @@ interface BSPDispInfo {
     vertexCount: number;
 }
 
-class DisplacementMeshVertex {
+class MeshVertex {
     public position = vec3.create();
     public normal = vec3.create();
     public alpha = 1.0;
-    public uv = vec3.create();
+    public uv = vec2.create();
+    public lightmapUV = vec2.create();
 }
 
-class DisplacementBuilder {
-    public vertex: DisplacementMeshVertex[];
-    public aabb = new AABB();
+interface DisplacementResult {
+    vertex: MeshVertex[];
+    aabb: AABB;
+}
 
-    constructor(public disp: BSPDispInfo, public corners: vec3[], public disp_verts: Float32Array) {
-        this.vertex = nArray(disp.vertexCount, () => new DisplacementMeshVertex());
+function buildDisplacement(disp: BSPDispInfo, corners: vec3[], disp_verts: Float32Array): DisplacementResult {
+    const vertex = nArray(disp.vertexCount, () => new MeshVertex());
+    const aabb = new AABB();
 
-        const v0 = vec3.create(), v1 = vec3.create();
+    const v0 = vec3.create(), v1 = vec3.create();
 
-        // Positions
-        for (let y = 0; y < disp.sideLength; y++) {
-            const ty = y / (disp.sideLength - 1);
-            vec3.lerp(v0, corners[0], corners[1], ty);
-            vec3.lerp(v1, corners[3], corners[2], ty);
+    // Positions
+    for (let y = 0; y < disp.sideLength; y++) {
+        const ty = y / (disp.sideLength - 1);
+        vec3.lerp(v0, corners[0], corners[1], ty);
+        vec3.lerp(v1, corners[3], corners[2], ty);
 
-            for (let x = 0; x < disp.sideLength; x++) {
-                const tx = x / (disp.sideLength - 1);
+        for (let x = 0; x < disp.sideLength; x++) {
+            const tx = x / (disp.sideLength - 1);
 
-                // Displacement normal vertex.
-                const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
-                const dvx = disp_verts[dvidx * 5 + 0];
-                const dvy = disp_verts[dvidx * 5 + 1];
-                const dvz = disp_verts[dvidx * 5 + 2];
-                const dvdist = disp_verts[dvidx * 5 + 3];
-                const dvalpha = disp_verts[dvidx * 5 + 4];
+            // Displacement normal vertex.
+            const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
+            const dvx = disp_verts[dvidx * 5 + 0];
+            const dvy = disp_verts[dvidx * 5 + 1];
+            const dvz = disp_verts[dvidx * 5 + 2];
+            const dvdist = disp_verts[dvidx * 5 + 3];
+            const dvalpha = disp_verts[dvidx * 5 + 4];
 
-                const vertex = this.vertex[y * disp.sideLength + x];
-                vec3.lerp(vertex.position, v0, v1, tx);
+            const v = vertex[y * disp.sideLength + x];
+            vec3.lerp(v.position, v0, v1, tx);
 
-                vertex.position[0] += (dvx * dvdist);
-                vertex.position[1] += (dvy * dvdist);
-                vertex.position[2] += (dvz * dvdist);
-                vertex.uv[0] = tx;
-                vertex.uv[1] = ty;
-                vertex.alpha = dvalpha / 0xFF;
-                this.aabb.unionPoint(vertex.position);
-            }
-        }
-
-        // Normals
-        const w = disp.sideLength;
-        for (let y = 0; y < w; y++) {
-            for (let x = 0; x < w; x++) {
-                const vertex = this.vertex[y * w + x];
-                const x0 = x - 1, x1 = x, x2 = x + 1;
-                const y0 = y - 1, y1 = y, y2 = y + 1;
-
-                let count = 0;
-
-                // Top left
-                if (x0 >= 0 && y0 >= 0) {
-                    vec3.sub(v0, this.vertex[y1*w+x0].position, this.vertex[y0*w+x0].position);
-                    vec3.sub(v1, this.vertex[y0*w+x1].position, this.vertex[y0*w+x0].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    vec3.sub(v0, this.vertex[y1*w+x0].position, this.vertex[y0*w+x1].position);
-                    vec3.sub(v1, this.vertex[y1*w+x1].position, this.vertex[y0*w+x1].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    count += 2;
-                }
-
-                // Top right
-                if (x2 < w && y0 >= 0) {
-                    vec3.sub(v0, this.vertex[y1*w+x1].position, this.vertex[y0*w+x1].position);
-                    vec3.sub(v1, this.vertex[y0*w+x2].position, this.vertex[y0*w+x1].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    vec3.sub(v0, this.vertex[y1*w+x1].position, this.vertex[y0*w+x2].position);
-                    vec3.sub(v1, this.vertex[y1*w+x2].position, this.vertex[y0*w+x2].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    count += 2;
-                }
-
-                // Bottom left
-                if (x0 >= 0 && y2 < w) {
-                    vec3.sub(v0, this.vertex[y2*w+x0].position, this.vertex[y1*w+x0].position);
-                    vec3.sub(v1, this.vertex[y1*w+x1].position, this.vertex[y1*w+x0].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    vec3.sub(v0, this.vertex[y2*w+x0].position, this.vertex[y1*w+x1].position);
-                    vec3.sub(v1, this.vertex[y2*w+x1].position, this.vertex[y1*w+x1].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    count += 2;
-                }
-
-                // Bottom right
-                if (x2 < w && y2 < w) {
-                    vec3.sub(v0, this.vertex[y2*w+x1].position, this.vertex[y1*w+x1].position);
-                    vec3.sub(v1, this.vertex[y1*w+x2].position, this.vertex[y1*w+x1].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    vec3.sub(v0, this.vertex[y2*w+x1].position, this.vertex[y1*w+x2].position);
-                    vec3.sub(v1, this.vertex[y2*w+x2].position, this.vertex[y1*w+x2].position);
-                    vec3.cross(v0, v1, v0);
-                    vec3.normalize(v0, v0);
-                    vec3.add(vertex.normal, vertex.normal, v0);
-
-                    count += 2;
-                }
-
-                vec3.scale(vertex.normal, vertex.normal, 1 / count);
-            }
+            v.position[0] += (dvx * dvdist);
+            v.position[1] += (dvy * dvdist);
+            v.position[2] += (dvz * dvdist);
+            v.lightmapUV[0] = tx;
+            v.lightmapUV[1] = ty;
+            v.alpha = dvalpha / 0xFF;
+            aabb.unionPoint(v.position);
         }
     }
-}
 
-class OverlayBuilder {
+    // Normals
+    const w = disp.sideLength;
+    for (let y = 0; y < w; y++) {
+        for (let x = 0; x < w; x++) {
+            const v = vertex[y * w + x];
+            const x0 = x - 1, x1 = x, x2 = x + 1;
+            const y0 = y - 1, y1 = y, y2 = y + 1;
+
+            let count = 0;
+
+            // Top left
+            if (x0 >= 0 && y0 >= 0) {
+                vec3.sub(v0, vertex[y1*w+x0].position, vertex[y0*w+x0].position);
+                vec3.sub(v1, vertex[y0*w+x1].position, vertex[y0*w+x0].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                vec3.sub(v0, vertex[y1*w+x0].position, vertex[y0*w+x1].position);
+                vec3.sub(v1, vertex[y1*w+x1].position, vertex[y0*w+x1].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                count += 2;
+            }
+
+            // Top right
+            if (x2 < w && y0 >= 0) {
+                vec3.sub(v0, vertex[y1*w+x1].position, vertex[y0*w+x1].position);
+                vec3.sub(v1, vertex[y0*w+x2].position, vertex[y0*w+x1].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                vec3.sub(v0, vertex[y1*w+x1].position, vertex[y0*w+x2].position);
+                vec3.sub(v1, vertex[y1*w+x2].position, vertex[y0*w+x2].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                count += 2;
+            }
+
+            // Bottom left
+            if (x0 >= 0 && y2 < w) {
+                vec3.sub(v0, vertex[y2*w+x0].position, vertex[y1*w+x0].position);
+                vec3.sub(v1, vertex[y1*w+x1].position, vertex[y1*w+x0].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                vec3.sub(v0, vertex[y2*w+x0].position, vertex[y1*w+x1].position);
+                vec3.sub(v1, vertex[y2*w+x1].position, vertex[y1*w+x1].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                count += 2;
+            }
+
+            // Bottom right
+            if (x2 < w && y2 < w) {
+                vec3.sub(v0, vertex[y2*w+x1].position, vertex[y1*w+x1].position);
+                vec3.sub(v1, vertex[y1*w+x2].position, vertex[y1*w+x1].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                vec3.sub(v0, vertex[y2*w+x1].position, vertex[y1*w+x2].position);
+                vec3.sub(v1, vertex[y2*w+x2].position, vertex[y1*w+x2].position);
+                vec3.cross(v0, v1, v0);
+                vec3.normalize(v0, v0);
+                vec3.add(v.normal, v.normal, v0);
+
+                count += 2;
+            }
+
+            vec3.scale(v.normal, v.normal, 1 / count);
+        }
+    }
+
+    return { vertex, aabb };
 }
 
 function magicint(S: string): number {
@@ -515,8 +516,9 @@ class ResizableArrayBuffer {
     }
 
     public addFloat32(count: number): Float32Array {
+        const offs = this.byteSize;
         this.addByteSize(count << 2);
-        return new Float32Array(this.buffer);
+        return new Float32Array(this.buffer, offs, count);
     }
 
     public finalize(): ArrayBuffer {
@@ -974,12 +976,10 @@ export class BSPFile {
 
         const scratchVec2 = vec2.create();
         const scratchPosition = vec3.create();
-        const scratchNormal = vec3.create();
-        const scratchTangentT = vec3.create();
         const scratchTangentS = vec3.create();
+        const scratchTangentT = vec3.create();
 
         // now build buffers
-        let dstOffsVertex = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
         for (let i = 0; i < basicSurfaces.length; i++) {
@@ -1044,14 +1044,64 @@ export class BSPFile {
             vec3.normalize(scratchTangentS, scratchTangentS);
             vec3.set(scratchTangentT, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
             vec3.normalize(scratchTangentT, scratchTangentT);
+
+            const scratchNormal = scratchTangentS; // reuse
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
-            // Detect if we need to flip tangents. XXX(jstpierre): This looks hella wrong?
+            // Detect if we need to flip tangents.
             const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = basicSurface.lightmapData;
+            const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
+            const lightmapBumpOffset = lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / lightmapPage.height) : 1;
 
-            const page = this.lightmapPackerManager.pages[lightmapData.pageIndex];
-            const lightmapBumpOffset = lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / page.height) : 1;
+            // World surfaces always want the texcoord0 scale.
+            const wantsTexCoord0Scale = true;
+
+            const addVertexDataToBuffer = (vertex: MeshVertex[]) => {
+                const vertexData = vertexBuffer.addFloat32(vertex.length * vertexSize);
+
+                let dstOffsVertex = 0;
+                for (let j = 0; j < vertex.length; j++) {
+                    const v = vertex[j];
+
+                    // Position
+                    vertexData[dstOffsVertex++] = v.position[0];
+                    vertexData[dstOffsVertex++] = v.position[1];
+                    vertexData[dstOffsVertex++] = v.position[2];
+
+                    if (center !== null)
+                        vec3.scaleAndAdd(center, center, v.position, 1 / vertex.length);
+
+                    // Normal
+                    vertexData[dstOffsVertex++] = v.normal[0];
+                    vertexData[dstOffsVertex++] = v.normal[1];
+                    vertexData[dstOffsVertex++] = v.normal[2];
+                    vertexData[dstOffsVertex++] = v.alpha;
+
+                    // Tangent
+                    vec3.cross(scratchTangentS, v.normal, scratchTangentT);
+                    vertexData[dstOffsVertex++] = scratchTangentS[0];
+                    vertexData[dstOffsVertex++] = scratchTangentS[1];
+                    vertexData[dstOffsVertex++] = scratchTangentS[2];
+                    // Tangent Sign and Lightmap Offset
+                    vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
+
+                    // Texture UV
+                    calcTexCoord(scratchVec2, v.position, tex.textureMapping);
+                    vertexData[dstOffsVertex++] = scratchVec2[0];
+                    vertexData[dstOffsVertex++] = scratchVec2[1];
+
+                    // Lightmap UV
+                    if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
+                        vertexData[dstOffsVertex++] = 0.5;
+                        vertexData[dstOffsVertex++] = 0.5;
+                    } else {
+                        // Place into lightmap page.
+                        vertexData[dstOffsVertex++] = (v.lightmapUV[0] + lightmapData.pagePosX) / lightmapPage.width;
+                        vertexData[dstOffsVertex++] = (v.lightmapUV[1] + lightmapData.pagePosY) / lightmapPage.height;
+                    }
+                }
+            };
 
             // vertex data
             if (dispinfo >= 0) {
@@ -1080,50 +1130,16 @@ export class BSPFile {
                 if (startIndex !== 0)
                     corners = corners.slice(startIndex).concat(corners.slice(0, startIndex));
 
-                const builder = new DisplacementBuilder(disp, corners, disp_verts);
+                const result = buildDisplacement(disp, corners, disp_verts);
 
-                const vertexData = vertexBuffer.addFloat32(disp.vertexCount * vertexSize);
-                for (let y = 0; y < disp.sideLength; y++) {
-                    for (let x = 0; x < disp.sideLength; x++) {
-                        const vertex = builder.vertex[y * disp.sideLength + x];
-
-                        // Position
-                        vertexData[dstOffsVertex++] = vertex.position[0];
-                        vertexData[dstOffsVertex++] = vertex.position[1];
-                        vertexData[dstOffsVertex++] = vertex.position[2];
-
-                        // Normal
-                        vertexData[dstOffsVertex++] = scratchNormal[0] = vertex.normal[0];
-                        vertexData[dstOffsVertex++] = scratchNormal[1] = vertex.normal[1];
-                        vertexData[dstOffsVertex++] = scratchNormal[2] = vertex.normal[2];
-                        vertexData[dstOffsVertex++] = vertex.alpha;
-
-                        // Tangent
-                        vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
-                        vertexData[dstOffsVertex++] = scratchTangentS[0];
-                        vertexData[dstOffsVertex++] = scratchTangentS[1];
-                        vertexData[dstOffsVertex++] = scratchTangentS[2];
-                        // Tangent Sign and Lightmap Offset
-                        vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
-
-                        // Texture UV
-                        calcTexCoord(scratchVec2, vertex.position, tex.textureMapping);
-                        vertexData[dstOffsVertex++] = scratchVec2[0];
-                        vertexData[dstOffsVertex++] = scratchVec2[1];
-
-                        // Lightmap UV
-                        // Source seems to just have displacement lightmaps in surface space, and ignore the mapping. (!!!)
-                        scratchVec2[0] = (vertex.uv[0] * m_LightmapTextureSizeInLuxels[0]) + 0.5;
-                        scratchVec2[1] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
-
-                        // Place into page.
-                        scratchVec2[0] = (scratchVec2[0] + lightmapData.pagePosX) / page.width;
-                        scratchVec2[1] = (scratchVec2[1] + lightmapData.pagePosY) / page.height;
-
-                        vertexData[dstOffsVertex++] = scratchVec2[0];
-                        vertexData[dstOffsVertex++] = scratchVec2[1];
-                    }
+                for (let j = 0; j < result.vertex.length; j++) {
+                    const v = result.vertex[j];
+                    // Put lightmap UVs in luxel space.
+                    v.lightmapUV[0] = v.lightmapUV[0] * m_LightmapTextureSizeInLuxels[0] + 0.5;
+                    v.lightmapUV[1] = v.lightmapUV[1] * m_LightmapTextureSizeInLuxels[1] + 0.5;
                 }
+
+                addVertexDataToBuffer(result.vertex);
 
                 // Build grid index buffer.
                 const indexData = indexBuffer.addUint32(((disp.sideLength - 1) ** 2) * 6);
@@ -1143,7 +1159,7 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, wantsTexCoord0Scale: true, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb, overlays: [] };
+                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: result.aabb, overlays: [] };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -1151,58 +1167,32 @@ export class BSPFile {
                 dstOffsIndex += m;
                 dstIndexBase += disp.vertexCount;
             } else {
-                const vertexData = vertexBuffer.addFloat32(numedges * vertexSize);
+                const vertex = nArray(numedges, () => new MeshVertex());
                 for (let j = 0; j < numedges; j++) {
+                    const v = vertex[j];
+
                     // Position
                     const vertIndex = vertindices[firstedge + j];
-                    vertexData[dstOffsVertex++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
-                    vertexData[dstOffsVertex++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
-                    vertexData[dstOffsVertex++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
-
-                    if (center !== null)
-                        vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
+                    v.position[0] = vertexes[vertIndex * 3 + 0];
+                    v.position[1] = vertexes[vertIndex * 3 + 1];
+                    v.position[2] = vertexes[vertIndex * 3 + 2];
 
                     // Normal
                     const vertnormalBase = basicSurface.vertnormalBase;
                     const normIndex = vertnormalindices[vertnormalBase + j];
-                    vertexData[dstOffsVertex++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
-                    vertexData[dstOffsVertex++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
-                    vertexData[dstOffsVertex++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
-                    vertexData[dstOffsVertex++] = 1.0; // Vertex Alpha (Unused)
+                    v.normal[0] = vertnormals[normIndex * 3 + 0];
+                    v.normal[1] = vertnormals[normIndex * 3 + 1];
+                    v.normal[2] = vertnormals[normIndex * 3 + 2];
 
-                    // Compute Tangent S vector
-                    // Tangent S = Normal x Texture T Mapping
-                    vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
-                    vertexData[dstOffsVertex++] = scratchTangentS[0];
-                    vertexData[dstOffsVertex++] = scratchTangentS[1];
-                    vertexData[dstOffsVertex++] = scratchTangentS[2];
-                    // Tangent Sign and Lightmap Offset
-                    vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
+                    // Alpha (Unused)
+                    v.alpha = 1.0;
 
-                    // Tangent T = Tangent S x Normal. Done in shader.
-
-                    // Texture UV
-                    calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
-                    vertexData[dstOffsVertex++] = scratchVec2[0];
-                    vertexData[dstOffsVertex++] = scratchVec2[1];
-
-                    // Lightmap UV
-                    if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
-                        vec2.set(scratchVec2, 0.5, 0.5);
-                    } else {
-                        calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
-                        scratchVec2[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
-                        scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
-
-                        // Place into page.
-                        const page = this.lightmapPackerManager.pages[lightmapData.pageIndex];
-                        scratchVec2[0] = (scratchVec2[0] + lightmapData.pagePosX) / page.width;
-                        scratchVec2[1] = (scratchVec2[1] + lightmapData.pagePosY) / page.height;
-                    }
-
-                    vertexData[dstOffsVertex++] = scratchVec2[0];
-                    vertexData[dstOffsVertex++] = scratchVec2[1];
+                    // Lightmap coordinates from the lightmap mapping
+                    calcTexCoord(v.lightmapUV, v.position, tex.lightmapMapping);
+                    v.lightmapUV[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
+                    v.lightmapUV[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
                 }
+                addVertexDataToBuffer(vertex);
 
                 // index buffer
                 const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
@@ -1233,7 +1223,7 @@ export class BSPFile {
                 let surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale: true, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
+                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
                     this.surfaces.push(surface);
                 }
 
@@ -1311,7 +1301,12 @@ export class BSPFile {
             const indexCount = 6;
             const vertexCount = 4;
 
+            // Go through each face listed and slice the overlay to the relevant portion of the face...
+            for (let j = 0; j < m_nFaceCount; j++) {
+            }
+
             const vertexData = vertexBuffer.addFloat32(vertexCount * vertexSize);
+            let dstOffsVertex = 0;
             for (let j = 0; j < vertexCount; j++) {
                 vec3.copy(scratchPosition, vecOrigin);
                 vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal0, vecUVPoints[j * 2 + 0]);
