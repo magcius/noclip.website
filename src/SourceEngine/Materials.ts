@@ -2126,7 +2126,8 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAGfloat CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
+#ifdef FRAG
+float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
     float t_DepthSample = texture(SAMPLER_2D(u_Texture[2]), t_ProjTexCoord).r;
 
     // Reconstruct world-space position for the sample.
