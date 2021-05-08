@@ -1281,7 +1281,7 @@ export class SourceRenderer implements SceneGfx {
             pass.setDebugName('Color Correction & Gamma Correction');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorGammaTargetID);
 
-            const mainColorResolveTextureID = builder.resolveRenderTarget(lightColorTargetID);
+            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             const postRenderInst = this.renderHelper.renderInstManager.newRenderInst();
