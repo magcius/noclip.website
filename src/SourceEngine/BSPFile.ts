@@ -482,7 +482,6 @@ function ensureInList<T>(L: T[], v: T): void {
         L.push(v);
 }
 
-
 class ResizableArrayBuffer {
     private buffer: ArrayBuffer;
     private byteSize: number;
@@ -731,6 +730,7 @@ export class BSPFile {
             texinfo: number;
             lightmapData: SurfaceLightmapData;
             vertnormalBase: number;
+            plane: ReadonlyVec3;
         }
 
         const basicSurfaces: BasicSurface[] = [];
@@ -745,13 +745,14 @@ export class BSPFile {
         let vertnormalIdx = 0;
 
         // Do some initial surface parsing, pack lightmaps.
+        const planes = getLumpData(LumpType.PLANES).createDataView();
         for (let i = 0; i < faceCount; i++) {
             const idx = i * 0x38;
 
+            const planenum = faces.getUint16(idx + 0x00, true);
+            const numedges = faces.getUint16(idx + 0x08, true);
             const texinfo = faces.getUint16(idx + 0x0A, true);
             const tex = texinfoa[texinfo];
-
-            const numedges = faces.getUint16(idx + 0x08, true);
 
             // Normals are stored in the data for all surfaces, even for displacements.
             const vertnormalBase = vertnormalIdx;
@@ -788,7 +789,8 @@ export class BSPFile {
             // Allocate ourselves a page.
             this.lightmapPackerManager.allocate(lightmapData);
 
-            basicSurfaces.push({ index: i, texinfo, lightmapData, vertnormalBase });
+            const plane = readVec3(planes, planenum * 0x14);
+            basicSurfaces.push({ index: i, texinfo, lightmapData, vertnormalBase, plane });
         }
 
         const models = getLumpData(LumpType.MODELS).createDataView();
@@ -832,6 +834,13 @@ export class BSPFile {
         if (leafambientlightingLump === null || leafambientlightingLump.byteLength === 0)
             [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING);
         const leafambientlighting = leafambientlightingLump.createDataView();
+
+        function readVec3(view: DataView, offs: number): vec3 {
+            const x = view.getFloat32(offs + 0x00, true);
+            const y = view.getFloat32(offs + 0x04, true);
+            const z = view.getFloat32(offs + 0x08, true);
+            return vec3.fromValues(x, y, z);
+        }
 
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
         const surfaceToLeafIdx: number[][] = nArray(basicSurfaces.length, () => []);
@@ -953,13 +962,6 @@ export class BSPFile {
         for (let i = 0; i < surfaceToLeafIdx.length; i++)
             surfaceToLeafIdx[i].sort((a, b) => a - b);
 
-        function readVec3(view: DataView, offs: number): vec3 {
-            const x = view.getFloat32(offs + 0x00, true);
-            const y = view.getFloat32(offs + 0x04, true);
-            const z = view.getFloat32(offs + 0x08, true);
-            return vec3.fromValues(x, y, z);
-        }
-
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         basicSurfaces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
@@ -968,7 +970,6 @@ export class BSPFile {
         const vertexBuffer = new ResizableArrayBuffer();
         const indexBuffer = new ResizableArrayBuffer();
 
-        const planes = getLumpData(LumpType.PLANES).createDataView();
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
@@ -1017,7 +1018,6 @@ export class BSPFile {
             }
 
             const idx = basicSurface.index * 0x38;
-            const planenum = faces.getUint16(idx + 0x00, true);
             const side = faces.getUint8(idx + 0x02);
             const onNode = !!faces.getUint8(idx + 0x03);
             const firstedge = faces.getUint32(idx + 0x04, true);
@@ -1034,11 +1034,6 @@ export class BSPFile {
             const firstPrimID = faces.getUint16(idx + 0x32, true);
             const smoothingGroups = faces.getUint32(idx + 0x34, true);
 
-            const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
-            const planeY = planes.getFloat32(planenum * 0x14 + 0x04, true);
-            const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
-            vec3.set(scratchPosition, planeX, planeY, planeZ);
-
             // Tangent space setup.
             vec3.set(scratchTangentS, tex.textureMapping.s[0], tex.textureMapping.s[1], tex.textureMapping.s[2]);
             vec3.normalize(scratchTangentS, scratchTangentS);
@@ -1048,7 +1043,7 @@ export class BSPFile {
             const scratchNormal = scratchTangentS; // reuse
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
             // Detect if we need to flip tangents.
-            const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
+            const tangentSSign = vec3.dot(basicSurface.plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = basicSurface.lightmapData;
             const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
