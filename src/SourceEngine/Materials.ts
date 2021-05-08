@@ -2057,33 +2057,6 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 //#endregion
 
 //#region Water
-function fillUnprojectParams(d: Float32Array, offs: number, projectionMatrix: ReadonlyMat4): number {
-    // Take the bottom-right quadrant of the projection matrix, and calculate the inverse.
-    const ZZ = projectionMatrix[10];
-    const ZW = projectionMatrix[14];
-    const WZ = projectionMatrix[11];
-    const WW = projectionMatrix[15];
-    const invdet = 1 / (ZZ*WW - ZW*WZ);
-    const UnprojMtxZZ = invdet * WW;
-    const UnprojMtxZW = invdet * -ZW;
-    const UnprojMtxWZ = invdet * -WZ;
-    const UnprojMtxWW = invdet * ZZ;
-
-    const testI = vec4.fromValues(0, 0, 50, 1);
-    const testM = vec4.transformMat4(vec4.create(), testI, projectionMatrix);
-    const testG = vec4.create();
-    // Double-check our sanity
-    testG[2] = ZZ*testI[2] + ZW*testI[3];
-    testG[3] = WZ*testI[2] + WW*testI[3];
-    assert(testM[2] === testG[2]);
-    assert(testM[3] === testG[3]);
-
-    testG[2] /= testG[3];
-    const TestZ = (testG[2]*UnprojMtxZZ + UnprojMtxZW) / (testG[2]*UnprojMtxWZ + UnprojMtxWW);
-
-    return fillVec4(d, offs, UnprojMtxZZ, UnprojMtxZW, UnprojMtxWZ, UnprojMtxWW);
-}
-
 const enum WaterShaderType { Normal, Flow }
 
 class WaterMaterialProgram extends MaterialProgramBase {
@@ -2153,35 +2126,7 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
-/*
-float UnprojectViewSpaceDepth(float t_DepthSample) {
-    float Viewport_Z = t_DepthSample;
-    float NDC_Z = Viewport_Z * 2.0 - 1.0; // Expand from 0..1 to -1..1
-
-    // To get the view-space depth from NDC depth, we calculate the inverse of the bottom-right quadrant
-    // of the projection matrix, and apply it here.
-    float UnprojMtxZZ = u_UnprojectParams[0];
-    float UnprojMtxZW = u_UnprojectParams[1];
-    float UnprojMtxWZ = u_UnprojectParams[2];
-    float UnprojMtxWW = u_UnprojectParams[3];
-
-    float ViewSpaceZ = (NDC_Z*UnprojMtxZZ + UnprojMtxZW) / (NDC_Z*UnprojMtxWZ + UnprojMtxWW);
-    return -ViewSpaceZ;
-}
-
-vec3 ViewSpaceFromScreenCoordAndDepth(vec2 t_ScreenCoord, float t_ViewSpaceDepth) {
-    vec2 t_ViewSpaceCoord = t_ScreenCoord * 2.0 - 1.0; // Expand from 0..1 to -1..1
-    // TODO(jstpierre): I don't think this is quite right? We need to take the near plane position into account...
-    vec2 t_ViewSpaceRay = vec2(u_ProjectionMatrixXX, u_ProjectionMatrixYY) * t_ViewSpaceCoord.xy;
-    // Point the ray out the camera lens.
-    vec3 t_Near = vec3(t_ViewSpaceRay.xy, u_ProjectionNearZ);
-    // Traverse down the ray by Z units.
-    return t_Near * t_ViewSpaceDepth;
-}
-*/
-
-float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
+#ifdef FRAGfloat CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
     float t_DepthSample = texture(SAMPLER_2D(u_Texture[2]), t_ProjTexCoord).r;
 
     // Reconstruct world-space position for the sample.
@@ -2221,17 +2166,6 @@ void mainPS() {
     float t_BumpmapStrength = t_BumpmapSample.a;
 
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
-
-    /*
-    float t_DepthWater = gl_FragCoord.z;
-
-    float t_ViewSpaceDepthSample = UnprojectViewSpaceDepth(t_DepthSample);
-    float t_ViewSpaceDepthWater = UnprojectViewSpaceDepth(t_DepthWater);
-
-    vec3 t_ViewSpacePosSample = ViewSpaceFromScreenCoordAndDepth(t_ProjTexCoord.xy, t_ViewSpaceDepthSample);
-    vec3 t_ViewSpacePosWater = ViewSpaceFromScreenCoordAndDepth(t_ProjTexCoord.xy, t_ViewSpaceDepthWater);
-    float t_HeightDifference = max(t_ViewSpacePosSample.y - t_ViewSpacePosWater.y, 0.0);
-    */
 
     float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
     float t_RefractAmount = u_RefractTint.a * t_RefractFogBendAmount;
@@ -2516,7 +2450,6 @@ class Material_Water extends BaseMaterial {
 
             this.isTranslucent = false;
         } else {
-            // Use Cheap water for now.
             this.shaderType = WaterShaderType.Normal;
             this.program = new WaterMaterialProgram();
 
@@ -2525,7 +2458,6 @@ class Material_Water extends BaseMaterial {
                 this.program.setDefineBool('USE_TEXSCROLL', true);
             }
 
-            // this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
             this.isIndirect = this.textureIsIndirect('$refracttexture');
         }
 
