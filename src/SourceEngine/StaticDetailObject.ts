@@ -1,8 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
-import { vec4, vec3, mat4 } from "gl-matrix";
-import { Color, colorClampLDR, colorNewFromRGBA } from "../Color";
+import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { Color, colorClampLDR, colorCopy, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
@@ -43,6 +43,7 @@ interface DetailSpriteDef {
 }
 
 export interface DetailObjects {
+    detailModelDict: string[];
     detailSpriteDict: DetailSpriteDef[];
     detailModels: DetailModel[];
     leafDetailModels: Map<number, DetailModel[]>;
@@ -120,7 +121,7 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
         leafDetailModels.get(leaf)!.push(detailModels[i]);
     }
 
-    return { detailSpriteDict, detailModels, leafDetailModels };
+    return { detailModelDict, detailSpriteDict, detailModels, leafDetailModels };
 }
 
 class DetailSpriteEntry {
@@ -138,7 +139,7 @@ class DetailSpriteEntry {
 }
 
 // Compute a rotation matrix given a forward direction, in Source Engine space.
-function computeMatrixForForwardDir(dst: mat4, fwd: vec3, pos: vec3): void {
+function computeMatrixForForwardDir(dst: mat4, fwd: ReadonlyVec3, pos: ReadonlyVec3): void {
     let yaw = 0, pitch = 0;
 
     if (fwd[1] === 0 && fwd[0] === 0) {
@@ -168,11 +169,14 @@ function colorLinearToTexGamma(c: Color): Color {
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class DetailPropLeafRenderer {
+    private visible = true;
+
     private materialInstance: BaseMaterial | null = null;
     private inputLayout: GfxInputLayout;
 
     // For each sprite, store an origin and a radius for easy culling.
     private spriteEntries: DetailSpriteEntry[] = [];
+    private modelEntries: StudioModelInstance[] = [];
 
     private vertexData: Float32Array;
     private indexData: Uint16Array;
@@ -222,6 +226,9 @@ export class DetailPropLeafRenderer {
                 entry.color = colorLinearToTexGamma(detailModel.lighting);
 
                 this.spriteEntries.push(entry);
+            } else if (detailModel.type === DetailPropType.MODEL) {
+                const modelName = objects.detailModelDict[detailModel.detailModel];
+                this.createModelDetailProp(renderContext, modelName, detailModel);
             }
 
             // TODO(jstpierre): Cross & Tri shapes.
@@ -239,7 +246,21 @@ export class DetailPropLeafRenderer {
         this.bindMaterial(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    private async createModelDetailProp(renderContext: SourceRenderContext, modelName: string, detailModel: DetailModel): Promise<void> {
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName);
+
+        const materialParams = new EntityMaterialParameters();
+        const studioModelInstance = new StudioModelInstance(renderContext, modelData, materialParams);
+        studioModelInstance.setSkin(renderContext, 0);
+
+        computeModelMatrixPosQAngle(studioModelInstance.modelMatrix, detailModel.pos, detailModel.rot);
+        getMatrixTranslation(materialParams.position, studioModelInstance.modelMatrix);
+        colorCopy(materialParams.blendColor, detailModel.lighting);
+
+        this.modelEntries.push(studioModelInstance);
+    }
+
+    private prepareToRenderSprites(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
         if (this.materialInstance === null)
             return;
 
@@ -247,7 +268,6 @@ export class DetailPropLeafRenderer {
         const vertexData = this.vertexData;
         const indexData = this.indexData;
 
-        // TODO(jstpierre): Sort models based on distance to camera.
         let vertexOffs = 0;
         let vertexBase = 0;
         let indexOffs = 0;
@@ -270,7 +290,6 @@ export class DetailPropLeafRenderer {
             vec3.sub(scratchVec3, view.cameraPos, entry.pos);
             scratchVec3[2] = 0.0;
             computeMatrixForForwardDir(scratchMatrix, scratchVec3, entry.pos);
-            // mat4.fromTranslation(scratchMatrix, entry.pos);
 
             // top left
             vec3.set(scratchVec3, 0, -entry.halfWidth, -entry.height);
@@ -335,10 +354,30 @@ export class DetailPropLeafRenderer {
         this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }
 
+    private prepareToRenderModels(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        for (let i = 0; i < this.modelEntries.length; i++)
+            this.modelEntries[i].prepareToRender(renderContext, renderInstManager);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.visible)
+            return;
+
+        this.prepareToRenderSprites(renderContext, renderInstManager, view);
+        this.prepareToRenderModels(renderContext, renderInstManager, view);
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.modelEntries.length; i++)
+            this.modelEntries[i].movement(renderContext);
+    }
+
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
+        for (let i = 0; i < this.modelEntries.length; i++)
+            this.modelEntries[i].destroy(device);
     }
 
     private async bindMaterial(renderContext: SourceRenderContext) {
@@ -566,7 +605,6 @@ export class StaticPropRenderer {
             return;
 
         computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
-
         getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);
     }

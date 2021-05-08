@@ -765,6 +765,8 @@ export class BSPRenderer {
 
         for (let i = 0; i < this.models.length; i++)
             this.models[i].movement(renderContext);
+        for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
+            this.detailPropLeafRenderers[i].movement(renderContext);
         for (let i = 0; i < this.staticPropRenderers.length; i++)
             this.staticPropRenderers[i].movement(renderContext);
     }

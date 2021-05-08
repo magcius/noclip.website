@@ -1654,8 +1654,7 @@ class Material_Generic extends BaseMaterial {
         p['$bumpmap']                      = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
-        // TODO(jstpierre): This default isn't right
-        p['$alphatestreference']           = new ParameterNumber(0.4);
+        p['$alphatestreference']           = new ParameterNumber(0.7);
         p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
         p['$ssbump']                       = new ParameterBoolean(false, false);
         p['$halflambert']                  = new ParameterBoolean(false, false);
