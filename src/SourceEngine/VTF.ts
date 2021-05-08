@@ -209,7 +209,7 @@ export class VTF {
     private versionMajor: number;
     private versionMinor: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean, public lateBinding: string | null = null) {
         if (buffer === null)
             return;
 
@@ -344,6 +344,7 @@ export class VTF {
         m.gfxSampler = this.gfxSampler;
         m.width = this.width;
         m.height = this.height;
+        m.lateBinding = this.lateBinding;
     }
 
     public isTranslucent(): boolean {

@@ -169,7 +169,6 @@ interface Parameter {
 class ParameterTexture {
     public ref: string | null = null;
     public texture: VTF | null = null;
-    public lateBindingTexture: LateBindingTexture | null = null;
 
     constructor(public isSRGB: boolean = false, public isEnvmap: boolean = false) {
     }
@@ -204,10 +203,6 @@ class ParameterTexture {
     public fillTextureMapping(m: TextureMapping, frame: number): boolean {
         if (this.texture !== null) {
             this.texture.fillTextureMapping(m, frame);
-            return true;
-        } else if (this.lateBindingTexture !== null) {
-            assert(frame === 0);
-            m.lateBinding = this.lateBindingTexture;
             return true;
         } else {
             return false;
@@ -599,10 +594,14 @@ export abstract class BaseMaterial {
         return fillColor(d, offs, scratchColor);
     }
 
-    protected textureIsIndirect(name: string): boolean {
-        const texture = this.paramGetTexture(name);
+    protected vtfIsIndirect(vtf: VTF): boolean {
+        return vtf.lateBinding === LateBindingTexture.FramebufferTexture;
+    }
 
-        if (texture.lateBindingTexture === LateBindingTexture.FramebufferTexture)
+    protected textureIsIndirect(name: string): boolean {
+        const vtf = this.paramGetVTF(name);
+
+        if (vtf !== null && this.vtfIsIndirect(vtf))
             return true;
 
         return false;
@@ -733,24 +732,34 @@ export abstract class BaseMaterial {
         return this.paramGetVTF(name);
     }
 
+    private vtfIsRepresentative(vtf: VTF | null): boolean {
+        if (vtf === null)
+            return false;
+
+        if (this.vtfIsIndirect(vtf))
+            return false;
+
+        return true;
+    }
+
     private calcRepresentativeTexture(): VTF | null {
-        let texture: VTF | null = null;
+        let vtf: VTF | null = null;
 
-        texture = this.paramGetVTFPossiblyMissing('$basetexture');
-        if (texture !== null)
-            return texture;
+        vtf = this.paramGetVTFPossiblyMissing('$basetexture');
+        if (this.vtfIsRepresentative(vtf))
+            return vtf;
 
-        texture = this.paramGetVTFPossiblyMissing('$envmapmask');
-        if (texture !== null)
-            return texture;
+        vtf = this.paramGetVTFPossiblyMissing('$envmapmask');
+        if (this.vtfIsRepresentative(vtf))
+            return vtf;
 
-        texture = this.paramGetVTFPossiblyMissing('$bumpmap');
-        if (texture !== null)
-            return texture;
+        vtf = this.paramGetVTFPossiblyMissing('$bumpmap');
+        if (this.vtfIsRepresentative(vtf))
+            return vtf;
 
-        texture = this.paramGetVTFPossiblyMissing('$normalmap');
-        if (texture !== null)
-            return texture;
+        vtf = this.paramGetVTFPossiblyMissing('$normalmap');
+        if (this.vtfIsRepresentative(vtf))
+            return vtf;
 
         return null;
     }
@@ -2673,17 +2682,14 @@ class Material_Refract extends BaseMaterial {
         p['$bluramount']                   = new ParameterNumber(1, false);
         p['$localrefract']                 = new ParameterBoolean(false, false);
         p['$localrefractdepth']            = new ParameterNumber(0.05);
+
+        this.paramGetTexture('$basetexture').ref = '_rt_Camera';
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         super.initStatic(device, cache);
 
         this.program = new RefractMaterialProgram();
-
-        if (this.paramGetVTF('$basetexture') === null) {
-            // We fall back to the framebuffer texture.
-            this.paramGetTexture('$basetexture').lateBindingTexture = LateBindingTexture.FramebufferTexture;
-        }
 
         if (this.paramGetVTF('$envmap') !== null) {
             this.program.setDefineBool('USE_ENVMAP', true);
@@ -2788,7 +2794,7 @@ export class MaterialCache {
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
-        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false));
+        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.FramebufferTexture));
         this.systemTextures = new SystemTextures(device);
     }
 
@@ -2842,8 +2848,16 @@ export class MaterialCache {
         return vtf;
     }
 
+    private getCacheKey(name: string, srgb: boolean): string {
+        // Special runtime render target
+        if (name.startsWith('_rt_'))
+            return name;
+
+        return srgb ? `${name}_srgb` : name;
+    }
+
     public fetchVTF(name: string, srgb: boolean): Promise<VTF> {
-        const cacheKey = srgb ? `${name}_srgb` : name;
+        const cacheKey = this.getCacheKey(name, srgb);
 
         if (this.textureCache.has(cacheKey))
             return Promise.resolve(this.textureCache.get(cacheKey)!);
