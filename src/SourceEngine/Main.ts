@@ -15,7 +15,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, getMatrixAxisZ, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -1375,23 +1375,30 @@ export class SourceRenderer implements SceneGfx {
             // Reflect around waterZ
             const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
             if (cameraZ > waterZ) {
-                const view = this.reflectViewRenderer.mainView;
-
-                this.reflectViewRenderer.mainView.copy(this.mainViewRenderer.mainView);
-
                 // Reflection plane
                 scratchPlane.set4(0, 0, 1, -waterZ);
                 scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
 
-                const translationZ = -2.0 * (cameraZ - waterZ);
-                this.reflectViewRenderer.mainView.cameraPos[2] += translationZ;
+                const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);
 
-                // Get the forward dir
-                getMatrixAxisZ(scratchVec3, this.mainViewRenderer.mainView.worldFromViewMatrix);
+                // There's probably a much cleaner way to do this, tbh.
+                const reflectView = this.reflectViewRenderer.mainView;
+                reflectView.copy(this.mainViewRenderer.mainView);
 
-                // Intersect the camera forward direction with the plane to find our look position.
-                scratchPlane.intersectLine(view.lookAtPos, this.mainViewRenderer.mainView.cameraPos, scratchVec3);
-                mat4.lookAt(this.reflectViewRenderer.mainView.viewFromWorldMatrix, this.reflectViewRenderer.mainView.cameraPos, view.lookAtPos, Vec3UnitZ);
+                // Flip the view upside-down so that when we invert later, the winding order comes out correct.
+                // This will mean we'll have to flip the texture in the shader though. Intentionally adding a Y-flip for once!
+
+                // This is in noclip space
+                computeModelMatrixS(scratchMatrix, 1, -1, 1);
+                mat4.mul(reflectView.worldFromViewMatrix, this.mainViewRenderer.mainView.worldFromViewMatrix, scratchMatrix);
+
+                // Now flip it over the reflection plane.
+
+                // This is in Source space
+                computeModelMatrixS(scratchMatrix, 1, 1, -1);
+                mat4.mul(reflectView.worldFromViewMatrix, scratchMatrix, reflectView.worldFromViewMatrix);
+                reflectView.worldFromViewMatrix[14] = reflectionCameraZ;
+                mat4.invert(reflectView.viewFromWorldMatrix, reflectView.worldFromViewMatrix);
 
                 this.reflectViewRenderer.mainView.finishSetup();
                 this.reflectViewRenderer.prepareToRender(this);
