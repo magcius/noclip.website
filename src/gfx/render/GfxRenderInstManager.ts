@@ -9,7 +9,6 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { IS_DEVELOPMENT } from "../../BuildVersion";
-import { GfxrAttachmentSlot } from "./GfxRenderGraph";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -461,9 +460,9 @@ export class GfxRenderInst {
         const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
 
         let sampleCount = -1;
-        for (let slot = GfxrAttachmentSlot.Color0; slot <= GfxrAttachmentSlot.ColorMax; slot++) {
-            const colorAttachmentDescriptor = passDescriptor.colorAttachment[slot] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[slot]!) : null;
-            this._renderPipelineDescriptor.colorAttachmentFormats[slot] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
+        for (let i = 0; i <= passDescriptor.colorAttachment.length; i++) {
+            const colorAttachmentDescriptor = passDescriptor.colorAttachment[i] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[i]!) : null;
+            this._renderPipelineDescriptor.colorAttachmentFormats[i] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
             if (colorAttachmentDescriptor !== null) {
                 if (sampleCount === -1)
                     sampleCount = colorAttachmentDescriptor.sampleCount;

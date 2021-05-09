@@ -633,8 +633,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._fallbackSampler = this.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
-            minLOD: 0,
-            maxLOD: 0,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.NoMip,
