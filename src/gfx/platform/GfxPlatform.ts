@@ -140,11 +140,13 @@ export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, h
 export interface GfxSamplerDescriptor {
     wrapS: GfxWrapMode;
     wrapT: GfxWrapMode;
+    wrapQ?: GfxWrapMode;
     minFilter: GfxTexFilterMode;
     magFilter: GfxTexFilterMode;
     mipFilter: GfxMipFilterMode;
-    minLOD: number;
-    maxLOD: number;
+    minLOD?: number;
+    maxLOD?: number;
+    maxAnisotropy?: number;
 }
 
 export interface GfxRenderTargetDescriptor {

@@ -732,14 +732,15 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const lodMinClamp = descriptor.minLOD;
         const lodMaxClamp = descriptor.mipFilter === GfxMipFilterMode.NoMip ? descriptor.minLOD : descriptor.maxLOD;
 
-        // TODO(jstpierre): Expose this as a sampler parameter.
-        const maxAnisotropy = (descriptor.minFilter === GfxTexFilterMode.Bilinear && descriptor.magFilter === GfxTexFilterMode.Bilinear && descriptor.mipFilter === GfxMipFilterMode.Linear) ? 16 : 1;
+        let maxAnisotropy = descriptor.maxAnisotropy ?? 1;
+        if (maxAnisotropy > 1)
+            assert(descriptor.minFilter === GfxTexFilterMode.Bilinear && descriptor.magFilter === GfxTexFilterMode.Bilinear && descriptor.mipFilter === GfxMipFilterMode.Linear);
 
         const gpuSampler = this.device.createSampler({
             addressModeU: translateWrapMode(descriptor.wrapS),
             addressModeV: translateWrapMode(descriptor.wrapT),
             // TODO(jstpierre): Expose this as a sampler parameter.
-            addressModeW: 'clamp-to-edge',
+            addressModeW: translateWrapMode(descriptor.wrapQ ?? descriptor.wrapS),
             lodMinClamp,
             lodMaxClamp,
             minFilter: translateMinMagFilter(descriptor.minFilter),
