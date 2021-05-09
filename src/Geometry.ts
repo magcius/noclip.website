@@ -1,5 +1,5 @@
 
-import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
+import { vec3, ReadonlyVec3, ReadonlyMat4, vec4 } from "gl-matrix";
 import { nArray } from "./util";
 
 export class Plane {
@@ -18,6 +18,10 @@ export class Plane {
     public distance(x: number, y: number, z: number): number {
         const dot = x*this.x + y*this.y + z*this.z;
         return this.d + dot;
+    }
+
+    public getVec4v(dst: vec4): void {
+        vec4.set(dst, this.x, this.y, this.z, this.d);
     }
 
     public getNormal(dst: vec3): void {
@@ -44,15 +48,18 @@ export class Plane {
         this.d = d / h;
     }
 
+    public intersectLine(dst: vec3, p0: ReadonlyVec3, dir: ReadonlyVec3): void {
+        const n = Plane.scratchVec3[0];
+        vec3.set(n, this.x, this.y, this.z);
+        const t = -(vec3.dot(n, p0) + this.d) / vec3.dot(n, dir);
+        vec3.scaleAndAdd(dst, p0, dir, t);
+    }
+
     // Compute point where line segment intersects plane
     public intersectLineSegment(dst: vec3, p0: ReadonlyVec3, p1: ReadonlyVec3) {
-        const p0_p1 = Plane.scratchVec3[0];
-        const n = Plane.scratchVec3[1];
-        vec3.sub(p0_p1, p1, p0);
-        vec3.set(n, this.x, this.y, this.z);
-        const t = -(vec3.dot(n, p0) + this.d) / vec3.dot(n, p0_p1);
-        vec3.copy(dst, p0);
-        vec3.scaleAndAdd(dst, dst, p0_p1, t);
+        const dir = Plane.scratchVec3[1];
+        vec3.sub(dir, p1, p0);
+        this.intersectLineSegment(dst, p0, dir);
     }
 }
 

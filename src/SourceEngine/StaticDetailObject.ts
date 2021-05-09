@@ -7,14 +7,15 @@ import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, Ent
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
 import BitMap from "../BitMap";
-import { BSPFile } from "./BSPFile";
+import { BSPFile, BSPLeaf } from "./BSPFile";
 import { AABB } from "../Geometry";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -183,8 +184,9 @@ export class DetailPropLeafRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputState: GfxInputState;
+    private centerPoint = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, private objects: DetailObjects, public leaf: number) {
+    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number) {
         const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -199,10 +201,10 @@ export class DetailPropLeafRenderer {
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         // Create a vertex buffer for our detail sprites.
-
         let vertexCount = 0;
         let indexCount = 0;
-        const detailModels = this.objects.leafDetailModels.get(this.leaf)!;
+        const objects = bspFile.detailObjects!;
+        const detailModels = objects.leafDetailModels.get(leaf)!;
         for (let i = 0; i < detailModels.length; i++) {
             const detailModel = detailModels[i];
 
@@ -225,6 +227,7 @@ export class DetailPropLeafRenderer {
                 entry.texcoord = desc.texcoord;
                 entry.color = colorLinearToTexGamma(detailModel.lighting);
 
+                vec3.add(this.centerPoint, this.centerPoint, entry.pos);
                 this.spriteEntries.push(entry);
             } else if (detailModel.type === DetailPropType.MODEL) {
                 const modelName = objects.detailModelDict[detailModel.detailModel];
@@ -233,6 +236,8 @@ export class DetailPropLeafRenderer {
 
             // TODO(jstpierre): Cross & Tri shapes.
         }
+
+        vec3.scale(this.centerPoint, this.centerPoint, 1 / this.spriteEntries.length);
 
         this.vertexData = new Float32Array(vertexCount * 9);
         this.indexData = new Uint16Array(indexCount);
@@ -348,7 +353,12 @@ export class DetailPropLeafRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         mat4.identity(scratchMatrix);
+
         this.materialInstance.setOnRenderInst(renderContext, renderInst, scratchMatrix);
+
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.centerPoint);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+
         renderInst.drawIndexes(indexOffs);
         renderInst.debug = this;
         this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);

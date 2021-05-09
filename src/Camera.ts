@@ -161,6 +161,22 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
 }
 
 /**
+ * Computes a view-space depth given @param viewMatrix and @param v in world-space.
+ * 
+ * The convention of "view-space depth" is that 0 is near plane, +z is further away.
+ *
+ * The returned value is not clamped to the near or far planes -- that is, the depth
+ * value is less than zero if the camera is behind the point.
+ *
+ * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
+ * which will clamp if the value is below 0.
+ */
+ export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
+    transformVec3Mat4w1(v_, viewMatrix, v);
+    return -v_[2];
+}
+
+/**
  * Computes a view-space depth given @param camera and @param v in world-space.
  * 
  * The convention of "view-space depth" is that 0 is near plane, +z is further away.
@@ -172,24 +188,7 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * which will clamp if the value is below 0.
  */
 export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: ReadonlyVec3, v_ = scratchVec3a): number {
-    transformVec3Mat4w1(v_, camera.viewMatrix, v);
-    return -v_[2];
-}
-
-/**
- * Computes a view-space depth given @param viewMatrix and @param v in world-space.
- * 
- * The convention of "view-space depth" is that 0 is near plane, +z is further away.
- *
- * The returned value is not clamped to the near or far planes -- that is, the depth
- * value is less than zero if the camera is behind the point.
- *
- * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
- * which will clamp if the value is below 0.
- */
-export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
-    transformVec3Mat4w1(v_, viewMatrix, v);
-    return -v_[2];
+    return computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(camera.viewMatrix, v);
 }
 
 export function divideByW(dst: vec4, src: ReadonlyVec4): void {

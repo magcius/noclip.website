@@ -37,6 +37,7 @@ export const enum SkinningMode {
 export const enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     FramebufferDepth = `framebuffer-depth`,
+    WaterReflection  = `water-reflection`,
     DeferredLightmap = `deferred-lightmap`,
 }
 
@@ -65,6 +66,7 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_CameraPosWorld;
     vec4 u_FogColor;
     vec4 u_FogParams;
+    vec4 u_ClipPlaneWorld[1];
 };
 
 #define u_FogStart      (u_FogParams.x)
@@ -155,11 +157,13 @@ function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEng
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
     offs += fillVec3v(d, offs, view.cameraPos);
     offs += fillFogParams(d, offs, view.fogParams);
+    for (let i = 0; i < view.clipPlaneWorld.length; i++)
+        offs += fillVec4v(d, offs, view.clipPlaneWorld[i]);
     return offs - baseOffs;
 }
 
 export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>): void {
-    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
+    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
     fillSceneParams(d, offs, view);
 }
@@ -1327,7 +1331,22 @@ vec4 DebugLightmapTexture(vec4 t_TextureSample) {
     return t_TextureSample;
 }
 
+bool CheckClipPlanes(vec3 t_PositionWorld) {
+    // TODO(jstpierre): Optimize this if we have hardware clip plane in vertex shader (GL extension?)
+    for (int i = 0; i < 1; i++) {
+        if (dot(u_ClipPlaneWorld[i].xyz, t_PositionWorld.xyz) + u_ClipPlaneWorld[i].w < 0.0)
+            return false;
+    }
+
+    return true;
+}
+
 void mainPS() {
+    if (!CheckClipPlanes(v_PositionWorld.xyz)) {
+        discard;
+        return;
+    }
+
     vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)));
 
     vec4 t_Albedo, t_BlendedAlpha;
@@ -1997,6 +2016,7 @@ ${this.Common}
 
 layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
+    Mat4x2 u_Texture1Transform;
     Mat4x2 u_Texture2Transform;
     vec4 u_ModulationColor;
 };
@@ -2017,8 +2037,7 @@ void mainVS() {
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    // TODO(jstpierre): BaseTransform
-    v_TexCoord0.xy = a_TexCoord.xy;
+    v_TexCoord0.xy = Mul(u_Texture1Transform, vec4(a_TexCoord.xy, 1.0, 1.0));
     v_TexCoord0.zw = Mul(u_Texture2Transform, vec4(a_TexCoord.xy, 1.0, 1.0));
 }
 #endif
@@ -2086,6 +2105,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix!);
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
 
@@ -2133,9 +2153,9 @@ varying vec3 v_TangentSpaceBasis0;
 varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
-// Refract Texture, Normalmap, Framebuffer Depth Texture
-uniform sampler2D u_Texture[3];
-// Envmap
+// Refract Texture, Normalmap, Framebuffer Depth Texture, Reflect Texture (Expensive Water)
+uniform sampler2D u_Texture[4];
+// Envmap ("Cheap" Water)
 uniform samplerCube u_TextureCube[1];
 
 #ifdef VERT
@@ -2209,14 +2229,15 @@ void mainPS() {
 
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
 
+    vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
+
     float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
     float t_RefractAmount = u_RefractTint.a * t_RefractFogBendAmount;
-    vec2 t_RefractTexCoordOffs = t_BumpmapNormal.xy * t_BumpmapStrength;
-    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_RefractTexCoordOffs.xy * t_RefractAmount);
+    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractAmount);
     vec4 t_RefractSample = texture(SAMPLER_2D(u_Texture[0], t_RefractTexCoord));
     vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
 
-    float t_RefractFogAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord + (t_RefractTexCoordOffs.xy * -t_RefractAmount));
+    float t_RefractFogAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord + (t_TexCoordBumpOffset.xy * -t_RefractAmount));
     t_RefractColor.rgb = mix(t_RefractColor.rgb, u_WaterFogColor.rgb, t_RefractFogAmount);
 
     vec3 t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
@@ -2224,10 +2245,21 @@ void mainPS() {
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
-    vec4 t_FinalColor;
+    vec3 t_ReflectColor = vec3(0.0);
+#ifdef USE_EXPENSIVE_REFLECT
+    float t_ReflectAmount = u_ReflectTint.a * 0.25;
+    vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
+    // Reflection texture is stored upside down
+    t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
 
+    vec4 t_ReflectSample = texture(SAMPLER_2D(u_Texture[3]), t_ReflectTexCoord);
+    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+#else
     vec4 t_ReflectSample = texture(u_TextureCube[0], t_Reflection);
-    vec3 t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+#endif
+
+    vec4 t_FinalColor;
 
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
     float t_Fresnel = CalcFresnelTerm5(dot(t_NormalWorld, t_WorldDirectionToEye));
@@ -2442,6 +2474,7 @@ class Material_Water extends BaseMaterial {
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$refracttexture']               = new ParameterTexture(true, false);
         p['$refracttint']                  = new ParameterColor(1, 1, 1);
+        p['$reflecttexture']               = new ParameterTexture(true, false);
         p['$refractamount']                = new ParameterNumber(0);
         p['$reflecttint']                  = new ParameterColor(1, 1, 1);
         p['$reflectamount']                = new ParameterNumber(0.8);
@@ -2500,6 +2533,8 @@ class Material_Water extends BaseMaterial {
                 this.program.setDefineBool('USE_TEXSCROLL', true);
             }
 
+            this.program.setDefineBool('USE_EXPENSIVE_REFLECT', true);
+
             this.isIndirect = this.textureIsIndirect('$refracttexture');
         }
 
@@ -2557,7 +2592,8 @@ class Material_Water extends BaseMaterial {
             this.paramGetTexture('$refracttexture').fillTextureMapping(this.textureMapping[0], 0);
             this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
             this.paramGetTexture('$depthtexture').fillTextureMapping(this.textureMapping[2], 0);
-            this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[3], this.paramGetInt('$envmapframe'));
+            this.paramGetTexture('$reflecttexture').fillTextureMapping(this.textureMapping[3], 0);
+            this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapframe'));
 
             let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
             const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
@@ -2904,6 +2940,7 @@ export class MaterialCache {
         // Install render targets
         this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.FramebufferColor));
         this.textureCache.set('_rt_WaterRefraction', new VTF(device, cache, null, '_rt_WaterRefraction', false, LateBindingTexture.FramebufferColor));
+        this.textureCache.set('_rt_WaterReflection', new VTF(device, cache, null, '_rt_WaterReflection', false, LateBindingTexture.WaterReflection));
         this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.systemTextures = new SystemTextures(device);
     }

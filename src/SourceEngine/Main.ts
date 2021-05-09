@@ -1,11 +1,11 @@
 
-import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { AABB, Frustum } from "../Geometry";
+import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -13,9 +13,9 @@ import { fillColor, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, getMatrixTranslation } from "../MathHelpers";
+import { clamp, getMatrixAxisZ, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -30,6 +30,7 @@ import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { OpaqueBlack } from "../Color";
+import * as UI from "../ui";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
@@ -525,7 +526,7 @@ export class BSPModelRenderer {
     }
 }
 
-// A "View" is effectively a camera, but in Source engine space.
+// A "View" is effectively camera settings, but in Source engine space.
 export class SourceEngineView {
     // aka viewMatrix
     public viewFromWorldMatrix = mat4.create();
@@ -537,6 +538,7 @@ export class SourceEngineView {
 
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
+    public lookAtPos = vec3.create();
 
     // Frustum is stored in Source engine world space.
     public frustum = new Frustum();
@@ -546,20 +548,26 @@ export class SourceEngineView {
     public indirectList = new GfxRenderInstList(null);
 
     public fogParams = new FogParams();
+    public clipPlaneWorld = nArray(1, () => vec4.create());
 
-    public setupFromCamera(camera: Camera, extraTransformInSourceEngineSpace: mat4 | null = null): void {
-        mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
-        if (extraTransformInSourceEngineSpace !== null)
-            mat4.mul(this.viewFromWorldMatrix, this.viewFromWorldMatrix, extraTransformInSourceEngineSpace);
+    public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
-        this.clipFromViewMatrix = camera.projectionMatrix;
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
         this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
-
-        // Compute camera position.
-
         this.frustum.newFrame();
+    }
+
+    public copy(other: SourceEngineView): void {
+        mat4.copy(this.viewFromWorldMatrix, other.viewFromWorldMatrix);
+        this.clipFromViewMatrix = other.clipFromViewMatrix;
+        vec3.copy(this.cameraPos, other.cameraPos);
+    }
+
+    public setupFromCamera(camera: Camera): void {
+        mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
+        this.clipFromViewMatrix = camera.projectionMatrix;
+        this.finishSetup();
     }
 
     public reset(): void {
@@ -750,7 +758,7 @@ export class BSPRenderer {
         // Spawn detail objects.
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
-                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
+                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf));
 
         this.debugCube = new DebugCube(device, cache);
     }
@@ -977,10 +985,11 @@ export class SourceRenderContext {
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
-    public showToolMaterials = false;
-    public showTriggerDebug = false;
     public colorCorrection: SourceColorCorrection;
     public renderCache: GfxRenderCache;
+    public showToolMaterials = false;
+    public showTriggerDebug = false;
+    public showFog = true;
 
     constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
         this.renderCache = new GfxRenderCache(device);
@@ -1029,29 +1038,235 @@ void main() {
 `;
 }
 
+// Renders the entire world (2D skybox, 3D skybox, etc.) given a specific camera location.
+// It's distinct from a view, which is camera settings, which there can be multiple of in a world renderer view.
+class SourceWorldViewRenderer {
+    public drawSkybox2D = true;
+    public drawSkybox3D = true;
+    public drawWorld = true;
+    public drawIndirect = true;
+    public drawDeferredDecals = true;
+    public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities | RenderObjectKind.DebugCube;
+    public pvsEnabled = true;
+
+    public mainView = new SourceEngineView();
+    public skyboxView = new SourceEngineView();
+    public enabled = false;
+
+    public outputColorTargetID: number | null = null;
+
+    constructor(public name: string) {
+    }
+
+    private calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
+        if (!this.pvsEnabled)
+            return false;
+
+        // Compute PVS from view.
+        const leaf = bsp.findLeafForPoint(view.cameraPos);
+
+        if (leaf !== null && leaf.cluster !== 0xFFFF) {
+            // Has valid visibility.
+            pvs.fill(false);
+            pvs.or(bsp.visibility.pvs[leaf.cluster]);
+            return true;
+        }
+
+        return false;
+    }
+
+    public prepareToRender(renderer: SourceRenderer): void {
+        this.enabled = true;
+        const renderContext = renderer.renderContext, renderInstManager = renderer.renderHelper.renderInstManager;
+
+        this.skyboxView.copy(this.mainView);
+
+        // Position the 2D skybox around the main view.
+        vec3.negate(scratchVec3, this.mainView.cameraPos);
+        mat4.fromTranslation(scratchMatrix, this.mainView.cameraPos);
+        mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, scratchMatrix);
+        this.skyboxView.finishSetup();
+
+        renderContext.currentView = this.skyboxView;
+
+        if (renderer.skyboxRenderer !== null && this.drawSkybox2D)
+            renderer.skyboxRenderer.prepareToRender(renderContext, renderInstManager, this.skyboxView);
+
+        if (this.drawSkybox3D) {
+            for (let i = 0; i < renderer.bspRenderers.length; i++) {
+                const bspRenderer = renderer.bspRenderers[i];
+
+                // Draw the skybox by positioning us inside the skybox area.
+                const skyCamera = bspRenderer.getSkyCamera();
+                if (skyCamera === null)
+                    continue;
+
+                this.skyboxView.copy(this.mainView);
+                mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, skyCamera.modelMatrix);
+                this.skyboxView.finishSetup();
+
+                skyCamera.fillFogParams(this.skyboxView.fogParams);
+
+                // If our skybox is not in a useful spot, then don't render it.
+                if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.skyboxView))
+                    continue;
+
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.skyboxView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
+            }
+        }
+
+        if (this.drawWorld) {
+            renderContext.currentView = this.mainView;
+
+            for (let i = 0; i < renderer.bspRenderers.length; i++) {
+                const bspRenderer = renderer.bspRenderers[i];
+
+                if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.mainView)) {
+                    // No valid PVS, mark everything visible.
+                    renderer.pvsScratch.fill(true);
+                }
+
+                // Calculate our fog parameters from the local player's fog controller.
+                const localPlayer = bspRenderer.entitySystem.getLocalPlayer();
+                if (localPlayer.currentFogController !== null && renderer.renderContext.showFog)
+                    localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
+                else
+                    this.mainView.fogParams.maxdensity = 0.0;
+
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.mainView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube));
+            }
+        }
+
+        renderContext.currentView = null!;
+    }
+
+    public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
+        assert(this.enabled);
+
+        const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        mainColorDesc.copyDimensions(renderTargetDesc);
+        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+
+        const lightColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        lightColorDesc.copyDimensions(mainColorDesc);
+        lightColorDesc.colorClearColor = OpaqueBlack;
+
+        const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+        mainDepthDesc.copyDimensions(mainColorDesc);
+        mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, `${this.name} - Main Color (sRGB)`);
+        const lightColorTargetID = builder.createRenderTargetID(lightColorDesc, `${this.name} - Light Color (sRGB)`);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, `${this.name} - Skybox Depth`);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+
+            pass.exec((passRenderer) => {
+                renderer.executeOnPass(passRenderer, this.skyboxView.mainList);
+            });
+        });
+
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, `${this.name} - Main Depth`);
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            if (this.drawDeferredDecals)
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color1, lightColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            pass.exec((passRenderer) => {
+                renderer.executeOnPass(passRenderer, this.mainView.mainList);
+            });
+
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+        });
+
+        if (this.drawDeferredDecals && this.mainView.deferredDecalList.renderInsts.length > 0) {
+            builder.pushPass((pass) => {
+                pass.setDebugName('Deferred Decals');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+                const lightColorResolveTextureID = builder.resolveRenderTarget(lightColorTargetID);
+                pass.attachResolveTexture(lightColorResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderer.setLateBindingTexture(LateBindingTexture.DeferredLightmap, scope.getResolveTextureForID(lightColorResolveTextureID), renderer.linearSampler);
+                    renderer.executeOnPass(passRenderer, this.mainView.deferredDecalList);
+                });
+            });
+        }
+
+        if (this.drawIndirect && this.mainView.indirectList.renderInsts.length > 0) {
+            builder.pushPass((pass) => {
+                pass.setDebugName('Indirect');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+                const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+                pass.attachResolveTexture(mainColorResolveTextureID);
+
+                const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+                pass.attachResolveTexture(mainDepthResolveTextureID);
+
+                let reflectColorResolveTextureID: number | null = null;
+                if (renderer.reflectViewRenderer.outputColorTargetID !== null) {
+                    reflectColorResolveTextureID = builder.resolveRenderTarget(renderer.reflectViewRenderer.outputColorTargetID);
+                    pass.attachResolveTexture(reflectColorResolveTextureID);
+                }
+
+                pass.exec((passRenderer, scope) => {
+                    renderer.setLateBindingTexture(LateBindingTexture.FramebufferColor, scope.getResolveTextureForID(mainColorResolveTextureID), renderer.linearSampler);
+                    renderer.setLateBindingTexture(LateBindingTexture.FramebufferDepth, scope.getResolveTextureForID(mainDepthResolveTextureID), renderer.pointSampler);
+
+                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : renderer.renderContext.materialCache.systemTextures.opaqueBlackTexture2D;
+                    renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, renderer.linearSampler);
+
+                    renderer.executeOnPass(passRenderer, this.mainView.indirectList);
+                });
+            });
+        }
+
+        this.outputColorTargetID = mainColorTargetID;
+    }
+
+    public reset(): void {
+        this.mainView.reset();
+        this.skyboxView.reset();
+        this.enabled = false;
+        this.outputColorTargetID = null;
+    }
+}
+
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
+const scratchPlane = new Plane();
 export class SourceRenderer implements SceneGfx {
-    private textureMapping = nArray(3, () => new TextureMapping());
-    private linearSampler: GfxSampler;
-    private pointSampler: GfxSampler;
     private postProgram = new FullscreenPostProgram();
+    public linearSampler: GfxSampler;
+    public pointSampler: GfxSampler;
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
 
-    // Debug & Settings
-    public drawSkybox2D = true;
-    public drawSkybox3D = true;
-    public drawWorld = true;
-    public pvsEnabled = true;
+    private textureMapping = nArray(4, () => new TextureMapping());
+    private bindingMapping: string[] = [LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection, LateBindingTexture.DeferredLightmap];
 
-    // Scratch
-    public mainView = new SourceEngineView();
-    public skyboxView = new SourceEngineView();
+    public mainViewRenderer = new SourceWorldViewRenderer(`Main View`);
+    public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`);
+
+    // Debug & Settings
     public pvsScratch = new BitMap(65536);
 
     constructor(context: SceneContext, public renderContext: SourceRenderContext) {
+        // Make the reflection view a bit cheaper.
+        this.reflectViewRenderer.drawIndirect = false;
+        this.reflectViewRenderer.drawDeferredDecals = false;
+        this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
+
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
@@ -1076,45 +1291,69 @@ export class SourceRenderer implements SceneGfx {
         });
     }
 
+    public setLateBindingTexture(binding: LateBindingTexture, texture: GfxTexture, sampler: GfxSampler): void {
+        const m = assertExists(this.textureMapping[this.bindingMapping.indexOf(binding)]);
+        m.gfxTexture = texture;
+        m.gfxSampler = sampler;
+    }
+
+    public executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
+        const cache = this.renderContext.renderCache;
+        for (let i = 0; i < this.bindingMapping.length; i++)
+            list.resolveLateSamplerBinding(this.bindingMapping[i], this.textureMapping[i]);
+        list.drawOnPassRenderer(cache, passRenderer);
+    }
+
     private movement(): void {
+        this.renderContext.currentView = this.mainViewRenderer.mainView;
+
         for (let i = 0; i < this.bspRenderers.length; i++)
             this.bspRenderers[i].movement(this.renderContext);
+
+        this.renderContext.currentView = null!;
     }
 
-    public calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
-        if (!this.pvsEnabled)
-            return false;
-
-        // Compute PVS from view.
-        const leaf = bsp.findLeafForPoint(view.cameraPos);
-
-        if (leaf !== null && leaf.cluster !== 0xFFFF) {
-            // Has valid visibility.
-            pvs.fill(false);
-            pvs.or(bsp.visibility.pvs[leaf.cluster]);
-            return true;
-        }
-
-        return false;
+    private resetViews(): void {
+        this.mainViewRenderer.reset();
+        this.reflectViewRenderer.reset();
     }
 
-    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        const renderContext = this.renderContext;
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(1/20);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const enableFog = new UI.Checkbox('Enable Fog', true);
+        enableFog.onchanged = () => {
+            const v = enableFog.checked;
+            this.renderContext.showFog = v;
+        };
+        renderHacksPanel.contents.appendChild(enableFog.elem);
+        const enableColorCorrection = new UI.Checkbox('Enable Color Correction', true);
+        enableColorCorrection.onchanged = () => {
+            const v = enableColorCorrection.checked;
+            this.renderContext.colorCorrection.setEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableColorCorrection.elem);
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
+        showDebugThumbnails.onchanged = () => {
+            const v = showDebugThumbnails.checked;
+            this.renderHelper.debugThumbnails.enabled = v;
+        };
+        renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
+
+        return [renderHacksPanel];
+    }
+
+    public prepareToRender(viewerInput: ViewerRenderInput): void {
+        const renderContext = this.renderContext, device = this.renderContext.device;
 
         // globalTime is in seconds.
         renderContext.globalTime = viewerInput.time / 1000.0;
         renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
-
-        // Set up our views.
-        this.mainView.setupFromCamera(viewerInput.camera);
-
-        // Position the 2D skybox around the main view.
-        vec3.negate(scratchVec3, this.mainView.cameraPos);
-        mat4.fromTranslation(scratchMatrix, this.mainView.cameraPos);
-        this.skyboxView.setupFromCamera(viewerInput.camera, scratchMatrix);
-
-        // Fill in the current view with the main view. This is what's used for material proxies.
-        renderContext.currentView = this.mainView;
 
         this.movement();
 
@@ -1124,43 +1363,38 @@ export class SourceRenderer implements SceneGfx {
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
 
-        if (this.skyboxRenderer !== null && this.drawSkybox2D)
-            this.skyboxRenderer.prepareToRender(renderContext, renderInstManager, this.skyboxView);
+        this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
+        this.mainViewRenderer.prepareToRender(this);
 
-        if (this.drawSkybox3D) {
-            for (let i = 0; i < this.bspRenderers.length; i++) {
-                const bspRenderer = this.bspRenderers[i];
+        // Refraction is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
+        const bsp = this.bspRenderers[0].bsp;
+        const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos);
+        if (leafwater !== null) {
+            const waterZ = leafwater.surfaceZ;
 
-                // Draw the skybox by positioning us inside the skybox area.
-                const skyCamera = bspRenderer.getSkyCamera();
-                if (skyCamera === null)
-                    continue;
-                this.skyboxView.setupFromCamera(viewerInput.camera, skyCamera.modelMatrix);
-                skyCamera.fillFogParams(this.skyboxView.fogParams);
+            // Reflect around waterZ
+            const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
+            if (cameraZ > waterZ) {
+                const view = this.reflectViewRenderer.mainView;
 
-                // If our skybox is not in a useful spot, then don't render it.
-                if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
-                    continue;
+                this.reflectViewRenderer.mainView.copy(this.mainViewRenderer.mainView);
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
-            }
-        }
+                // Reflection plane
+                scratchPlane.set4(0, 0, 1, -waterZ);
+                scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
 
-        if (this.drawWorld) {
-            for (let i = 0; i < this.bspRenderers.length; i++) {
-                const bspRenderer = this.bspRenderers[i];
+                const translationZ = -2.0 * (cameraZ - waterZ);
+                this.reflectViewRenderer.mainView.cameraPos[2] += translationZ;
 
-                if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.mainView)) {
-                    // No valid PVS, mark everything visible.
-                    this.pvsScratch.fill(true);
-                }
+                // Get the forward dir
+                getMatrixAxisZ(scratchVec3, this.mainViewRenderer.mainView.worldFromViewMatrix);
 
-                // Calculate our fog parameters from the local player's fog controller.
-                const localPlayer = bspRenderer.entitySystem.getLocalPlayer();
-                if (localPlayer.currentFogController !== null)
-                    localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
+                // Intersect the camera forward direction with the plane to find our look position.
+                scratchPlane.intersectLine(view.lookAtPos, this.mainViewRenderer.mainView.cameraPos, scratchVec3);
+                mat4.lookAt(this.reflectViewRenderer.mainView.viewFromWorldMatrix, this.reflectViewRenderer.mainView.cameraPos, view.lookAtPos, Vec3UnitZ);
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
+                this.reflectViewRenderer.mainView.finishSetup();
+                this.reflectViewRenderer.prepareToRender(this);
             }
         }
 
@@ -1173,104 +1407,31 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.prepareToRender();
     }
 
-    private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
-        const r = this.renderHelper.renderInstManager;
-        list.resolveLateSamplerBinding(LateBindingTexture.FramebufferColor, this.textureMapping[0]);
-        list.resolveLateSamplerBinding(LateBindingTexture.FramebufferDepth, this.textureMapping[1]);
-        list.resolveLateSamplerBinding(LateBindingTexture.DeferredLightmap, this.textureMapping[2]);
-        list.drawOnPassRenderer(r.gfxRenderCache, passRenderer);
-    }
-
-    private resetViews(): void {
-        this.mainView.reset();
-        this.skyboxView.reset();
-    }
-
-    public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(1/20);
-    }
-
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.textureMapping[0].reset();
-        this.textureMapping[1].reset();
-        this.textureMapping[2].reset();
+        for (let i = 0; i < this.textureMapping.length; i++)
+            this.textureMapping[i].reset();
+
+        this.prepareToRender(viewerInput);
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
-        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
 
-        const lightColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-        setBackbufferDescSimple(lightColorDesc, viewerInput);
-        lightColorDesc.colorClearColor = OpaqueBlack;
+        if (this.reflectViewRenderer.enabled) {
+            const reflectionColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
 
-        const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-        mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
-        mainDepthDesc.copyDimensions(mainColorDesc);
+            // Render the reflection view at a smaller resolution...
+            reflectionColorDesc.copyDimensions(mainColorDesc);
+            reflectionColorDesc.width >>= 1;
+            reflectionColorDesc.height >>= 1;
 
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color (sRGB)');
-        const lightColorTargetID = builder.createRenderTargetID(lightColorDesc, 'Light Color (sRGB)');
+            this.reflectViewRenderer.pushPasses(this, builder, reflectionColorDesc);
+        }
 
-        builder.pushPass((pass) => {
-            pass.setDebugName('Skybox');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
-
-            pass.exec((passRenderer) => {
-                this.executeOnPass(passRenderer, this.skyboxView.mainList);
-            });
-        });
-
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color1, lightColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-            pass.exec((passRenderer) => {
-                this.executeOnPass(passRenderer, this.mainView.mainList);
-            });
-        });
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('Deferred Decals');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-            const lightColorResolveTextureID = builder.resolveRenderTarget(lightColorTargetID);
-            pass.attachResolveTexture(lightColorResolveTextureID);
-
-            pass.exec((passRenderer, scope) => {
-                this.textureMapping[2].gfxTexture = scope.getResolveTextureForID(lightColorResolveTextureID);
-                this.textureMapping[2].gfxSampler = this.linearSampler;
-                this.executeOnPass(passRenderer, this.mainView.deferredDecalList);
-            });
-        });
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('Indirect');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
-            pass.attachResolveTexture(mainColorResolveTextureID);
-
-            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
-            pass.attachResolveTexture(mainDepthResolveTextureID);
-
-            pass.exec((passRenderer, scope) => {
-                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                this.textureMapping[0].gfxSampler = this.linearSampler;
-                this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                this.textureMapping[1].gfxSampler = this.pointSampler;
-                this.executeOnPass(passRenderer, this.mainView.indirectList);
-            });
-        });
+        this.mainViewRenderer.pushPasses(this, builder, mainColorDesc);
+        const mainColorTargetID = assertExists(this.mainViewRenderer.outputColorTargetID);
 
         const mainColorGammaDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
         mainColorGammaDesc.copyDimensions(mainColorDesc);
@@ -1301,12 +1462,11 @@ export class SourceRenderer implements SceneGfx {
                 postRenderInst.drawOnPass(cache, passRenderer);
             });
         });
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorGammaTargetID, viewerInput.mouseLocation);
 
-        // TODO(jstpierre): Merge FXAA and Gamma Correct?
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorGammaTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
-        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.resetViews();
         renderInstManager.resetRenderInsts();

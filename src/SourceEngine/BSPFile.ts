@@ -2,7 +2,7 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray } from "../util";
+import { readString, assertExists, assert, nArray, leftPad } from "../util";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
@@ -36,6 +36,7 @@ const enum LumpType {
     VERTNORMALINDICES         = 31,
     DISP_VERTS                = 33,
     GAME_LUMP                 = 35,
+    LEAFWATERDATA             = 36,
     PRIMITIVES                = 37,
     PRIMINDICES               = 39,
     PAKFILE                   = 40,
@@ -139,12 +140,26 @@ export interface BSPLeafAmbientSample {
     pos: vec3;
 }
 
+const enum BSPLeafContents {
+    Solid     = 0x001,
+    Water     = 0x010,
+    TestWater = 0x100,
+}
+
 export interface BSPLeaf {
     bbox: AABB;
     area: number;
     cluster: number;
     ambientLightSamples: BSPLeafAmbientSample[];
     surfaces: number[];
+    leafwaterdata: number;
+    contents: BSPLeafContents;
+}
+
+interface BSPLeafWaterData {
+    surfaceZ: number;
+    minZ: number;
+    surfaceTexInfoID: number;
 }
 
 export interface Model {
@@ -536,6 +551,7 @@ export class BSPFile {
     public leaflist: BSPLeaf[] = [];
     public cubemaps: Cubemap[] = [];
     public worldlights: WorldLight[] = [];
+    public leafwaterdata: BSPLeafWaterData[] = [];
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility;
@@ -549,14 +565,6 @@ export class BSPFile {
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
         assert(this.version === 19 || this.version === 20 || this.version === 21);
-
-        let USING_HDR = false;
-        if (this.version === 21) {
-            // SDR lumps appear to be empty on version 21...
-            // TODO(jstpierre): Use HDR lumps everywhere / reimplement Source HDR
-            USING_HDR = true;
-        }
-        this.usingHDR = USING_HDR;
 
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
@@ -581,6 +589,28 @@ export class BSPFile {
             if (buffer.byteLength !== 0)
                 assert(version === expectedVersion);
             return buffer;
+        }
+
+        let lighting: ArrayBufferSlice | null = null;
+
+        // TODO(jstpierre): Implement Source HDR
+        const preferHDR = false;
+        if (preferHDR) {
+            lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
+            this.usingHDR = true;
+
+            if (lighting === null || lighting.byteLength === 0) {
+                lighting = getLumpData(LumpType.LIGHTING, 1);
+                this.usingHDR = false;
+            }
+        } else {
+            lighting = getLumpData(LumpType.LIGHTING, 1);
+            this.usingHDR = false;
+
+            if (lighting === null || lighting.byteLength === 0) {
+                lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
+                this.usingHDR = true;
+            }
         }
 
         const game_lump = getLumpData(LumpType.GAME_LUMP).createDataView();
@@ -683,7 +713,7 @@ export class BSPFile {
 
         // Parse out surfaces.
         let faces_: DataView | null = null;
-        if (USING_HDR)
+        if (this.usingHDR)
             faces_ = getLumpData(LumpType.FACES_HDR, 1).createDataView();
         if (faces_ === null || faces_.byteLength === 0)
             faces_ = getLumpData(LumpType.FACES, 1).createDataView();
@@ -731,12 +761,6 @@ export class BSPFile {
         }
 
         const basicSurfaces: BasicSurface[] = [];
-
-        let lighting: ArrayBufferSlice | null = null;
-        if (USING_HDR)
-            lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
-        if (lighting === null || lighting.byteLength === 0)
-            lighting = getLumpData(LumpType.LIGHTING, 1);
 
         // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
         let vertnormalIdx = 0;
@@ -815,18 +839,26 @@ export class BSPFile {
             this.models.push({ bbox, headnode, surfaces: [] });
         }
 
+        const leafwaterdata = getLumpData(LumpType.LEAFWATERDATA).createDataView();
+        for (let idx = 0; idx < leafwaterdata.byteLength; idx += 0x0C) {
+            const surfaceZ = leafwaterdata.getFloat32(idx + 0x00, true);
+            const minZ = leafwaterdata.getFloat32(idx + 0x04, true);
+            const surfaceTexInfoID = leafwaterdata.getUint16(idx + 0x08, true);
+            this.leafwaterdata.push({ surfaceZ, minZ, surfaceTexInfoID });
+        }
+
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
         let leafambientindex: DataView | null = null;
-        if (USING_HDR)
+        if (this.usingHDR)
             leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX_HDR).createDataView();
         if (leafambientindex === null || leafambientindex.byteLength === 0)
             leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX).createDataView();
 
         let leafambientlightingLump: ArrayBufferSlice | null = null;
         let leafambientlightingVersion: number = 0;
-        if (USING_HDR)
+        if (this.usingHDR)
             [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING_HDR);
         if (leafambientlightingLump === null || leafambientlightingLump.byteLength === 0)
             [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING);
@@ -949,7 +981,7 @@ export class BSPFile {
                 idx += 0x02;
             }
 
-            this.leaflist.push({ bbox, cluster, area, ambientLightSamples, surfaces: [] });
+            this.leaflist.push({ bbox, cluster, area, ambientLightSamples, surfaces: [], leafwaterdata, contents });
 
             const leafidx = this.leaflist.length - 1;
             for (let i = firstleafface; i < firstleafface + numleaffaces; i++)
@@ -1399,7 +1431,7 @@ export class BSPFile {
         let worldlightsVersion = 0;
         let worldlightsIsHDR = false;
 
-        if (USING_HDR) {
+        if (this.usingHDR) {
             [worldlightsLump, worldlightsVersion] = getLumpDataEx(LumpType.WORLDLIGHTS_HDR);
             worldlightsIsHDR = true;
         }
@@ -1505,6 +1537,31 @@ export class BSPFile {
     public findLeafForPoint(p: ReadonlyVec3): BSPLeaf | null {
         const leafidx = this.findLeafIdxForPoint(p);
         return leafidx >= 0 ? this.leaflist[leafidx] : null;
+    }
+
+    public findLeafWaterForPoint(p: ReadonlyVec3, nodeid: number = 0): BSPLeafWaterData | null {
+        if (nodeid < 0) {
+            const leafidx = -nodeid - 1;
+            const leaf = this.leaflist[leafidx];
+            if (leaf.leafwaterdata !== -1)
+                return this.leafwaterdata[leaf.leafwaterdata];
+            return null;
+        }
+
+        const node = this.nodelist[nodeid];
+        const dot = node.plane.distance(p[0], p[1], p[2]);
+
+        const check1 = dot >= 0.0 ? node.child0 : node.child1;
+        const check2 = dot >= 0.0 ? node.child1 : node.child0;
+
+        const w1 = this.findLeafWaterForPoint(p, check1);
+        if (w1 !== null)
+            return w1;
+        const w2 = this.findLeafWaterForPoint(p, check2);
+        if (w2 !== null)
+            return w2;
+
+            return null;
     }
 
     public markClusterSet(dst: number[], aabb: AABB, nodeid: number = 0): void {
