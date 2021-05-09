@@ -157,8 +157,13 @@ function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEng
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
     offs += fillVec3v(d, offs, view.cameraPos);
     offs += fillFogParams(d, offs, view.fogParams);
-    for (let i = 0; i < view.clipPlaneWorld.length; i++)
-        offs += fillVec4v(d, offs, view.clipPlaneWorld[i]);
+    for (let i = 0; i < 1; i++) {
+        const clipPlaneWorld = view.clipPlaneWorld[i];
+        if (clipPlaneWorld)
+            offs += fillVec4v(d, offs, view.clipPlaneWorld[i]);
+        else
+            offs += fillVec4(d, offs, 0, 0, 0, 0);
+    }
     return offs - baseOffs;
 }
 
@@ -1332,11 +1337,13 @@ vec4 DebugLightmapTexture(vec4 t_TextureSample) {
 }
 
 bool CheckClipPlanes(vec3 t_PositionWorld) {
+#ifdef USE_CLIP_PLANES
     // TODO(jstpierre): Optimize this if we have hardware clip plane in vertex shader (GL extension?)
     for (int i = 0; i < 1; i++) {
         if (dot(u_ClipPlaneWorld[i].xyz, t_PositionWorld.xyz) + u_ClipPlaneWorld[i].w < 0.0)
             return false;
     }
+#endif
 
     return true;
 }
@@ -1641,12 +1648,15 @@ class Material_Generic extends BaseMaterial {
             assert(!this.wantsLightmap);
         }
 
-        this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting);
-        this.program.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', wantsDynamicVertexLighting);
-        this.program.setDefineBool('USE_DYNAMIC_PIXEL_LIGHTING', wantsDynamicPixelLighting);
-        this.program.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting);
-        this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube);
-        this.gfxProgram = null;
+        let changed = false;
+        changed = this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting) || changed;
+        changed = this.program.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', wantsDynamicVertexLighting) || changed;
+        changed = this.program.setDefineBool('USE_DYNAMIC_PIXEL_LIGHTING', wantsDynamicPixelLighting) || changed;
+        changed = this.program.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting) || changed;
+        changed = this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube) || changed;
+
+        if (changed)
+            this.gfxProgram = null;
     }
 
     protected initParameters(): void {
@@ -1696,7 +1706,7 @@ class Material_Generic extends BaseMaterial {
         p['$flow_color_intensity']         = new ParameterNumber(0.0);
     }
 
-    private recacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
+    private recacheProgram(cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
             this.gfxProgram = cache.createProgram(this.program);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -1860,7 +1870,7 @@ class Material_Generic extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
-        this.recacheProgram(device, cache);
+        this.recacheProgram(cache);
     }
 
     private updateTextureMappings(renderContext: SourceRenderContext): void {
@@ -1902,7 +1912,12 @@ class Material_Generic extends BaseMaterial {
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
         else if (this.wantsDeferredLightmap)
             this.textureMapping[3].lateBinding = LateBindingTexture.DeferredLightmap;
-        this.recacheProgram(renderContext.device, renderContext.renderCache);
+
+        // TODO(jstpierre): The cost of reprocessing shaders every frame toggling between clip planes and not-clip planes is too massive right now...
+        // GfxRenderCache happens *post*-preprocess, and the expensive thing appears to be preprocessGLSL.
+        const useClipPlanes = true; // renderContext.currentView.clipPlaneWorld.length > 0;
+        if (this.program.setDefineBool('USE_CLIP_PLANES', useClipPlanes))
+            this.gfxProgram = null;
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 132);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
@@ -1970,6 +1985,7 @@ class Material_Generic extends BaseMaterial {
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
         offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
 
+        this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -2455,7 +2471,7 @@ void mainPS() {
 class Material_Water extends BaseMaterial {
     private shaderType: WaterShaderType;
     private program: MaterialProgramBase;
-    private gfxProgram: GfxProgram;
+    private gfxProgram: GfxProgram | null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
     private textureMapping: TextureMapping[] = nArray(6, () => new TextureMapping());
@@ -2508,6 +2524,13 @@ class Material_Water extends BaseMaterial {
         this.paramGetTexture('$depthtexture').ref = '_rt_Depth';
     }
 
+    private recacheProgram(cache: GfxRenderCache): void {
+        if (this.gfxProgram === null) {
+            this.gfxProgram = cache.createProgram(this.program);
+            this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+        }
+    }
+
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         super.initStatic(device, cache);
 
@@ -2532,8 +2555,6 @@ class Material_Water extends BaseMaterial {
                 this.wantsTexScroll = true;
                 this.program.setDefineBool('USE_TEXSCROLL', true);
             }
-
-            this.program.setDefineBool('USE_EXPENSIVE_REFLECT', true);
 
             this.isIndirect = this.textureIsIndirect('$refracttexture');
         }
@@ -2608,6 +2629,10 @@ class Material_Water extends BaseMaterial {
                 offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
             }
 
+            const useExpensiveReflect = renderContext.currentView.useExpensiveWater;
+            if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
+                this.gfxProgram = null;
+
             offs += this.paramFillColor(d, offs, '$refracttint', '$refractamount');
             offs += this.paramFillColor(d, offs, '$reflecttint', '$reflectamount');
 
@@ -2624,8 +2649,9 @@ class Material_Water extends BaseMaterial {
             offs += fillMatrix4x4(d, offs, scratchMatrix);
         }
 
+        this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.sortKey = this.sortKeyBase;
     }

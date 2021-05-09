@@ -1,7 +1,8 @@
 
-import { vec3, ReadonlyVec3, ReadonlyMat4, vec4 } from "gl-matrix";
+import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4 } from "gl-matrix";
 import { nArray } from "./util";
 
+const scratchVec4 = vec4.create();
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
 
@@ -22,6 +23,13 @@ export class Plane {
 
     public getVec4v(dst: vec4): void {
         vec4.set(dst, this.x, this.y, this.z, this.d);
+    }
+
+    public setVec4v(v: ReadonlyVec4): void {
+        this.x = v[0];
+        this.y = v[1];
+        this.z = v[2];
+        this.d = v[3];
     }
 
     public getNormal(dst: vec3): void {
@@ -60,6 +68,14 @@ export class Plane {
         const dir = Plane.scratchVec3[1];
         vec3.sub(dir, p1, p0);
         this.intersectLineSegment(dst, p0, dir);
+    }
+
+    public transform(mtx: ReadonlyMat4): void {
+        // You might have to retrieve the adjugate / inverse here if you're doing scaling. I'm using this
+        // with view matrices which shouldn't ever have non-homogenous scaling.
+        this.getVec4v(scratchVec4);
+        vec4.transformMat4(scratchVec4, scratchVec4, mtx);
+        this.setVec4v(scratchVec4);
     }
 }
 

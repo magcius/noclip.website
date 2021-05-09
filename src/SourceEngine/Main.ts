@@ -533,8 +533,8 @@ export class SourceEngineView {
     // aka worldMatrix
     public worldFromViewMatrix = mat4.create();
     public clipFromWorldMatrix = mat4.create();
-
-    public clipFromViewMatrix: ReadonlyMat4;
+    // aka projectionMatrix
+    public clipFromViewMatrix = mat4.create();
 
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
@@ -548,7 +548,8 @@ export class SourceEngineView {
     public indirectList = new GfxRenderInstList(null);
 
     public fogParams = new FogParams();
-    public clipPlaneWorld = nArray(1, () => vec4.create());
+    public clipPlaneWorld: vec4[] = [];
+    public useExpensiveWater = false;
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
@@ -560,13 +561,13 @@ export class SourceEngineView {
 
     public copy(other: SourceEngineView): void {
         mat4.copy(this.viewFromWorldMatrix, other.viewFromWorldMatrix);
-        this.clipFromViewMatrix = other.clipFromViewMatrix;
+        mat4.copy(this.clipFromViewMatrix, other.clipFromViewMatrix);
         vec3.copy(this.cameraPos, other.cameraPos);
     }
 
     public setupFromCamera(camera: Camera): void {
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
-        this.clipFromViewMatrix = camera.projectionMatrix;
+        mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();
     }
 
@@ -987,9 +988,12 @@ export class SourceRenderContext {
     public currentView: SourceEngineView;
     public colorCorrection: SourceColorCorrection;
     public renderCache: GfxRenderCache;
+
+    // Public settings
     public showToolMaterials = false;
     public showTriggerDebug = false;
     public showFog = true;
+    public showExpensiveWater = true;
 
     constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
         this.renderCache = new GfxRenderCache(device);
@@ -1242,8 +1246,28 @@ class SourceWorldViewRenderer {
 }
 
 const scratchVec3 = vec3.create();
+const scratchVec4a = vec4.create(), scratchVec4b = vec4.create();
 const scratchMatrix = mat4.create();
 const scratchPlane = new Plane();
+
+// http://www.terathon.com/code/oblique.html
+// Plane here needs to be in view-space.
+function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane): void {
+    const x = (Math.sign(plane.x) + m[8]) / m[0];
+    const y = (Math.sign(plane.y) + m[9]) / m[5];
+    const z = -1;
+    const w = (1 + m[10]) / m[14];
+
+    vec4.set(scratchVec4a, x, y, z, w);
+    plane.getVec4v(scratchVec4b);
+
+    vec4.scale(scratchVec4b, scratchVec4b, 2.0 / vec4.dot(scratchVec4b, scratchVec4a));
+    m[2] = scratchVec4a[0];
+    m[6] = scratchVec4a[1];
+    m[10] = scratchVec4a[2] + 1;
+    m[14] = scratchVec4a[3];
+}
+
 export class SourceRenderer implements SceneGfx {
     private postProgram = new FullscreenPostProgram();
     public linearSampler: GfxSampler;
@@ -1266,6 +1290,7 @@ export class SourceRenderer implements SceneGfx {
         this.reflectViewRenderer.drawIndirect = false;
         this.reflectViewRenderer.drawDeferredDecals = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
+        this.reflectViewRenderer.mainView.clipPlaneWorld.push(vec4.create());
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
@@ -1338,6 +1363,34 @@ export class SourceRenderer implements SceneGfx {
             this.renderContext.colorCorrection.setEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableColorCorrection.elem);
+        const useExpensiveWater = new UI.Checkbox('Use Expensive Water', true);
+        useExpensiveWater.onchanged = () => {
+            const v = useExpensiveWater.checked;
+            this.renderContext.showExpensiveWater = v;
+        };
+        renderHacksPanel.contents.appendChild(useExpensiveWater.elem);
+        const showToolMaterials = new UI.Checkbox('Show Tool-only Materials', false);
+        showToolMaterials.onchanged = () => {
+            const v = showToolMaterials.checked;
+            this.renderContext.showToolMaterials = v;
+        };
+        renderHacksPanel.contents.appendChild(showToolMaterials.elem);
+        const showTriggerDebug = new UI.Checkbox('Show Trigger Debug', false);
+        showTriggerDebug.onchanged = () => {
+            const v = showTriggerDebug.checked;
+            this.renderContext.showTriggerDebug = v;
+        };
+        renderHacksPanel.contents.appendChild(showTriggerDebug.elem);
+        const showEntityDebug = new UI.Checkbox('Show Entity Debug', false);
+        showEntityDebug.onchanged = () => {
+            const v = showEntityDebug.checked;
+            for (let i = 0; i < this.bspRenderers.length; i++) {
+                const entityDebugger = this.bspRenderers[i].entitySystem.debugger;
+                entityDebugger.capture = v;
+                entityDebugger.draw = v;
+            }
+        };
+        renderHacksPanel.contents.appendChild(showEntityDebug.elem);
         const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
         showDebugThumbnails.onchanged = () => {
             const v = showDebugThumbnails.checked;
@@ -1355,6 +1408,9 @@ export class SourceRenderer implements SceneGfx {
         renderContext.globalTime = viewerInput.time / 1000.0;
         renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
 
+        // Update the main view early, since that's what movement/entities will use
+        this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
+
         this.movement();
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -1363,48 +1419,56 @@ export class SourceRenderer implements SceneGfx {
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
 
-        this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
         this.mainViewRenderer.prepareToRender(this);
 
         // Refraction is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
-        const bsp = this.bspRenderers[0].bsp;
-        const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos);
-        if (leafwater !== null) {
-            const waterZ = leafwater.surfaceZ;
+        if (this.renderContext.showExpensiveWater) {
+            const bsp = this.bspRenderers[0].bsp;
+            const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos);
+            if (leafwater !== null) {
+                const waterZ = leafwater.surfaceZ;
 
-            // Reflect around waterZ
-            const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
-            if (cameraZ > waterZ) {
-                // Reflection plane
-                scratchPlane.set4(0, 0, 1, -waterZ);
-                scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
+                // Reflect around waterZ
+                const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
+                if (cameraZ > waterZ) {
+                    // Reflection plane
+                    scratchPlane.set4(0, 0, 1, -waterZ);
+                    scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
 
-                const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);
+                    const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);
 
-                // There's probably a much cleaner way to do this, tbh.
-                const reflectView = this.reflectViewRenderer.mainView;
-                reflectView.copy(this.mainViewRenderer.mainView);
+                    // There's probably a much cleaner way to do this, tbh.
+                    const reflectView = this.reflectViewRenderer.mainView;
+                    reflectView.copy(this.mainViewRenderer.mainView);
 
-                // Flip the view upside-down so that when we invert later, the winding order comes out correct.
-                // This will mean we'll have to flip the texture in the shader though. Intentionally adding a Y-flip for once!
+                    // Flip the view upside-down so that when we invert later, the winding order comes out correct.
+                    // This will mean we'll have to flip the texture in the shader though. Intentionally adding a Y-flip for once!
 
-                // This is in noclip space
-                computeModelMatrixS(scratchMatrix, 1, -1, 1);
-                mat4.mul(reflectView.worldFromViewMatrix, this.mainViewRenderer.mainView.worldFromViewMatrix, scratchMatrix);
+                    // This is in noclip space
+                    computeModelMatrixS(scratchMatrix, 1, -1, 1);
+                    mat4.mul(reflectView.worldFromViewMatrix, this.mainViewRenderer.mainView.worldFromViewMatrix, scratchMatrix);
 
-                // Now flip it over the reflection plane.
+                    // Now flip it over the reflection plane.
 
-                // This is in Source space
-                computeModelMatrixS(scratchMatrix, 1, 1, -1);
-                mat4.mul(reflectView.worldFromViewMatrix, scratchMatrix, reflectView.worldFromViewMatrix);
-                reflectView.worldFromViewMatrix[14] = reflectionCameraZ;
-                mat4.invert(reflectView.viewFromWorldMatrix, reflectView.worldFromViewMatrix);
+                    // This is in Source space
+                    computeModelMatrixS(scratchMatrix, 1, 1, -1);
+                    mat4.mul(reflectView.worldFromViewMatrix, scratchMatrix, reflectView.worldFromViewMatrix);
+                    reflectView.worldFromViewMatrix[14] = reflectionCameraZ;
+                    mat4.invert(reflectView.viewFromWorldMatrix, reflectView.worldFromViewMatrix);
 
-                this.reflectViewRenderer.mainView.finishSetup();
-                this.reflectViewRenderer.prepareToRender(this);
+                    // TODO(jstpierre): This isn't quite working yet.
+                    /*
+                    scratchPlane.transform(reflectView.viewFromWorldMatrix);
+                    modifyProjectionMatrixForObliqueClipping(reflectView.clipFromViewMatrix, scratchPlane);
+                    */
+
+                    this.reflectViewRenderer.mainView.finishSetup();
+                    this.reflectViewRenderer.prepareToRender(this);
+                }
             }
         }
 
+        this.mainViewRenderer.mainView.useExpensiveWater = this.reflectViewRenderer.enabled;
         renderInstManager.popTemplateRenderInst();
 
         // Update our lightmaps right before rendering.
