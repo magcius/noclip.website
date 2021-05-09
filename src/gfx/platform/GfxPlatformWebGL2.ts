@@ -133,13 +133,13 @@ function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, no
 
     function translateSize(flags: FormatCompFlags): number {
         switch (flags) {
-        case FormatCompFlags.COMP_R:
+        case FormatCompFlags.R:
             return 1;
-        case FormatCompFlags.COMP_RG:
+        case FormatCompFlags.RG:
             return 2;
-        case FormatCompFlags.COMP_RGB:
+        case FormatCompFlags.RGB:
             return 3;
-        case FormatCompFlags.COMP_RGBA:
+        case FormatCompFlags.RGBA:
             return 4;
         }
     }
@@ -150,13 +150,13 @@ function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, no
 
     const type = translateType(typeFlags);
     const size = translateSize(compFlags);
-    const normalized = !!(flags & FormatFlags.NORMALIZED);
+    const normalized = !!(flags & FormatFlags.Normalized);
     return { size, type, normalized };
 }
 
 function isFormatSizedInteger(fmt: GfxFormat): boolean {
     const flags = getFormatFlags(fmt);
-    if (!!(flags & FormatFlags.NORMALIZED))
+    if (!!(flags & FormatFlags.Normalized))
         return false;
 
     const typeFlags = getFormatTypeFlags(fmt);
@@ -690,13 +690,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
         switch (compFlags) {
-        case FormatCompFlags.COMP_R:
+        case FormatCompFlags.R:
             return isInteger ? WebGL2RenderingContext.RED_INTEGER : WebGL2RenderingContext.RED;
-        case FormatCompFlags.COMP_RG:
+        case FormatCompFlags.RG:
             return isInteger ? WebGL2RenderingContext.RG_INTEGER : WebGL2RenderingContext.RG;
-        case FormatCompFlags.COMP_RGB:
+        case FormatCompFlags.RGB:
             return isInteger ? WebGL2RenderingContext.RGB_INTEGER : WebGL2RenderingContext.RGB;
-        case FormatCompFlags.COMP_RGBA:
+        case FormatCompFlags.RGBA:
             return isInteger ? WebGL2RenderingContext.RGBA_INTEGER : WebGL2RenderingContext.RGBA;
         }
     }
@@ -1188,9 +1188,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (depthStencilAttachment !== null) {
             const attachment = depthStencilAttachment as GfxRenderTargetP_GL;
             const flags = getFormatFlags(attachment.pixelFormat);
-            if (!!(flags & FormatFlags.DEPTH) && depthClearValue !== 'load')
+            if (!!(flags & FormatFlags.Depth) && depthClearValue !== 'load')
                 depthClearValueF = depthClearValue;
-            if (!!(flags & FormatFlags.STENCIL) && stencilClearValue !== 'load')
+            if (!!(flags & FormatFlags.Stencil) && stencilClearValue !== 'load')
                 stencilClearValueF = stencilClearValue;
         }
 
@@ -1621,8 +1621,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _bindFramebufferDepthStencilAttachment(framebuffer: GLenum, attachment: GfxRenderTargetP_GL | GfxTextureP_GL | null): void {
         const gl = this.gl;
 
-        const flags = attachment !== null ? getFormatFlags(attachment.pixelFormat) : (FormatFlags.DEPTH | FormatFlags.STENCIL);
-        const depth = !!(flags & FormatFlags.DEPTH), stencil = !!(flags & FormatFlags.STENCIL);
+        const flags = attachment !== null ? getFormatFlags(attachment.pixelFormat) : (FormatFlags.Depth | FormatFlags.Stencil);
+        const depth = !!(flags & FormatFlags.Depth), stencil = !!(flags & FormatFlags.Stencil);
         if (depth && stencil) {
             this._bindFramebufferAttachment(framebuffer, gl.DEPTH_STENCIL_ATTACHMENT, attachment);
         } else if (depth) {

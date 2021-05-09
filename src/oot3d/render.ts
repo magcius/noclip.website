@@ -674,7 +674,7 @@ function translateDataType(dataType: CMB.DataType, size: number, normalized: boo
 
     const formatTypeFlags = translateDataTypeFlags(dataType);
     const formatCompFlags = size as FormatCompFlags;
-    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.NORMALIZED : FormatFlags.NONE;
+    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.Normalized : FormatFlags.None;
     return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
 }
 
