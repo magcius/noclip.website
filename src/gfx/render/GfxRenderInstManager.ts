@@ -460,7 +460,7 @@ export class GfxRenderInst {
         const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
 
         let sampleCount = -1;
-        for (let i = 0; i <= passDescriptor.colorAttachment.length; i++) {
+        for (let i = 0; i < passDescriptor.colorAttachment.length; i++) {
             const colorAttachmentDescriptor = passDescriptor.colorAttachment[i] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[i]!) : null;
             this._renderPipelineDescriptor.colorAttachmentFormats[i] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
             if (colorAttachmentDescriptor !== null) {
