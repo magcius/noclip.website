@@ -67,7 +67,7 @@ export class Plane {
     public intersectLineSegment(dst: vec3, p0: ReadonlyVec3, p1: ReadonlyVec3) {
         const dir = Plane.scratchVec3[1];
         vec3.sub(dir, p1, p0);
-        this.intersectLineSegment(dst, p0, dir);
+        this.intersectLine(dst, p0, dir);
     }
 
     public transform(mtx: ReadonlyMat4): void {
