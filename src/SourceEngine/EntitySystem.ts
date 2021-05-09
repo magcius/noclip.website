@@ -7,8 +7,8 @@ import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldS
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1, Vec3Zero } from '../MathHelpers';
-import { arrayRemove, assert, assertExists, fallbackUndefined } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
+import { assert, assertExists, fallbackUndefined } from '../util';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
@@ -1096,6 +1096,35 @@ class material_modify_control extends BaseEntity {
     }
 }
 
+class info_overlay_accessor extends BaseEntity {
+    public static classname = `info_overlay_accessor`;
+    private overlaySurface: BSPSurfaceRenderer;
+    private needsMaterialInit = true;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        const overlayid = Number(assertExists(this.entity.overlayid));
+        const overlay = assertExists(bspRenderer.bsp.overlays[overlayid]);
+        console.log(`info_overlay_accessor spawn`, overlayid, overlay.surfaceIndex);
+        // Overlays are only on the world spawn right now... (maybe this will always be true?)
+        this.overlaySurface = bspRenderer.models[0].surfacesByIdx[overlay.surfaceIndex];
+
+        this.materialParams = new EntityMaterialParameters();
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.needsMaterialInit && this.overlaySurface.materialInstance !== null) {
+            // Hook up the material params...
+            assert(this.overlaySurface.materialInstance.entityParams === null);
+            this.overlaySurface.materialInstance.entityParams = this.materialParams;
+            this.needsMaterialInit = false;
+        }
+    }
+}
+
 class color_correction extends BaseEntity {
     public static classname = `color_correction`;
 
@@ -1189,6 +1218,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_fog_controller);
         this.registerFactory(env_texturetoggle);
         this.registerFactory(material_modify_control);
+        this.registerFactory(info_overlay_accessor);
         this.registerFactory(color_correction);
     }
 

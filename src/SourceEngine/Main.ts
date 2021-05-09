@@ -277,7 +277,7 @@ export class SkyboxRenderer {
     }
 }
 
-class BSPSurfaceRenderer {
+export class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
     public lightmaps: SurfaceLightmap[] = [];
@@ -392,44 +392,24 @@ export class BSPModelRenderer {
     }
 
     private async bindMaterials(renderContext: SourceRenderContext) {
-        // Gather all materials.
-        const texNames = new Set<string>();
-        for (let i = 0; i < this.surfaces.length; i++) {
-            const surface = this.surfaces[i];
-            texNames.add(surface.surface.texName);
-        }
+        await Promise.all(this.surfaces.map(async (surface) => {
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(surface.surface.texName);
 
-        const materialInstances = await Promise.all([...texNames].map(async (texName: string): Promise<[string, BaseMaterial]> => {
-            const materialInstance = await renderContext.materialCache.createMaterialInstance(texName);
-            return [texName, materialInstance];
-        }));
-
-        // Now that we've created our materials, set our entity parameters and initialize the material...
-        // We have to do this as late as possible, as it's possible entity parameters were set between the
-        // fetching and now.
-        await Promise.all(materialInstances.map(async ([texName, materialInstance]) => {
             const entityParams = this.entity !== null ? this.entity.materialParams : null;
             materialInstance.entityParams = entityParams;
 
             // We don't have vertex colors on BSP surfaces.
             materialInstance.hasVertexColorInput = false;
 
-            // Look for the first surface with this name -- the theory being that overlays should be using
-            // separate texinfo's than regular surfaces (might not be true in practice)
-            const surface = assertExists(this.surfaces.find((surface) => surface.surface.texName === texName));
             materialInstance.wantsTexCoord0Scale = surface.surface.wantsTexCoord0Scale;
 
+            // TODO(jstpierre): Refactor this a bit. Maybe use $decal instead?
             const isOverlay = !surface.surface.wantsTexCoord0Scale;
             materialInstance.wantsDeferredLightmap = isOverlay;
 
             await materialInstance.init(renderContext);
-        }));
-
-        for (let i = 0; i < this.surfaces.length; i++) {
-            const surface = this.surfaces[i];
-            const [, materialInstance] = assertExists(materialInstances.find(([texName]) => surface.surface.texName === texName));
             surface.bindMaterial(materialInstance, renderContext.lightmapManager);
-        }
+        }));
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -511,6 +491,8 @@ export class BSPModelRenderer {
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
         this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
+
+        // Hacky: Always render all overlays. We should probably do it based on the origin faces...
         for (let i = 0; i < this.bsp.overlays.length; i++)
             this.liveSurfaceSet.add(this.bsp.overlays[i].surfaceIndex);
 
