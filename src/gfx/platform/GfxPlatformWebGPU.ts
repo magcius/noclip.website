@@ -627,7 +627,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = true;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
 
-    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvasContext: GPUCanvasContext, private glslang: Glslang) {
+    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glslang: Glslang) {
         this._swapChain = this.canvasContext.configureSwapChain({ device, format: 'bgra8unorm', usage: this._swapChainTextureUsage });
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
@@ -666,6 +666,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public getDevice(): GfxDevice {
         return this;
+    }
+
+    public getCanvas(): HTMLCanvasElement | OffscreenCanvas {
+        return this.canvas;
     }
 
     public present(): void {
@@ -1179,5 +1183,5 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement): Promi
 
     const _glslang = await glslang('glslang.wasm');
 
-    return new GfxImplP_WebGPU(adapter, device, context, _glslang);
+    return new GfxImplP_WebGPU(adapter, device, canvas, context, _glslang);
 }

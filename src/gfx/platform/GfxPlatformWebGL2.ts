@@ -576,6 +576,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return this;
     }
 
+    public getCanvas(): HTMLCanvasElement | OffscreenCanvas {
+        return this.gl.canvas;
+    }
+
     public getOnscreenTexture(): GfxTexture {
         return this._scTexture!;
     }

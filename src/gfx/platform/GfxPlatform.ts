@@ -291,6 +291,7 @@ export interface GfxSwapChain {
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
     configureSwapChain(width: number, height: number, platformFramebuffer?: GfxPlatformFramebuffer): void;
     getDevice(): GfxDevice;
+    getCanvas(): HTMLCanvasElement | OffscreenCanvas;
     getOnscreenTexture(): GfxTexture;
     present(): void;
     createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
