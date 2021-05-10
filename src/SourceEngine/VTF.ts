@@ -320,9 +320,12 @@ export class VTF {
         const magFilter = texFilter;
         const forceTrilinear = true;
         const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NoMip : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+
+        const canSupportAnisotropy = texFilter === GfxTexFilterMode.Bilinear && mipFilter === GfxMipFilterMode.Linear;
+        const maxAnisotropy = canSupportAnisotropy ? 16 : 1;
         this.gfxSampler = cache.createSampler({
             wrapS, wrapT, minFilter, magFilter, mipFilter,
-            maxAnisotropy: 16,
+            maxAnisotropy,
         });
     }
 
