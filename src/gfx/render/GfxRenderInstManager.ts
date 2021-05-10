@@ -457,8 +457,6 @@ export class GfxRenderInst {
     private setAttachmentFormatsFromRenderPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
         const passDescriptor = device.queryRenderPass(passRenderer);
 
-        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
-
         let sampleCount = -1;
         for (let i = 0; i < passDescriptor.colorAttachment.length; i++) {
             const colorAttachmentDescriptor = passDescriptor.colorAttachment[i] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[i]!) : null;
@@ -471,7 +469,9 @@ export class GfxRenderInst {
             }
         }
 
+        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
+
         this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 

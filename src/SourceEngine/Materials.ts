@@ -3404,7 +3404,6 @@ export class LightmapManager {
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
-            maxAnisotropy: 16,
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
         });
