@@ -59,14 +59,12 @@ function peekParser(stream: DataStream): ChunkType | null {
 }
 
 export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
-
     const stream = new DataStream(buffer);
  
     const header = readDataHeader(stream);
     let textures: DC_PVRT.PVR_Texture[] = [];
 
-    for (let i=0; i<header.datas.length; ++i) {
-
+    for (let i = 0; i < header.datas.length; i++) {
         const textureBlobOffset = header.datas[i].offset;
         const textureBlobSize = header.datas[i].size;
         const textureBlobEnd = textureBlobOffset + textureBlobSize;

@@ -91,7 +91,7 @@ enum op {
     or,
     ori,
     set_frame_from_msec,
-    set_mesc_from_frame,
+    set_msec_from_frame,
     set_ram,
     set_ramf,
     get_ram,
@@ -974,17 +974,18 @@ export class evtmgr {
             // TODO
         } break;
         case op.read: {
-            // HACK: Fix gor_04
             this.evt_set_arg(evt, 0, 0);
         } break;
         case op.read2: {
-            // TODO
+            this.evt_set_arg(evt, 0, 0);
+            this.evt_set_arg(evt, 1, 0);
         } break;
         case op.read3: {
-            // TODO
+            this.evt_set_arg(evt, 0, 0);
+            this.evt_set_arg(evt, 1, 0);
+            this.evt_set_arg(evt, 2, 0);
         } break;
         case op.read4: {
-            // HACK: Fix gor_04
             this.evt_set_arg(evt, 0, 0);
             this.evt_set_arg(evt, 1, 0);
             this.evt_set_arg(evt, 2, 0);
@@ -1013,6 +1014,10 @@ export class evtmgr {
         case op.set_frame_from_msec: {
             const msec = this.evt_eval_arg(evt, 1);
             this.evt_set_arg(evt, 0, msec * 60/1000);
+        } break;
+        case op.set_msec_from_frame: {
+            const frame = this.evt_eval_arg(evt, 1);
+            this.evt_set_arg(evt, 0, frame * 1000/60);
         } break;
         case op.setr:
         case op.setrf: {
@@ -1149,6 +1154,12 @@ export class evt_handler_ttyd extends evt_handler {
     }
 
     public user_func(ctx: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
+        if (addr === 0x805bea21) {
+            // HACK: fix for tou_01
+            ctx.evt_set_arg(evt, 1, 1);
+            return evt_user_func_ret.advance;
+        }
+
         const sym = this.mapfile.getSymbol(addr);
         if (sym === null)
             return evt_user_func_ret.advance;

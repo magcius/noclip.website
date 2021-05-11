@@ -162,7 +162,7 @@ export class MaterialRenderer {
         let stateFlags: Partial<GfxMegaStateDescriptor> = {};
     
         const renderOpts = this.material.renderOptions; 
-        
+
         // TODO: there's some sort of logic involving texture indices equal to 0xffe - might need to figure out what that does
 
         // this is copied pretty much verbatim from Ghidra if you can't tell lol
@@ -303,9 +303,8 @@ export class MaterialRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {
-        if(this.DEBUG_shouldSkip()) {
+        if (this.DEBUG_shouldSkip())
             return;
-        }
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(this.stateFlagsFromGeomAndBlenderSettings);
@@ -361,12 +360,9 @@ export class MaterialRenderer {
         renderInst.drawIndexes(this.indexCount, 0);
         renderInstManager.submitRenderInst(renderInst);
 
-        if(DEBUGGING_TOOLS_STATE.showTextureIndices && this.isTextured) {
+        if (DEBUGGING_TOOLS_STATE.showTextureIndices && this.isTextured)
             this.DEBUG_showtext(adjmodelToWorldMatrix, viewerInput);
-        }
     }
-
-
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
@@ -378,11 +374,11 @@ export class MaterialRenderer {
     private DEBUG_shouldSkip(): boolean {
         if (DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
             // Skip any untextured materials
-            if(!this.isTextured)
+            if (!this.isTextured)
                 return true;
 
             // Skip textures that aren't the specified texture
-            if((this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)
+            if ((this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)
                 return true;
         }
 
@@ -404,12 +400,9 @@ export class MaterialRenderer {
         let centerWorldSpace = vec3.create();
         vec3.transformMat4(centerWorldSpace, centerModelSpace, adjmodelToWorldMatrix);
 
-        let debugStr = (this.uvtx.flagsAndIndex & 0xfff).toString(16);
-        if (this.uvtx.otherUVTX !== null) {
-            debugStr += " | " + (this.uvtx.otherUVTX.flagsAndIndex & 0xfff).toString(16);
-        }
-        //debugStr += "\n";
-        //debugStr += humanReadableCombineParams(this.uvtx.rspState.combineParams);
+        let debugStr = (this.uvtx.flagsAndIndex & 0x0FFF).toString(16);
+        if (this.uvtx.otherUVTX !== null)
+            debugStr = `${debugStr} | ${(this.uvtx.otherUVTX.flagsAndIndex & 0x0FFF).toString(16)}`;
         drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, centerWorldSpace, debugStr);
     }
 }
