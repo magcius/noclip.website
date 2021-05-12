@@ -64,9 +64,9 @@ void main() {
 `;
 
     public frag: string = `
+in vec3 v_Normal;
 in vec2 v_TexCoord;
 in vec3 v_ShadowTexCoord;
-in vec3 v_Normal;
 
 void main() {
     vec2 t_DiffuseTexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
