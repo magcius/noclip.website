@@ -260,6 +260,10 @@ class Main {
 
         this.canvas = document.createElement('canvas');
 
+        this.toplevel.appendChild(this.canvas);
+        window.onresize = this._onResize.bind(this);
+        this._onResize();
+
         const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
             this.toplevel.appendChild(makeErrorUI(errorCode));
@@ -287,10 +291,6 @@ class Main {
             e.preventDefault();
         };
         this.toplevel.ondrop = this._onDrop.bind(this);
-
-        this.toplevel.appendChild(this.canvas);
-        window.onresize = this._onResize.bind(this);
-        this._onResize();
 
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
