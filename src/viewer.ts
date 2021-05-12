@@ -10,7 +10,6 @@ import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
-import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
@@ -100,15 +99,6 @@ export class Viewer {
 
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-    private renderPassDescriptor: GfxRenderPassDescriptor = {
-        colorAttachment: [],
-        colorResolveTo: [null],
-        colorClearColor: [OpaqueBlack],
-        depthClearValue: 'load',
-        stencilClearValue: 'load',
-        depthStencilAttachment: null,
-        depthStencilResolveTo: null,
-    };
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -151,15 +141,8 @@ export class Viewer {
     }
 
     private renderViewport(): void {
-        if (this.scene !== null) {
+        if (this.scene !== null)
             this.scene.render(this.gfxDevice, this.viewerRenderInput);
-        } else {
-            // Clear to black.
-            this.renderPassDescriptor.colorResolveTo[0] = this.viewerRenderInput.onscreenTexture;
-
-            const emptyRenderPass = this.gfxDevice.createRenderPass(this.renderPassDescriptor);
-            this.gfxDevice.submitPass(emptyRenderPass);
-        }
     }
 
     private render(): void {
