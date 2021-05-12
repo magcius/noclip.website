@@ -375,22 +375,22 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public commandEncoder: GPUCommandEncoder | null = null;
     public descriptor: GfxRenderPassDescriptor;
-    private renderPassEncoder: GPURenderPassEncoder | null = null;
-    private renderPassDescriptor: GPURenderPassDescriptor;
-    private colorAttachments: GPURenderPassColorAttachmentNew[];
-    private depthStencilAttachment: GPURenderPassDepthStencilAttachmentNew;
-    private colorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
-    private colorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
+    private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
+    private gpuRenderPassDescriptor: GPURenderPassDescriptor;
+    private gpuColorAttachments: GPURenderPassColorAttachmentNew[];
+    private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachmentNew;
+    private gfxColorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
+    private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private debugPointer: any;
 
     constructor(private device: GPUDevice) {
-        this.colorAttachments = [{
+        this.gpuColorAttachments = [{
             view: null!,
             loadValue: 'load',
             storeOp: 'store',
         }];
 
-        this.depthStencilAttachment = {
+        this.gpuDepthStencilAttachment = {
             view: null!,
             depthLoadValue: 'load',
             depthStoreOp: 'store',
@@ -398,18 +398,20 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             stencilStoreOp: 'store',
         };
 
-        this.renderPassDescriptor = {
-            colorAttachments: this.colorAttachments,
-            depthStencilAttachment: this.depthStencilAttachment,
+        this.gpuRenderPassDescriptor = {
+            colorAttachments: this.gpuColorAttachments,
+            depthStencilAttachment: this.gpuDepthStencilAttachment,
         };
     }
 
     private setRenderPassDescriptor(descriptor: GfxRenderPassDescriptor): void {
         this.descriptor = descriptor;
 
+        this.gpuRenderPassDescriptor.colorAttachments = this.gpuColorAttachments;
+
         const numColorAttachments = descriptor.colorAttachment.length;
-        this.colorAttachment.length = numColorAttachments;
-        this.colorResolveTo.length = numColorAttachments;
+        this.gfxColorAttachment.length = numColorAttachments;
+        this.gfxColorResolveTo.length = numColorAttachments;
         for (let i = 0; i < descriptor.colorAttachment.length; i++) {
             let colorAttachment: GfxTextureSharedP_WebGPU | null = descriptor.colorAttachment[i] as GfxAttachmentP_WebGPU;
             let colorResolveTo: GfxTextureSharedP_WebGPU | null = descriptor.colorResolveTo[i] as GfxTextureP_WebGPU;
@@ -421,55 +423,58 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             }
 
             if (colorAttachment !== null) {
-                const dstAttachment = this.colorAttachments[0];
+                const dstAttachment = this.gpuColorAttachments[i];
                 dstAttachment.view = colorAttachment.gpuTextureView;
                 dstAttachment.loadValue = descriptor.colorClearColor[i];
                 dstAttachment.storeOp = 'store';
                 dstAttachment.resolveTarget = undefined;
-                this.renderPassDescriptor.colorAttachments = this.colorAttachments;
-
                 if (colorResolveTo !== null && colorAttachment.sampleCount > 1)
                     dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
             } else {
-                this.renderPassDescriptor.colorAttachments = [];
+                // TODO(jstpierre): Figure out what to do with no sparse attachments.
+                // https://github.com/gpuweb/gpuweb/issues/1250
+                this.gpuColorAttachments.length = i;
+                this.gfxColorAttachment.length = i;
+                this.gfxColorResolveTo.length = i;
+                break;
             }
 
-            this.colorAttachment[i] = colorAttachment;
-            this.colorResolveTo[i] = colorResolveTo;
+            this.gfxColorAttachment[i] = colorAttachment;
+            this.gfxColorResolveTo[i] = colorResolveTo;
         }
 
         if (descriptor.depthStencilAttachment !== null) {
             const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
-            const dstAttachment = this.depthStencilAttachment;
+            const dstAttachment = this.gpuDepthStencilAttachment;
             dstAttachment.view = dsAttachment.gpuTextureView;
             dstAttachment.depthLoadValue = descriptor.depthClearValue;
             dstAttachment.stencilLoadValue = descriptor.stencilClearValue;
             dstAttachment.depthStoreOp = 'store';
             dstAttachment.stencilStoreOp = 'store';
-            this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment;
+            this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
         } else {
-            this.renderPassDescriptor.depthStencilAttachment = undefined;
+            this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
     }
 
     public beginRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): void {
-        assert(this.renderPassEncoder === null);
+        assert(this.gpuRenderPassEncoder === null);
         this.setRenderPassDescriptor(renderPassDescriptor);
-        this.renderPassEncoder = this.commandEncoder!.beginRenderPass(this.renderPassDescriptor);
+        this.gpuRenderPassEncoder = this.commandEncoder!.beginRenderPass(this.gpuRenderPassDescriptor);
     }
 
     public setViewport(x: number, y: number, w: number, h: number): void {
-        this.renderPassEncoder!.setViewport(x, y, w, h, 0, 1);
+        this.gpuRenderPassEncoder!.setViewport(x, y, w, h, 0, 1);
     }
 
     public setScissor(x: number, y: number, w: number, h: number): void {
-        this.renderPassEncoder!.setScissorRect(x, y, w, h);
+        this.gpuRenderPassEncoder!.setScissorRect(x, y, w, h);
     }
 
     public setPipeline(pipeline_: GfxRenderPipeline): void {
         const pipeline = pipeline_ as GfxRenderPipelineP_WebGPU;
         const gpuRenderPipeline = assertExists(pipeline.gpuRenderPipeline);
-        this.renderPassEncoder!.setPipeline(gpuRenderPipeline);
+        this.gpuRenderPassEncoder!.setPipeline(gpuRenderPipeline);
     }
 
     public setInputState(inputState_: GfxInputState | null): void {
@@ -480,37 +485,37 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         if (inputState.indexBuffer !== null) {
             const inputLayout = inputState.inputLayout as GfxInputLayoutP_WebGPU;
             const indexBuffer = inputState.indexBuffer;
-            this.renderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset);
+            this.gpuRenderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset);
         }
 
         for (let i = 0; i < inputState.vertexBuffers.length; i++) {
             const b = inputState.vertexBuffers[i];
             if (b === null)
                 continue;
-            this.renderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
+            this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
         }
     }
 
     public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {
         const bindings = bindings_ as GfxBindingsP_WebGPU;
-        this.renderPassEncoder!.setBindGroup(bindingLayoutIndex + 0, bindings.gpuBindGroup[0], dynamicByteOffsets.slice(0, bindings.bindingLayout.numUniformBuffers));
-        this.renderPassEncoder!.setBindGroup(bindingLayoutIndex + 1, bindings.gpuBindGroup[1]);
+        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex + 0, bindings.gpuBindGroup[0], dynamicByteOffsets.slice(0, bindings.bindingLayout.numUniformBuffers));
+        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex + 1, bindings.gpuBindGroup[1]);
     }
 
     public setStencilRef(ref: number): void {
-        this.renderPassEncoder!.setStencilReference(ref);
+        this.gpuRenderPassEncoder!.setStencilReference(ref);
     }
 
     public draw(vertexCount: number, firstVertex: number): void {
-        this.renderPassEncoder!.draw(vertexCount, 1, firstVertex, 0);
+        this.gpuRenderPassEncoder!.draw(vertexCount, 1, firstVertex, 0);
     }
 
     public drawIndexed(indexCount: number, firstIndex: number): void {
-        this.renderPassEncoder!.drawIndexed(indexCount, 1, firstIndex, 0, 0);
+        this.gpuRenderPassEncoder!.drawIndexed(indexCount, 1, firstIndex, 0, 0);
     }
 
     public drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void {
-        this.renderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
+        this.gpuRenderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
     }
 
     public setDebugPointer(value: any): void {
@@ -518,13 +523,13 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 
     public finish(): GPUCommandBuffer {
-        this.renderPassEncoder!.endPass();
-        this.renderPassEncoder = null;
+        this.gpuRenderPassEncoder!.endPass();
+        this.gpuRenderPassEncoder = null;
 
         // Fake a resolve with a copy for non-MSAA.
-        for (let i = 0; i < this.colorAttachment.length; i++) {
-            const colorAttachment = this.colorAttachment[i];
-            const colorResolveTo = this.colorResolveTo[i];
+        for (let i = 0; i < this.gfxColorAttachment.length; i++) {
+            const colorAttachment = this.gfxColorAttachment[i];
+            const colorResolveTo = this.gfxColorResolveTo[i];
 
             if (colorAttachment !== null && colorResolveTo !== null && colorAttachment.sampleCount === 1) {
                 const srcCopy: GPUImageCopyTexture = { texture: colorAttachment.gpuTexture };
