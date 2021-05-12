@@ -1722,12 +1722,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _setRenderPassParametersClearColor(slot: number, r: number, g: number, b: number, a: number): void {
         const gl = this.gl;
 
-        const stateSlot = 0; // TODO(jstpierre): #OES_draw_buffers_indexed
-
-        const attachment = this._currentMegaState.attachmentsState[stateSlot];
-        if (attachment.channelWriteMask !== GfxChannelWriteMask.AllChannels) {
-            gl.colorMask(true, true, true, true);
-            attachment.channelWriteMask = GfxChannelWriteMask.AllChannels;
+        if (this._OES_draw_buffers_indexed !== null) {
+            const attachment = this._currentMegaState.attachmentsState[slot];
+            if (attachment.channelWriteMask !== GfxChannelWriteMask.AllChannels) {
+                this._OES_draw_buffers_indexed.colorMaskiOES(slot, true, true, true, true);
+                attachment.channelWriteMask = GfxChannelWriteMask.AllChannels;
+            }
+        } else {
+            const attachment = this._currentMegaState.attachmentsState[0];
+            if (attachment.channelWriteMask !== GfxChannelWriteMask.AllChannels) {
+                gl.colorMask(true, true, true, true);
+                attachment.channelWriteMask = GfxChannelWriteMask.AllChannels;
+            }
         }
 
         gl.disable(gl.SCISSOR_TEST);
@@ -1934,9 +1940,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const currentMegaState = this._currentMegaState;
 
-        // TODO(jstpierre): Support OES_draw_buffers_indexed
-        assert(newMegaState.attachmentsState.length === 1);
-        this._applyAttachmentState(currentMegaState.attachmentsState![0], newMegaState.attachmentsState[0]);
+        if (this._OES_draw_buffers_indexed !== null) {
+            for (let i = 0; i < newMegaState.attachmentsState.length; i++)
+                this._applyAttachmentStateIndexed(i, currentMegaState.attachmentsState[0], newMegaState.attachmentsState[0]);
+        } else {
+            assert(newMegaState.attachmentsState.length === 1);
+            this._applyAttachmentState(currentMegaState.attachmentsState[0], newMegaState.attachmentsState[0]);
+        }
 
         if (!gfxColorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {
             gl.blendColor(newMegaState.blendConstant.r, newMegaState.blendConstant.g, newMegaState.blendConstant.b, newMegaState.blendConstant.a);
@@ -2120,11 +2130,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
                 assert(colorResolveFrom.pixelFormat === colorResolveTo.pixelFormat);
 
-                // TODO(jstpierre): Re-enable this? It is currently possible to "resolve" from a single-sampled attachment
-                // to another one, as a way of doing a copy. With a smarter GfxRenderGraph, we might be able to cull this
-
-                // assert(colorResolveFrom.gl_renderbuffer !== null);
-
                 gl.disable(gl.SCISSOR_TEST);
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
 
@@ -2163,7 +2168,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (depthStencilResolveFrom !== null && depthStencilResolveTo !== null) {
             assert(depthStencilResolveFrom.width === depthStencilResolveTo.width && depthStencilResolveFrom.height === depthStencilResolveTo.height);
-            // assert(depthStencilResolveFrom.gl_renderbuffer !== null);
 
             gl.disable(gl.SCISSOR_TEST);
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
