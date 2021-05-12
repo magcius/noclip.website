@@ -1,9 +1,10 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
-import { assertExists, assert, leftPad, align } from "./GfxPlatformUtil";
+import { assertExists, assert, leftPad, align, gfxBindingLayoutDescriptorCopy, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
+import { HashMap, nullHashFunc } from "../../HashMap";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -49,9 +50,13 @@ interface GfxProgramP_WebGPU extends GfxProgram {
     fragmentStage: GPUProgrammableStage | null;
 }
 
+interface BindGroupLayout {
+    gpuBindGroupLayout: GPUBindGroupLayout[];
+}
+
 interface GfxBindingsP_WebGPU extends GfxBindings {
     bindingLayout: GfxBindingLayoutDescriptor;
-    gpuBindGroupLayout: GPUBindGroupLayout[];
+    bindGroupLayout: BindGroupLayout;
     gpuBindGroup: GPUBindGroup[];
 }
 
@@ -625,6 +630,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _fallbackSampler: GfxSampler;
     private _featureTextureCompressionBC: boolean = false;
 
+    private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
+
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
     public readonly glslVersion = `#version 440`;
@@ -643,7 +650,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             mipFilter: GfxMipFilterMode.NoMip,
         });
 
-        this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
+        // Firefox doesn't support GPUDevice.features yet...
+        if (this.device.features)
+            this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
     }
 
     // GfxSwapChain
@@ -817,7 +826,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return this.createProgramSimple(descriptor);
     }
 
-    private _createBindGroupLayout(bindingLayout: GfxBindingLayoutDescriptor): GPUBindGroupLayout[] {
+    private _createBindGroupLayoutInternal(bindingLayout: GfxBindingLayoutDescriptor): BindGroupLayout {
         const entries: GPUBindGroupLayoutEntry[][] = [[], []];
 
         for (let i = 0; i < bindingLayout.numUniformBuffers; i++)
@@ -829,12 +838,22 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } });
         }
 
-        return entries.map((entries) => this.device.createBindGroupLayout({ entries }));
+        const gpuBindGroupLayout = entries.map((entries) => this.device.createBindGroupLayout({ entries }));
+        return { gpuBindGroupLayout };
+    }
+
+    private _createBindGroupLayout(bindingLayout: GfxBindingLayoutDescriptor): BindGroupLayout {
+        let gpuBindGroupLayout = this._bindGroupLayoutCache.get(bindingLayout);
+        if (gpuBindGroupLayout === null) {
+            gpuBindGroupLayout = this._createBindGroupLayoutInternal(bindingLayout);
+            this._bindGroupLayoutCache.add(bindingLayout, gpuBindGroupLayout);
+        }
+        return gpuBindGroupLayout;
     }
 
     public createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings {
         const bindingLayout = bindingsDescriptor.bindingLayout;
-        const gpuBindGroupLayout = this._createBindGroupLayout(bindingLayout);
+        const bindGroupLayout = this._createBindGroupLayout(bindingLayout);
 
         const gpuBindGroupEntries: GPUBindGroupEntry[][] = [[], []];
         let numBindings = 0;
@@ -861,8 +880,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             gpuBindGroupEntries[1].push({ binding: numBindings++, resource: gpuSampler });
         }
 
-        const gpuBindGroup = gpuBindGroupEntries.map((gpuBindGroupEntries, i) => this.device.createBindGroup({ layout: gpuBindGroupLayout[i], entries: gpuBindGroupEntries }));
-        const bindings: GfxBindingsP_WebGPU = { _T: _T.Bindings, ResourceUniqueId: this._resourceUniqueId, bindingLayout: bindingsDescriptor.bindingLayout, gpuBindGroupLayout, gpuBindGroup };
+        const gpuBindGroup = gpuBindGroupEntries.map((gpuBindGroupEntries, i) => this.device.createBindGroup({ layout: bindGroupLayout.gpuBindGroupLayout[i], entries: gpuBindGroupEntries }));
+        const bindings: GfxBindingsP_WebGPU = { _T: _T.Bindings, ResourceUniqueId: this._resourceUniqueId, bindingLayout: bindingsDescriptor.bindingLayout, bindGroupLayout, gpuBindGroup };
         return bindings;
     }
 
@@ -906,7 +925,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private _createPipelineLayout(bindingLayouts: GfxBindingLayoutDescriptor[]): GPUPipelineLayout {
-        const bindGroupLayouts = bindingLayouts.flatMap((bindingLayout) => this._createBindGroupLayout(bindingLayout));
+        const bindGroupLayouts = bindingLayouts.flatMap((bindingLayout) => this._createBindGroupLayout(bindingLayout).gpuBindGroupLayout);
         return this.device.createPipelineLayout({ bindGroupLayouts });
     }
 

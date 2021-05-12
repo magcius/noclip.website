@@ -98,6 +98,12 @@ function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Reado
     return a.gfxSampler === b.gfxSampler && a.gfxTexture === b.gfxTexture;
 }
 
+export function gfxBindingLayoutDescriptorEqual(a: Readonly<GfxBindingLayoutDescriptor>, b: Readonly<GfxBindingLayoutDescriptor>): boolean {
+    if (a.numSamplers !== b.numSamplers) return false;
+    if (a.numUniformBuffers !== b.numUniformBuffers) return false;
+    return true;
+}
+
 export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, b: Readonly<GfxBindingsDescriptor>): boolean {
     if (a.samplerBindings.length !== b.samplerBindings.length) return false;
     if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
