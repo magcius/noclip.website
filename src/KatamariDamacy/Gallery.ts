@@ -212,9 +212,15 @@ export class GallerySceneRenderer implements SceneGfx {
         this.rareBadge.style.visibility = objectDef.isRare ? '' : 'hidden';
 
         // XXX(jstpierre): Hax!
-        if (window.main.viewer.cameraController instanceof OrbitCameraController) {
+        const cameraController = window.main.viewer.cameraController;
+        if (cameraController instanceof OrbitCameraController) {
             const radius = objectModel.bbox.boundingSphereRadius();
-            window.main.viewer.cameraController.z = -radius * 4.5;
+            const z = -radius * 4.5;
+            cameraController.z = z;
+            cameraController.zTarget = z;
+            cameraController.sceneMoveSpeedMult = radius / 400.0;
+            cameraController.orbitSpeed = 0.5;
+            cameraController.shouldOrbit = true;
         }
     }
 
