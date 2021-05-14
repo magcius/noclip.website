@@ -104,55 +104,10 @@ export function hexzero0x(n: number, spaces: number = 8): string {
         return `0x${hexzero(n, spaces)}`;
 }
 
-export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
-    const buffer: ArrayBufferSlice = b_ instanceof ArrayBufferSlice ? b_ : new ArrayBufferSlice(b_);
-    const groupSize_ = 16;
-    let S = '';
-    const arr = buffer.createTypedArray(Uint8Array, offs);
-    length = Math.min(length, arr.byteLength);
-    for (let i = 0; i < length; i += groupSize_) {
-        let groupSize = Math.min(length - i, groupSize_);
-        const addr = offs + i;
-        S += `${hexzero(addr, 8)}    `;
-        for (let j = 0; j < groupSize; j++) {
-            const b = arr[i + j];
-            S += ` ${hexzero(b, 2)}`;
-        }
-        for (let j = groupSize; j < groupSize_; j++)
-            S += `   `;
-
-        S += '  ';
-        for (let j = 0; j < groupSize; j++) {
-            const b = arr[i + j];
-            const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
-            S += `${c}`;
-        }
-        for (let j = groupSize; j < groupSize_; j++)
-            S += ` `;
-
-        S += '\n';
-    }
-    console.log(S);
-}
-
-export function magicstr(v: number): string {
-    v = v & 0xFFFFFFFF;
-    const a0 = String.fromCharCode((v >>> 24) & 0xFF);
-    const a1 = String.fromCharCode((v >>> 16) & 0xFF);
-    const a2 = String.fromCharCode((v >>>  8) & 0xFF);
-    const a3 = String.fromCharCode((v >>>  0) & 0xFF);
-    return a0 + a1 + a2 + a3;
-}
-
-export function concat<T>(dst: T[], src: T[]): void {
-    for (let i = 0; i < src.length; i++)
-        dst.push(src[i]);
-}
-
 export function flatten<T>(L: T[][]): T[] {
     const R: T[] = [];
     for (let i = 0; i < L.length; i++)
-        R.push.apply(R, L[i]);
+        R.push(... L[i]);
     return R;
 }
 

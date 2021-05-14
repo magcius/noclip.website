@@ -205,7 +205,7 @@ class FakeWaterModelInstance {
             mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.RASA, GX.CC.A2, GX.CC.ZERO);
             mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.KONST, GX.CA.A2, GX.CA.ZERO);
 
-            material.tevStages.push.apply(material.tevStages, mb.finish().tevStages);
+            material.tevStages.push(... mb.finish().tevStages);
         }
 
         // Replace the alpha test section with dynamic alpha test based on s_kColor3.

@@ -3,7 +3,6 @@ import { readFileSync, writeFileSync } from "fs";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as Yay0 from "../Common/Compression/Yay0";
 import { StringDecoder } from 'string_decoder'
-import { hexdump } from "../util";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);

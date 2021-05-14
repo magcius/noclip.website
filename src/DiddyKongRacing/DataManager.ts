@@ -6,7 +6,7 @@ import * as Pako from "pako";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";
-import { assert, assertExists, decodeString, fallbackUndefined } from "../util";
+import { assert, assertExists, decodeString, nullify } from "../util";
 import { decompressZipFileEntry, parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile";
 
 export class DataManager {
@@ -89,7 +89,7 @@ export class DataManager {
     }
 
     private getZipEntry(filename: string): ZipFileEntry | null {
-        return fallbackUndefined(this.zipFile.find((entry) => entry.filename === filename), null);
+        return nullify(this.zipFile.find((entry) => entry.filename === filename));
     }
 
     private async getFileFromZip(filename: string): Promise<ArrayBufferSlice> {

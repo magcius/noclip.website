@@ -4,7 +4,7 @@ import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS, Red, Green, Blue, OpaqueBlack } from "./Color";
 import { divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
-import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
+import { nArray, assert, assertExists, hexzero } from "./util";
 import { UI, Slider } from "./ui";
 import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, MathConstants, transformVec3Mat4w0, Vec3UnitX, lerp } from "./MathHelpers";
 import ArrayBufferSlice from "./ArrayBufferSlice";
@@ -507,6 +507,46 @@ export function ghidraDecode(s: string, encoding = 'sjis'): string {
     const hex = new Uint8Array([...s.matchAll(/[0-9A-Fa-f]{2}h/g)].map((g) => parseInt(g[0].slice(0, 2), 16)));
     console.log([...hex].map((g) => g.toString(16)));
     return new TextDecoder(encoding).decode(hex);
+}
+
+export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
+    const buffer: ArrayBufferSlice = b_ instanceof ArrayBufferSlice ? b_ : new ArrayBufferSlice(b_);
+    const groupSize_ = 16;
+    let S = '';
+    const arr = buffer.createTypedArray(Uint8Array, offs);
+    length = Math.min(length, arr.byteLength);
+    for (let i = 0; i < length; i += groupSize_) {
+        let groupSize = Math.min(length - i, groupSize_);
+        const addr = offs + i;
+        S += `${hexzero(addr, 8)}    `;
+        for (let j = 0; j < groupSize; j++) {
+            const b = arr[i + j];
+            S += ` ${hexzero(b, 2)}`;
+        }
+        for (let j = groupSize; j < groupSize_; j++)
+            S += `   `;
+
+        S += '  ';
+        for (let j = 0; j < groupSize; j++) {
+            const b = arr[i + j];
+            const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
+            S += `${c}`;
+        }
+        for (let j = groupSize; j < groupSize_; j++)
+            S += ` `;
+
+        S += '\n';
+    }
+    console.log(S);
+}
+
+export function magicstr(v: number): string {
+    v = v & 0xFFFFFFFF;
+    const a0 = String.fromCharCode((v >>> 24) & 0xFF);
+    const a1 = String.fromCharCode((v >>> 16) & 0xFF);
+    const a2 = String.fromCharCode((v >>>  8) & 0xFF);
+    const a3 = String.fromCharCode((v >>>  0) & 0xFF);
+    return a0 + a1 + a2 + a3;
 }
 
 // This goes on window.main and is meant as a global "helper utils" thing.

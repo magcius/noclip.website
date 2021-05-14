@@ -190,7 +190,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     public addTextureData(sector: BINModelSectorData): void {
         for (let i = 0; i < sector.textureData.length; i++)
-            [].push.apply(this.textureHolder.viewerTextures, sector.textureData[i].viewerTexture);
+            this.textureHolder.viewerTextures.push(... sector.textureData[i].viewerTexture);
     }
 
     public adjustCameraController(c: CameraController) {
