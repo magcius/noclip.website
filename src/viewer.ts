@@ -329,6 +329,11 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.NO_WEBGL2_GENERIC;
     }
 
+    // SwiftShader is trash and I don't trust it.
+    const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
+    if (WEBGL_debug_renderer_info && gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
+        return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
+
     const config = new GfxPlatformWebGL2Config();
     config.trackResources = IS_DEVELOPMENT;
     config.shaderDebug = IS_DEVELOPMENT;
