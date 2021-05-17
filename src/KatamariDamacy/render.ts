@@ -5,7 +5,7 @@ import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { mat4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderInstManager";
@@ -31,8 +31,8 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    vec3 u_LightDirs[2];
-    vec3 u_LightColors[3];
+    vec4 u_LightDirs[2];
+    vec4 u_LightColors[3];
 };
 
 layout(std140) uniform ub_ModelParams {
@@ -40,8 +40,10 @@ layout(std140) uniform ub_ModelParams {
     Mat4x3 u_NormalMatrix[SKINNING_MATRIX_COUNT];
     Mat4x2 u_TextureMatrix[1];
     vec4 u_Color;
-    float u_alphaMult;
+    vec4 u_Misc[1];
 };
+
+#define u_Alpha (u_Misc[0].x)
 
 uniform sampler2D u_Texture[1];
 
@@ -118,16 +120,15 @@ void main() {
     t_Color.rgba *= u_Color.rgba;
 
 #ifdef LIGHTING
-    vec3 t_CombinedIntensity = u_LightColors[2];
-    float t_intensity = max(dot(v_Normal, u_LightDirs[0]), 0.0);
-    t_CombinedIntensity += t_intensity * u_LightColors[0];
-    t_intensity = max(dot(v_Normal, u_LightDirs[1]), 0.0);
-    t_CombinedIntensity += t_intensity * u_LightColors[1];
+    vec3 t_CombinedIntensity = u_LightColors[2].rgb;
+
+    t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[0].xyz), 0.0) * u_LightColors[0].rgb;
+    t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[1].xyz), 0.0) * u_LightColors[1].rgb;
 
     t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
 #endif
 
-    t_Color.a *= u_alphaMult;
+    t_Color.a *= u_Alpha;
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
@@ -289,15 +290,15 @@ export class BINModelPartInstance {
 
         renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
-        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+1);
-        const mapped = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
+        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+4);
+        const d = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
         for (let i = 0; i < this.transformCount; i++)
-            offs += fillMatrix4x3(mapped, offs, modelViewMatrices[i]);
+            offs += fillMatrix4x3(d, offs, modelViewMatrices[i]);
         for (let i = 0; i < this.transformCount; i++)
-            offs += fillMatrix4x3(mapped, offs, modelMatrices[i]);
-        offs += fillMatrix4x2(mapped, offs, scratchTextureMatrix);
-        offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
-        mapped[offs++] = this.alphaMultiplier;
+            offs += fillMatrix4x3(d, offs, modelMatrices[i]);
+        offs += fillMatrix4x2(d, offs, scratchTextureMatrix);
+        offs += fillColor(d, offs, this.binModelPart.diffuseColor);
+        offs += fillVec4(d, offs, this.alphaMultiplier);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
