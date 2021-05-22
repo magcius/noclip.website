@@ -617,7 +617,7 @@ void main() {
     // Do the "indirect texture lookup"
     float t_BlurAmount = saturate(invlerp(u_BlurMinDist, u_BlurMaxDist, t_TexCoord));
 
-    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_TextureColor));
     vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord, t_Aspect);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
 }
