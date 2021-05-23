@@ -341,7 +341,7 @@ export class evt_disasm_ctx {
 // records execution state for one evt
 const enum evt_state { running, waitonexpr, waitonfrm, waitonevt, stopped, end, }
 
-const enum evt_user_func_ret { advance, stay, }
+const enum evt_user_func_ret { advance, stay, stall, }
 
 interface evt_loop_record {
     pc: number;
@@ -1033,6 +1033,8 @@ export class evtmgr {
 
             if (ret === evt_user_func_ret.stay)
                 nextpc = null;
+            else if (ret === evt_user_func_ret.stall)
+                evt.state = evt_state.stopped;
         } break;
         case op.run_evt: {
             const addr = this.evt_eval_arg(evt, 0);
@@ -1225,6 +1227,9 @@ export class evt_handler_ttyd extends evt_handler {
             const mobj = this.renderer.spawnMOBJ(mobjName, 'MOBJ_SaveBlock');
             mobj.setPosition(x, y, z);
             mobj.setAnim('S_1');
+            return evt_user_func_ret.advance;
+        } else if (sym.name === 'evt_npc_glide_position') {
+            return evt_user_func_ret.stall;
         }
 
         return evt_user_func_ret.advance;
