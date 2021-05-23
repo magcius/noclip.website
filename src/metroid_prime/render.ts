@@ -157,10 +157,10 @@ class MaterialGroupInstance {
     public gfxSampler: GfxSampler;
     public materialParamsBlockOffs: number = 0;
 
-    constructor(device: GfxDevice, public material: Material, materialHacks?: GXMaterialHacks) {
+    constructor(cache: GfxRenderCache, public material: Material, materialHacks?: GXMaterialHacks) {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial, materialHacks);
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,
@@ -440,7 +440,7 @@ export class MREARenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupInstances[material.groupIndex] === undefined)
-                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(device, material);
+                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(cache, material);
         }
 
         // Now create the material commands.
@@ -526,7 +526,7 @@ export class MREARenderer {
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     const cmdlData = modelCache.getCMDLData(device, this.textureHolder, cache, model);
-                    const cmdlRenderer = new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData);
+                    const cmdlRenderer = new CMDLRenderer(cache, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData);
                     const actor = new Actor(ent, cmdlRenderer);
                     this.actors.push(actor);
                 }
@@ -542,7 +542,7 @@ export class MREARenderer {
                             const modelMatrix = mat4.create();
 
                             const skyData = modelCache.getCMDLData(device, this.textureHolder, cache, areaAttributes.overrideSky);
-                            this.overrideSky = new CMDLRenderer(device, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, modelMatrix, skyData);
+                            this.overrideSky = new CMDLRenderer(cache, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, modelMatrix, skyData);
                             this.overrideSky.isSkybox = true;
                         }
                     }
@@ -630,7 +630,7 @@ export class CMDLRenderer {
     public isSkybox: boolean = false;
     public modelMatrix: mat4 = mat4.create();
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, modelMatrix: mat4 | null, public cmdlData: CMDLData) {
+    constructor(cache: GfxRenderCache, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, modelMatrix: mat4 | null, public cmdlData: CMDLData) {
         const materialSet = this.cmdlData.cmdl.materialSets[0];
 
         // First, create our group commands. These will store UBO buffer data which is shared between
@@ -638,7 +638,7 @@ export class CMDLRenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupInstances[material.groupIndex] === undefined)
-                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(device, material);
+                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(cache, material);
         }
 
         // Now create the material commands.
