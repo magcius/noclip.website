@@ -187,7 +187,7 @@ export async function traverseFileSystemDataTransfer(dataTransfer: DataTransfer)
     if (items.length === 0)
         return [];
 
-    const itemFiles = await Promise.all(items.map((item) => {
+    const itemFiles = await Promise.all(items.filter((item) => item).map((item) => {
         const entry = item.webkitGetAsEntry() as Entry;
         return traverseFileSystemEntry(entry);
     }));
