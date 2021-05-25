@@ -610,10 +610,16 @@ export abstract class BaseMaterial {
         }
     }
 
-    protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
+    protected paramFillGammaColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
         const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
         this.paramGetVector(name).fillColor(scratchColor, alpha);
         return fillGammaColor(d, offs, scratchColor);
+    }
+
+    protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
+        const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
+        this.paramGetVector(name).fillColor(scratchColor, alpha);
+        return fillColor(d, offs, scratchColor);
     }
 
     protected vtfIsIndirect(vtf: VTF): boolean {
@@ -1955,7 +1961,7 @@ class Material_Generic extends BaseMaterial {
         }
 
         if (this.wantsSelfIllum) {
-            offs += this.paramFillColor(d, offs, '$selfillumtint');
+            offs += this.paramFillGammaColor(d, offs, '$selfillumtint');
         }
 
         if (this.wantsPhong) {
@@ -2587,7 +2593,7 @@ class Material_Water extends BaseMaterial {
             offs += fillMatrix4x3(d, offs, modelMatrix!);
 
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
-            offs += this.paramFillColor(d, offs, '$fogcolor');
+            offs += this.paramFillGammaColor(d, offs, '$fogcolor');
 
             // Texture coordinate scales
             offs += fillVec4(d, offs,
@@ -2633,8 +2639,8 @@ class Material_Water extends BaseMaterial {
             if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
                 this.gfxProgram = null;
 
-            offs += this.paramFillColor(d, offs, '$refracttint', '$refractamount');
-            offs += this.paramFillColor(d, offs, '$reflecttint', '$reflectamount');
+            offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
+            offs += this.paramFillGammaColor(d, offs, '$reflecttint', '$reflectamount');
 
             const fogStart = this.paramGetNumber('$fogstart');
             const fogEnd = this.paramGetNumber('$fogend');
@@ -2906,7 +2912,7 @@ class Material_Refract extends BaseMaterial {
         offs += fillMatrix4x3(d, offs, modelMatrix!);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
-        offs += this.paramFillColor(d, offs, '$refracttint', '$refractamount');
+        offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
         offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
 
         if (this.wantsEnvmap) {
