@@ -36,7 +36,7 @@ import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType }
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail, RailRider } from '../RailRider';
-import { addShadowVolumeCylinder, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
+import { addShadowVolumeCylinder, addShadowVolumeLine, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
@@ -6188,8 +6188,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         if (railShadowDropLength > 0.0 || pointShadowDropLength > 0.0) {
             initShadowController(this);
 
-            if (pointShadowDropLength <= 0.0)
+            let useLine = false;
+            if (pointShadowDropLength <= 0.0) {
                 pointShadowDropLength = railShadowDropLength;
+                useLine = true;
+            }
 
             addShadowVolumeCylinder(sceneObjHolder, this, 'start', 20.0);
             addShadowVolumeCylinder(sceneObjHolder, this, 'end', 20.0);
@@ -6202,7 +6205,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
             onCalcShadowDropPrivateGravity(this, 'start');
             onCalcShadowDropPrivateGravity(this, 'end');
 
-            // TODO(jstpierre): ElectricRailShadowDrawer / addShadowVolumeLine
+            if (useLine) {
+                addShadowVolumeLine(sceneObjHolder, this, "line", this, "start", 20.0, this, "end", 20.0);
+            } else {
+                // TODO(jstpierre): ElectricRailShadowDrawer
+            }
         }
     }
 

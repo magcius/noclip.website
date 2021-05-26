@@ -1328,6 +1328,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeBox') {
         createShadowVolumeBoxFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeFlatModel') {
+        debugger;
     } else if (shadowType === 'VolumeLine') {
         createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {
@@ -1424,6 +1425,17 @@ export function addShadowVolumeFlatModel(sceneObjHolder: SceneObjHolder, actor: 
     controller.shadowDrawer = drawer;
     controller.setCalcCollisionMode(CalcCollisionMode.Off);
     drawer.setBaseMtxPtr(baseMtxPtr);
+}
+
+export function addShadowVolumeLine(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, fromActor: LiveActor, fromName: string, fromWidth: number, toActor: LiveActor, toName: string, toWidth: number): void {
+    const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
+    const drawer = new ShadowVolumeLine(sceneObjHolder, controller);
+    controller.setCalcCollisionMode(CalcCollisionMode.Off);
+    drawer.fromController = fromActor.shadowControllerList!.getController(fromName);
+    drawer.fromWidth = fromWidth;
+    drawer.toController = toActor.shadowControllerList!.getController(toName);
+    drawer.toWidth = toWidth;
+    controller.shadowDrawer = drawer;
 }
 
 export function initShadowController(actor: LiveActor): void {
