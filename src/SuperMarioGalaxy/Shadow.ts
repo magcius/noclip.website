@@ -5,11 +5,11 @@ import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, ScenePara
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos } from "./ActorUtil";
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert, nArray } from "../util";
@@ -557,11 +557,11 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         vec3.normalize(scratchVec3b, scratchVec3b);
 
         getMatrixAxis(scratchVec3a, null, null, scratchMat4a);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -vec3.dot(scratchVec3a, scratchVec3b));
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
         setMatrixAxis(scratchMat4a, scratchVec3a, null, null);
 
         getMatrixAxis(null, null, scratchVec3a, scratchMat4a);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -vec3.dot(scratchVec3a, scratchVec3b));
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
         setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
 
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
@@ -569,6 +569,57 @@ class ShadowVolumeOval extends ShadowVolumeModel {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
+    }
+}
+
+class ShadowVolumeOvalPole extends ShadowVolumeModel {
+    public size = vec3.fromValues(100.0, 100.0, 200.0);
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowVolumeOvalPole', controller);
+        this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
+    }
+
+    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+        vec3.scale(scratchVec3a, this.size, 1 / 100.0);
+        scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
+        scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
+        scratchVec3a[2] = Math.max(scratchVec3a[2], 0.01);
+
+        if (this.controller.followHostScale)
+            vec3.mul(scratchVec3a, scratchVec3a, this.controller.host.scale);
+
+        computeMatrixWithoutTranslation(scratchMat4a, this.controller.getDropPosMtxPtr()!);
+        mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+        mat4.invert(scratchMat4b, scratchMat4a);
+        vec3.negate(scratchVec3a, this.controller.getDropDir());
+        transformVec3Mat4w0(scratchVec3a, scratchMat4b, scratchVec3a);
+        makeMtxUpNoSupport(scratchMat4b, scratchVec3a);
+        mat4.mul(scratchMat4a, scratchMat4a, scratchMat4b);
+
+        this.calcBaseDropPosition(scratchVec3a);
+        setMatrixTranslation(scratchMat4a, scratchVec3a);
+
+        getMatrixAxis(null, scratchVec3b, null, scratchMat4a);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        getMatrixAxis(scratchVec3a, null, null, scratchMat4a);
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+        setMatrixAxis(scratchMat4a, scratchVec3a, null, null);
+
+        getMatrixAxis(null, null, scratchVec3a, scratchMat4a);
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+        setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
+
+        const baseDropLength = this.calcBaseDropLength();
+        vec3.scale(scratchVec3b, scratchVec3b, baseDropLength / 100.0);
+        setMatrixAxis(scratchMat4a, null, scratchVec3b, null);
+
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
     }
 }
 
@@ -800,6 +851,111 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     }
 }
 
+class ShadowVolumeLine extends ShadowVolumeDrawer {
+    public fromController: ShadowController | null = null;
+    public toController: ShadowController | null = null;
+    public fromWidth: number = 100.0;
+    public toWidth: number = 100.0;
+
+    private ddraw = new TDDraw();
+    private vtx: vec3[] = nArray(8, () => vec3.create());
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowVolumeLine', controller);
+
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+    }
+
+    protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
+        if (this.fromController === null || this.toController === null)
+            return;
+
+        this.calcBaseDropPosition(scratchVec3a, this.fromController);
+        this.calcBaseDropPosition(scratchVec3b, this.toController);
+
+        // Direction of line.
+        vec3.sub(scratchVec3c, scratchVec3b, scratchVec3a);
+        if (isNearZero(vec3.length(scratchVec3c), 0.001))
+            return;
+
+        vec3.normalize(scratchVec3c, scratchVec3c);
+
+        // Axis vectors relative to the drop direction.
+
+        // Compute the eight corners of our line box.
+        const dropDirFrom = this.fromController.getDropDir();
+        const dropLengthFrom = this.calcBaseDropLength(this.fromController) + this.fromWidth;
+        vec3.cross(scratchVec3d, dropDirFrom, scratchVec3c);
+        vec3.scaleAndAdd(this.vtx[0], scratchVec3a, scratchVec3d, -this.fromWidth);
+        vec3.scaleAndAdd(this.vtx[1], scratchVec3a, scratchVec3d, +this.fromWidth);
+        vec3.scaleAndAdd(this.vtx[2], this.vtx[0], dropDirFrom, dropLengthFrom);
+        vec3.scaleAndAdd(this.vtx[3], this.vtx[1], dropDirFrom, dropLengthFrom);
+
+        const dropDirTo = this.toController.getDropDir();
+        const dropLengthTo = this.calcBaseDropLength(this.toController) + this.toWidth;
+        vec3.cross(scratchVec3d, dropDirTo, scratchVec3c);
+        vec3.scaleAndAdd(this.vtx[4], scratchVec3b, scratchVec3d, -this.toWidth);
+        vec3.scaleAndAdd(this.vtx[5], scratchVec3b, scratchVec3d, +this.toWidth);
+        vec3.scaleAndAdd(this.vtx[6], this.vtx[4], dropDirTo, dropLengthTo);
+        vec3.scaleAndAdd(this.vtx[7], this.vtx[5], dropDirTo, dropLengthTo);
+
+        // Now send our points over.
+        this.ddraw.beginDraw();
+
+        this.ddraw.begin(GX.Command.DRAW_QUADS);
+        this.ddraw.position3vec3(this.vtx[1]);
+        this.ddraw.position3vec3(this.vtx[5]);
+        this.ddraw.position3vec3(this.vtx[7]);
+        this.ddraw.position3vec3(this.vtx[3]);
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_QUADS);
+        this.ddraw.position3vec3(this.vtx[0]);
+        this.ddraw.position3vec3(this.vtx[2]);
+        this.ddraw.position3vec3(this.vtx[6]);
+        this.ddraw.position3vec3(this.vtx[4]);
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        this.ddraw.position3vec3(this.vtx[0]);
+        this.ddraw.position3vec3(this.vtx[1]);
+        this.ddraw.position3vec3(this.vtx[2]);
+        this.ddraw.position3vec3(this.vtx[3]);
+        this.ddraw.position3vec3(this.vtx[6]);
+        this.ddraw.position3vec3(this.vtx[7]);
+        this.ddraw.position3vec3(this.vtx[4]);
+        this.ddraw.position3vec3(this.vtx[5]);
+        this.ddraw.position3vec3(this.vtx[0]);
+        this.ddraw.position3vec3(this.vtx[1]);
+        this.ddraw.end();
+
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+
+        const front = renderInstManager.newRenderInst();
+        front.setFromTemplate(shapeRenderInst);
+        this.materialFront.setOnRenderInst(device, cache, front);
+        renderInstManager.submitRenderInst(front);
+
+        const back = renderInstManager.newRenderInst();
+        back.setFromTemplate(shapeRenderInst);
+        this.materialBack.setOnRenderInst(device, cache, back);
+        renderInstManager.submitRenderInst(back);
+
+        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
+        shapeRenderInst.reset();
+    }
+
+    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
 function findPosNrmMtxIndexFromShape(shape: Shape, jointIndex: number): number | null {
     for (let i = 0; i < shape.mtxGroups.length; i++) {
         const mtxGroup = shape.mtxGroups[i];
@@ -993,6 +1149,7 @@ export class ShadowControllerHolder extends NameObj {
         ShadowVolumeSphere.requestArchives(sceneObjHolder);
         ShadowVolumeOval.requestArchives(sceneObjHolder);
         ShadowVolumeCylinder.requestArchives(sceneObjHolder);
+        ShadowVolumeOvalPole.requestArchives(sceneObjHolder);
     }
 }
 
@@ -1106,6 +1263,18 @@ function createShadowVolumeOvalFromCSV(sceneObjHolder: SceneObjHolder, actor: Li
     controller.shadowDrawer = drawer;
 }
 
+function createShadowVolumeOvalPoleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeNormal();
+
+    const drawer = new ShadowVolumeOvalPole(sceneObjHolder, controller);
+    setUpShadowVolumeFromCSV(drawer, infoIter);
+    vec3.set(drawer.size, 100.0, 100.0, 100.0);
+    getJMapInfoV3f(drawer.size, infoIter, `Size`);
+
+    controller.shadowDrawer = drawer;
+}
+
 function createShadowVolumeCylinderFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
     controller.setDropTypeNormal();
@@ -1128,6 +1297,20 @@ function createShadowVolumeBoxFromCSV(sceneObjHolder: SceneObjHolder, actor: Liv
     controller.shadowDrawer = drawer;
 }
 
+function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeNormal();
+
+    const drawer = new ShadowVolumeLine(sceneObjHolder, controller);
+    setUpShadowVolumeFromCSV(drawer, infoIter);
+    drawer.fromController = actor.shadowControllerList!.getController(infoIter.getValueString('LineStart'));
+    drawer.toController = actor.shadowControllerList!.getController(infoIter.getValueString('LineEnd'));
+    drawer.fromWidth = fallback(infoIter.getValueNumber('LineStartRadius'), 100.0);
+    drawer.toWidth = fallback(infoIter.getValueNumber('LineEndRadius'), 100.0);
+
+    controller.shadowDrawer = drawer;
+}
+
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
@@ -1139,12 +1322,14 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeOval') {
         createShadowVolumeOvalFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOvalPole') {
+        createShadowVolumeOvalPoleFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeCylinder') {
         createShadowVolumeCylinderFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeBox') {
         createShadowVolumeBoxFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeFlatModel') {
     } else if (shadowType === 'VolumeLine') {
+        createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {
         throw "whoops";
     }

@@ -13,6 +13,7 @@ import { LightType } from "../DrawBuffer";
 import { emitEffect } from "../EffectSystem";
 import { createModelObjMapObj } from "./ModelObj";
 import { initLightCtrl } from "../LightData";
+import { initShadowFromCSV } from "../Shadow";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -233,6 +234,7 @@ export class NoclipLegacyActorSpawner {
                 const actor = await spawnGraph('HoneyQueen');
                 initLightCtrl(this.sceneObjHolder, actor);
                 initMultiFur(this.sceneObjHolder, actor, LightType.None);
+                initShadowFromCSV(this.sceneObjHolder, actor);
             } break;
 
             case 'Plant':
