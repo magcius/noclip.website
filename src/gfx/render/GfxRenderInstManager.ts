@@ -480,7 +480,7 @@ export class GfxRenderInst {
         this.setAttachmentFormatsFromRenderPass(device, passRenderer);
 
         const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
-        if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady) && !device.queryPipelineReady(gfxPipeline))
+        if (!device.queryPipelineReady(gfxPipeline))
             return false;
 
         if (SET_DEBUG_POINTER)
