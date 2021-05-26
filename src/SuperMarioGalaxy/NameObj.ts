@@ -351,6 +351,14 @@ export class SceneNameObjListExecutor {
     public getRenderInstListExecute(drawType: DrawType): GfxRenderInstList | null {
         return nullify(this.executeDrawRenderInstList[drawType]);
     }
+
+    public reset(): void {
+        for (let i = 0; i < this.executeDrawRenderInstList.length; i++)
+            if (this.executeDrawRenderInstList[i] !== undefined)
+                this.executeDrawRenderInstList[i].reset();
+
+        this.drawBufferHolder.reset();
+    }
 }
 
 export class NameObjAdaptor extends NameObj {
