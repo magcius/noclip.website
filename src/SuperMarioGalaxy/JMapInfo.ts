@@ -5,8 +5,8 @@ import { MathConstants } from '../MathHelpers';
 import { assertExists, fallback } from '../util';
 import type { SceneObjHolder } from './Main';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { _T } from '../gfx/platform/GfxPlatformImpl';
 import { ZoneAndLayer } from './LiveActor';
+import { UI } from '../ui';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg0'); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg1'); }
@@ -92,6 +92,15 @@ export class JMapInfoIter {
         if (v === -1)
             return null;
         return v;
+    }
+
+    public popDebug(): void {
+        const ui: UI = window.main.ui;
+        const debugFloater = ui.debugFloaterHolder.makeFloatingPanel(fallback(this.filename, 'BCSV'));
+        debugFloater.contents.style.overflow = 'auto';
+
+        const table = BCSV.makeTable(this.bcsv);
+        debugFloater.contents.appendChild(table);
     }
 }
 

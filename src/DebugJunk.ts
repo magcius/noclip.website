@@ -466,12 +466,16 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
 
     doneButton.onclick = () => {
         const index = slider.getValue();
-        debugFloater.destroy();
+        debugFloater.close();
         done(index);
+    };
+
+    debugFloater.onclose = () => {
+        done(-1);
     };
 }
 
-export function interactiveVizSliderSelect(items: any[], fieldName: string = 'visible', callback: ((item: number) => void) | null = null): void {
+export function interactiveVizSliderSelect(items: any[], fieldName: string = 'visible', callback: ((obj: any, itemIndex: number) => void) | null = null): void {
     const visibleItems = items.filter((v) => v[fieldName]);
 
     interactiveSliderSelect(visibleItems, (i, v) => {
@@ -485,9 +489,9 @@ export function interactiveVizSliderSelect(items: any[], fieldName: string = 'vi
         const item = visibleItems[index];
         const origIndex = items.indexOf(item);
         flashItem(item, fieldName);
-        console.log(`Found item @ ${items.indexOf(item)}:`, item);
+        console.log(`Found item @ ${origIndex}:`, item);
         if (callback !== null)
-            callback(origIndex);
+            callback(item, origIndex);
     });
 }
 
