@@ -6,6 +6,7 @@ const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 const CopyPlugin = require('copy-webpack-plugin');
 const path = require('path');
 const webpack = require('webpack');
+const { NormalModuleReplacementPlugin } = require('webpack');
 
 module.exports = {
   entry: {
@@ -72,6 +73,7 @@ module.exports = {
       crateDirectory: path.join(__dirname, 'rust'),
       forceMode: "production",
     }),
+    new NormalModuleReplacementPlugin(/iconv-lite/, './dummy-iconv-lite.js'),
   ],
   experiments: {
     syncWebAssembly: true,
