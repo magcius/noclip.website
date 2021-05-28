@@ -29,11 +29,11 @@ return vec4(
 
 void Fma(inout Mat4x3 d, Mat4x3 m, float s) { d.mx += m.mx * s; d.my += m.my * s; d.mz += m.mz * s; }
 
-Mat4x4 _Mat4x4(float n) { Mat4x4 o; o.mx.x = n; o.my.y = n; o.mz.z = n; o.mw.w = n; return o; }
+Mat4x4 _Mat4x4(float n) { Mat4x4 o; o.mx = vec4(n, 0.0, 0.0, 0.0); o.my = vec4(0.0, n, 0.0, 0.0); o.mz = vec4(0.0, 0.0, n, 0.0); o.mw = vec4(0.0, 0.0, 0.0, n); return o; }
 Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
 Mat4x4 _Mat4x4(Mat4x2 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; return o; }
 
-Mat4x3 _Mat4x3(float n) { Mat4x3 o; o.mx.x = n; o.my.y = n; o.mz.z = n; return o; }
+Mat4x3 _Mat4x3(float n) { Mat4x3 o; o.mx = vec4(n, 0.0, 0.0, 0.0); o.my = vec4(0.0, n, 0.0, 0.0); o.mz = vec4(0.0, 0.0, n, 0.0); return o; }
 Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
 `;
 
