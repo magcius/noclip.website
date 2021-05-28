@@ -493,6 +493,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = false;
     public readonly viewportOrigin = GfxViewportOrigin.LowerLeft;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
+    public readonly supportsSyncPipelineCompilation: boolean = true;
 
     // GfxLimits
     public uniformBufferWordAlignment: number;

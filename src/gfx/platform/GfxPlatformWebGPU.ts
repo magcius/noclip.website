@@ -639,6 +639,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = true;
     public readonly viewportOrigin = GfxViewportOrigin.UpperLeft;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
+    public readonly supportsSyncPipelineCompilation: boolean = false;
 
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glslang: Glslang) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));

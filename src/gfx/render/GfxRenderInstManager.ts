@@ -480,8 +480,13 @@ export class GfxRenderInst {
         this.setAttachmentFormatsFromRenderPass(device, passRenderer);
 
         const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
-        if (!device.queryPipelineReady(gfxPipeline))
-            return false;
+
+        const pipelineReady = device.queryPipelineReady(gfxPipeline);
+        if (!pipelineReady) {
+            const needsToSkip = !device.queryVendorInfo().supportsSyncPipelineCompilation;
+            if (needsToSkip || !!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady))
+                return false;
+        }
 
         if (SET_DEBUG_POINTER)
             passRenderer.setDebugPointer(this);
