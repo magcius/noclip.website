@@ -6,18 +6,17 @@ import { GfxCompareMode } from "../platform/GfxPlatform";
 
 export const IS_DEPTH_REVERSED = true;
 
-export function reverseDepthForPerspectiveProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
-    if (isDepthReversed) {
-        m[10] = -m[10];
-        m[14] = -m[14];
-    }
-}
+// This is designed for an OpenGL-style clip space, because we apply the clip space transform after...
+const reverseDepthMatrix = mat4.fromValues(
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, -1, 0,
+    0, 0, 0, 1,
+);
 
-export function reverseDepthForOrthographicProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
-    if (isDepthReversed) {
-        m[10] = -m[10];
-        m[14] = -m[14] + 1;
-    }
+export function reverseDepthForProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
+    if (isDepthReversed)
+        mat4.mul(m, reverseDepthMatrix, m);
 }
 
 export function reverseDepthForCompareMode(compareMode: GfxCompareMode, isDepthReversed = IS_DEPTH_REVERSED): GfxCompareMode {

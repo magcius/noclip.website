@@ -6,7 +6,7 @@ import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoo
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
-import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 
@@ -102,13 +102,11 @@ export class Camera {
     }
 
     public updateProjectionMatrix(): void {
-        if (this.isOrthographic) {
+        if (this.isOrthographic)
             computeProjectionMatrixFromCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
-            reverseDepthForPerspectiveProjectionMatrix(this.projectionMatrix);
-        } else {
+        else
             computeProjectionMatrixFromFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
-            reverseDepthForOrthographicProjectionMatrix(this.projectionMatrix);
-        }
+        reverseDepthForProjectionMatrix(this.projectionMatrix);
         projectionMatrixConvertClipSpaceNearZ(this.projectionMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.updateClipFromWorld();
@@ -695,7 +693,7 @@ export class XRCameraController {
             // TODO WebXR: We do this to restore the components removed by setClipPlanes.
             // The camera class ideally should generate the projection matrix taking these components into account
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
-            reverseDepthForPerspectiveProjectionMatrix(camera.projectionMatrix);
+            reverseDepthForProjectionMatrix(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();
 
