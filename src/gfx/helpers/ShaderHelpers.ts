@@ -55,13 +55,13 @@ out vec2 v_TexCoord;
 
 void main() {
     v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-#ifdef VIEWPORT_ORIGIN_TL
-    v_TexCoord.y = (gl_VertexID == 2) ? -2.0 : 0.0;
-#else
     v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-#endif
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
     gl_Position.zw = vec2(1, 1);
+
+#ifdef VIEWPORT_ORIGIN_TL
+    v_TexCoord.y = 1.0 - v_TexCoord.y;
+#endif
 }
 `;
 
