@@ -5072,7 +5072,7 @@ export class Petari extends LiveActor<PetariNrv> {
     }
 }
 
-enum CocoNutBallNrv { Throw };
+const enum CocoNutBallNrv { Throw };
 
 class CocoNutBall extends LiveActor<CocoNutBallNrv> {
 
@@ -5091,7 +5091,7 @@ class CocoNutBall extends LiveActor<CocoNutBallNrv> {
         initShadowVolumeCylinder(sceneObjHolder, this, 60);
         // invalidateClipping
         this.initNerve(CocoNutBallNrv.Throw);
-        this.makeActorDead;
+        this.makeActorDead(sceneObjHolder);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CocoNutBallNrv, deltaTimeFrames: number): void {
@@ -5104,7 +5104,8 @@ class CocoNutBall extends LiveActor<CocoNutBallNrv> {
             this.processApproachToPlayer();
         }
     }
-    processApproachToPlayer() {
+
+    private processApproachToPlayer() {
         throw new Error('Method not implemented.');
     }
 }
@@ -5112,15 +5113,14 @@ class CocoNutBall extends LiveActor<CocoNutBallNrv> {
 enum OtaKingLongFootNrv { Wait }
 
 export class OtaKingLongFoot extends PartsModel<OtaKingLongFootNrv>{
-    private stepOffset: number;
-    constructor(sceneObjHolder:SceneObjHolder, infoIter:JMapInfoIter,parent: OtaKing, stepOffset: number){
+    constructor(sceneObjHolder:SceneObjHolder, infoIter:JMapInfoIter,parent: OtaKing, private stepOffset: number){
         super(sceneObjHolder, "OtaKingLongFoot", "OtaKingLongFoot", parent , DrawBufferType.EnemyDecoration);
-        this.stepOffset = stepOffset
         initDefaultPos(sceneObjHolder, this, infoIter);
         initLightCtrl(sceneObjHolder, this);
         showModel(this);
         startBck(this,"Wait");
-        setBckFrameAtRandom(this);
+        // Used because normally the frame offset is set in exeAppearDemo, which we do not implement
+        setBckFrame(this, stepOffset);
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -5137,15 +5137,16 @@ export class OtaKingLongFoot extends PartsModel<OtaKingLongFootNrv>{
 enum OtaKingNrv { Wait, ThrowCocoNut, ThrowFireBall }
 
 export class OtaKing extends LiveActor<OtaKingNrv> {
-    private feet: Array<PartsModel>;
-    private longFeet: Array<PartsModel>;
-    private coconuts: Array<CocoNutBall>;
+    private feet: PartsModel[];
+    private longFeet: PartsModel[];
+    private coconuts: CocoNutBall[];
     private currentMove: number;
     private magma: PartsModel;
     private magmaBloom: PartsModel;
     private isLv2: boolean;
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        this.coconuts = new Array<CocoNutBall>();
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModel(sceneObjHolder, infoIter);
         connectToSceneEnemy(sceneObjHolder,this);
@@ -5153,6 +5154,7 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
         this.initEffectKeeper(sceneObjHolder, 'OtaKing');
         tryRegisterDemoCast(sceneObjHolder, this, infoIter);
         this.initNerve(OtaKingNrv.Wait);
+        this.currentMove = 0;
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OtaKingNrv, deltaTimeFrames: number): void {
@@ -5271,7 +5273,7 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
 
         this.initLongFoot(sceneObjHolder, infoIter);
 
-        for (let i in range(0,3)){
+        for (let i = 0; i < 3; i++){
             let coco = new CocoNutBall(this.zoneAndLayer, sceneObjHolder, infoIter);
             this.coconuts.push(coco);
         }
@@ -5286,6 +5288,7 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
             sceneObjHolder.modelCache.requestObjectData('OtaKingMagmaBloom');
             sceneObjHolder.modelCache.requestObjectData('OtaKingFoot');
             sceneObjHolder.modelCache.requestObjectData('OtaKingLongFoot');
+            sceneObjHolder.modelCache.requestObjectData('CocoNut');
         } else if (objectName === 'OtaKingLv2') {
             sceneObjHolder.modelCache.requestObjectData('OtaKingFootLv2');
         }
