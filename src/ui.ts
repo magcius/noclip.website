@@ -47,6 +47,7 @@ const FRUSTUM_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 1
 const STATISTICS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 0 55 60" height="16" fill="white"><g><polygon points="6.9,11.5 6.9,56 55.4,56 55.4,53 9.9,53 9.9,11.5"/><path d="M52.7,15.8c-2.7,0-4.9,2.2-4.9,4.9c0,1,0.3,1.8,0.8,2.6l-5,6.8c-0.4-0.1-0.9-0.2-1.3-0.2c-1.5,0-2.9,0.7-3.8,1.8l-5.6-2.8   c0-0.2,0.1-0.5,0.1-0.8c0-2.7-2.2-4.9-4.9-4.9s-4.9,2.2-4.9,4.9c0,1.1,0.3,2,0.9,2.8l-3.9,5.1c-0.5-0.2-1.1-0.3-1.7-0.3   c-2.7,0-4.9,2.2-4.9,4.9s2.2,4.9,4.9,4.9s4.9-2.2,4.9-4.9c0-1-0.3-2-0.8-2.7l4-5.2c0.5,0.2,1.1,0.3,1.6,0.3c1.4,0,2.6-0.6,3.5-1.5   l5.8,2.9c0,0.1,0,0.2,0,0.3c0,2.7,2.2,4.9,4.9,4.9c2.7,0,4.9-2.2,4.9-4.9c0-1.2-0.4-2.2-1.1-3.1l4.8-6.5c0.6,0.2,1.2,0.4,1.9,0.4   c2.7,0,4.9-2.2,4.9-4.9S55.4,15.8,52.7,15.8z"/></g></svg>`;
 const ABOUT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="16" fill="white"><path d="M50,1.1C23,1.1,1.1,23,1.1,50S23,98.9,50,98.9C77,98.9,98.9,77,98.9,50S77,1.1,50,1.1z M55.3,77.7c0,1.7-1.4,3.1-3.1,3.1  h-7.9c-1.7,0-3.1-1.4-3.1-3.1v-5.1c0-1.7,1.4-3.1,3.1-3.1h7.9c1.7,0,3.1,1.4,3.1,3.1V77.7z M67.8,47.3c-2.1,2.9-4.7,5.2-7.9,6.9  c-1.8,1.2-3,2.4-3.6,3.8c-0.4,0.9-0.7,2.1-0.9,3.5c-0.1,1.1-1.1,1.9-2.2,1.9h-9.7c-1.3,0-2.3-1.1-2.2-2.3c0.2-2.7,0.9-4.8,2-6.4  c1.4-1.9,3.9-4.2,7.5-6.7c1.9-1.2,3.3-2.6,4.4-4.3c1.1-1.7,1.6-3.7,1.6-6c0-2.3-0.6-4.2-1.9-5.6c-1.3-1.4-3-2.1-5.3-2.1  c-1.9,0-3.4,0.6-4.7,1.7c-0.8,0.7-1.3,1.6-1.6,2.8c-0.4,1.4-1.7,2.3-3.2,2.3l-9-0.2c-1.1,0-2-1-1.9-2.1c0.3-4.8,2.2-8.4,5.5-11  c3.8-2.9,8.7-4.4,14.9-4.4c6.6,0,11.8,1.7,15.6,5c3.8,3.3,5.7,7.8,5.7,13.5C70.9,41.2,69.8,44.4,67.8,47.3z"/></svg>`;
 const CLAPBOARD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" height="20" fill="white"><path d="M61,22H14.51l3.41-.72h0l7.74-1.64,2-.43h0l6.85-1.46h0l1.17-.25,8.61-1.83h0l.78-.17,9-1.91h0l.4-.08L60,12.33a1,1,0,0,0,.77-1.19L59.3,4.3a1,1,0,0,0-1.19-.77l-19,4-1.56.33h0L28.91,9.74,27.79,10h0l-9.11,1.94-.67.14h0L3.34,15.17a1,1,0,0,0-.77,1.19L4,23.11V60a1,1,0,0,0,1,1H61a1,1,0,0,0,1-1V23A1,1,0,0,0,61,22ZM57,5.8l.65.6.89,4.19-1.45.31L52.6,6.75ZM47.27,7.88,51.8,12,47.36,13,42.82,8.83ZM37.48,10,42,14.11l-4.44.94L33,10.91ZM27.7,12l4.53,4.15-4.44.94L23.26,13Zm-9.78,2.08,4.53,4.15L18,19.21l-4.53-4.15ZM19.49,29H14.94l3.57-5h4.54Zm9-5h4.54l-3.57,5H24.94ZM39,45.88l-11,6A1,1,0,0,1,26.5,51V39A1,1,0,0,1,28,38.12l11,6a1,1,0,0,1,0,1.76ZM39.49,29H34.94l3.57-5h4.54Zm10,0H44.94l3.57-5h4.54ZM60,29H54.94l3.57-5H60Z"/></svg>`;
+const POPOUT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -5 100 100" height="20" fill="white"><g><polygon points="65.1 17.2 77.1 17.2 41.2 53.1 46.9 58.8 82.8 22.9 82.8 34.9 90.8 34.9 90.8 9.2 65.1 9.2 65.1 17.2"/><polygon points="80.6 46.5 72.6 46.5 72.6 82.8 17.2 82.8 17.2 27.4 53.5 27.4 53.5 19.4 9.2 19.4 9.2 90.8 80.6 90.8 80.6 46.5"/></g></svg>`
 
 // Custom icons used by game-specific panels.
 export const LAYER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" height="20" fill="white"><g transform="translate(0,-1036.3622)"><path d="m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z"/></g></svg>`;
@@ -1506,7 +1507,7 @@ class ViewerSettings extends Panel {
 
         this.contents.style.lineHeight = '36px';
 
-         // Don't change the order
+        // Don't change the order
         this.camRadioButtons = new RadioButtons('Camera Controls', ['WASD', 'Orbit', 'Ortho']);
         this.camRadioButtons.onselectedchange = () => {
             if (ui.studioModeEnabled)
@@ -1587,7 +1588,7 @@ class ViewerSettings extends Panel {
     }
 
     private onScrollWheel(): void {
-        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4, 0, 200);
+        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz) * 4, 0, 200);
         this.ui.setMouseActive();
         this.viewer.setKeyMoveSpeed(v);
     }
@@ -1618,7 +1619,7 @@ class ViewerSettings extends Panel {
 }
 
 class XRSettings extends Panel {
-    public onWebXRStateRequested: (state: boolean)=>void = (state: boolean) => {};
+    public onWebXRStateRequested: (state: boolean) => void = (state: boolean) => { };
 
     public enableXRCheckBox: Checkbox;
     private scaleSlider: Slider;
@@ -1787,6 +1788,8 @@ class StudioPanel extends FloatingPanel {
     private enableStudioBtn: HTMLElement;
     private disableStudioBtn: HTMLElement;
 
+    private panelCssString: string;
+
     private studioPanelContents: HTMLElement;
     private studioHelpText: HTMLElement;
 
@@ -1799,6 +1802,11 @@ class StudioPanel extends FloatingPanel {
     private exportAnimationBtn: HTMLInputElement;
 
     private studioControlsContainer: HTMLElement;
+
+    private animationLengthInput: HTMLInputElement;
+    private timelineBgCanvas: HTMLCanvasElement;
+    private timelineMarkersCanvas: HTMLCanvasElement;
+    private timelineCanvas: HTMLCanvasElement;
 
     private keyframeList: HTMLElement;
     private selectedKeyframeListItem?: HTMLElement;
@@ -1842,9 +1850,12 @@ class StudioPanel extends FloatingPanel {
     private playAnimationBtn: HTMLElement;
     private stopAnimationBtn: HTMLElement;
 
+    private popOutBtn: HTMLElement;
+    private popOutWindow: Window;
+
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
-        this.setWidth(500);
+        this.setWidth(650);
         this.contents.style.maxHeight = '';
         this.contents.style.overflow = '';
         this.elem.onmouseout = () => {
@@ -1863,6 +1874,7 @@ class StudioPanel extends FloatingPanel {
                 padding: 0.15rem;
                 text-align: center;
                 background-color: rgb(64, 64, 64);
+                cursor: pointer;
             }
         </style>
         `);
@@ -1926,7 +1938,6 @@ class StudioPanel extends FloatingPanel {
         setElementHighlighted(this.disableStudioBtn, true);
         setElementHighlighted(this.enableStudioBtn, false);
 
-        this.elem.style.display = 'none';
     }
 
     public v(): void {
@@ -1937,10 +1948,34 @@ class StudioPanel extends FloatingPanel {
         // Add Studio Mode-specific CSS.
         document.head.insertAdjacentHTML('beforeend', `
         <style>
+            #studioDataBtn {
+                width: 40%;
+                display: block;
+                margin: 0 auto 0.25rem;
+            }
+            #studioSaveLoadControls {
+                width: 85%;
+                margin: auto;
+            }
             #studioHelpText {
-                line-height:1.5;
+                line-height: 1.5;
                 padding: 0 1rem 0.5rem 1rem;
-                min-height:3rem;
+                min-height: 3rem;
+            }
+            #timelineContainerDiv {
+                height: 50px;
+            }
+            #timelineContainerDiv > canvas {
+                position: absolute;
+            }
+            #timelineBgCanvas {
+                z-index: 1;
+            }
+            #timelineMarkersCanvas {
+                z-index: 2;
+            }
+            #timelineCanvas {
+                z-index: 3;
             }
             #keyframeList {
                 list-style: none;
@@ -1979,11 +2014,16 @@ class StudioPanel extends FloatingPanel {
                 padding: 0 5rem 1rem;
                 border-top: 1px solid #444;
             }
+            #popOutBtnContainer {
+                position: absolute;
+                bottom: 0;
+                right: 0.25rem;
+            }
         </style>
         `);
         this.studioPanelContents.insertAdjacentHTML('afterbegin', `
-        <button type="button" id="studioDataBtn" class="SettingsButton" style="width: 40%; display: block; margin: 0 auto 0.25rem;">📁</button>
-        <div id="studioSaveLoadControls" style="width:85%; margin: auto;" hidden>
+        <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
+        <div id="studioSaveLoadControls" hidden>
             <div style="display: grid;grid-template-columns: 1fr 1fr 1fr; gap: 0.25rem 1rem;">
                 <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
                 <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
@@ -1995,6 +2035,17 @@ class StudioPanel extends FloatingPanel {
         </div>
         <div id="studioHelpText"></div>
         <div id="studioControlsContainer" hidden>
+            <div id="animationDurationContainer">
+                <div class="SettingsHeader KeyframeSettingsName">Animation Length</div>
+                <div style="display:flex; align-items:center; justify-content:space-evenly">
+                    <input id="animationLengthInput" class="KeyframeNumericInput" type="number" min="1" max="300" step="0.1"/> <span>s</span>
+                </div>
+            </div>
+            <div id="timelineContainerDiv" style="margin: 0 25px;">
+                <canvas id="timelineBgCanvas" width="600" height="45"></canvas>
+                <canvas id="timelineMarkersCanvas" width="600" height="45"></canvas>
+                <canvas id="timelineCanvas" width="600" height="45"></canvas>
+            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr;">
                 <div style="margin: 0 0.5rem 0 0.25rem">
                     <ol id="keyframeList" class="KeyframeList"></ol>
@@ -2053,6 +2104,9 @@ class StudioPanel extends FloatingPanel {
                 <button type="button" id="playAnimationBtn" class="SettingsButton">▶</button>
                 <button type="button" id="stopAnimationBtn" class="SettingsButton" hidden>■</button>
             </div>
+            <div id="popOutBtnContainer">
+                <button type="button" id="popOutBtn" class="SettingsButton"></button>
+            </div>
         </div>`);
         this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
         this.studioHelpText.dataset.startPosHelpText = 'Move the camera to the desired starting position and press Enter.';
@@ -2081,6 +2135,146 @@ class StudioPanel extends FloatingPanel {
         this.exportAnimationBtn.dataset.helpText = 'Save the current animation as a JSON file.';
 
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
+
+        const playhead = {
+            width: 15,
+            height: 15,
+            pointerHeight: 10,
+            x: 0,
+            color: '#FF0000',
+            draw: function (ctx: CanvasRenderingContext2D) {
+                ctx.beginPath();
+                ctx.fillStyle = this.color;
+                ctx.moveTo(this.x, 0);
+                ctx.lineTo(this.x + this.width, 0);
+                ctx.lineTo(this.x + this.width, this.height);
+                ctx.lineTo(this.x + (this.width / 2), this.height + this.pointerHeight);
+                ctx.lineTo(this.x, this.height);
+                ctx.lineTo(this.x, 0);
+                ctx.fill();
+            }
+        };
+
+        const playheadLine = {
+            draw: function (ctx: CanvasRenderingContext2D) {
+                ctx.strokeStyle = playhead.color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(playhead.x + (playhead.width / 2), playhead.height + playhead.pointerHeight - 1);
+                ctx.lineTo(playhead.x + (playhead.width / 2), 85);
+                ctx.stroke();
+            }
+        }
+
+        this.timelineBgCanvas = this.contents.querySelector('#timelineBgCanvas') as HTMLCanvasElement;
+        const timelineHeaderHeight = playhead.height + playhead.pointerHeight;
+        const timelineWidth = this.timelineBgCanvas.width;
+        const timelineHeight = this.timelineBgCanvas.height;
+        const trackHeight = 20;
+        const bgCtx = this.timelineBgCanvas.getContext('2d');
+        if (bgCtx) {
+            const timelineScaleFillGrad = bgCtx.createLinearGradient(0, 0, 0, timelineHeaderHeight);
+            timelineScaleFillGrad.addColorStop(0, '#494949');
+            timelineScaleFillGrad.addColorStop(1, '#2F2F2F');
+            bgCtx.fillStyle = timelineScaleFillGrad;
+            bgCtx.fillRect(playhead.width / 2, 0, timelineWidth, timelineHeaderHeight);
+            bgCtx.fillStyle = '#494949';
+            bgCtx.fillRect(playhead.width / 2, timelineHeaderHeight, timelineWidth, trackHeight);
+            bgCtx.fillStyle = '#2F2F2F';
+            bgCtx.fillRect(playhead.width / 2, timelineHeaderHeight + trackHeight, timelineWidth, trackHeight);
+            bgCtx.fillStyle = '#494949';
+            bgCtx.fillRect(playhead.width / 2, timelineHeaderHeight + (trackHeight * 2), timelineWidth, trackHeight);
+        }
+
+        this.timelineMarkersCanvas = this.contents.querySelector('#timelineMarkersCanvas') as HTMLCanvasElement;
+        const markerCtx = this.timelineMarkersCanvas.getContext('2d')
+
+        const MAX_MARKER_WIDTH_PX = 50;
+        const DEFAULT_SECONDS_PER_MARKER = 5;
+        let animationLength = 120;
+        const markers = {
+            draw: function (ctx: CanvasRenderingContext2D) {
+                ctx.clearRect(0, 0, timelineWidth, timelineHeight);
+                let secondsPerMarker = DEFAULT_SECONDS_PER_MARKER;
+                let markerCount = animationLength / secondsPerMarker;
+                let pixelsPerSecond = (timelineWidth / markerCount) / secondsPerMarker;
+                if (timelineWidth / markerCount < MAX_MARKER_WIDTH_PX) {
+                    markerCount = timelineWidth / MAX_MARKER_WIDTH_PX;
+                    secondsPerMarker = animationLength / markerCount;
+                    pixelsPerSecond *= secondsPerMarker / DEFAULT_SECONDS_PER_MARKER;
+                }
+
+                const totalMarkers = markerCount * 5;
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#f3f3f3';
+                ctx.fillStyle = '#f3f3f3';
+                let x = 0;
+                let labelSize = null;
+                const halfMarkerHeight = timelineHeaderHeight / 1.5;
+                const markerHeight = timelineHeaderHeight / 2;
+                const labelHeight = markerHeight - 3;
+                for (let i = 0; i < totalMarkers; i++) {
+                    x = i * pixelsPerSecond;
+                    ctx.moveTo(x, timelineHeaderHeight);
+                    if (i % 5 === 0) {
+                        ctx.lineTo(x, markerHeight);
+                        const label = ((i / 5) * secondsPerMarker).toString();
+                        labelSize = ctx.measureText(label);
+                        ctx.fillText(label, x - (labelSize.width / 2), labelHeight);
+                    } else {
+                        ctx.lineTo(x, halfMarkerHeight);
+                    }
+                }
+                ctx.stroke();
+
+            }
+        }
+
+        if (markerCtx) {
+            markerCtx.translate(playhead.width / 2, 0);
+            markerCtx.save();
+            markers.draw(markerCtx);
+        }
+
+        this.timelineCanvas = this.contents.querySelector('#timelineCanvas') as HTMLCanvasElement;
+        const ctx = this.timelineCanvas.getContext('2d');
+        if (ctx) {
+            playhead.draw(ctx);
+
+            // Draw keyframe icons
+            ctx.save();
+            ctx.translate(7.5, 35);
+            ctx.rotate(Math.PI / 4);
+            ctx.translate(-7.5, -35);
+            ctx.fillStyle = '#FFFF00'
+            ctx.fillRect(3.75, 31, 7.5, 7.5);
+            ctx.restore();
+
+            playheadLine.draw(ctx);
+        }
+
+        const MIN_ANIMATION_LENGTH = 1;
+        const MAX_ANIMATION_LENGTH = 300;
+        this.animationLengthInput = this.contents.querySelector('#animationLengthInput') as HTMLInputElement;
+        let currentAnimationLength = parseFloat(this.animationLengthInput.value);
+        this.animationLengthInput.onchange = () => {
+            let lengthVal = parseFloat(this.animationLengthInput.value)
+            if (Number.isNaN(lengthVal)) {
+                this.animationLengthInput.value = currentAnimationLength.toString();
+                return;
+            } else {
+                clamp(lengthVal, MIN_ANIMATION_LENGTH, MAX_ANIMATION_LENGTH);
+            }
+
+            currentAnimationLength = lengthVal;
+            animationLength = lengthVal;
+
+            if (markerCtx) {
+                markers.draw(markerCtx);
+            }
+        }
+
         this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
 
         this.editKeyframePositionBtn = this.contents.querySelector('#editKeyframePositionBtn') as HTMLInputElement;
@@ -2133,6 +2327,9 @@ class StudioPanel extends FloatingPanel {
 
         this.playAnimationBtn = this.contents.querySelector('#playAnimationBtn') as HTMLInputElement;
         this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLInputElement;
+
+        this.popOutBtn = this.contents.querySelector('#popOutBtn') as HTMLInputElement;
+        this.popOutBtn.insertAdjacentElement('afterbegin', createDOMFromString(POPOUT_ICON).querySelector('svg')!);
 
         this.animationManager = new CameraAnimationManager(this.keyframeList, this.studioControlsContainer);
 
@@ -2380,6 +2577,62 @@ class StudioPanel extends FloatingPanel {
             this.stopAnimationBtn.setAttribute('hidden', '');
         }
 
+        this.popOutBtn.onclick = () => {
+            this.popOutWindow = window.open('', undefined, 'top=0px,left=0px,width=800px,height=700px')!;
+            const uiTop = this.elem.parentElement;
+            this.popOutWindow.document.head.insertAdjacentHTML('afterbegin', `
+            <style>
+                #studioHelpText {
+                    line-height:1.5;
+                    padding: 0 1rem 0.5rem 1rem;
+                    min-height:3rem;
+                }
+                #keyframeList {
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                    height: 27rem;
+                    overflow-y: scroll;
+                    border: 1px solid #555;
+                }
+                #keyframeList > li {
+                    position: relative;
+                    background-color: #441111;
+                }
+                #keyframeControls {
+                    line-height: 1.2;
+                }
+                #keyframeControls input {
+                    background: #000;
+                    color: white;
+                    font-weight: bold;
+                    font: 16px monospace;
+                    border: 1px solid #444444;
+                }
+                .KeyframeSettingsName {
+                    margin-top: 0.5rem;
+                    margin-bottom: 0.25rem;
+                }
+                .KeyframeNumericInput {
+                    width: 4rem;
+                }
+                #studioControlsContainer .disabled,
+                .SettingsButton.disabled {
+                    cursor: not-allowed!important;
+                }
+                #playbackControls {
+                    padding: 0 5rem 1rem;
+                    border-top: 1px solid #444;
+                }
+            </style>
+            `);
+            this.popOutWindow.document.documentElement.insertAdjacentHTML('afterbegin', this.elem.innerHTML);
+            this.elem.style.display = 'none';
+            this.popOutWindow.onclose = () => {
+                uiTop?.appendChild(this.elem);
+            }
+        }
+
         this.studioControlsContainer.addEventListener('animationStopped', () => {
             this.enableKeyframeControls();
 
@@ -2417,7 +2670,7 @@ class StudioPanel extends FloatingPanel {
 
     private newAnimation(): void {
         this.animationManager.newAnimation();
-        this.studioControlsContainer.setAttribute('hidden','');
+        this.studioControlsContainer.setAttribute('hidden', '');
         this.keyframeList.innerText = '';
         this.keyframeList.dataset.selectedIndex = '-1';
         this.keyframeList.removeAttribute('data-editing-keyframe-position');
@@ -2448,7 +2701,7 @@ class StudioPanel extends FloatingPanel {
 
     private exportAnimation() {
         const a = document.createElement('a');
-        const anim = new Blob([this.animationManager.serializeAnimation()], {type: 'application/json'});
+        const anim = new Blob([this.animationManager.serializeAnimation()], { type: 'application/json' });
         a.href = URL.createObjectURL(anim);
         a.download = 'studio-animation-' + GlobalSaveManager.getCurrentSceneDescId() + '.json';
         a.click();
@@ -2612,7 +2865,7 @@ class StudioPanel extends FloatingPanel {
             setElementHighlighted(this.hermiteBtn, false);
             setElementHighlighted(this.linearBtn, true);
         } else {
-            this.linearEaseSettingsDiv.setAttribute('hidden','');
+            this.linearEaseSettingsDiv.setAttribute('hidden', '');
             setElementHighlighted(this.hermiteBtn, true);
             setElementHighlighted(this.linearBtn, false);
         }
@@ -2928,6 +3181,7 @@ used under Creative Commons CC-BY:</p>
 <li> Overlap <span>by</span> Zach Bogart
 <li> VR <span>by</span> Fauzan Adaiima
 <li> Play Clapboard <span>by</span> Yoyon Pujiyono
+<li> Popout <span>by</span> Satisfactory
 </ul>
 `;
 
