@@ -64,8 +64,16 @@ const enum VolumeType {
     Line     = 0x06,
 }
 
+const enum DynamicsFlags {
+    FixedDensity        = 0x01,
+    FixedInterval       = 0x02,
+    InheritScale        = 0x04,
+    FollowEmitter       = 0x08,
+    FollowEmitterChild  = 0x10,
+}
+
 interface JPADynamicsBlock {
-    flags: number;
+    flags: DynamicsFlags;
     volumeType: VolumeType;
     emitterScl: vec3;
     emitterTrs: vec3;
@@ -322,8 +330,20 @@ const enum FieldAddType {
     FieldVelocity = 0x02,
 }
 
+const enum FieldStatusFlag {
+    NoInheritRotate = 0x02,
+
+    FadeUseEnTime  = 0x08,
+    FadeUseDisTime = 0x10,
+    FadeUseFadeIn  = 0x20,
+    FadeUseFadeOut = 0x40,
+    FadeFlagMask   = (FadeUseEnTime | FadeUseDisTime | FadeUseFadeIn | FadeUseFadeOut),
+
+    UseMaxDist     = 0x80,
+}
+
 interface JPAFieldBlock {
-    sttFlag: number;
+    sttFlag: FieldStatusFlag;
     type: FieldType;
     addType: FieldAddType;
     // Used by JPA1 and JEFFjpa1
@@ -1111,6 +1131,7 @@ export const enum JPAEmitterStatus {
     FIRST_EMISSION       = 0x0010,
     RATE_STEP_EMIT       = 0x0020,
     IMMORTAL             = 0x0040,
+    CHILD_DRAW           = 0x0080,
     TERMINATE            = 0x0100,
     TERMINATE_FLAGGED    = 0x0200,
 }
@@ -1477,7 +1498,7 @@ export class JPABaseEmitter {
         const bem1 = workData.baseEmitter.resData.res.bem1;
 
         let angle: number, x: number;
-        if (!!(bem1.flags & 0x02)) {
+        if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
             const startAngle = Math.PI;
 
             angle = startAngle;
@@ -1503,7 +1524,7 @@ export class JPABaseEmitter {
         }
 
         let distance = get_rndm_f(this.random);
-        if (!!(bem1.flags & 0x01)) {
+        if (!!(bem1.flags & DynamicsFlags.FixedDensity)) {
             // Fixed density
             distance = 1.0 - (distance * distance * distance);
         }
@@ -1522,7 +1543,7 @@ export class JPABaseEmitter {
         const bem1 = workData.baseEmitter.resData.res.bem1;
 
         let distance = get_rndm_f(this.random);
-        if (!!(bem1.flags & 0x01)) {
+        if (!!(bem1.flags & DynamicsFlags.FixedDensity)) {
             // Fixed density
             distance = 1.0 - (distance * distance);
         }
@@ -1565,7 +1586,7 @@ export class JPABaseEmitter {
         const bem1 = this.resData.res.bem1;
 
         let angle: number;
-        if (!!(bem1.flags & 0x02)) {
+        if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
             // Fixed interval
             const idx = workData.volumeEmitIdx++;
             const idxS = (idx / workData.volumeEmitCount) - 0.5;
@@ -1575,7 +1596,7 @@ export class JPABaseEmitter {
         }
 
         let distance = get_rndm_f(this.random);
-        if (!!(bem1.flags & 0x01)) {
+        if (!!(bem1.flags & DynamicsFlags.FixedDensity)) {
             // Fixed density
             distance = 1.0 - (distance * distance);
         }
@@ -1589,7 +1610,7 @@ export class JPABaseEmitter {
     private calcVolumeLine(workData: JPAEmitterWorkData): void {
         const bem1 = this.resData.res.bem1;
 
-        if (!!(bem1.flags & 0x02)) {
+        if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
             // Fixed interval
             const idx = workData.volumeEmitIdx++;
             vec3.set(workData.volumePos, 0, 0, bem1.volumeSize * ((idx / (workData.volumeEmitCount - 1)) - 0.5));
@@ -1641,7 +1662,7 @@ export class JPABaseEmitter {
         const bem1 = this.resData.res.bem1;
 
         if (!!(this.status & JPAEmitterStatus.RATE_STEP_EMIT)) {
-            if (!!(bem1.flags & 0x02)) {
+            if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
                 // Fixed Interval
                 if (bem1.volumeType === VolumeType.Sphere)
                     this.emitCount = bem1.divNumber * bem1.divNumber * 4 + 2;
@@ -1972,7 +1993,7 @@ export class JPABaseEmitter {
         const bsp1 = this.resData.res.bsp1;
         const etx1 = this.resData.res.etx1;
 
-        this.status = this.status & 0xFFFFFF7F;
+        this.status &= ~JPAEmitterStatus.CHILD_DRAW;
         vec2.mul(workData.globalScale2D, this.globalParticleScale, bsp1.baseSize);
 
         if (bsp1.shapeType === ShapeType.Point) {
@@ -2055,7 +2076,7 @@ export class JPABaseEmitter {
 
         const materialParams = workData.materialParams;
 
-        this.status = this.status | 0x00000080;
+        this.status |= JPAEmitterStatus.CHILD_DRAW;
 
         if (ssp1.isInheritedScale)
             vec2.mul(workData.globalScale2D, this.globalParticleScale, bsp1.baseSize);
@@ -2239,8 +2260,11 @@ const planeXZSwizzle = mat4.fromValues(
 );
 
 const enum JPAParticleStatus {
-    DELETE_PARTICLE    = 0x02,
-    INVISIBLE_PARTICLE = 0x08,
+    DELETE_PARTICLE        = 0x02,
+    STOP_FIELD_FADE_AFFECT = 0x04,
+    INVISIBLE_PARTICLE     = 0x08,
+    FOLLOW_EMITTER         = 0x20,
+    STOP_FIELD_AFFECT      = 0x40,
 }
 
 export class JPABaseParticle {
@@ -2288,8 +2312,8 @@ export class JPABaseParticle {
 
         transformVec3Mat4w0(this.localPosition, workData.emitterGlobalSR, workData.volumePos);
 
-        if (!!(bem1.flags & 0x08))
-            this.status = this.status | 0x20;
+        if (!!(bem1.flags & DynamicsFlags.FollowEmitter))
+            this.status |= JPAParticleStatus.FOLLOW_EMITTER;
 
         vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
 
@@ -2322,15 +2346,10 @@ export class JPABaseParticle {
             this.baseVel[2] += baseEmitter.randomDirectionSpeed * randZ;
         }
         const velRatio = 1.0 + get_r_zp(baseEmitter.random) * bem1.initialVelRatio;
-        this.baseVel[0] *= velRatio;
-        this.baseVel[1] *= velRatio;
-        this.baseVel[2] *= velRatio;
+        vec3.scale(this.baseVel, this.baseVel, velRatio);
 
-        if (!!(bem1.flags & 0x04)) {
-            this.baseVel[0] *= baseEmitter.localScale[0];
-            this.baseVel[1] *= baseEmitter.localScale[1];
-            this.baseVel[2] *= baseEmitter.localScale[2];
-        }
+        if (!!(bem1.flags & DynamicsFlags.InheritScale))
+            vec3.mul(this.baseVel, this.baseVel, baseEmitter.localScale);
 
         transformVec3Mat4w0(this.baseVel, workData.emitterGlobalRotation, this.baseVel);
 
@@ -2359,11 +2378,10 @@ export class JPABaseParticle {
 
         this.prmColorAlphaAnm = 1.0;
 
-        if (esp1 !== null && esp1.isEnableAlpha) {
+        if (esp1 !== null && esp1.isEnableAlpha)
             this.alphaWaveRandom = 1.0 + (get_r_zp(baseEmitter.random) * esp1.alphaWaveRandom);
-        } else {
+        else
             this.alphaWaveRandom = 1.0;
-        }
 
         if (esp1 !== null && esp1.isEnableRotate) {
             this.rotateAngle = esp1.rotateAngle + (get_rndm_f(baseEmitter.random) - 0.5) * esp1.rotateAngleRandom;
@@ -2387,7 +2405,7 @@ export class JPABaseParticle {
 
         this.age = -1;
         this.time = 0;
-        this.status = 0x04;
+        this.status = JPAParticleStatus.STOP_FIELD_FADE_AFFECT;
 
         this.lifeTime = ssp1.life;
 
@@ -2402,8 +2420,8 @@ export class JPABaseParticle {
             normToLengthAndAdd(this.localPosition, scratchVec3a, rndLength);
         }
 
-        if (!!(bem1.flags & 0x10))
-            this.status = this.status | 0x20;
+        if (!!(bem1.flags & DynamicsFlags.FollowEmitterChild))
+            this.status |= JPAParticleStatus.FOLLOW_EMITTER;
 
         vec3.copy(this.offsetPosition, parent.offsetPosition);
 
@@ -2422,7 +2440,7 @@ export class JPABaseParticle {
             // isEnableField
             this.drag = parent.drag;
         } else {
-            this.status |= 0x40;
+            this.status |= JPAParticleStatus.STOP_FIELD_AFFECT;
             this.drag = 1.0;
         }
 
@@ -2481,24 +2499,23 @@ export class JPABaseParticle {
     }
 
     private calcFieldFadeAffect(field: JPAFieldBlock, time: number): number {
-        if ((!!(field.sttFlag & 0x08) && time < field.enTime) ||
-            (!!(field.sttFlag & 0x10) && time >= field.disTime)) {
+        if ((!!(field.sttFlag & FieldStatusFlag.FadeUseEnTime) && time < field.enTime) ||
+            (!!(field.sttFlag & FieldStatusFlag.FadeUseDisTime) && time >= field.disTime)) {
             return 0;
         }
 
-        if (!!(field.sttFlag & 0x40) && time >= field.fadeOut)
-            return (field.disTime - time) * field.fadeOutRate;
-
-        if (!!(field.sttFlag & 0x20) && time < field.fadeIn)
+        if (!!(field.sttFlag & FieldStatusFlag.FadeUseFadeIn) && time < field.fadeIn)
             return (time - field.enTime) * field.fadeInRate;
+
+        if (!!(field.sttFlag & FieldStatusFlag.FadeUseFadeOut) && time >= field.fadeOut)
+            return (field.disTime - time) * field.fadeOutRate;
 
         return 1;
     }
 
     private calcFieldAffect(v: vec3, field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
-        if (!(this.status & 0x04) && !!(field.sttFlag & 0x78)) {
+        if (!(this.status & JPAParticleStatus.STOP_FIELD_FADE_AFFECT) && !!(field.sttFlag & FieldStatusFlag.FadeFlagMask))
             vec3.scale(v, v, this.calcFieldFadeAffect(field, this.time));
-        }
 
         if (field.addType === FieldAddType.FieldAccel)
             vec3.scaleAndAdd(this.fieldAccel, this.fieldAccel, v, workData.deltaTime);
@@ -2510,7 +2527,7 @@ export class JPABaseParticle {
 
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
-        if (!!(field.sttFlag & 0x02)) {
+        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate)) {
             vec3.scale(scratchVec3a, field.dir, field.mag);
         } else {
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, field.dir);
@@ -2524,7 +2541,7 @@ export class JPABaseParticle {
     private calcFieldAir(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
         vec3.normalize(scratchVec3a, field.dir);
-        if (!!(field.sttFlag & 0x02)) {
+        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate)) {
             vec3.scale(scratchVec3a, scratchVec3a, field.mag);
         } else {
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
@@ -2637,7 +2654,7 @@ export class JPABaseParticle {
         // Prepare
 
         // Calc
-        if (!(this.status & 0x04)) {
+        if (!(this.status & JPAParticleStatus.STOP_FIELD_FADE_AFFECT)) {
             this.drag *= (1.0 - (this.calcFieldFadeAffect(field, this.time) * (1.0 - this.dragFieldEffect)));
         } else {
             this.drag *= this.dragFieldEffect;
@@ -2696,7 +2713,7 @@ export class JPABaseParticle {
         for (let i = fld1.length - 1; i >= 0; i--) {
             const field = fld1[i];
 
-            if (!!(field.sttFlag & 0x80) && vec3.squaredDistance(field.pos, this.position) >= field.maxDistSq)
+            if (!!(field.sttFlag & FieldStatusFlag.UseMaxDist) && vec3.squaredDistance(field.pos, this.position) >= field.maxDistSq)
                 continue;
 
             if (field.type === FieldType.Gravity)
@@ -2787,13 +2804,13 @@ export class JPABaseParticle {
 
         this.time = this.age / this.lifeTime;
 
-        if (!!(this.status & 0x20))
+        if (!!(this.status & JPAParticleStatus.FOLLOW_EMITTER))
             vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
 
         vec3.zero(this.fieldVel);
         vec3.scaleAndAdd(this.baseVel, this.baseVel, this.accel, workData.deltaTime);
 
-        if (!(this.status & 0x40))
+        if (!(this.status & JPAParticleStatus.STOP_FIELD_AFFECT))
             this.calcField(workData);
 
         vec3.add(this.fieldVel, this.fieldVel, this.fieldAccel);
@@ -2911,13 +2928,13 @@ export class JPABaseParticle {
         this.time = this.age / this.lifeTime;
 
         if (this.age != 0) {
-            if (!!(this.status & 0x20))
+            if (!!(this.status & JPAParticleStatus.FOLLOW_EMITTER))
                 vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
 
             this.baseVel[1] -= ssp1.gravity;
             vec3.zero(this.fieldVel);
 
-            if (!(this.status & 0x40))
+            if (!(this.status & JPAParticleStatus.STOP_FIELD_AFFECT))
                 this.calcField(workData);
 
             vec3.add(this.fieldVel, this.fieldVel, this.fieldAccel);
@@ -4355,7 +4372,6 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const flags = view.getUint32(tableIdx + 0x08);
             const volumeType: VolumeType = (flags >>> 8) & 0x07;
 
-            // 0x08 = unk
             // 0x0C = unk
             const emitterSclX = view.getFloat32(tableIdx + 0x10);
             const emitterSclY = view.getFloat32(tableIdx + 0x14);
