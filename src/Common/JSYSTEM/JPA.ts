@@ -3998,13 +3998,12 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const colorInSelect = (flags >>> 0x0F) & 0x07;
             const alphaInSelect = (flags >>> 0x12) & 0x01;
-            const isDrawFwdAhead = !!(flags >>> 0x15);
-
             const isEnableTexScrollAnm = !!(flags & 0x01000000);
-            const isDrawPrntAhead   = !!(flags & 0x00400000);
+            const isDrawPrntAhead      = !!(flags & 0x00400000);
+            const isDrawFwdAhead       = !!(flags & 0x00200000);
             const isEnableProjection   = !!(flags & 0x00100000);
-            const isGlblTexAnm     = !!(flags & 0x00004000);
-            const isGlblClrAnm   = !!(flags & 0x00001000);
+            const isGlblTexAnm         = !!(flags & 0x00004000);
+            const isGlblClrAnm         = !!(flags & 0x00001000);
 
             // stopDrawParent is in the SSP1 block in JPA1.
             const isNoDrawParent = false;
@@ -4016,8 +4015,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const baseSize = vec2.fromValues(baseSizeX, baseSizeY);
 
             const anmRndm = view.getInt16(dataBegin + 0x10);
-            const colorLoopOfstMask = -((flags >>> 11) & 0x01);
-            const texIdxLoopOfstMask = -((flags >>> 13) & 0x01);
+            const colorLoopOfstMask  = -((flags >>> 0x0B) & 0x01);
+            const texIdxLoopOfstMask = -((flags >>> 0x0D) & 0x01);
 
             const blendModeFlags = view.getUint16(dataBegin + 0x12);
             const alphaCompareFlags = view.getUint8(dataBegin + 0x14);
