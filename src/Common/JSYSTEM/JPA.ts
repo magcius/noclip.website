@@ -34,7 +34,7 @@ import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyI
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../TextureHolder";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
-import { BTIData, BTI } from "./JUTTexture";
+import { BTIData, BTI, BTI_Texture } from "./JUTTexture";
 import { VertexAttributeInput } from "../../gx/gx_displaylist";
 import { dfRange, dfShow } from "../../DebugFloaters";
 import { Frustum } from "../../Geometry";
@@ -172,6 +172,7 @@ interface JPABaseShapeBlock {
     anmRndm: number;
 
     // Texture Palette Animation
+    isEnableTexture: boolean;
     isGlblTexAnm: boolean;
     texCalcIdxType: CalcIdxType;
     texIdx: number;
@@ -437,9 +438,39 @@ export class JPACData {
     constructor(public jpac: JPAC) {
     }
 
-    public ensureTexture(device: GfxDevice, cache: GfxRenderCache, index: number): void {
-        if (this.texData[index] === undefined)
-            this.texData[index] = new BTIData(device, cache, this.jpac.textures[index].texture);
+    public ensureTexture(cache: GfxRenderCache, index: number): void {
+        if (this.texData[index] !== undefined)
+            return;
+
+        if (index >= 0) {
+            this.texData[index] = new BTIData(cache.device, cache, this.jpac.textures[index].texture);
+        } else {
+            const imgData = new Uint8Array([
+                0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x1A, 0xFF, 0x80, 0xFF, 0xD6, 0xFF,
+                0x00, 0xFF, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xD6, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0xD6, 0xFF, 0x80, 0xFF, 0x1A, 0xFF, 0x00, 0xFF,
+                0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xD6, 0xFF, 0x00, 0xFF,
+                0x00, 0xFF, 0xD6, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0xFF, 0x1A, 0xFF, 0x80, 0xFF, 0xD6, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xD6, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0xFF, 0x00, 0xFF,
+                0xD6, 0xFF, 0x80, 0xFF, 0x1A, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+            ]);
+            const btiTexture: BTI_Texture = {
+                name: 'JPADefaultTexture',
+                width: 0x08, height: 0x08,
+                format: GX.TexFormat.IA8,
+                wrapS: GX.WrapMode.CLAMP,
+                wrapT: GX.WrapMode.CLAMP,
+                minFilter: GX.TexFilter.LINEAR,
+                magFilter: GX.TexFilter.LINEAR,
+                data: new ArrayBufferSlice(imgData.buffer),
+                lodBias: 0, minLOD: 0, maxLOD: 100, mipCount: 1,
+                paletteData: null,
+                paletteFormat: GX.TexPalette.IA8,
+            };
+
+            this.texData[index] = new BTIData(cache.device, cache, btiTexture);
+        }
 
         if (this.textureMapping[index] === undefined) {
             this.textureMapping[index] = new TextureMapping();
@@ -465,7 +496,7 @@ export class JPACData {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.texData.length; i++)
+        for (let i = -1; i < this.texData.length; i++)
             if (this.texData[i] !== undefined)
                 this.texData[i].destroy(device);
     }
@@ -502,24 +533,27 @@ export class JPAResourceData {
         const texIdBase = resRaw.texIdBase;
         if (bsp1.texIdxAnimData !== null) {
             for (let i = 0; i < bsp1.texIdxAnimData.length; i++)
-                this.ensureTextureFromTDB1Index(device, cache, bsp1.texIdxAnimData[i], texIdBase);
+                this.ensureTextureFromTDB1Index(cache, bsp1.texIdxAnimData[i], texIdBase);
+        } else if (bsp1.isEnableTexture) {
+            this.ensureTextureFromTDB1Index(cache, bsp1.texIdx, texIdBase);
         } else {
-            this.ensureTextureFromTDB1Index(device, cache, bsp1.texIdx, texIdBase);
+            this.textureIds[bsp1.texIdx] = -1;
+            this.ensureTexture(cache, bsp1.texIdx);
         }
 
         if (etx1 !== null) {
             if (etx1.indTextureMode !== IndTextureMode.Off) {
-                this.ensureTextureFromTDB1Index(device, cache, etx1.indTextureID, texIdBase);
+                this.ensureTextureFromTDB1Index(cache, etx1.indTextureID, texIdBase);
                 if (etx1.indTextureMode === IndTextureMode.Sub)
-                    this.ensureTextureFromTDB1Index(device, cache, etx1.subTextureID, texIdBase);
+                    this.ensureTextureFromTDB1Index(cache, etx1.subTextureID, texIdBase);
             }
 
             if (etx1.secondTextureIndex !== -1)
-                this.ensureTextureFromTDB1Index(device, cache, etx1.secondTextureIndex, texIdBase);
+                this.ensureTextureFromTDB1Index(cache, etx1.secondTextureIndex, texIdBase);
         }
 
         if (ssp1 !== null)
-            this.ensureTextureFromTDB1Index(device, cache, ssp1.texIdx, texIdBase);
+            this.ensureTextureFromTDB1Index(cache, ssp1.texIdx, texIdBase);
 
         // Material.
         const mb = new GXMaterialBuilder(`JPA Material`);
@@ -593,11 +627,14 @@ export class JPAResourceData {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    private ensureTextureFromTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number, tdb1Base: number): void {
+    private ensureTexture(cache: GfxRenderCache, idx: number): void {
+        this.jpacData.ensureTexture(cache, this.textureIds[idx]);
+    }
+
+    private ensureTextureFromTDB1Index(cache: GfxRenderCache, idx: number, tdb1Base: number): void {
         const texIndex = tdb1Base + ((this.res.tdb1 !== null) ? this.res.tdb1[idx] : idx);
         this.textureIds[idx] = texIndex;
-
-        this.jpacData.ensureTexture(device, cache, this.textureIds[idx]);
+        this.ensureTexture(cache, this.textureIds[idx]);
     }
 
     public fillTextureMapping(m: TextureMapping, idx: number): void {
@@ -3609,11 +3646,13 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const isDrawFwdAhead = !!(flags & 0x01);
             const isDrawPrntAhead = !!(flags & 0x02);
 
+            const isEnableTexture = true;
+
             bsp1 = {
                 shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
-                isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
+                isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
                 isEnableTexScrollAnm, isEnableProjection,
                 texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
                 texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
@@ -4070,11 +4109,13 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             if (isEnableTextureAnm)
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, tableIdx + 0x60, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
+            const isEnableTexture = !!(texFlags & 0x00000002);
+
             bsp1 = {
                 shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
-                isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
+                isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
                 isEnableTexScrollAnm, isEnableProjection,
                 texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
                 texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
@@ -4529,11 +4570,13 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             const colorCalcIdxType: CalcIdxType = (colorFlags >>> 4) & 0x07;
 
+            const isEnableTexture = true;
+
             bsp1 = {
                 shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
-                isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
+                isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
                 isEnableTexScrollAnm, isEnableProjection,
                 texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
                 texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,

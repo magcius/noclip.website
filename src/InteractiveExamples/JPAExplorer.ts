@@ -64,7 +64,10 @@ class BasicEffectSystem {
     public resourceDataUsesFB(resourceData: JPA.JPAResourceData): boolean {
         for (let i = 0; i < resourceData.textureIds.length; i++) {
             const texID = resourceData.textureIds[i];
-            const textureName = this.jpacData.jpac.textures[texID].texture.name;
+            const jpaTexture = this.jpacData.jpac.textures[texID];
+            if (jpaTexture === undefined)
+                continue;
+            const textureName = jpaTexture.texture.name;
             if (this.fbTextureNames.includes(textureName))
                 return true;
         }
