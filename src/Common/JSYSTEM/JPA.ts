@@ -439,6 +439,7 @@ export class JPACData {
     }
 
     public ensureTexture(cache: GfxRenderCache, index: number): void {
+        assert(index !== undefined);
         if (this.texData[index] !== undefined)
             return;
 
@@ -634,7 +635,7 @@ export class JPAResourceData {
     private ensureTextureFromTDB1Index(cache: GfxRenderCache, idx: number, tdb1Base: number): void {
         const texIndex = tdb1Base + ((this.res.tdb1 !== null) ? this.res.tdb1[idx] : idx);
         this.textureIds[idx] = texIndex;
-        this.ensureTexture(cache, this.textureIds[idx]);
+        this.ensureTexture(cache, idx);
     }
 
     public fillTextureMapping(m: TextureMapping, idx: number): void {
