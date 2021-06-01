@@ -3940,7 +3940,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
     const blockCount = view.getUint32(0x0C);
     const keyBlockCount = view.getUint8(0x14);
     const fieldBlockCount = view.getUint8(0x15);
-    // Unknown at 0x16. Seemingly unused?
+    const tdb1Count = view.getUint8(0x16);
 
     let bem1: JPADynamicsBlock | null = null;
     let bsp1: JPABaseShapeBlock | null = null;
@@ -4357,7 +4357,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".
-            tdb1 = buffer.subarray(dataBegin + 0x00, blockSize - 0x0C).createTypedArray(Uint16Array, 0, undefined, Endianness.BIG_ENDIAN);
+            tdb1 = buffer.subarray(dataBegin + 0x00).createTypedArray(Uint16Array, 0, tdb1Count, Endianness.BIG_ENDIAN);
         } else {
             throw "whoops";
         }
@@ -4387,7 +4387,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
     const blockCount = view.getUint16(0x02);
     const fieldBlockCount = view.getUint8(0x04);
     const keyBlockCount = view.getUint8(0x05);
-    // Unknown at 0x06. Seemingly unused?
+    const tdb1Count = view.getUint8(0x06);
 
     let bem1: JPADynamicsBlock | null = null;
     let bsp1: JPABaseShapeBlock | null = null;
@@ -4823,7 +4823,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".
-            tdb1 = buffer.subarray(tableIdx + 0x08, blockSize - 0x08).createTypedArray(Uint16Array, 0, undefined, Endianness.BIG_ENDIAN);
+            tdb1 = buffer.subarray(tableIdx + 0x08).createTypedArray(Uint16Array, 0, tdb1Count, Endianness.BIG_ENDIAN);
         } else {
             throw "whoops";
         }
