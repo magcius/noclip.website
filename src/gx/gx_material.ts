@@ -294,6 +294,11 @@ export function materialUsePnMtxIdx(material: { usePnMtxIdx?: boolean }): boolea
     return material.usePnMtxIdx !== undefined ? material.usePnMtxIdx : true;
 }
 
+export function materialUseTexMtxIdx(material: { useTexMtxIdx?: boolean[] }, i: number): boolean {
+    // Dynamic TexMtxIdx is off by default.
+    return material.useTexMtxIdx !== undefined ? material.useTexMtxIdx[i] : false;
+}
+
 export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: boolean }): boolean {
     return material.hasDynamicAlphaTest !== undefined ? material.hasDynamicAlphaTest : false;
 }
@@ -607,11 +612,7 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     // Output is a vec3, src is a vec3.
     private generateTexGenMatrixMult(texCoordGenIndex: number, src: string) {
-        // Dynamic TexMtxIdx is off by default.
-        let useTexMtxIdx = false;
-        if (this.material.useTexMtxIdx !== undefined && !!this.material.useTexMtxIdx[texCoordGenIndex])
-            useTexMtxIdx = true;
-        if (useTexMtxIdx) {
+        if (materialUseTexMtxIdx(this.material, texCoordGenIndex)) {
             const attrStr = this.generateTexMtxIdxAttr(texCoordGenIndex);
             return this.generateMulPntMatrixDynamic(attrStr, src);
         } else {
@@ -1261,8 +1262,60 @@ ${this.generateFogFunc(`t_Fog`)}
         }
     }
 
+    private usesColorChannel(c: ColorChannelControl): boolean {
+        return c.matColorSource === GX.ColorSrc.VTX || c.ambColorSource === GX.ColorSrc.VTX;
+    }
+
+    private usesLightChannel(c: LightChannelControl | undefined): boolean {
+        if (c === undefined)
+            return false;
+        return this.usesColorChannel(c.colorChannel) || this.usesColorChannel(c.alphaChannel);
+    }
+
+    private usesNormalColorChannel(c: ColorChannelControl): boolean {
+        if (!c.lightingEnabled || c.litMask === 0)
+            return false;
+        if (c.diffuseFunction !== GX.DiffuseFunction.NONE)
+            return true;
+        if (c.attenuationFunction === GX.AttenuationFunction.SPEC)
+            return true;
+        return false;
+    }
+
+    private usesNormal(): boolean {
+        return this.material.lightChannels.some((c) => {
+            return this.usesNormalColorChannel(c.colorChannel) || this.usesNormalColorChannel(c.alphaChannel);
+        });
+    }
+
+    private usesTexGenInput(s: GX.TexGenSrc): boolean {
+        return this.material.texGens.some((g) => {
+            return g.source === s;
+        });
+    }
+
+    private usesAttrib(a: VertexAttributeGenDef): boolean {
+        switch (a.attrInput) {
+        case VertexAttributeInput.POS: return true;
+        case VertexAttributeInput.TEX0123MTXIDX: return materialUseTexMtxIdx(this.material, 0) || materialUseTexMtxIdx(this.material, 1) || materialUseTexMtxIdx(this.material, 2) || materialUseTexMtxIdx(this.material, 3);
+        case VertexAttributeInput.TEX4567MTXIDX: return materialUseTexMtxIdx(this.material, 4) || materialUseTexMtxIdx(this.material, 5) || materialUseTexMtxIdx(this.material, 6) || materialUseTexMtxIdx(this.material, 7);
+        case VertexAttributeInput.NRM: return this.usesNormal() || this.usesTexGenInput(GX.TexGenSrc.NRM);
+        case VertexAttributeInput.TANGENT: return this.usesTexGenInput(GX.TexGenSrc.TANGENT);
+        case VertexAttributeInput.BINRM: return this.usesTexGenInput(GX.TexGenSrc.BINRM);
+        case VertexAttributeInput.CLR0: return this.usesLightChannel(this.material.lightChannels[0]);
+        case VertexAttributeInput.CLR1: return this.usesLightChannel(this.material.lightChannels[1]);
+        case VertexAttributeInput.TEX01: return this.usesTexGenInput(GX.TexGenSrc.TEX0) || this.usesTexGenInput(GX.TexGenSrc.TEX1);
+        case VertexAttributeInput.TEX23: return this.usesTexGenInput(GX.TexGenSrc.TEX2) || this.usesTexGenInput(GX.TexGenSrc.TEX3);
+        case VertexAttributeInput.TEX45: return this.usesTexGenInput(GX.TexGenSrc.TEX4) || this.usesTexGenInput(GX.TexGenSrc.TEX5);
+        case VertexAttributeInput.TEX67: return this.usesTexGenInput(GX.TexGenSrc.TEX6) || this.usesTexGenInput(GX.TexGenSrc.TEX7);
+        default: return false;
+        }
+    }
+
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
+            if (!this.usesAttrib(a))
+                return ``;
             return `layout(location = ${i}) in ${this.generateAttributeStorageType(a.format)} a_${a.name};`;
         }).join('\n');
     }
@@ -1276,7 +1329,7 @@ ${this.generateFogFunc(`t_Fog`)}
     }
 
     private generateMulNrm(): string {
-        const src = `vec4(a_Normal.xyz, 0.0)`;
+        const src = this.usesNormal() ? `vec4(a_Normal.xyz, 0.0)` : `vec4(0.0)`;
         if (materialUsePnMtxIdx(this.material))
             return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
         else

@@ -1196,7 +1196,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 }
 
-export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement): Promise<GfxSwapChain | null> {
+export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<GfxSwapChain | null> {
     if (navigator.gpu === undefined)
         return null;
 
