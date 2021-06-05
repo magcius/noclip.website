@@ -9,6 +9,8 @@ import { assert } from './util';
 import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
+import { StudioPanel } from './Studio';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -520,7 +522,9 @@ export class StudioCameraController extends FPSCameraController {
      */
     private isOnKeyframe: boolean = false;
 
-    constructor(private animationManager: CameraAnimationManager) {
+    public previewPath: boolean = false;
+
+    constructor(private animationManager: CameraAnimationManager, private studioPanel: StudioPanel) {
         super();
     }
 
@@ -532,50 +536,45 @@ export class StudioCameraController extends FPSCameraController {
                 mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
                 this.camera.worldMatrixUpdated();
             }
-            if (inputManager.isKeyDownEventTriggered('Escape')) {
+            if (inputManager.isKeyDownEventTriggered('Escape'))
                 this.stopAnimation();
-            }
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
             if (!this.isOnKeyframe && inputManager.isKeyDownEventTriggered('Enter')) {
-                this.animationManager.addNextKeyframe(mat4.clone(this.camera.worldMatrix));
+                this.studioPanel.addKeyframe(mat4.clone(this.camera.worldMatrix));
                 this.isOnKeyframe = true;
             }
-            if (inputManager.isKeyDownEventTriggered('Escape')) {
-                this.animationManager.endEditKeyframePosition();
-            }
+
+            if (inputManager.isKeyDownEventTriggered('Escape'))
+                this.studioPanel.endEditKeyframePosition();
+
             result = super.update(inputManager, dt);
-            if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged) {
+
+            if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged)
                 this.isOnKeyframe = false;
+
+            if (this.previewPath) {
+                for (let i = 0; i < this.studioPanel.animationPreviewSteps.length - 1; i++) {
+                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i + 1].pos);
+                }
             }
         }
-
-        this.animationManager.drawPreviewLine(this.camera.clipFromWorldMatrix);
 
         return result;
     }
 
     public updateAnimation(dt: number): CameraUpdateResult {
-        if (this.animationManager.isKeyframeFinished()) {
-            if (this.animationManager.playbackHasNextKeyframe())
-                this.animationManager.playbackAdvanceKeyframe();
-            else
-                this.stopAnimation();
+        if (this.animationManager.isAnimationFinished()) {
+            this.stopAnimation();
             return CameraUpdateResult.Unchanged;
         }
 
-        if (this.animationManager.interpFinished()) {
-            // The interpolation is finished, but this keyframe still has a hold duration to complete.
-            this.animationManager.update(dt);
-            return CameraUpdateResult.Unchanged;
-        } else {
-            this.animationManager.update(dt);
-            this.animationManager.playbackInterpolationStep(this.interpStep);
-            mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
-            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
-            return CameraUpdateResult.Changed;
-        }
+        this.animationManager.updateElapsedTime(dt);
+        this.animationManager.getCurrentAnimationFrame(this.interpStep);
+        mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
+        mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
+        return CameraUpdateResult.Changed;
     }
 
     public setToPosition(setStep: InterpolationStep): void {
@@ -593,7 +592,7 @@ export class StudioCameraController extends FPSCameraController {
 
     public stopAnimation() {
         this.isAnimationPlaying = false;
-        this.animationManager.fireStoppedEvent();
+        this.studioPanel.onAnimationStopped();
     }
 
 }
