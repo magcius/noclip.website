@@ -571,7 +571,7 @@ export class StudioCameraController extends FPSCameraController {
         }
 
         this.animationManager.updateElapsedTime(dt);
-        this.animationManager.getCurrentAnimationFrame(this.interpStep);
+        this.animationManager.getAnimFrame(this.interpStep);
         mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
         mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
         return CameraUpdateResult.Changed;
