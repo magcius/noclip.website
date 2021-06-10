@@ -284,21 +284,35 @@ class Main {
         if(window.innerWidth <= 600) {
             console.warn('Mobile user detected; This may also be triggered by very narrow viewports.');
             const mobileWarning = document.createElement('div');
-            mobileWarning.id = 'mobileWarning'; //If you know a better way to refernce this, and have the time, please fix. I am mostly a HTML/CSS dev and I don't want inconsistent garbage but also no way am I redoing this entire 900 line file
-            document.body.appendChild(mobileWarning);   
-            mobileWarning.innerHTML = `<h1>Mobile is not properly supported</h1> <p>Continuing may cause errors on both Android and iOS, and the controls may not be accessible at all on just a touchscreen. This is due to a combination of issues, the most prevalent being that mobile devices lack great support for 3D rendering on webpages.</p> <br> <button onclick="document.getElementById('mobileWarning').remove();" style="display:block; margin-left:auto; margin-right:auto; background-color: #186cd4; border:0; padding:1%;">Continue anyway</button>`;
-            //Time for CSS Portion
+            document.body.appendChild(mobileWarning); 
+            mobileWarning.innerHTML = `
+            <h1>Mobile is not properly supported</h1> 
+            <p>Continuing may cause errors on both Android and iOS, and the controls may not be accessible at all on just a touchscreen. This is due to a combination of issues, the most prevalent being that mobile devices lack great support for 3D rendering on webpages.</p> 
+            `;
+            //Button constructed here so no need for id
+            const mobileclose = document.createElement('button');
+            mobileclose.innerHTML = "Continue anyway";
+            mobileWarning.appendChild(mobileclose);
+            mobileclose.onclick = () => {
+                mobileWarning.remove();
+            };
+            //Finally, add CSS
             mobileWarning.style.position = 'absolute';
-            mobileWarning.style.top = "0"; 
+            mobileWarning.style.top = "0"; //Bring to front
             mobileWarning.style.margin = "10%";
             mobileWarning.style.padding = "5%";
-            mobileWarning.style.width = "70%"; //Remember padding/margin adds thickness too so final size is 80%, 100 including margin.
+            mobileWarning.style.width = "70%";
             mobileWarning.style.height = "70%";
             mobileWarning.style.backgroundColor = "#d81c1c";
-            //mobileWarning.style.zIndex = '999'; //Already done with setting top
             mobileWarning.style.display = 'block';
             mobileWarning.style.fontFamily = "'fontello', monospace";
             mobileWarning.style.textAlign = "center";
+            mobileclose.style.display = "block";
+            mobileclose.style.marginLeft = 'auto';
+            mobileclose.style.marginRight = 'auto';
+            mobileclose.style.backgroundColor = "#186cd4";
+            mobileclose.style.border = '0';
+            mobileclose.style.padding = "1%";
         } 
 
         this.toplevel.ondragover = (e) => {
