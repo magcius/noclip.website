@@ -283,18 +283,11 @@ class Main {
         
         if(window.innerWidth <= 600) {
             console.warn('Mobile user detected; This may also be triggered by very narrow viewports.');
-            //Don't generate the mobile warning unless the user is, you know, actually on mobile.
             const mobileWarning = document.createElement('div');
             mobileWarning.id = 'mobileWarning'; //If you know a better way to refernce this, and have the time, please fix. I am mostly a HTML/CSS dev and I don't want inconsistent garbage but also no way am I redoing this entire 900 line file
             document.body.appendChild(mobileWarning);   
             mobileWarning.innerHTML = `<h1>Mobile is not properly supported</h1> <p>Continuing may cause errors on both Android and iOS, and the controls may not be accessible at all on just a touchscreen. This is due to a combination of issues, the most prevalent being that mobile devices lack great support for 3D rendering on webpages.</p> <br> <button onclick="document.getElementById('mobileWarning').remove();" style="display:block; margin-left:auto; margin-right:auto; background-color: #186cd4; border:0; padding:1%;">Continue anyway</button>`;
-            // I write it again. For some reason that's a thing I need to do.
-            //const insertarea = document.getElementById(`<h1>Mobile is not properly supported</h1> <p>Continuing may cause errors on both Android and iOS, and the controls may not be accessible at all on just a touchscreen.</p> <br> <button onclick="document.getElementById('mobileWarning').remove();">Continue anyway</button>`);
-            //So in order to mount this, we need a node.
-            const insertnode = document.createTextNode('Create');
-            //insertarea?.appendChild(insertnode);
             //Time for CSS Portion
-            //I did do this already in main.ts but could not figure out how to do it the Jasper way so I did it the bad way -stopmotio
             mobileWarning.style.position = 'absolute';
             mobileWarning.style.top = "0"; 
             mobileWarning.style.margin = "10%";
@@ -307,9 +300,6 @@ class Main {
             mobileWarning.style.fontFamily = "'fontello', monospace";
             mobileWarning.style.textAlign = "center";
         } 
-        // Don't know why but this broke when I was making mobileWarning so
-        document.body.style.margin = "0";
-        // Is it a dumb fix? Yes. Is it probably bad code? Yes. Will it ever cause any trouble? Don't think anyone wants the margin to get removed so no. 
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
