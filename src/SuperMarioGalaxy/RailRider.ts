@@ -25,11 +25,11 @@ function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JM
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 class LinearRailPart {
-    public p0: vec3 = vec3.create();
-    public p3: vec3 = vec3.create();
+    public p0 = vec3.create();
+    public p3 = vec3.create();
     private length: number;
 
-    constructor(p0: vec3, p3: vec3) {
+    constructor(p0: ReadonlyVec3, p3: ReadonlyVec3) {
         vec3.copy(this.p0, p0);
         vec3.sub(this.p3, p3, p0);
         this.length = vec3.length(this.p3);
@@ -66,13 +66,13 @@ class LinearRailPart {
 }
 
 class BezierRailPart {
-    public p0: vec3 = vec3.create();
-    public p1: vec3 = vec3.create();
-    public p2: vec3 = vec3.create();
-    public p3: vec3 = vec3.create();
+    public p0 = vec3.create();
+    public p1 = vec3.create();
+    public p2 = vec3.create();
+    public p3 = vec3.create();
     private length: number;
 
-    constructor(p0: vec3, p1: vec3, p2: vec3, p3: vec3) {
+    constructor(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3) {
         vec3.copy(this.p0, p0);
         vec3.sub(this.p1, p1, p0);
         vec3.sub(this.p2, p2, p1);
@@ -177,11 +177,11 @@ function equalEpsilon(a: number, b: number, ep: number): boolean {
     return true;
 }
 
-function equalEpsilonVec3(a: vec3, b: vec3, ep: number): boolean {
+function equalEpsilonVec3(a: ReadonlyVec3, b: ReadonlyVec3, ep: number): boolean {
     return equalEpsilon(a[0], b[0], ep) && equalEpsilon(a[1], b[1], ep) && equalEpsilon(a[2], b[2], ep);
 }
 
-function makeRailPart(p0: vec3, p1: vec3, p2: vec3, p3: vec3): RailPart {
+function makeRailPart(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3): RailPart {
     if (equalEpsilonVec3(p0, p1, 0.01) && equalEpsilonVec3(p2, p3, 0.01))
         return new LinearRailPart(p0, p3);
     else
