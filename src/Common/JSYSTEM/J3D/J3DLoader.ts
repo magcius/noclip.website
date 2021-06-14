@@ -691,7 +691,15 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const index = i;
         const name = nameTable[i];
         const materialEntryIdx = materialEntryTableOffs + (0x014C * remapTable[i]);
+
         const materialMode = view.getUint8(materialEntryIdx + 0x00);
+        // I believe this is a bitfield with three bits:
+        //   0x01: OPA (Opaque)
+        //   0x02: EDG (TexEdge / Masked)
+        //   0x04: XLU (Translucent)
+        // I haven't seen anything but OPA/XLU in the wild.
+        assert(materialMode === 0x01 || materialMode === 0x04);
+
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const colorChanNumIndex = view.getUint8(materialEntryIdx + 0x02);
         // const texGenNumIndex = view.getUint8(materialEntryIdx + 0x03);
@@ -994,7 +1002,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         fogBlock.AdjTable.set(fogAdjTable);
         fogBlock.AdjCenter = fogAdjCenter;
 
-        const translucent = !(materialMode & 0x03);
+        const translucent = materialMode === 0x04;
         const colorUpdate = true, alphaUpdate = false;
 
         const ropInfo: GX_Material.RopInfo = {
