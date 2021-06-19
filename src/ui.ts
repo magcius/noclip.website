@@ -12,7 +12,7 @@ import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
 import { DebugFloaterHolder } from './DebugFloaters';
 import { DraggingMode } from './InputManager';
-import { StudioPanel } from './Studio';
+import { CLAPBOARD_ICON, StudioPanel } from './Studio';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
@@ -1781,6 +1781,60 @@ class StatisticsPanel extends Panel {
     }
 }
 
+class StudioSidePanel extends Panel {
+    private enableStudioBtn: HTMLElement;
+    private disableStudioBtn: HTMLElement;
+
+    constructor(private ui: UI) {
+        super();
+        this.setTitle(CLAPBOARD_ICON, 'Studio');
+        document.head.insertAdjacentHTML('beforeend', `
+            <style>
+                button.SettingsButton {
+                    font: 16px monospace;
+                    font-weight: bold;
+                    border: none;
+                    width: 100%;
+                    color: inherit;
+                    padding: 0.15rem;
+                    text-align: center;
+                    background-color: rgb(64, 64, 64);
+                    cursor: pointer;
+                }
+            </style>
+            `);
+        this.contents.insertAdjacentHTML('beforeend', `
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
+                <div style="font-weight: bold;">Studio Mode</div>
+                <button id="enableStudioBtn" class="SettingsButton">Enable</button>
+                <button id="disableStudioBtn" class="SettingsButton">Disable</button>
+            </div>
+            <div id="studioPanelContents" hidden></div>
+        `);
+        this.contents.style.lineHeight = '36px';
+
+        this.enableStudioBtn = this.contents.querySelector('#enableStudioBtn') as HTMLInputElement;
+        this.disableStudioBtn = this.contents.querySelector('#disableStudioBtn') as HTMLInputElement;
+
+        this.enableStudioBtn.onclick = () => {
+            if (!ui.studioModeEnabled) {
+                ui.enableStudioMode();
+                setElementHighlighted(this.enableStudioBtn, true);
+                setElementHighlighted(this.disableStudioBtn, false);
+            }
+        }
+        this.disableStudioBtn.onclick = () => {
+            if (ui.studioModeEnabled) {
+                ui.disableStudioMode();
+                setElementHighlighted(this.disableStudioBtn, true);
+                setElementHighlighted(this.enableStudioBtn, false);
+            }
+        };
+        setElementHighlighted(this.disableStudioBtn, true);
+        setElementHighlighted(this.enableStudioBtn, false);
+    }
+
+}
 
 class About extends Panel {
     public onfaq: (() => void) | null = null;
@@ -2553,6 +2607,7 @@ export class UI {
     public panels: Panel[];
     private about: About;
     private faqPanel: FAQPanel;
+    private studioSidePanel: StudioSidePanel;
     private studioPanel: StudioPanel;
     private recordingBranding = new RecordingBranding();
 
@@ -2640,6 +2695,7 @@ export class UI {
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
 
+        this.studioSidePanel = new StudioSidePanel(this);
         this.studioPanel = new StudioPanel(this, viewer);
         this.toplevel.appendChild(this.studioPanel.elem);
 
@@ -2717,7 +2773,7 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null) {
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.studioSidePanel, this.about]);
         } else {
             this.setPanels([this.sceneSelect, this.about]);
         }
@@ -2788,5 +2844,20 @@ export class UI {
 
         this.isVisible = v;
         this.syncVisibilityState();
+    }
+
+    public enableStudioMode(): void {
+        // Switch to the FPS Camera Controller (so the UI shows the correct controller highlighted).
+        this.viewerSettings.setCameraControllerIndex(0);
+        this.studioPanel.initStudio();
+        this.studioPanel.show();
+        this.viewer.setCameraController(this.studioPanel.studioCameraController);
+        this.studioModeEnabled = true;
+    }
+
+    public disableStudioMode(): void {
+        this.studioModeEnabled = false;
+        this.viewerSettings.setCameraControllerIndex(0);
+        this.studioPanel.hide();
     }
 }
