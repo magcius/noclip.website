@@ -384,7 +384,7 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -418,7 +418,7 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -477,7 +477,7 @@ export class MaterialInstance {
         // ref. J3DTexMtx::calc()
         const tmp1 = matrixScratch;
         const tmp2 = matrixScratch2;
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
             {
                 // J3DGetTextureMtxOld(tmp1)

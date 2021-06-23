@@ -1054,7 +1054,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             attnFn === 2 ? GX.AttenuationFunction.NONE :
             attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
         );
-        assert(attenuationFunction !== -1);
+        assert((attenuationFunction as number) !== -1);
         const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
 
         const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
@@ -1066,7 +1066,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
         const info = view.getUint8(texMtxOffs + 0x01);
 
-        const matrixMode: TexMtxMapMode = info & 0x3F;
+        const matrixMode = info & 0x3F;
 
         // Detect uses of unlikely map modes.
         if (matrixMode === TexMtxMapMode.ProjmapBasic || matrixMode === TexMtxMapMode.ViewProjmapBasic ||
