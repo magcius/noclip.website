@@ -39,6 +39,7 @@ function rectFlipY(r: Rect, h: number): void {
 export interface TextDrawer {
     textColor: GfxColor;
     setFontScale(v: number): void;
+    getScaledLineHeight(): number;
     beginDraw(): void;
     endDraw(renderInstManager: GfxRenderInstManager): void;
     drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth?: number, strokeNum?: number): void;
@@ -50,7 +51,6 @@ export class DebugThumbnailDrawer {
     private textureMapping: GfxSamplerBinding[] = nArray(1, gfxSamplerBindingNew);
 
     // Used for text.
-    private renderInstList = new GfxRenderInstList(null);
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     public enabled = false;
@@ -102,6 +102,7 @@ export class DebugThumbnailDrawer {
         // Add our passes.
         const resolveTextureIDs: number[] = [];
         const renderTargetIDs: number[] = [];
+        const debugLabels: [string, string][] = [];
 
         for (let i = 0; i < inputPasses.length; i++) {
             const pass = inputPasses[i];
@@ -115,6 +116,10 @@ export class DebugThumbnailDrawer {
                 const renderTargetID = builderDebug.getPassRenderTargetID(pass, j);
                 resolveTextureIDs.push(resolveTextureID);
                 renderTargetIDs.push(renderTargetID);
+
+                const passDebugName = builderDebug.getPassDebugName(pass);
+                const thumbnailDebugName = builderDebug.getRenderTargetIDDebugName(renderTargetID);
+                debugLabels.push([passDebugName, thumbnailDebugName]);
             }
         }
 
@@ -130,11 +135,8 @@ export class DebugThumbnailDrawer {
         const y2 = desc.height - this.padding;
         const y1 = y2 - this.thumbnailHeight;
 
-        const drawThumbnail = (scope: GfxrPassScope, passRenderer: GfxRenderPass, i: number) => {
+        const prepareAnim = (i: number) => {
             const thumbnailDesc = builder.getRenderTargetDescription(renderTargetIDs[i]);
-
-            const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
-            this.textureMapping[0].gfxTexture = gfxTexture;
 
             const slotIndex = resolveTextureIDs.length - 1 - i;
             const x2 = desc.width - (this.thumbnailWidth + this.padding) * slotIndex - this.padding;
@@ -149,29 +151,45 @@ export class DebugThumbnailDrawer {
 
             const viewport = this.computeViewport(thumbnailDesc, location);
             const vw = viewport.x2 - viewport.x1, vh = viewport.y2 - viewport.y1;
+            return { t, viewport, location, vw, vh };
+        };
+
+        const prepareText = (textDrawer: TextDrawer, i: number, anim: ReturnType<typeof prepareAnim>) => {
+            const renderInstList = new GfxRenderInstList(null);
+
+            const oldRenderInstList = renderInstManager.currentRenderInstList;
+            renderInstManager.currentRenderInstList = renderInstList;
+
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.setUniformBuffer(this.uniformBuffer);
+
+            const { t, vw, vh } = anim;
+            const thumbnailDebugLabels = debugLabels[i];
+            for (let i = 0; i < thumbnailDebugLabels.length; i++) {
+                const debugStr = thumbnailDebugLabels[i];
+                textDrawer.textColor.a = lerp(0.6, 1.0, t);
+                textDrawer.setFontScale(lerp(0.5, 1.0, t));
+                const y = lerp(5, 20, t) + textDrawer.getScaledLineHeight() * i;
+                textDrawer.drawString(renderInstManager, vw, vh, debugStr, vw / 2, vh - y);
+            }
+
+            renderInstManager.popTemplateRenderInst();
+            renderInstManager.currentRenderInstList = oldRenderInstList;
+            return renderInstList;
+        };
+
+        const drawThumbnail = (scope: GfxrPassScope, passRenderer: GfxRenderPass, i: number, textAnimList: GfxRenderInstList | undefined, anim: ReturnType<typeof prepareAnim>) => {
+            const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
+            this.textureMapping[0].gfxTexture = gfxTexture;
+
+            const { viewport, location, vw, vh } = anim;
             passRenderer.setViewport(viewport.x1, viewport.y1, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
 
-            if (textDrawer !== null) {
-                const oldRenderInstList = renderInstManager.currentRenderInstList;
-                renderInstManager.currentRenderInstList = this.renderInstList;
-
-                const template = renderInstManager.pushTemplateRenderInst();
-                template.setUniformBuffer(this.uniformBuffer);
-
-                const thumbnailDebugName = builderDebug.getRenderTargetIDDebugName(renderTargetIDs[i]);
-                textDrawer.textColor.a = lerp(0.6, 1.0, t);
-                textDrawer.setFontScale(lerp(0.5, 1.0, t));
-                const y = lerp(5, 20, t);
-                textDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugName, vw / 2, vh - y);
-
-                renderInstManager.popTemplateRenderInst();
-                this.renderInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
-
-                renderInstManager.currentRenderInstList = oldRenderInstList;
-            }
+            if (textAnimList !== undefined)
+                textAnimList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
         };
 
         for (let i = 0; i < resolveTextureIDs.length; i++)
@@ -189,12 +207,17 @@ export class DebugThumbnailDrawer {
                 pass.attachResolveTexture(resolveTextureIDs[i]);
 
             pass.exec((passRenderer, scope) => {
-                if (textDrawer !== null)
+                const anims = resolveTextureIDs.map((tex, i) => prepareAnim(drawOrder[i]));
+
+                let textLists: GfxRenderInstList[] = [];
+                if (textDrawer !== null) {
                     textDrawer.beginDraw();
-                for (let i = 0; i < resolveTextureIDs.length; i++)
-                    drawThumbnail(scope, passRenderer, drawOrder[i]);
-                if (textDrawer !== null)
+                    textLists = resolveTextureIDs.map((tex, i) => prepareText(textDrawer, drawOrder[i], anims[i]));
                     textDrawer.endDraw(renderInstManager);
+                }
+
+                resolveTextureIDs.forEach((tex, i) => drawThumbnail(scope, passRenderer, drawOrder[i], textLists[i], anims[i]));
+
                 this.uniformBuffer.prepareToRender();
             });
         });

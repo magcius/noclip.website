@@ -280,8 +280,11 @@ export class CharWriter {
         this.charSpacing = charSpacing;
         this.scale[0] = fontWidth !== null ? (fontWidth / rfnt.width) : 1;
         this.scale[1] = fontHeight !== null ? (fontHeight / rfnt.height) : 1;
-        // TODO(jstpierre): This isn't correct
-        this.lineHeight = lineHeight - (rfnt.advanceHeight * this.scale[1]);
+        this.lineHeight = lineHeight;
+    }
+
+    public getScaledLineHeight(): number {
+        return this.lineHeight + (this.font.rfnt.advanceHeight * this.scale[1]);
     }
 
     public calcRect(dst: vec4, str: string): void {
@@ -310,7 +313,7 @@ export class CharWriter {
             x += glyphWidth;
         }
     
-        const y = this.lineHeight;
+        const y = this.getScaledLineHeight();
     
         const x0 = Math.min(x, 0), x1 = Math.max(x, 0);
         const y0 = Math.min(y, 0), y1 = Math.max(y, 0);
