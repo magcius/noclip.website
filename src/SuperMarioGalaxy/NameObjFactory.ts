@@ -17,7 +17,7 @@ import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
 import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, Petari, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
-import { createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
+import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -821,6 +821,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("ClipAreaCenterBox",            createClipAreaCenterBox, requestArchivesClipAreaBox),
     E("ClipAreaBottomBox",            createClipAreaBottomBox, requestArchivesClipAreaBox),
     E("ClipAreaSphere",               createClipAreaSphere,    requestArchivesClipAreaSphere),
+    _("ClipAreaDropLaser",            ClipAreaDropLaser),
 
     N("WaterArea"),
     N("SwitchArea"),
@@ -895,6 +896,11 @@ const SpecialPlanetTable: NameObjFactoryTableEntry[] = [
     _("ChoConveyorPlanetB",            RailPlanetMap),
     _("ChoConveyorPlanetD",            RotateMoveObj),
     _("DinoPackunBattlePlanet",        FurPlanetMap),
+    _("DarkHopperPlanetA",             SimpleClipPartsObj),
+    _("DarkHopperPlanetB",             SimpleClipPartsObj),
+    _("DarkHopperPlanetC",             SimpleClipPartsObj),
+    _("DarkHopperPlanetD",             SimpleClipPartsObj),
+    _("DarknessRoomPlanet",            SimpleClipPartsObj),
     _("FlagDiscPlanetD",               RotateMoveObj),
     _("HatchWaterPlanet",              HatchWaterPlanet),
     _("HeavensDoorInsidePlanet",       SimpleMapObj),

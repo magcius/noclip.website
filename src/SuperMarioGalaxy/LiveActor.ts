@@ -880,7 +880,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
         this.modelManager = new ModelManager(sceneObjHolder, objName);
 
-        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+        this.modelManager.modelInstance.setBaseScale(this.scale);
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
@@ -978,7 +978,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // calcAnmMtx
         if (this.modelManager !== null) {
-            vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+            this.modelManager.modelInstance.setBaseScale(this.scale);
             this.calcAndSetBaseMtx(sceneObjHolder);
             this.modelManager.calcAnim();
         }

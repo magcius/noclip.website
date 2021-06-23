@@ -117,6 +117,7 @@ export const enum DrawType {
     WhirlPoolAccelerator           = 0x0D,
     ElectricRailHolder             = 0x0E,
     SpinDriverPathDrawer           = 0x12,
+    ClipAreaDropLaser              = 0x14,
     WarpPodPath                    = 0x18,
     WaterPlant                     = 0x1B,
     EyeBeamer                      = 0x1C,

@@ -7,7 +7,7 @@ import { SceneObjHolder } from "./Main";
 import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
 import { computeModelMatrixR, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
@@ -148,7 +148,12 @@ class ParticleEmitter {
             colorCopy(this.baseEmitter.globalColorEnv, color);
     }
 
-    public setGlobalScale(v: vec3): void {
+    public setGlobalTranslation(v: ReadonlyVec3): void {
+        if (this.baseEmitter !== null)
+            this.baseEmitter.setGlobalTranslation(v);
+    }
+
+    public setGlobalScale(v: ReadonlyVec3): void {
         if (this.baseEmitter !== null)
             this.baseEmitter.setGlobalScale(v);
     }
@@ -570,7 +575,21 @@ export class MultiEmitter {
         }
     }
 
-    public setGlobalScale(v: vec3, emitterIndex: number = -1): void {
+    public setGlobalTranslation(v: ReadonlyVec3, emitterIndex: number = -1): void {
+        if (emitterIndex === -1) {
+            for (let i = 0; i < this.singleEmitters.length; i++) {
+                const emitter = this.singleEmitters[i];
+                if (emitter.isValid())
+                    emitter.particleEmitter!.setGlobalTranslation(v);
+            }
+        } else {
+            const emitter = this.singleEmitters[emitterIndex];
+            if (emitter.isValid())
+                emitter.particleEmitter!.setGlobalTranslation(v);
+        }
+    }
+
+    public setGlobalScale(v: ReadonlyVec3, emitterIndex: number = -1): void {
         if (emitterIndex === -1) {
             for (let i = 0; i < this.singleEmitters.length; i++) {
                 const emitter = this.singleEmitters[i];
@@ -1116,6 +1135,16 @@ export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, nam
     if (actor.effectKeeper === null)
         return;
     actor.effectKeeper.createEmitter(sceneObjHolder, name);
+}
+
+export function emitEffectHit(sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: ReadonlyVec3, name: string | null = null): void {
+    if (actor.effectKeeper === null)
+        return;
+    if (name === null)
+        name = 'HitMarkNormal';
+    const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
+    if (emitter !== null)
+        emitter.setGlobalTranslation(pos);
 }
 
 export function isEffectValid(actor: LiveActor, name: string): boolean {

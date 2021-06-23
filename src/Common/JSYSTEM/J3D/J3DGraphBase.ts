@@ -1,5 +1,5 @@
 
-import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
@@ -974,6 +974,10 @@ export class J3DModelInstance {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setBaseScale(v: ReadonlyVec3): void {
+        vec3.copy(this.baseScale, v);
     }
 
     public setModelMaterialData(modelMaterialData: BMDModelMaterialData): void {

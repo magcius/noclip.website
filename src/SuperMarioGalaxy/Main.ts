@@ -1223,7 +1223,7 @@ export class SceneObjHolder {
         else if (sceneObj === SceneObj.ClipAreaDropHolder)
             this.clipAreaDropHolder = new ClipAreaDropHolder(this);
         else if (sceneObj === SceneObj.FallOutFieldDraw)
-            this.fallOutFieldDraw = new FallOutFieldDraw(this);
+            assert(false); // this.fallOutFieldDraw = new FallOutFieldDraw(this); // Handled by createFallOutFieldDraw
         else if (sceneObj === SceneObj.ClipAreaHolder)
             this.clipAreaHolder = new ClipAreaHolder(this);
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)

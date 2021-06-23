@@ -7,16 +7,16 @@ import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "..
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { nArray } from "../util";
+import { fallback, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { connectToScene, drawSimpleModel, getEaseInOutValue, getEaseOutValue, initDefaultPos, isOnSwitchB, isValidSwitchB, useStageSwitchWriteB } from "./ActorUtil";
-import { JMapInfoIter } from "./JMapInfo";
+import { calcRailPointPos, connectToScene, drawSimpleModel, getEaseInOutValue, getEaseOutValue, getRailPointArg0, getRailPointNum, initDefaultPos, isOnSwitchAppear, isOnSwitchB, isRailReachedGoal, isValidSwitchAppear, isValidSwitchB, listenStageSwitchOnOffAppear, listenStageSwitchOnOffAppearCtrl, moveCoordAndTransToRailStartPoint, moveTransToCurrentRailPos, useStageSwitchReadAppear, useStageSwitchWriteB } from "./ActorUtil";
+import { getJMapInfoArg0, getJMapInfoBool, JMapInfoIter } from "./JMapInfo";
 import { dynamicSpawnZoneAndLayer, LiveActor, LiveActorGroup, makeMtxTRFromActor, ZoneAndLayer } from "./LiveActor";
 import { getObjectName, SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
-import { colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
+import { colorFromRGBA8, colorNewFromRGBA8, Cyan } from "../Color";
 import { Camera } from "../Camera";
-import { isGreaterStep, isLessStep } from "./Spine";
+import { isFirstStep, isGreaterStep, isLessStep } from "./Spine";
 import { invlerp, saturate, setMatrixTranslation, Vec3Zero } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
@@ -26,11 +26,14 @@ import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { TextureMapping } from "../TextureHolder";
-import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { reverseDepthForDepthOffset } from "../gfx/helpers/ReversedDepthHelpers";
 import { isConnectedWithRail } from "./RailRider";
 import { MapPartsRailMover, MapPartsRotator } from "./MapParts";
 import { addHitSensorMapObj } from "./HitSensor";
+import { emitEffectHit } from "./EffectSystem";
+import { createStageSwitchCtrl, isExistStageSwitchAppear, StageSwitchCtrl } from "./Switch";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -90,7 +93,7 @@ class ClipAreaShapeSphere extends ClipAreaShape {
 
     public calcVolumeMatrix(dst: mat4, mtx: ReadonlyMat4, scale: ReadonlyVec3): void {
         vec3.scale(scratchVec3a, scale, this.size * 0.01);
-        mat4.scale(dst, mtx, scale);
+        mat4.scale(dst, mtx, scratchVec3a);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
@@ -99,16 +102,20 @@ class ClipAreaShapeSphere extends ClipAreaShape {
 }
 
 abstract class ClipArea<TNerve extends number = number> extends LiveActor<TNerve> {
-    public mtx: mat4 = mat4.create();
+    public baseMtx: mat4 = mat4.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objectName: string, infoIter: JMapInfoIter | null, private shape: ClipAreaShape) {
         super(zoneAndLayer, sceneObjHolder, objectName);
 
         initDefaultPos(sceneObjHolder, this, infoIter);
-        makeMtxTRFromActor(this.mtx, this);
+        makeMtxTRFromActor(this.baseMtx, this);
 
         sceneObjHolder.create(SceneObj.ClipAreaHolder);
         sceneObjHolder.clipAreaHolder!.registerActor(this);
+    }
+
+    public getBaseMtx(): mat4 {
+        return this.baseMtx;
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -123,10 +130,10 @@ abstract class ClipArea<TNerve extends number = number> extends LiveActor<TNerve
         clipAreaHolder.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
         clipAreaHolder.materialFront.setOnRenderInst(cache.device, cache, template);
-        this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.mtx, this.scale, viewerInput.camera);
+        this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.baseMtx, this.scale, viewerInput.camera);
 
         clipAreaHolder.materialBack.setOnRenderInst(cache.device, cache, template);
-        this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.mtx, this.scale, viewerInput.camera);
+        this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.baseMtx, this.scale, viewerInput.camera);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -188,9 +195,10 @@ class ClipAreaMovable extends ClipArea {
 
     private updateMatrix(): void {
         if (this.railMover !== null)
-            setMatrixTranslation(this.mtx, this.railMover.translation);
+            vec3.copy(this.translation, this.railMover.translation);
         if (this.rotator !== null)
-            mat4.mul(this.mtx, this.mtx, this.rotator.mtx);
+            mat4.copy(this.baseMtx, this.rotator.mtx);
+        setMatrixTranslation(this.baseMtx, this.translation);
 }
 
     public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
@@ -266,7 +274,7 @@ class ClipAreaDrop extends ClipArea<ClipAreaDropNrv> {
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
-        mat4.identity(this.mtx);
+        mat4.fromTranslation(this.baseMtx, this.translation);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropNrv, deltaTimeFrames: number): void {
@@ -274,9 +282,11 @@ class ClipAreaDrop extends ClipArea<ClipAreaDropNrv> {
 
         if (currentNerve === ClipAreaDropNrv.Wait) {
             if (isLessStep(this, 15))
-                this.sphere.size = calcNerveEaseInOutValue(this, 60, 240, this.baseSize, 0.0);
-            else
                 this.sphere.size = calcNerveEaseOutValue(this, 15, 0.0, this.baseSize);
+            else
+                this.sphere.size = calcNerveEaseInOutValue(this, 60, 240, this.baseSize, 0.0);
+
+            // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation, Cyan, this.sphere.size);
 
             if (isGreaterStep(this, 240))
                 this.makeActorDead(sceneObjHolder);
@@ -305,11 +315,94 @@ function appearClipAreaDrop(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3, b
     drop.makeActorAppeared(sceneObjHolder);
 }
 
+function moveCoordAndCheckPassPointNo(actor: LiveActor, speed: number): number {
+    const railRider = actor.railRider!;
+    const p0 = railRider.getNextPointNo();
+    railRider.setSpeed(speed);
+    railRider.move();
+    const p1 = railRider.getNextPointNo();
+
+    if (p0 !== p1)
+        return p0;
+
+    return -1;
+}
+
 const enum ClipAreaDropLaserNrv { Wait, Move }
 export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
+    private moveSpeed: number;
+    private waitTimer: number = 0;
+    private drawCount: number = 0;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'ClipAreaDropLaser');
-        // TODO(jstpierre): The rest of this whole thing.
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.None, DrawBufferType.None, DrawType.ClipAreaDropLaser);
+        this.initRailRider(sceneObjHolder, infoIter);
+        moveCoordAndTransToRailStartPoint(this);
+
+        this.moveSpeed = fallback(getJMapInfoArg0(infoIter), 20.0);
+        this.initEffectKeeper(sceneObjHolder, 'ClipAreaDropLaser');
+        this.initNerve(ClipAreaDropLaserNrv.Move);
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter))
+            this.setNerve(ClipAreaDropLaserNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+
+        sceneObjHolder.create(SceneObj.ClipAreaDropHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropLaserNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === ClipAreaDropLaserNrv.Wait) {
+            if (this.waitTimer > 0)
+                this.waitTimer -= deltaTimeFrames;
+
+            if (isValidSwitchAppear(this) && isOnSwitchAppear(sceneObjHolder, this))
+                this.setNerve(ClipAreaDropLaserNrv.Move);
+        } else if (currentNerve === ClipAreaDropLaserNrv.Move) {
+            if (isFirstStep(this)) {
+                moveCoordAndTransToRailStartPoint(this);
+                this.waitTimer = 0;
+            }
+
+            let passPoint = moveCoordAndCheckPassPointNo(this, this.moveSpeed);
+            moveTransToCurrentRailPos(this);
+            this.incrementDrawCount(deltaTimeFrames);
+
+            if (isRailReachedGoal(this)) {
+                passPoint = getRailPointNum(this) - 1;
+                moveCoordAndTransToRailStartPoint(this);
+            }
+
+            // TODO(jstpierre): Record the point for the line trail.
+
+            if (passPoint !== -1) {
+                calcRailPointPos(scratchVec3a, this, passPoint);
+
+                const dropSize = fallback(getRailPointArg0(this, passPoint), -1.0);
+                if (dropSize > 0.0) {
+                    emitEffectHit(sceneObjHolder, this, scratchVec3a, 'Splash');
+                    appearClipAreaDrop(sceneObjHolder, scratchVec3a, dropSize);
+                }
+            }
+
+            if (isValidSwitchAppear(this) && !isOnSwitchAppear(sceneObjHolder, this))
+                this.setNerve(ClipAreaDropLaserNrv.Wait);
+
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation);
+        }
+    }
+
+    private incrementDrawCount(deltaTimeFrames: number): void {
+        this.drawCount = (this.drawCount + 1) % 64;
+
+        this.waitTimer += deltaTimeFrames;
+        if (this.waitTimer >= 64.0)
+            this.waitTimer = 64.0;
+    }
+
+    public static requestArchives(): void {
     }
 }
 
@@ -352,9 +445,26 @@ class FullscreenBlitProgram extends DeviceProgram {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
+const fallOutFieldDrawCommon = `
+layout(std140) uniform ub_Params {
+    vec4 u_EdgeColor;
+    vec4 u_Misc[1];
+};
+
+#define u_Invert (u_Misc[0].x > 0.0)
+
+float SampleMask(PD_SAMPLER_2D(t_TextureMask), in vec2 t_TexCoord) {
+    bool t_RawMask = texture(PU_SAMPLER_2D(t_TextureMask), t_TexCoord).r > 0.0;
+    bool t_Mask = u_Invert ? t_RawMask : !t_RawMask;
+    float t_Value = t_Mask ? 1.0 : 0.0;
+    return t_Value;
+}
+`;
+
 class FallOutFieldDrawThresholdProgram extends DeviceProgram {
     public static Common = `
 uniform sampler2D u_Texture;
+${fallOutFieldDrawCommon}
 `;
 
     public vert = `
@@ -369,7 +479,8 @@ ${GfxShaderLibrary.saturate}
 in vec2 v_TexCoord;
 
 void main() {
-    gl_FragColor = vec4(texture(SAMPLER_2D(u_Texture), v_TexCoord).r > 0.0 ? 1.0 : 0.0);
+    float t_Mask = SampleMask(PP_SAMPLER_2D(u_Texture), v_TexCoord);
+    gl_FragColor = vec4(t_Mask);
 }
 `;
 }
@@ -377,6 +488,7 @@ void main() {
 class FallOutFieldDrawBlurProgram extends DeviceProgram {
     public static Common = `
 uniform sampler2D u_Texture;
+${fallOutFieldDrawCommon}
 `;
 
     public vert = `
@@ -408,6 +520,7 @@ void main() {
 class FallOutFieldDrawCompositeBlurProgram extends DeviceProgram {
     public static Common = `
 uniform sampler2D u_TextureMask;
+${fallOutFieldDrawCommon}
 `;
 
     public vert = `
@@ -420,10 +533,6 @@ ${FallOutFieldDrawCompositeBlurProgram.Common}
 
 in vec2 v_TexCoord;
 
-layout(std140) uniform ub_Params {
-    vec4 u_EdgeColor;
-};
-
 void main() {
     float t_BlurredMask = texture(SAMPLER_2D(u_TextureMask), v_TexCoord).r;
     vec4 t_Color = u_EdgeColor;
@@ -435,7 +544,8 @@ void main() {
 
 class FallOutFieldDrawMaskProgram extends DeviceProgram {
     public static Common = `
-uniform sampler2D u_TextureMask;
+uniform sampler2D u_Texture;
+${fallOutFieldDrawCommon}
 `;
 
     public vert = `
@@ -449,7 +559,9 @@ ${FallOutFieldDrawMaskProgram.Common}
 in vec2 v_TexCoord;
 
 void main() {
-    if (texture(SAMPLER_2D(u_TextureMask), v_TexCoord).r <= 0.0)
+    float t_Mask = SampleMask(PP_SAMPLER_2D(u_Texture), v_TexCoord);
+
+    if (t_Mask <= 0.0)
         discard;
 
     gl_FragColor = vec4(0.0);
@@ -458,6 +570,9 @@ void main() {
 }
 
 export class FallOutFieldDraw extends NameObj {
+    private invert: boolean = false;
+    private stageSwitchCtrl: StageSwitchCtrl | null = null;
+
     private thresholdProgram: GfxProgram;
     private blurProgram: GfxProgram;
     private compositeBlurProgram: GfxProgram;
@@ -482,8 +597,17 @@ export class FallOutFieldDraw extends NameObj {
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
     private target4ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
 
-    constructor(sceneObjHolder: SceneObjHolder) {
+    constructor(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(sceneObjHolder, 'FallOutFieldDraw');
+
+        sceneObjHolder.create(SceneObj.ClipAreaHolder);
+        this.invert = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
+        if (isExistStageSwitchAppear(infoIter)) {
+            this.stageSwitchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
+            listenStageSwitchOnOffAppearCtrl(sceneObjHolder, this.stageSwitchCtrl, this.activate.bind(this), this.deactivate.bind(this));
+        } else {
+            this.activate(sceneObjHolder);
+        }
 
         const cache = sceneObjHolder.modelCache.cache;
         const linearSampler = cache.createSampler({
@@ -504,11 +628,20 @@ export class FallOutFieldDraw extends NameObj {
         this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
     }
 
+    public activate(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.clipAreaHolder!.isActive = true;
+    }
+
+    public deactivate(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.clipAreaHolder!.isActive = false;
+    }
+
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
+        let offs = renderInst.allocateUniformBuffer(0, 8);
         const d = renderInst.mapUniformBufferF32(0);
 
         offs += fillColor(d, offs, this.edgeColor);
+        offs += fillVec4(d, offs, this.invert ? 1.0 : 0.0);
     }
 
     public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, clipAreaMaskTargetID: number): void {
@@ -614,5 +747,6 @@ export class FallOutFieldDraw extends NameObj {
 }
 
 export function createFallOutFieldDraw(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-    sceneObjHolder.create(SceneObj.FallOutFieldDraw);
+    // Kind of bizarre -- we have an InfoIter to pass through here.
+    sceneObjHolder.fallOutFieldDraw = new FallOutFieldDraw(sceneObjHolder, infoIter);
 }

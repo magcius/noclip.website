@@ -21,7 +21,7 @@ import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtx
 import { SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
-import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
+import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, StageSwitchCtrl, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -749,6 +749,10 @@ export function getCurrentRailPointNo(actor: LiveActor): number {
     return actor.railRider!.currentPointId;
 }
 
+export function getRailPointArg0(actor: LiveActor, idx: number): number | null {
+    return actor.railRider!.getPointArg(idx, 'point_arg0');
+}
+
 export function getCurrentRailPointArg0(actor: LiveActor): number | null {
     return actor.railRider!.getCurrentPointArg('point_arg0');
 }
@@ -1369,9 +1373,13 @@ export function listenStageSwitchOnOffB(sceneObjHolder: SceneObjHolder, actor: L
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerB(actor.stageSwitchCtrl!, eventListener);
 }
 
-export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback | null, cbOff: SwitchCallback | null): void {
+export function listenStageSwitchOnOffAppearCtrl(sceneObjHolder: SceneObjHolder, stageSwitchCtrl: StageSwitchCtrl, cbOn: SwitchCallback | null, cbOff: SwitchCallback | null): void {
     const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
-    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(stageSwitchCtrl, eventListener);
+}
+
+export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback | null, cbOff: SwitchCallback | null): void {
+    listenStageSwitchOnOffAppearCtrl(sceneObjHolder, actor.stageSwitchCtrl!, cbOn, cbOff);
 }
 
 export function isValidSwitchA(actor: LiveActor): boolean {

@@ -1417,7 +1417,11 @@ export class JPABaseEmitter {
         return (!!(this.status & JPAEmitterStatus.TERMINATED)) && this.getParticleNumber() === 0;
     }
 
-    public setGlobalScale(s: vec3): void {
+    public setGlobalTranslation(v: ReadonlyVec3): void {
+        vec3.copy(this.globalTranslation, v);
+    }
+
+    public setGlobalScale(s: ReadonlyVec3): void {
         vec3.copy(this.globalScale, s);
         this.globalParticleScale[0] = s[0];
         this.globalParticleScale[1] = s[1];
