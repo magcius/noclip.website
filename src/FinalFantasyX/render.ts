@@ -31,12 +31,12 @@ export class FFXProgram extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_LightDirection;
 };
 
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix;
     Mat4x2 u_TextureMatrix;
     vec4   u_Params;
@@ -56,14 +56,14 @@ layout(location = 3) in vec4 a_Extra;
 
 void main() {
 #if EFFECT == 1
-    gl_Position = vec4(mix(a_Position, a_Extra.xyz, u_Params.x), 1.0);
+    gl_Position = vec4(mix(a_Position, a_Extra.xyz, vec3(u_Params.x)), 1.0);
 #else
     gl_Position = vec4(a_Position, 1.0);
 #endif
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix), gl_Position));
 
 #if EFFECT == 4
-    v_Color = mix(a_Color, a_Extra, u_Params.x);
+    v_Color = mix(a_Color, a_Extra, vec4(u_Params.x));
 #else
     v_Color = a_Color;
 #endif
@@ -73,7 +73,7 @@ void main() {
     t_viewNormal = Mul(_Mat4x4(u_LightDirection), vec4(t_viewNormal.xyz, 0.0));
     v_TexCoord = (t_viewNormal.xz/4.0) + 0.5;
 #elif EFFECT == 3
-    v_TexCoord = mix(a_TexCoord, a_Extra.xy, u_Params.x);
+    v_TexCoord = mix(a_TexCoord, a_Extra.xy, vec2(u_Params.x));
 #elif EFFECT == 5
     v_TexCoord = a_TexCoord + u_Params.xy/256.0;
 #else

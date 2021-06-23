@@ -71,7 +71,6 @@ module.exports = {
     }),
     new WasmPackPlugin({
       crateDirectory: path.join(__dirname, 'rust'),
-      forceMode: "production",
     }),
     new NormalModuleReplacementPlugin(/iconv-lite/, './dummy-iconv-lite.js'),
   ],

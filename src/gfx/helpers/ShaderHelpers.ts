@@ -27,7 +27,7 @@ return vec4(
 );
 }
 
-void Fma(inout Mat4x3 d, Mat4x3 m, float s) { d.mx += m.mx * s; d.my += m.my * s; d.mz += m.mz * s; }
+/* void Fma(inout Mat4x3 d, Mat4x3 m, float s) { d.mx += m.mx * s; d.my += m.my * s; d.mz += m.mz * s; } */
 
 Mat4x4 _Mat4x4(float n) { Mat4x4 o; o.mx = vec4(n, 0.0, 0.0, 0.0); o.my = vec4(0.0, n, 0.0, 0.0); o.mz = vec4(0.0, 0.0, n, 0.0); o.mw = vec4(0.0, 0.0, 0.0, n); return o; }
 Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
@@ -93,7 +93,7 @@ vec4 FXAA(PD_SAMPLER_2D(t_Texture), in vec2 t_PixelCenter, in vec2 t_InvResoluti
 
     float lumaMM = MonochromeNTSC(texture(PU_SAMPLER_2D(t_Texture), t_PixelCenter.xy).rgb);
 
-#if 1
+#if 0
     vec2 t_PixelTopLeft = t_PixelCenter.xy - t_InvResolution.xy * 0.5;
     float lumaNW = MonochromeNTSC(texture      (PU_SAMPLER_2D(t_Texture), t_PixelTopLeft.xy)             .rgb);
     float lumaNE = MonochromeNTSC(textureOffset(PU_SAMPLER_2D(t_Texture), t_PixelTopLeft.xy, ivec2(1, 0)).rgb);

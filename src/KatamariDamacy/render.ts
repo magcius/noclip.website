@@ -45,7 +45,7 @@ layout(std140) uniform ub_ModelParams {
 
 #define u_Alpha (u_Misc[0].x)
 
-uniform sampler2D u_Texture[1];
+uniform sampler2D u_Texture;
 
 varying vec3 v_Normal;
 varying vec2 v_TexCoord;
@@ -116,7 +116,7 @@ ${KatamariDamacyProgram.reflectionDeclarations}
 void main() {
     vec4 t_Color;
 
-    t_Color = texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
+    t_Color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
 
 #ifdef LIGHTING
@@ -125,7 +125,7 @@ void main() {
     t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[0].xyz), 0.0) * u_LightColors[0].rgb;
     t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[1].xyz), 0.0) * u_LightColors[1].rgb;
 
-    t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
+    t_Color.rgb *= clamp(t_CombinedIntensity, vec3(0.0), vec3(1.0));
 #endif
 
     t_Color.a *= u_Alpha;
