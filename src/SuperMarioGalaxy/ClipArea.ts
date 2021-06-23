@@ -199,7 +199,7 @@ class ClipAreaMovable extends ClipArea {
         if (this.rotator !== null)
             mat4.copy(this.baseMtx, this.rotator.mtx);
         setMatrixTranslation(this.baseMtx, this.translation);
-}
+    }
 
     public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
@@ -390,7 +390,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
             if (isValidSwitchAppear(this) && !isOnSwitchAppear(sceneObjHolder, this))
                 this.setNerve(ClipAreaDropLaserNrv.Wait);
 
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation);
+            // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation);
         }
     }
 
