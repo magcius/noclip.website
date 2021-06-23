@@ -31,6 +31,7 @@ export const enum MovementType {
     LayoutOnPause                  = 0x12,
     ImageEffect                    = 0x17,
     SwitchWatcherHolder            = 0x1B,
+    ClippedMapParts                = 0x1C,
     Planet                         = 0x1D,
     CollisionMapObj                = 0x1E,
     CollisionEnemy                 = 0x1F,
@@ -49,6 +50,7 @@ export const enum MovementType {
 
 export const enum CalcAnimType {
     None                           = -1,
+    ClippedMapParts                = 0x00,
     Planet                         = 0x01,
     CollisionMapObj                = 0x02,
     CollisionEnemy                 = 0x03,
@@ -65,6 +67,7 @@ export const enum CalcAnimType {
 export const enum DrawBufferType {
     None                           = -1,
 
+    ClippedMapParts                     = 0x00,
     Sky                                 = 0x01,
     Air                                 = 0x02,
     Sun                                 = 0x03,
@@ -124,6 +127,7 @@ export const enum DrawType {
     ShadowSurface                  = 0x26,
     ShadowVolume                   = 0x27,
     AlphaShadow                    = 0x29,
+    ClipArea                       = 0x2A,
     Fur                            = 0x31,
     BloomModel                     = 0x36,
     BrightSun                      = 0x39,

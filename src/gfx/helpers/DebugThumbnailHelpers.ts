@@ -214,11 +214,10 @@ export class DebugThumbnailDrawer {
                     textDrawer.beginDraw();
                     textLists = resolveTextureIDs.map((tex, i) => prepareText(textDrawer, drawOrder[i], anims[i]));
                     textDrawer.endDraw(renderInstManager);
+                    this.uniformBuffer.prepareToRender();
                 }
 
                 resolveTextureIDs.forEach((tex, i) => drawThumbnail(scope, passRenderer, drawOrder[i], textLists[i], anims[i]));
-
-                this.uniformBuffer.prepareToRender();
             });
         });
     }
