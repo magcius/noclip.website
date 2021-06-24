@@ -513,6 +513,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
                 // executeDrawListXlu()
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
+                this.execute(passRenderer, DrawType.ClipAreaDropLaser);
                 this.drawXlu(passRenderer, 0x18);
 
                 this.execute(passRenderer, DrawType.ShadowSurface);

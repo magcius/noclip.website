@@ -194,7 +194,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
         this.spine.setNerve(MapPartsRotatorNrv.Wait);
     }
 
-    private updateVelocity(): void {
+    private updateVelocity(deltaTimeFrames: number): void {
         if (this.rotateAngle !== 0.0 && this.rotateAccelType === AccelType.Swing) {
             const sign = Math.sign(this.rotateSpeed);
             let velocityStep = ((this.rotateSpeed ** 2) * sign) / this.rotateAngle;
@@ -210,7 +210,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
                 velocityStep *= -1.0;
 
             const oldVelocity = this.velocity;
-            this.velocity += velocityStep; // dt?
+            this.velocity += velocityStep * deltaTimeFrames;
 
             this.isOnReverse = Math.sign(oldVelocity) !== Math.sign(this.velocity);
         } else {
@@ -249,7 +249,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
 
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRotatorNrv, deltaTimeFrames: number): void {
         if (currentNerve === MapPartsRotatorNrv.Rotate) {
-            this.updateVelocity();
+            this.updateVelocity(deltaTimeFrames);
             this.updateAngle(deltaTimeFrames);
 
             if ((this.rotateAccelType === AccelType.Normal || this.rotateAccelType === AccelType.Timed) && this.isReachedTargetAngle()) {

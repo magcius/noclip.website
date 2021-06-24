@@ -7,14 +7,14 @@ import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "..
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { fallback, nArray } from "../util";
+import { fallback, mod, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { calcRailPointPos, connectToScene, drawSimpleModel, getEaseInOutValue, getEaseOutValue, getRailPointArg0, getRailPointNum, initDefaultPos, isOnSwitchAppear, isOnSwitchB, isRailReachedGoal, isValidSwitchAppear, isValidSwitchB, listenStageSwitchOnOffAppear, listenStageSwitchOnOffAppearCtrl, moveCoordAndTransToRailStartPoint, moveTransToCurrentRailPos, useStageSwitchReadAppear, useStageSwitchWriteB } from "./ActorUtil";
+import { calcRailPointPos, connectToScene, drawSimpleModel, getCamZdir, getEaseInOutValue, getEaseOutValue, getRailPointArg0, getRailPointNum, initDefaultPos, isOnSwitchAppear, isOnSwitchB, isRailReachedGoal, isValidSwitchAppear, isValidSwitchB, listenStageSwitchOnOffAppear, listenStageSwitchOnOffAppearCtrl, moveCoordAndTransToRailStartPoint, moveTransToCurrentRailPos, useStageSwitchReadAppear, useStageSwitchWriteB } from "./ActorUtil";
 import { getJMapInfoArg0, getJMapInfoBool, JMapInfoIter } from "./JMapInfo";
 import { dynamicSpawnZoneAndLayer, LiveActor, LiveActorGroup, makeMtxTRFromActor, ZoneAndLayer } from "./LiveActor";
 import { getObjectName, SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
-import { colorFromRGBA8, colorNewFromRGBA8, Cyan } from "../Color";
+import { colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { Camera } from "../Camera";
 import { isFirstStep, isGreaterStep, isLessStep } from "./Spine";
 import { invlerp, saturate, setMatrixTranslation, Vec3Zero } from "../MathHelpers";
@@ -23,7 +23,7 @@ import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelper
 import { generateBlurFunction } from "./ImageEffect";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -33,11 +33,14 @@ import { MapPartsRailMover, MapPartsRotator } from "./MapParts";
 import { addHitSensorMapObj } from "./HitSensor";
 import { emitEffectHit } from "./EffectSystem";
 import { createStageSwitchCtrl, isExistStageSwitchAppear, StageSwitchCtrl } from "./Switch";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { TDDraw } from "./DDraw";
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 abstract class ClipAreaShape {
     public modelData: J3DModelData | null = null;
@@ -331,8 +334,13 @@ function moveCoordAndCheckPassPointNo(actor: LiveActor, speed: number): number {
 const enum ClipAreaDropLaserNrv { Wait, Move }
 export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
     private moveSpeed: number;
-    private waitTimer: number = 0;
     private drawCount: number = 0;
+    private headPointIndex: number = 0;
+    private gapPoint: number = 0;
+
+    private ddraw = new TDDraw();
+    private materialLaser: GXMaterialHelperGfx;
+    private points: vec3[] = nArray(64, () => vec3.create());
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'ClipAreaDropLaser');
@@ -349,33 +357,52 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         this.makeActorAppeared(sceneObjHolder);
 
         sceneObjHolder.create(SceneObj.ClipAreaDropHolder);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        const mb = new GXMaterialBuilder('ClipAreaDropLaser Laser');
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+
+        this.materialLaser = new GXMaterialHelperGfx(mb.finish());
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropLaserNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ClipAreaDropLaserNrv.Wait) {
-            if (this.waitTimer > 0)
-                this.waitTimer -= deltaTimeFrames;
+            if (this.drawCount > 0)
+                this.drawCount--;
 
             if (isValidSwitchAppear(this) && isOnSwitchAppear(sceneObjHolder, this))
                 this.setNerve(ClipAreaDropLaserNrv.Move);
         } else if (currentNerve === ClipAreaDropLaserNrv.Move) {
             if (isFirstStep(this)) {
                 moveCoordAndTransToRailStartPoint(this);
-                this.waitTimer = 0;
+                this.drawCount = 0;
             }
 
-            let passPoint = moveCoordAndCheckPassPointNo(this, this.moveSpeed);
+            let passPoint = moveCoordAndCheckPassPointNo(this, this.moveSpeed * deltaTimeFrames);
             moveTransToCurrentRailPos(this);
             this.incrementDrawCount(deltaTimeFrames);
 
+            // noclip bug fix: Fix an issue with gaps in the laser drawing
+            if (this.gapPoint === this.headPointIndex)
+                this.gapPoint = -1;
+
             if (isRailReachedGoal(this)) {
+                this.gapPoint = this.headPointIndex;
                 passPoint = getRailPointNum(this) - 1;
                 moveCoordAndTransToRailStartPoint(this);
             }
 
-            // TODO(jstpierre): Record the point for the line trail.
+            vec3.copy(this.points[this.headPointIndex], this.translation);
 
             if (passPoint !== -1) {
                 calcRailPointPos(scratchVec3a, this, passPoint);
@@ -395,11 +422,64 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
     }
 
     private incrementDrawCount(deltaTimeFrames: number): void {
-        this.drawCount = (this.drawCount + 1) % 64;
+        if (deltaTimeFrames === 0)
+            return;
 
-        this.waitTimer += deltaTimeFrames;
-        if (this.waitTimer >= 64.0)
-            this.waitTimer = 64.0;
+        this.headPointIndex = (this.headPointIndex + 1) % this.points.length;
+        this.drawCount = Math.min(this.drawCount + 1, 64);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (this.drawCount < 3)
+            return;
+
+        const ddraw = this.ddraw;
+        ddraw.beginDraw();
+
+        getCamZdir(scratchVec3b, viewerInput.camera);
+
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, this.drawCount * 2);
+        for (let i = 1; i < this.drawCount; i++) {
+            const i0 = mod(this.headPointIndex - (i - 1), this.points.length);
+            const i1 = mod(this.headPointIndex - (i - 0), this.points.length);
+
+            const p0 = this.points[i0];
+            const p1 = this.points[i1];
+
+            vec3.sub(scratchVec3a, p1, p0);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
+
+            const width = 20;
+
+            if (i0 === this.gapPoint) {
+                ddraw.end();
+                ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+            }
+
+            vec3.scaleAndAdd(scratchVec3a, p1, scratchVec3c, width / 2);
+            ddraw.position3vec3(scratchVec3a);
+            vec3.scaleAndAdd(scratchVec3a, p1, scratchVec3c, -width / 2);
+            ddraw.position3vec3(scratchVec3a);
+        }
+        ddraw.end();
+
+        const renderInst = ddraw.endDraw(renderInstManager);
+        this.materialLaser.setOnRenderInst(renderInstManager.gfxRenderCache.device, renderInstManager.gfxRenderCache, renderInst);
+
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x0040F080);
+        this.materialLaser.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialLaser.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 
     public static requestArchives(): void {
