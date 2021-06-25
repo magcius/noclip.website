@@ -36,31 +36,13 @@ export class KeyframeTrack {
 
     public getNextKeyframeIndexAtTime(t: number) {
         let nextKfIndex = -1;
-        for (let i = 0; i < this.keyframes.length; i++) {
-            if (t < this.keyframes[i].time) {
+        for (let i = this.keyframes.length - 1; i > -1; i--) {
+            if (t <= this.keyframes[i].time) {
                 nextKfIndex = i;
                 break;
             }
         }
         return nextKfIndex;
-    }
-
-    public moveKeyframeLeft(keyframe: Keyframe): boolean {
-        const index = this.keyframes.indexOf(keyframe);
-        if (index < 1)
-            return false;
-        [this.keyframes[index - 1].time, this.keyframes[index].time] = [this.keyframes[index].time, this.keyframes[index - 1].time];
-        [this.keyframes[index - 1], this.keyframes[index]] = [this.keyframes[index], this.keyframes[index - 1]];
-        return true;
-    }
-
-    public moveKeyframeRight(keyframe: Keyframe): boolean {
-        const index = this.keyframes.indexOf(keyframe);
-        if (index === -1 || index > this.keyframes.length - 2)
-            return false;
-        [this.keyframes[index].time, this.keyframes[index + 1].time] = [this.keyframes[index + 1].time, this.keyframes[index].time];
-        [this.keyframes[index], this.keyframes[index + 1]] = [this.keyframes[index + 1], this.keyframes[index]];
-        return true;
     }
 
     public setAllCatmullRomTangents(speedScale: boolean, loop: boolean) {
@@ -94,9 +76,9 @@ export interface CameraAnimation {
     posXTrack: KeyframeTrack;
     posYTrack: KeyframeTrack;
     posZTrack: KeyframeTrack;
-    lookatXTrack: KeyframeTrack;
-    lookatYTrack: KeyframeTrack;
-    lookatZTrack: KeyframeTrack;
+    lookAtXTrack: KeyframeTrack;
+    lookAtYTrack: KeyframeTrack;
+    lookAtZTrack: KeyframeTrack;
     bankTrack: KeyframeTrack;
 }
 
@@ -117,16 +99,16 @@ export class CameraAnimationManager {
         this.currentKeyframeIndices.set(animation.posXTrack, animation.posXTrack.getNextKeyframeIndexAtTime(startTimeMs));
         this.currentKeyframeIndices.set(animation.posYTrack, animation.posYTrack.getNextKeyframeIndexAtTime(startTimeMs));
         this.currentKeyframeIndices.set(animation.posZTrack, animation.posZTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.lookatXTrack, animation.lookatXTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.lookatYTrack, animation.lookatYTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.lookatZTrack, animation.lookatZTrack.getNextKeyframeIndexAtTime(startTimeMs));
+        this.currentKeyframeIndices.set(animation.lookAtXTrack, animation.lookAtXTrack.getNextKeyframeIndexAtTime(startTimeMs));
+        this.currentKeyframeIndices.set(animation.lookAtYTrack, animation.lookAtYTrack.getNextKeyframeIndexAtTime(startTimeMs));
+        this.currentKeyframeIndices.set(animation.lookAtZTrack, animation.lookAtZTrack.getNextKeyframeIndexAtTime(startTimeMs));
         this.currentKeyframeIndices.set(animation.bankTrack, animation.bankTrack.getNextKeyframeIndexAtTime(startTimeMs));
         this.lastKeyframeTimeMs = Math.max(animation.posXTrack.keyframes[animation.posXTrack.keyframes.length - 1].time,
             animation.posYTrack.keyframes[animation.posYTrack.keyframes.length - 1].time,
             animation.posZTrack.keyframes[animation.posZTrack.keyframes.length - 1].time,
-            animation.lookatXTrack.keyframes[animation.lookatXTrack.keyframes.length - 1].time,
-            animation.lookatYTrack.keyframes[animation.lookatYTrack.keyframes.length - 1].time,
-            animation.lookatZTrack.keyframes[animation.lookatZTrack.keyframes.length - 1].time,
+            animation.lookAtXTrack.keyframes[animation.lookAtXTrack.keyframes.length - 1].time,
+            animation.lookAtYTrack.keyframes[animation.lookAtYTrack.keyframes.length - 1].time,
+            animation.lookAtZTrack.keyframes[animation.lookAtZTrack.keyframes.length - 1].time,
             animation.bankTrack.keyframes[animation.bankTrack.keyframes.length - 1].time);
     }
 
@@ -136,9 +118,9 @@ export class CameraAnimationManager {
             this.currentKeyframeIndices.set(this.animation.posXTrack, 0);
             this.currentKeyframeIndices.set(this.animation.posYTrack, 0);
             this.currentKeyframeIndices.set(this.animation.posZTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.lookatXTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.lookatYTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.lookatZTrack, 0);
+            this.currentKeyframeIndices.set(this.animation.lookAtXTrack, 0);
+            this.currentKeyframeIndices.set(this.animation.lookAtYTrack, 0);
+            this.currentKeyframeIndices.set(this.animation.lookAtZTrack, 0);
             this.currentKeyframeIndices.set(this.animation.bankTrack, 0);
             const diff = this.elapsedTimeMs - this.lastKeyframeTimeMs;
             this.elapsedTimeMs = 0 + diff;
@@ -147,12 +129,12 @@ export class CameraAnimationManager {
 
     public getAnimFrame(outInterpStep: InterpolationStep) {
         vec3.set(outInterpStep.pos, this.getCurrentTrackValue(this.animation.posXTrack), this.getCurrentTrackValue(this.animation.posYTrack), this.getCurrentTrackValue(this.animation.posZTrack));
-        vec3.set(outInterpStep.lookAtPos, this.getCurrentTrackValue(this.animation.lookatXTrack), this.getCurrentTrackValue(this.animation.lookatYTrack), this.getCurrentTrackValue(this.animation.lookatZTrack));
+        vec3.set(outInterpStep.lookAtPos, this.getCurrentTrackValue(this.animation.lookAtXTrack), this.getCurrentTrackValue(this.animation.lookAtYTrack), this.getCurrentTrackValue(this.animation.lookAtZTrack));
         outInterpStep.bank = this.getCurrentTrackValue(this.animation.bankTrack);
 
     }
 
-    public getCurrentTrackValue(track: KeyframeTrack): number {
+    public getCurrentTrackValue(track: Readonly<KeyframeTrack>): number {
         let kfIndex = this.currentKeyframeIndices.get(track);
         if (kfIndex === undefined || kfIndex === -1)
             return track.keyframes[track.keyframes.length - 1].value;
