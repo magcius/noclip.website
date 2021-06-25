@@ -42,7 +42,7 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
     { DrawBufferType: DrawBufferType.Enemy,                          LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.EnemyDecoration,                LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: 0x1F,                                          LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
-    { DrawBufferType: 0x00,                                          LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.ClippedMapParts,                LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: 0x18,                                          LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.IndirectMapObj,                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.IndirectMapObjStrongLight,      LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
@@ -68,7 +68,7 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
     { DrawBufferType: DrawBufferType.Sun,                            LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.Environment,                    LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.EnvironmentStrongLight,         LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
-    { DrawBufferType: 0x23,                                          LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.AstroDomeSky,                   LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.BloomModel,                     LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.Model3DFor2D,                   LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_2D },
     { DrawBufferType: 0x25,                                          LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_2D },
@@ -88,23 +88,32 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
 //     this->mDrawBufferGroups[type]->drawOpa();
 //
 //   DrawBufferGroup::drawOpa():
-//     if (this->mLightType != -1)
+//     if (this->mLightType != -1):
 //       loadLight(this->mLightType);
-//     for each (drawBufferExecuter in this->mDrawBufferExecuters)
+//     for each (drawBufferExecuter in this->mDrawBufferExecuters):
 //       drawBufferExecuter->drawOpa();
 //
 //   DrawBufferExecuter::drawOpa():
-//     if (this->mLightType != -1)
+//     if (this->mLightType != -1):
 //       MR::loadLight(this->mLightType);
 //     this->mDrawBuffer->drawOpa();
+//
+//   DrawBuffer::drawOpa():
+//     for each (drawBufferShapeDrawer in this->mOpaDrawBuffers):
+//       drawBufferShapeDrawer->draw();
+//
+//   DrawBufferShapeDrawer::draw():
+//     this->mpMaterial->load();
+//     for each (shape in this->mpShapePackets):
+//       if (shape->mpActorLightCtrl) shape->mpActorLightCtrl->loadLight();
+//       if (!shape->mpPacket->hidden) shape->mpPacket->draw();
 
 // DrawBufferHolder is effectively a singleton. It holds DrawBufferGroups, of which there is one per DrawBufferType.
-// DrawBufferGroups contain DrawBufferExecuter's, which are 1:1 with a model. Each instance of a model is recorded
-// in the DrawBufferExecuter, and the shared model data goes in a DrawBuffer. Each DrawBuffer contains a number
-// of DrawBufferShapeDrawers, which is roughly equivalent to our *MaterialInstance*. Each DrawBufferShapeDrawer
+// DrawBufferGroups contain DrawBufferExecuter's, which are 1:1 with a model resource. Each instance of a model is
+// recorded in the DrawBufferExecuter, and the shared model data goes in a DrawBuffer. Each DrawBuffer contains a
+// number of DrawBufferShapeDrawers, which is roughly equivalent to our *MaterialInstance*. Each DrawBufferShapeDrawer
 // contains multiple J3DShapePackets.
 
-// TODO(jstpierre): Deduplicate DrawBufferExecuter?
 class DrawBufferExecuter {
     public materialOrderOpa: number[] = [];
     public materialOrderXlu: number[] = [];
