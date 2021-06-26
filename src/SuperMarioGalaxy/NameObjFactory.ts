@@ -154,7 +154,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
 
     // Coins
     E("Coin",                           createDirectSetCoin,         requestArchivesCoin),
-    E("PurpleCoin",                     createDirectSetPurpleCoin,            requestArchivesPurpleCoin),
+    E("PurpleCoin",                     createDirectSetPurpleCoin,   requestArchivesPurpleCoin),
     E("RailCoin",                       createRailCoin,              requestArchivesCoin),
     E("PurpleRailCoin",                 createPurpleRailCoin,        requestArchivesPurpleCoin),
     E("CircleCoinGroup",                createCircleCoinGroup,       requestArchivesCoin),
