@@ -173,6 +173,9 @@ export class ShapeGeometry {
             vec3.transformMat4(scratchVec0, scratchVec0, modelViewMtx);
             const depth = -scratchVec0[2];
 
+            // const debugCtx = getDebugOverlayCanvas2D();
+            // drawWorldSpaceAABB(debugCtx, camera.clipFromWorldMatrix, this.aabb, matrix);
+
             // XXX: the game has a max sort-key of 0x7fffff, whereas we have a max of 0xffff.
             // Hopefully our depth range is adequate.
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
