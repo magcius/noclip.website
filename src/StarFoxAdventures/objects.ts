@@ -1210,7 +1210,7 @@ export class ObjectInstance {
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
             // const debugCtx = getDebugOverlayCanvas2D();
             // drawWorldSpacePoint(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos);
-            // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ") cullRadius " + this.cullRadius + " scale " + this.scale);
+            // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ")");
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,

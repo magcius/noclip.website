@@ -164,6 +164,15 @@ export class ShapeGeometry {
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
 
+        // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
+        // The translucent flag must be set before calling setSortKeyDepth, otherwise errors will occur.
+        if (overrideSortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
+        else if (this.sortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + this.sortLayer);
+        else
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT);
+
         if (overrideSortDepth !== undefined)
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, overrideSortDepth);
         else if (this.aabb !== undefined) {
@@ -180,13 +189,6 @@ export class ShapeGeometry {
             // Hopefully our depth range is adequate.
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
-
-        // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
-        // FIXME: Depth sorting errors abound.
-        if (overrideSortLayer !== undefined)
-            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
-        else if (this.sortLayer !== undefined)
-            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + this.sortLayer);
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
             // If fine-skinning is enabled, matrix 9 is overridden with the identity matrix.
