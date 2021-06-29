@@ -168,7 +168,7 @@ export class SkyboxRenderer {
         let dstIdx = 0;
 
         function buildPlaneVert(pb: number, s: number, t: number): void {
-            const side = 30000 * Math.sqrt(1/3);
+            const side = 100000 * Math.sqrt(1/3);
             const g = [-s*side, s*side, -t*side, t*side, -side, side];
             vertexData[dstVert++] = g[(pb >>> 8) & 0x0F];
             vertexData[dstVert++] = g[(pb >>> 4) & 0x0F];
@@ -1403,7 +1403,7 @@ export class SourceRenderer implements SceneGfx {
 
         this.mainViewRenderer.prepareToRender(this);
 
-        // Refraction is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
+        // Reflection is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
         if (this.renderContext.showExpensiveWater) {
             const bsp = this.bspRenderers[0].bsp;
             const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos);
@@ -1472,16 +1472,9 @@ export class SourceRenderer implements SceneGfx {
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
 
-        if (this.reflectViewRenderer.enabled) {
-            const reflectionColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-
-            // Render the reflection view at a smaller resolution...
-            reflectionColorDesc.copyDimensions(mainColorDesc);
-            reflectionColorDesc.width >>= 1;
-            reflectionColorDesc.height >>= 1;
-
-            this.reflectViewRenderer.pushPasses(this, builder, reflectionColorDesc);
-        }
+        // Render reflection view first.
+        if (this.reflectViewRenderer.enabled)
+            this.reflectViewRenderer.pushPasses(this, builder, mainColorDesc);
 
         this.mainViewRenderer.pushPasses(this, builder, mainColorDesc);
         const mainColorTargetID = assertExists(this.mainViewRenderer.outputColorTargetID);
