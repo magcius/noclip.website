@@ -1,5 +1,5 @@
 
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin } from "../platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform";
 import { assert } from "../platform/GfxPlatformUtil";
 import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
 
@@ -32,6 +32,8 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
 
     if (vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft)
         extraDefines += `${defineStr(`VIEWPORT_ORIGIN_TL`, `1`)}\n`;
+    if (vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero)
+        extraDefines += `${defineStr(`CLIPSPACE_NEAR_ZERO`, `1`)}\n`;
 
     let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
@@ -47,10 +49,10 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
         binding = 0;
 
         assert(vendorInfo.separateSamplerTextures);
-        rest = rest.replace(/uniform sampler2D (.*);/g, (substr, samplerName) => {
+        rest = rest.replace(/uniform sampler(\w+) (.*);/g, (substr, samplerType, samplerName) => {
             // Can't have samplers in vertex for some reason.
             return type === 'frag' ? `
-layout(set = ${set}, binding = ${binding++}) uniform texture2D T_${samplerName};
+layout(set = ${set}, binding = ${binding++}) uniform texture${samplerType} T_${samplerName};
 layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
 ` : '';
         });
@@ -62,38 +64,35 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         outLayout = 'layout(location = 0) ';
 
         extraDefines += `${defineStr(`gl_VertexID`, `gl_VertexIndex`)}\n`;
+        extraDefines += `${defineStr(`gl_InstanceID`, `gl_InstanceIndex`)}\n`;
     }
 
+    rest = rest.replace(/\bPU_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+        return `SAMPLER_${samplerType}(P_${samplerName})`;
+    });
+
     if (vendorInfo.separateSamplerTextures) {
-        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `texture2D T_P_${samplerName}, sampler S_P_${samplerName}`;
+        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return `texture${samplerType} T_P_${samplerName}, sampler S_P_${samplerName}`;
         });
 
-        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `SAMPLER_2D(P_${samplerName})`;
-        });
-
-        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return `T_${samplerName}, S_${samplerName}`;
         });
 
-        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `sampler2D(T_${samplerName}, S_${samplerName})`;
+        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return `sampler${samplerType}(T_${samplerName}, S_${samplerName})`;
         });
     } else {
-        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `sampler2D P_${samplerName}`;
+        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return `sampler${samplerType} P_${samplerName}`;
         });
 
-        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `SAMPLER_2D(P_${samplerName})`;
-        });
-
-        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return samplerName;
         });
 
-        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return samplerName;
         });
     }

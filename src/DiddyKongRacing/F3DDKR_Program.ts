@@ -22,16 +22,26 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_DrawParams {
-    // u_Options.x = Use texture
-    // u_Options.y = Use vertex colors
-    // u_Options.z = Use vertex normals
-    // u_Options.w = Use object animation
-    bvec4 u_Options;
-    float u_AnimProgress; // Interpolation between animations.
     vec4 u_Color;
     vec4 u_TexCoordOffset;
     Mat4x3 u_ViewMatrix[${MAX_NUM_OF_INSTANCES}];
 };
+
+#define u_AnimProgress (u_TexCoordOffset.z)
+
+// t_Options.x = Use texture
+// t_Options.y = Use vertex colors
+// t_Options.z = Use vertex normals
+// t_Options.w = Use object animation
+bvec4 UnpackOptions() {
+    int t_PackedOptions = int(u_TexCoordOffset.w);
+    bvec4 t_Options = bvec4(false);
+    t_Options.x = bool(t_PackedOptions >> 3u);
+    t_Options.y = bool(t_PackedOptions >> 2u);
+    t_Options.z = bool(t_PackedOptions >> 1u);
+    t_Options.w = bool(t_PackedOptions >> 0u);
+    return t_Options;
+}
 
 uniform sampler2D u_Texture;
 
@@ -47,15 +57,16 @@ layout(location = ${F3DDKR_Program.a_TexCoord}) in vec2 a_TexCoord;
 
 void main() {
     vec3 pos;
+    bvec4 t_Options = UnpackOptions();
     
-    if(u_Options.w) { // u_Options.w = Use object animation
+    if(t_Options.w) { // t_Options.w = Use object animation
         pos = mix(a_Position, a_Position_2, u_AnimProgress); // lerp between the keyframes.
     } else {
         pos = a_Position; // Just use the default position.
     }
     
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix[gl_InstanceID]), vec4(pos, 1.0)));
-    if(u_Options.z) {
+    if(t_Options.z) {
         v_Color = vec4(1.0, 1.0, 1.0, 1.0);
     } else {
         v_Color = vec4(a_Color.xyz, a_Color.w * u_Color.w);
@@ -78,7 +89,6 @@ vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
 }
 
 void main() { 
-
     vec4 textureColor = vec4(1.0, 1.0, 1.0, 1.0);
     vec4 vertexColor = vec4(1.0, 1.0, 1.0, 1.0);
 

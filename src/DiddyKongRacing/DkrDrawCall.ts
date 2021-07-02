@@ -283,10 +283,6 @@ export class DkrDrawCall {
             d2[offs2 + 2] = params.usesNormals ? 1 : 0;
             d2[offs2 + 3] = !!params.objAnim ? 1 : 0;
             offs2 += 4;
-            if(!!params.objAnim) {
-                d2[offs2] = params.objAnim.getProgressInCurrentFrame();
-            }
-            offs2 += 4;
             // Color
             d2[offs2]     = 1.0;
             d2[offs2 + 1] = 1.0;
@@ -297,6 +293,9 @@ export class DkrDrawCall {
                 const texCoordOffset = this.texture!.getTexCoordOffset();
                 d2[offs2] = texCoordOffset[0] + this.scrollU;
                 d2[offs2+1] = texCoordOffset[1] + this.scrollV;
+            }
+            if(!!params.objAnim) {
+                d2[offs2+2] = params.objAnim.getProgressInCurrentFrame();
             }
             offs2 += 4;
     

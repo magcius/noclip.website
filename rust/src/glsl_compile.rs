@@ -35,7 +35,7 @@ pub fn glsl_compile(source: &str, stage: &str) -> String {
         },
     };
 
-    let info = match naga::valid::Validator::new(naga::valid::ValidationFlags::empty(), naga::valid::Capabilities::all()).validate(&module) {
+    let info = match naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module) {
         Ok(v) => v,
         Err(e) => {
             show_error(&"validator", e);

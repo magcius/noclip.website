@@ -843,6 +843,7 @@ export class SourceColorCorrection {
     private weights: number[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
+        /*
         const width = this.size, height = this.size, depth = this.size;
 
         this.lutData = new Uint8Array(width * height * depth * 4);
@@ -863,6 +864,7 @@ export class SourceColorCorrection {
         });
 
         this.prepareToRender(device);
+        */
     }
 
     public addLayer(layer: Uint8Array): void {
@@ -924,6 +926,8 @@ export class SourceColorCorrection {
     }
 
     public prepareToRender(device: GfxDevice): void {
+        return;
+
         if (!this.dirty)
             return;
 
@@ -1015,9 +1019,11 @@ void main() {
     vec4 t_Color = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord);
     t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
 
+/*
     vec3 t_Size = vec3(textureSize(u_ColorCorrectTexture, 0));
     vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
-    t_Color.rgb = texture(u_ColorCorrectTexture, t_TexCoord).rgb;
+    t_Color.rgb = texture(SAMPLER_3D(u_ColorCorrectTexture), t_TexCoord).rgb;
+*/
 
     gl_FragColor = t_Color;
 }
@@ -1503,7 +1509,7 @@ export class SourceRenderer implements SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
+                // this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
                 postRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 postRenderInst.drawOnPass(cache, passRenderer);
             });

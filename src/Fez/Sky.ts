@@ -30,7 +30,7 @@ layout(std140) uniform ub_Params {
 
 #define u_Alpha (u_Misc[0].x)
 
-uniform sampler2D u_Texture;
+uniform sampler2D u_SkyTexture;
 `;
 
     public vert: string = `
@@ -43,6 +43,15 @@ void main() {
     gl_Position.xy = p * vec2(2) - vec2(1);
     gl_Position.zw = vec2(${reverseDepthForDepthOffset(1)}, 1);
     v_TexCoord = p * u_ScaleOffset.xy + u_ScaleOffset.zw;
+
+#ifdef VIEWPORT_ORIGIN_TL
+    v_TexCoord.y = 1.0 - v_TexCoord.y;
+#endif
+
+#ifdef CLIPSPACE_NEAR_ZERO
+    // this is not quite right... needs to take w into account
+    gl_Position.z = gl_Position.z * 0.5 + 0.5;
+#endif
 }
 `;
 
@@ -50,8 +59,8 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor = vec4(color.rgb, u_Alpha);
+    vec4 t_Color = texture(SAMPLER_2D(u_SkyTexture), v_TexCoord);
+    gl_FragColor = vec4(t_Color.rgb, u_Alpha);
 }
 `;
 }

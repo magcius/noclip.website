@@ -382,8 +382,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public descriptor: GfxRenderPassDescriptor;
     private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
     private gpuRenderPassDescriptor: GPURenderPassDescriptor;
-    private gpuColorAttachments: GPURenderPassColorAttachmentNew[];
-    private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachmentNew;
+    private gpuColorAttachments: GPURenderPassColorAttachment[];
+    private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachment;
     private gfxColorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private debugPointer: any;
@@ -641,6 +641,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
     public readonly supportsSyncPipelineCompilation: boolean = false;
 
+    public static readonly requestFeatures: GPUFeatureName[] = [
+        // 'depth24unorm-stencil8',
+        // 'depth32float-stencil8',
+        'texture-compression-bc',
+    ];
+
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glslang: Glslang, private glsl_compile: (src: string, shaderStage: string) => string) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
@@ -813,13 +819,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         // Tint doesn't support interpolate(perspective) yet https://bugs.chromium.org/p/tint/issues/detail?id=746
         res = res.replace(/, interpolate\(perspective\)/g, '');
 
-        //this.device.pushErrorScope('validation');
+        this.device.pushErrorScope('validation');
         const shaderModule = this.device.createShaderModule({ code: res });
-        /*const error = await this.device.popErrorScope();
+        const error = await this.device.popErrorScope();
         if (error !== null) {
             console.error(error);
             throw "whoops";
-        }*/
+        }
 
         return { module: shaderModule, entryPoint: 'main' };
     }
@@ -999,7 +1005,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         renderPipeline.isCreating = true;
 
-        const gpuRenderPipeline: GPURenderPipelineDescriptorNew = {
+        const gpuRenderPipeline: GPURenderPipelineDescriptor = {
             layout,
             vertex: {
                 ... vertexStage,
@@ -1017,7 +1023,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
 
         // TODO(jstpierre): createRenderPipelineAsync
+        this.device.pushErrorScope('validation');
         renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipeline);
+        const error = await this.device.popErrorScope();
+        if (error !== null) {
+            console.error(error);
+            throw "whoops";
+        }
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
@@ -1231,7 +1243,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (adapter === null)
         return null;
 
-    const device = await adapter.requestDevice();
+    const device = await adapter.requestDevice({ nonGuaranteedFeatures: GfxImplP_WebGPU.requestFeatures });
     if (device === null)
         return null;
 
