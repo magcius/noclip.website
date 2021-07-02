@@ -2,7 +2,6 @@
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { assertExists, assert, leftPad, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
-import glslang, { Glslang, ShaderStage } from '../../vendor/glslang/glslang';
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
 
@@ -647,7 +646,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         'texture-compression-bc',
     ];
 
-    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glslang: Glslang, private glsl_compile: (src: string, shaderStage: string) => string) {
+    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: (src: string, shaderStage: string) => string) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
             wrapS: GfxWrapMode.Clamp,
@@ -807,7 +806,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return attachment;
     }
 
-    private async _createShaderStageGlslCompile(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStage> {
+    private async _createShaderStage(sourceText: string, shaderStage: 'vertex' | 'fragment'): Promise<GPUProgrammableStage> {
         let res: string;
         try {
             res = this.glsl_compile(sourceText, shaderStage);
@@ -828,23 +827,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }*/
 
         return { module: shaderModule, entryPoint: 'main' };
-    }
-
-    private async _createShaderStageGlslang(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStage> {
-        let res: Uint32Array;
-        try {
-            res = this.glslang.compileGLSL(sourceText, shaderStage, true);
-        } catch(e) {
-            console.error(prependLineNo(sourceText));
-            throw "whoops";
-        }
-
-        const shaderModule = this.device.createShaderModule({ code: res });
-        return { module: shaderModule, entryPoint: 'main' };
-    }
-
-    private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStage> {
-        return this._createShaderStageGlslCompile(sourceText, shaderStage);
     }
 
     private async _createProgram(program: GfxProgramP_WebGPU): Promise<void> {
@@ -1254,10 +1236,6 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (!context)
         return null;
 
-    const [_glslang, { glsl_compile }] = await Promise.all([
-        await glslang('glslang.wasm'),
-        await import('../../../rust/pkg/index'),
-    ])
-
-    return new GfxImplP_WebGPU(adapter, device, canvas, context, _glslang, glsl_compile);
+    const { glsl_compile } = await import('../../../rust/pkg/index');
+    return new GfxImplP_WebGPU(adapter, device, canvas, context, glsl_compile);
 }
