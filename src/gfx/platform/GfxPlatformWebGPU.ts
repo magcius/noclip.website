@@ -641,9 +641,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
     public readonly supportsSyncPipelineCompilation: boolean = false;
 
-    public static readonly requestFeatures: GPUFeatureName[] = [
-        // 'depth24unorm-stencil8',
-        // 'depth32float-stencil8',
+    public static readonly optionalFeatures: GPUFeatureName[] = [
+        'depth24unorm-stencil8',
+        'depth32float-stencil8',
         'texture-compression-bc',
     ];
 
@@ -819,13 +819,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         // Tint doesn't support interpolate(perspective) yet https://bugs.chromium.org/p/tint/issues/detail?id=746
         res = res.replace(/, interpolate\(perspective\)/g, '');
 
-        this.device.pushErrorScope('validation');
+        // this.device.pushErrorScope('validation');
         const shaderModule = this.device.createShaderModule({ code: res });
-        const error = await this.device.popErrorScope();
+        /*const error = await this.device.popErrorScope();
         if (error !== null) {
             console.error(error);
             throw "whoops";
-        }
+        }*/
 
         return { module: shaderModule, entryPoint: 'main' };
     }
@@ -1023,13 +1023,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
 
         // TODO(jstpierre): createRenderPipelineAsync
-        this.device.pushErrorScope('validation');
+        //this.device.pushErrorScope('validation');
         renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipeline);
-        const error = await this.device.popErrorScope();
+        /*const error = await this.device.popErrorScope();
         if (error !== null) {
             console.error(error);
             throw "whoops";
-        }
+        }*/
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
@@ -1243,7 +1243,9 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (adapter === null)
         return null;
 
-    const device = await adapter.requestDevice({ nonGuaranteedFeatures: GfxImplP_WebGPU.requestFeatures });
+    const requiredFeatures = GfxImplP_WebGPU.optionalFeatures.filter((feature) => adapter.features.has(feature));
+
+    const device = await adapter.requestDevice({ requiredFeatures });
     if (device === null)
         return null;
 
