@@ -1365,6 +1365,12 @@ export class SourceRenderer implements SceneGfx {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const enableDecals = new UI.Checkbox('Enable Decals', true);
+        enableDecals.onchanged = () => {
+            const v = enableDecals.checked;
+            this.mainViewRenderer.drawDeferredDecals = v;
+        };
+        renderHacksPanel.contents.appendChild(enableDecals.elem);
         const enableFog = new UI.Checkbox('Enable Fog', true);
         enableFog.onchanged = () => {
             const v = enableFog.checked;
