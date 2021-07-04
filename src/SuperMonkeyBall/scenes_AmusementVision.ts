@@ -5,8 +5,8 @@ import * as AVtpl from './AVtpl';
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from '../SceneBase';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { makeBackbufferDescSimple, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render';
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, GMAData } from './render';
 import AnimationController from '../AnimationController';
@@ -81,7 +81,7 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = this.modelInstances.length-1; i >= 0; i--)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -101,20 +101,20 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
