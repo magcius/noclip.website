@@ -91,6 +91,7 @@ export class DeviceProgram {
             };
             onresize();
             (win as any).editor = editor;
+            (window as any).editor = editor;
             win.document.body.appendChild(editor.elem);
         };
         if (win.document.readyState === 'complete')
