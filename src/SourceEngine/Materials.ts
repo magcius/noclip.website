@@ -588,7 +588,7 @@ export abstract class BaseMaterial {
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
-        // assert(m[1] === 0.0 && m[2] === 0.0);
+        assert(m[1] === 0.0 && m[2] === 0.0);
         let scaleS = m[0];
         let scaleT = m[5];
         if (useMappingTransform) {
@@ -1358,20 +1358,21 @@ void mainPS() {
         return;
     }
 
-    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)));
-
     vec4 t_Albedo, t_BlendedAlpha;
-#ifdef USE_DETAIL
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
-    t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
-#else
-    t_Albedo = t_BaseTexture;
-#endif
+
+    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0]), v_TexCoord0.xy));
 
 #ifdef USE_BASETEXTURE2
     // Blend in BaseTexture2 using blend factor.
     vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy));
-    t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
+    t_Albedo = mix(t_BaseTexture, t_BaseTexture2, v_PositionWorld.w);
+#else
+    t_Albedo = t_BaseTexture;
+#endif
+
+#ifdef USE_DETAIL
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
+    t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
     vec4 t_FinalColor;
