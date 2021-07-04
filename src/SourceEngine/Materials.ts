@@ -891,10 +891,7 @@ layout(std140) uniform ub_ObjectParams {
     // We support up to N lights.
     WorldLight u_WorldLights[${Material_Generic_Program.MaxDynamicWorldLights}];
 #endif
-    vec4 u_BaseTextureScaleBias;
-#ifdef USE_DETAIL
-    vec4 u_DetailScaleBias;
-#endif
+    Mat4x2 u_BaseTextureTransform;
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
@@ -917,6 +914,7 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
+#define u_DetailScale        (u_Misc[0].z)
 
 #if SKINNING_MODE != ${SkinningMode.None}
 layout(std140) uniform ub_SkinningParams {
@@ -1189,9 +1187,9 @@ void mainVS() {
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias);
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #ifdef USE_DETAIL
-    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
+    v_TexCoord0.zw = v_TexCoord0.xy * u_DetailScale;
 #endif
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
@@ -1201,7 +1199,7 @@ void mainVS() {
 #endif
 #ifdef USE_BUMPMAP
     v_LightmapOffset = abs(a_TangentS.w);
-    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #endif
 
 #ifdef HAS_PROJECTED_TEXCOORD
@@ -1939,12 +1937,7 @@ class Material_Generic extends BaseMaterial {
             offs += lightCache.fillWorldLights(d, offs);
         }
 
-        offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
-
-        if (this.wantsDetail) {
-            scaleBiasSet(scratchVec4, this.paramGetNumber('$detailscale'));
-            offs += fillVec4v(d, offs, scratchVec4);
-        }
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
@@ -1989,7 +1982,8 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
+        const detailScale = this.paramGetNumber('$detailscale');
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, detailScale);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
