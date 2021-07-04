@@ -1338,6 +1338,12 @@ export class SourceRenderer implements SceneGfx {
     }
 
     private movement(): void {
+        // Update render context.
+
+        // TODO(jstpierre): The world lighting state should probably be moved to the BSP? Or maybe SourceRenderContext is moved to the BSP...
+        this.renderContext.worldLightingState.update(this.renderContext.globalTime);
+
+        // Update BSP (includes entities).
         this.renderContext.currentView = this.mainViewRenderer.mainView;
 
         for (let i = 0; i < this.bspRenderers.length; i++)

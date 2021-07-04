@@ -1931,7 +1931,7 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsDynamicLighting) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
-            offs += lightCache.fillWorldLights(d, offs);
+            offs += lightCache.fillWorldLights(d, offs, renderContext.worldLightingState);
         }
 
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
@@ -3096,7 +3096,7 @@ function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): numb
 const scratchVec3 = vec3.create();
 const ntscGrayscale = vec3.fromValues(0.299, 0.587, 0.114);
 
-function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null): number {
+function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null, worldLightingState: WorldLightingState): number {
     const base = offs;
 
     if (light === null) {
@@ -3104,31 +3104,39 @@ function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null)
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
-    } else if (light.type === WorldLightType.Surface) {
+        return offs - base;
+    }
+
+    if (light.style >= 0)
+        vec3.scale(scratchVec3, light.intensity, worldLightingState.styleIntensities[light.style]);
+    else
+        vec3.copy(scratchVec3, light.intensity);
+
+    if (light.type === WorldLightType.Surface) {
         // 180 degree spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec4(d, offs, 0, 0, 1);
         offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.Spotlight) {
         // Controllable spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity, light.exponent);
+        offs += fillVec3v(d, offs, scratchVec3, light.exponent);
         offs += fillVec3v(d, offs, light.distAttenuation, light.stopdot);
         offs += fillVec3v(d, offs, light.normal, light.stopdot2);
     } else if (light.type === WorldLightType.Point) {
         const type = ShaderWorldLightType.Point;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec3v(d, offs, light.distAttenuation);
         offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.SkyLight) {
         // Directional.
         const type = ShaderWorldLightType.Directional;
         offs += fillVec3v(d, offs, Vec3Zero, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec4(d, offs, 0);
         offs += fillVec3v(d, offs, light.normal);
     } else {
@@ -3152,8 +3160,8 @@ class LightCacheWorldLight {
         this.intensity = 0;
     }
 
-    public fill(d: Float32Array, offs: number): number {
-        return fillWorldLight(d, offs, this.worldLight);
+    public fill(d: Float32Array, offs: number, worldLightingState: WorldLightingState): number {
+        return fillWorldLight(d, offs, this.worldLight, worldLightingState);
     }
 }
 
@@ -3311,10 +3319,10 @@ export class LightCache {
         return offs - base;
     }
 
-    public fillWorldLights(d: Float32Array, offs: number): number {
+    public fillWorldLights(d: Float32Array, offs: number, worldLightingState: WorldLightingState): number {
         const base = offs;
         for (let i = 0; i < this.worldLights.length; i++)
-            offs += this.worldLights[i].fill(d, offs);
+            offs += this.worldLights[i].fill(d, offs, worldLightingState);
         return offs - base;
     }
 }
@@ -3565,10 +3573,59 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
 }
 
 export class WorldLightingState {
-    public styleIntensities = new Float32Array(255);
+    public styleIntensities = new Float32Array(64);
+    public stylePatterns: string[] = [
+        'm',
+        'mmnmmommommnonmmonqnmmo',
+        'abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba',
+        'mmmmmaaaaammmmmaaaaaabcdefgabcdefg',
+        'mamamamamama',
+        'jklmnopqrstuvwxyzyxwvutsrqponmlkj',
+        'nmonqnmomnmomomno',
+        'mmmaaaabcdefgmmmmaaaammmaamm',
+        'mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa',
+        'aaaaaaaazzzzzzzz',
+        'mmamammmmammamamaaamammma',
+        'abcdefghijklmnopqrrqponmlkjihgfedcba',
+        'mmnnmmnnnmmnn',
+    ];
+    private smoothAnim = false;
 
     constructor() {
         this.styleIntensities.fill(1.0);
+    }
+
+    private styleIntensityFromChar(c: number): number {
+        const alpha = c - 0x61;
+        assert(alpha >= 0 && alpha <= 25);
+        return (alpha * 22) / 264.0;
+    }
+
+    private styleIntensityFromPattern(pattern: string, time: number): number {
+        const t = time % pattern.length;
+        const i0 = t | 0;
+        const p0 = this.styleIntensityFromChar(pattern.charCodeAt(i0));
+
+        if (this.smoothAnim) {
+            const i1 = (i0 + 1) % pattern.length;
+            const t01 = t - i0;
+
+            const p1 = this.styleIntensityFromChar(pattern.charCodeAt(i1));
+            return lerp(p0, p1, t01);
+        } else {
+            return p0;
+        }
+    }
+
+    public update(timeInSeconds: number): void {
+        const time = (timeInSeconds * 10);
+        for (let i = 0; i < this.styleIntensities.length; i++) {
+            const pattern = this.stylePatterns[i];
+            if (pattern === undefined)
+                continue;
+
+            this.styleIntensities[i] = this.styleIntensityFromPattern(pattern, time);
+        }
     }
 }
 
