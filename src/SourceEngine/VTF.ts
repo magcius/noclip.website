@@ -2,24 +2,25 @@
 // Valve Texture File
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { readString, assert, nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const enum ImageFormat {
-    RGBA8888     = 0x00,
-    ABGR8888     = 0x01,
-    BGR888       = 0x03,
-    I8           = 0x05,
-    ARGB8888     = 0x0B,
-    BGRA8888     = 0x0C,
-    DXT1         = 0x0D,
-    DXT3         = 0x0E,
-    DXT5         = 0x0F,
-    BGRX8888     = 0x10,
-    BGRA5551     = 0x15,
-    UV88         = 0x16,
+    RGBA8888      = 0x00,
+    ABGR8888      = 0x01,
+    BGR888        = 0x03,
+    I8            = 0x05,
+    ARGB8888      = 0x0B,
+    BGRA8888      = 0x0C,
+    DXT1          = 0x0D,
+    DXT3          = 0x0E,
+    DXT5          = 0x0F,
+    BGRX8888      = 0x10,
+    BGRA5551      = 0x15,
+    UV88          = 0x16,
+    RGBA16161616F = 0x18,
 }
 
 function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
@@ -32,6 +33,8 @@ function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
 }
 
 function imageFormatGetBPP(fmt: ImageFormat): number {
+    if (fmt === ImageFormat.RGBA16161616F)
+        return 8;
     if (fmt === ImageFormat.RGBA8888)
         return 4;
     if (fmt === ImageFormat.ABGR8888)
@@ -93,6 +96,8 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return GfxFormat.S8_RG_NORM;
     else if (fmt === ImageFormat.I8)
         return GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.RGBA16161616F)
+        return GfxFormat.F16_RGBA;
     else
         throw "whoops";
 }
@@ -156,7 +161,7 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
         return dst;
     } else if (fmt === ImageFormat.UV88) {
         return data.createTypedArray(Int8Array);
-    } else if (fmt === ImageFormat.BGRA5551) {
+    } else if (fmt === ImageFormat.BGRA5551 || fmt === ImageFormat.RGBA16161616F) {
         return data.createTypedArray(Uint16Array);
     } else if (fmt === ImageFormat.I8) {
         // I8 => RGBA8888
@@ -204,7 +209,7 @@ export class VTF {
     private versionMajor: number;
     private versionMinor: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean, public lateBinding: string | null = null) {
         if (buffer === null)
             return;
 
@@ -212,7 +217,9 @@ export class VTF {
 
         assert(readString(buffer, 0x00, 0x04, false) === 'VTF\0');
         this.versionMajor = view.getUint32(0x04, true);
+        assert(this.versionMajor === 7);
         this.versionMinor = view.getUint32(0x08, true);
+        assert(this.versionMinor >= 0 && this.versionMinor <= 5);
         const headerSize = view.getUint32(0x0C, true);
 
         let dataIdx: number;
@@ -270,13 +277,15 @@ export class VTF {
         const pixelFormat = imageFormatToGfxFormat(device, this.format, srgb);
         const dimension = isCube ? GfxTextureDimension.Cube : GfxTextureDimension.n2D;
         const faceCount = (isCube ? 6 : 1);
-        const faceDataCount = (isCube ? 7 : 1);
+        const hasSpheremap = this.versionMinor < 5;
+        const faceDataCount = (isCube ? (6 + (hasSpheremap ? 1 : 0)) : 1);
         const descriptor: GfxTextureDescriptor = {
             dimension, pixelFormat,
             width: this.width,
             height: this.height,
             numLevels: this.numLevels,
             depth: this.depth * faceCount,
+            usage: GfxTextureUsage.Sampled,
         };
 
         for (let i = 0; i < this.numFrames; i++) {
@@ -303,17 +312,20 @@ export class VTF {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.uploadTextureData(this.gfxTextures[i], 0, levelDatas[i]);
 
-        const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
-        const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
+        const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.Clamp : GfxWrapMode.Repeat;
+        const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.Clamp : GfxWrapMode.Repeat;
 
-        const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.POINT : GfxTexFilterMode.BILINEAR;
+        const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.Point : GfxTexFilterMode.Bilinear;
         const minFilter = texFilter;
         const magFilter = texFilter;
         const forceTrilinear = true;
-        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NO_MIP : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NEAREST;
-        this.gfxSampler = cache.createSampler(device, {
+        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NoMip : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+
+        const canSupportAnisotropy = texFilter === GfxTexFilterMode.Bilinear && mipFilter === GfxMipFilterMode.Linear;
+        const maxAnisotropy = canSupportAnisotropy ? 16 : 1;
+        this.gfxSampler = cache.createSampler({
             wrapS, wrapT, minFilter, magFilter, mipFilter,
-            minLOD: 0, maxLOD: 100,
+            maxAnisotropy,
         });
     }
 
@@ -335,6 +347,7 @@ export class VTF {
         m.gfxSampler = this.gfxSampler;
         m.width = this.width;
         m.height = this.height;
+        m.lateBinding = this.lateBinding;
     }
 
     public isTranslucent(): boolean {

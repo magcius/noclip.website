@@ -3,7 +3,7 @@ import { NameObj } from "../NameObj";
 import { SceneObjHolder, SceneObj } from "../Main";
 import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ, getCamYdir } from "../ActorUtil";
 import { ViewerRenderInput } from "../../viewer";
-import { vec3, vec2, vec4, mat4 } from "gl-matrix";
+import { vec3, vec2, vec4, mat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { AreaObj, AreaFormType } from "../AreaObj";
 import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo";
 import { fallback } from "../../util";
@@ -45,13 +45,13 @@ const scratchVec3c = vec3.create();
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();
 
-export function project(dst: vec4, v: vec3, viewerInput: ViewerRenderInput): void {
+export function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
     vec4.set(dst, v[0], v[1], v[2], 1.0);
     vec4.transformMat4(dst, dst, viewerInput.camera.clipFromWorldMatrix);
     divideByW(dst, dst);
 }
 
-export function calcScreenPosition(dst: vec2, v: vec4, viewerInput: ViewerRenderInput): void {
+export function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
     dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
     dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
 }
@@ -138,7 +138,7 @@ export class BrightObjBase {
             // Put projected coordinate in 0-1 normalized space.
             const projectedZ = scratchVec4[2] * 0.5 + 0.5;
 
-            const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.LESS);
+            const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.Less);
 
             if (visible) {
                 checkArg.pointsVisibleNum++;

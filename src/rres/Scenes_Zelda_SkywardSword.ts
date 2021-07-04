@@ -16,11 +16,11 @@ import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { ColorKind } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import { colorNewCopy, White } from '../Color';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -304,7 +304,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.modelCache.destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
@@ -318,7 +318,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -337,7 +337,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, ZSSPass.SKYBOX);
+                executeOnPass(this.renderHelper.renderInstManager, passRenderer, ZSSPass.SKYBOX);
             });
         });
 
@@ -347,7 +347,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, ZSSPass.OPAQUE);
+                executeOnPass(this.renderHelper.renderInstManager, passRenderer, ZSSPass.OPAQUE);
             });
         });
 
@@ -363,7 +363,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer, scope) => {
                     renderInstManager.setVisibleByFilterKeyExact(ZSSPass.INDIRECT);
                     renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    renderInstManager.drawOnPassRenderer(passRenderer);
                 });
             });
         }
@@ -371,7 +371,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 

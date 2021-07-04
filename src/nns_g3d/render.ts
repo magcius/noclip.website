@@ -45,9 +45,9 @@ class MaterialInstance {
         const texture = this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         if (texture !== null) {
             this.gfxSampler = device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.NoMip,
                 wrapS: parseTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -74,9 +74,9 @@ class MaterialInstance {
         };
 
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
     }
 

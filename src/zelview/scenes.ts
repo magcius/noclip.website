@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxRenderPassDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
@@ -10,12 +10,12 @@ import { RootMeshRenderer, MeshData, Mesh } from './render';
 import { RSPState, RSPOutput } from './f3dzex';
 import { CameraController } from '../Camera';
 import * as UI from '../ui';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `zelview`;
 
 class ZelviewRenderer implements Viewer.SceneGfx {
-    private clearRenderPassDescriptor: GfxRenderPassDescriptor;
+    private clearAttachmentDescriptor: GfxrAttachmentClearDescriptor;
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -24,7 +24,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private zelview: ZELVIEW0) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
+        this.clearAttachmentDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
     }
 
     public createPanels(): UI.Panel[] {
@@ -35,7 +35,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         const enableCullingCheckbox = new UI.Checkbox('Force Backfacing Culling', false);
         enableCullingCheckbox.onchanged = () => {
             for (let i = 0; i < this.meshRenderers.length; i++)
-                this.meshRenderers[i].setCullModeOverride(enableCullingCheckbox.checked ? GfxCullMode.BACK : GfxCullMode.NONE);
+                this.meshRenderers[i].setCullModeOverride(enableCullingCheckbox.checked ? GfxCullMode.Back : GfxCullMode.None);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
 
@@ -53,15 +53,15 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearAttachmentDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearAttachmentDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -70,19 +70,19 @@ class ZelviewRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.meshDatas.length; i++)
             this.meshDatas[i].destroy(device);
         for (let i = 0; i < this.meshRenderers.length; i++)

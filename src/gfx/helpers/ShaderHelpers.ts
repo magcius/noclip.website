@@ -29,11 +29,11 @@ return vec4(
 
 void Fma(inout Mat4x3 d, Mat4x3 m, float s) { d.mx += m.mx * s; d.my += m.my * s; d.mz += m.mz * s; }
 
-Mat4x4 _Mat4x4(float n) { Mat4x4 o; o.mx.x = n; o.my.y = n; o.mz.z = n; o.mw.w = n; return o; }
+Mat4x4 _Mat4x4(float n) { Mat4x4 o; o.mx = vec4(n, 0.0, 0.0, 0.0); o.my = vec4(0.0, n, 0.0, 0.0); o.mz = vec4(0.0, 0.0, n, 0.0); o.mw = vec4(0.0, 0.0, 0.0, n); return o; }
 Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
 Mat4x4 _Mat4x4(Mat4x2 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; return o; }
 
-Mat4x3 _Mat4x3(float n) { Mat4x3 o; o.mx.x = n; o.my.y = n; o.mz.z = n; return o; }
+Mat4x3 _Mat4x3(float n) { Mat4x3 o; o.mx = vec4(n, 0.0, 0.0, 0.0); o.my = vec4(0.0, n, 0.0, 0.0); o.mz = vec4(0.0, 0.0, n, 0.0); return o; }
 Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
 `;
 
@@ -46,24 +46,28 @@ vec4 saturate(vec4 v) { return clamp(v, vec4(0.0), vec4(1.0)); }
 `;
 
 export const invlerp: string = `
-float invlerp(float v, float min, float max) { return (v - min) / (max - min); }
+float invlerp(float a, float b, float v) { return (v - a) / (b - a); }
 `;
 
-export const lerp: string = `
-float lerp(float v, float a, float b) { return mix(a, b, v); }
-`
-
-// Vertex shader for indexbuffer-less full-screen triangle
-export const fullscreenVS: string = `
+export function makeFullscreenVS(z: number = 1.0, w: number = 1.0): string {
+    return `
 out vec2 v_TexCoord;
 
 void main() {
     v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
     v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(1, 1);
+    gl_Position.zw = vec2(${z}, ${w});
+
+#ifdef VIEWPORT_ORIGIN_TL
+    v_TexCoord.y = 1.0 - v_TexCoord.y;
+#endif
 }
 `;
+}
+
+// Vertex shader for indexbuffer-less full-screen triangle
+export const fullscreenVS: string = makeFullscreenVS();
 
 export const fullscreenBlitOneTexPS: string = `
 uniform sampler2D u_Texture;

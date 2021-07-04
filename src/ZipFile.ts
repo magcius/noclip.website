@@ -5,6 +5,8 @@
 import * as CRC32 from 'crc-32';
 import ArrayBufferSlice from './ArrayBufferSlice';
 import { readString, assert } from './util';
+import Pako from "pako";
+import { decodeLZMAProperties, decompress } from './Common/Compression/LZMA';
 
 export const enum ZipCompressionMethod {
     None = 0,
@@ -153,14 +155,45 @@ export function parseZipFile(buffer: ArrayBufferSlice): ZipFile {
         const dataSize = view.getUint32(cdIdx + 0x14, true);
         const uncompressedSize = view.getUint32(cdIdx + 0x18, true);
         const filenameSize = view.getUint16(cdIdx + 0x1C, true);
+        const extraSize = view.getUint16(cdIdx + 0x1E, true);
+        const commentSize = view.getUint16(cdIdx + 0x20, true);
         const localHeaderOffset = view.getUint32(cdIdx + 0x2A, true);
         const filename = readString(buffer, cdIdx + 0x2E, filenameSize);
-        cdIdx += 0x2E + filenameSize;
+        cdIdx += 0x2E + filenameSize + extraSize + commentSize;
 
         assert(readString(buffer, localHeaderOffset + 0x00, 0x04) === 'PK\x03\x04');
-        const data = buffer.subarray(localHeaderOffset + 0x1E + filenameSize, dataSize);
+        const filenameSize2 = view.getUint16(localHeaderOffset + 0x1A, true);
+        assert(filenameSize === filenameSize2);
+        const extraSize2 = view.getUint16(localHeaderOffset + 0x1C, true);
+        const data = buffer.subarray(localHeaderOffset + 0x1E + filenameSize + extraSize2, dataSize);
         entries.push({ filename, data, uncompressedSize, compressionMethod });
     }
 
     return entries;
+}
+
+export function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
+    if (entry.compressionMethod === ZipCompressionMethod.None) {
+        return entry.data;
+    } else if (entry.compressionMethod === ZipCompressionMethod.DEFLATE) {
+        const decompressed = Pako.inflateRaw(entry.data.createTypedArray(Uint8Array));
+        return new ArrayBufferSlice(decompressed.buffer);
+    } else if (entry.compressionMethod === ZipCompressionMethod.LZMA) {
+        // Parse out the ZIP-style LZMA header. See APPNOTE.txt section 5.8.8
+        const view = entry.data.createDataView();
+
+        // First two bytes are LZMA version.
+        // const versionMajor = view.getUint8(0x00);
+        // const versionMinor = view.getUint8(0x00);
+        // Next two bytes are "properties size", which should be 5 in all valid files.
+        const propertiesSize = view.getUint16(0x02, true);
+        assert(propertiesSize === 5);
+
+        const properties = decodeLZMAProperties(entry.data.subarray(0x04, propertiesSize));
+        // Compressed data comes immediately after the properties.
+        const compressedData = entry.data.slice(0x04 + propertiesSize);
+        return new ArrayBufferSlice(decompress(compressedData, properties, entry.uncompressedSize!));
+    } else {
+        throw "whoops";
+    }
 }

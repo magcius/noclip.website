@@ -4,7 +4,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController, OrbitCameraController } from '../Camera';
 import { colorFromHSL, colorNewCopy, White } from '../Color';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform";
@@ -21,7 +21,7 @@ import { ObjectRenderer } from './objects';
 import { BINModelSectorData, KatamariDamacyProgram } from './render';
 import { fillSceneParamsData } from './scenes';
 import { setMatrixTranslation } from '../MathHelpers';
-import { GfxrAttachmentSlot, GfxrTemporalTexture, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -71,7 +71,7 @@ class GalleryCircleRenderer {
     public colors = nArray(2, () => colorNewCopy(White));
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
     }
 
     public randomColor(): void {
@@ -212,9 +212,15 @@ export class GallerySceneRenderer implements SceneGfx {
         this.rareBadge.style.visibility = objectDef.isRare ? '' : 'hidden';
 
         // XXX(jstpierre): Hax!
-        if (window.main.viewer.cameraController instanceof OrbitCameraController) {
+        const cameraController = window.main.viewer.cameraController;
+        if (cameraController instanceof OrbitCameraController) {
             const radius = objectModel.bbox.boundingSphereRadius();
-            window.main.viewer.cameraController.z = -radius * 4.5;
+            const z = -radius * 4.5;
+            cameraController.z = z;
+            cameraController.zTarget = z;
+            cameraController.sceneMoveSpeedMult = radius / 400.0;
+            cameraController.orbitSpeed = 0.5;
+            cameraController.shouldOrbit = true;
         }
     }
 
@@ -245,7 +251,7 @@ export class GallerySceneRenderer implements SceneGfx {
             this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace, 0);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -270,7 +276,7 @@ export class GallerySceneRenderer implements SceneGfx {
             pass.exec((passRenderer) => {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -285,13 +291,13 @@ export class GallerySceneRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.sceneTexture.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);

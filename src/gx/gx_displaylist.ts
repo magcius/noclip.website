@@ -282,18 +282,18 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
     switch (vtxAttrib) {
     case GX.Attr.POS:
         if (compCnt === GX.CompCnt.POS_XY)
-            return FormatCompFlags.COMP_RG;
+            return FormatCompFlags.RG;
         else if (compCnt === GX.CompCnt.POS_XYZ)
-            return FormatCompFlags.COMP_RGB;
+            return FormatCompFlags.RGB;
     case GX.Attr.NRM:
         // Normals always have 3 components per index.
-        return FormatCompFlags.COMP_RGB;
+        return FormatCompFlags.RGB;
     case GX.Attr.CLR0:
     case GX.Attr.CLR1:
         if (compCnt === GX.CompCnt.CLR_RGB)
-            return FormatCompFlags.COMP_RGB;
+            return FormatCompFlags.RGB;
         else if (compCnt === GX.CompCnt.CLR_RGBA)
-            return FormatCompFlags.COMP_RGBA;
+            return FormatCompFlags.RGBA;
     case GX.Attr.TEX0:
     case GX.Attr.TEX1:
     case GX.Attr.TEX2:
@@ -303,9 +303,9 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
     case GX.Attr.TEX6:
     case GX.Attr.TEX7:
         if (compCnt === GX.CompCnt.TEX_S)
-            return FormatCompFlags.COMP_R;
+            return FormatCompFlags.R;
         else if (compCnt === GX.CompCnt.TEX_ST)
-            return FormatCompFlags.COMP_RG;
+            return FormatCompFlags.RG;
     case GX.Attr.NULL:
     default:
         // Shouldn't ever happen
@@ -316,7 +316,7 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
 function getAttributeFormatCompFlags(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): FormatCompFlags {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
-        return FormatCompFlags.COMP_R;
+        return FormatCompFlags.R;
 
     return getAttributeFormatCompFlagsRaw(vtxAttrib, vatFormat.compCnt);
 }
@@ -420,16 +420,16 @@ function getAttributeFormat(vatLayouts: (VatLayout | undefined)[], vtxAttrib: GX
 
     if (vtxAttrib === GX.Attr.POS) {
         // We pack PNMTXIDX into w of POS.
-        formatCompFlags = FormatCompFlags.COMP_RGBA;
+        formatCompFlags = FormatCompFlags.RGBA;
     } else if (isVtxAttribColor(vtxAttrib)) {
         // For color attributes, we always output all 4 components.
-        formatCompFlags = FormatCompFlags.COMP_RGBA;
+        formatCompFlags = FormatCompFlags.RGBA;
     } else if (isVtxAttribTexMtxIdx(vtxAttrib)) {
         // We pack TexMtxIdx into multi-channel vertex inputs.
-        formatCompFlags = FormatCompFlags.COMP_RGBA;
+        formatCompFlags = FormatCompFlags.RGBA;
     } else if (isVtxAttribTex(vtxAttrib)) {
         assert(baseFormat === GfxFormat.F32_R);
-        formatCompFlags = FormatCompFlags.COMP_RGBA;
+        formatCompFlags = FormatCompFlags.RGBA;
     } else {
         // Go over all layouts and pick the best one.
         for (let i = 0; i < vatLayouts.length; i++) {
@@ -560,7 +560,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
         if (isVtxAttribMtxIdx(vtxAttrib)) {
             // Remove the normalized flag for the conversion.
-            fieldFormat = setFormatFlags(fieldFormat, FormatFlags.NONE);
+            fieldFormat = setFormatFlags(fieldFormat, FormatFlags.None);
         }
 
         const fieldByteOffset = getFormatCompByteSize(input.format) * fieldCompOffset;
@@ -652,7 +652,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
 
         function compileWriteOneComponent(offs: number, value: string): string {
             const typeFlags = getFormatTypeFlags(dstFormat);
-            const isNorm = getFormatFlags(dstFormat) & FormatFlags.NORMALIZED;
+            const isNorm = getFormatFlags(dstFormat) & FormatFlags.Normalized;
             if (typeFlags === FormatTypeFlags.F32)
                 return compileWriteOneComponentF32(offs, value);
             else if (typeFlags === FormatTypeFlags.U8 && isNorm)

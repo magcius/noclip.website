@@ -15,13 +15,13 @@ import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad, assertExists } from '../util';
 import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 import { mat4 } from 'gl-matrix';
 import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 
 class ZTPExtraTextures {
@@ -148,7 +148,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -181,7 +181,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, ZTPPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, ZTPPass.SKYBOX);
             });
         });
 
@@ -191,7 +191,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, ZTPPass.OPAQUE);
+                executeOnPass(renderInstManager, passRenderer, ZTPPass.OPAQUE);
             });
         });
 
@@ -207,7 +207,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer, scope) => {
                     renderInstManager.setVisibleByFilterKeyExact(ZTPPass.INDIRECT);
                     renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    renderInstManager.drawOnPassRenderer(passRenderer);
                 });
             });
         }
@@ -217,19 +217,19 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, ZTPPass.TRANSPARENT);
+                executeOnPass(renderInstManager, passRenderer, ZTPPass.TRANSPARENT);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.extraTextures.destroy(device);
         this.modelInstances.forEach((instance) => instance.destroy(device));
     }

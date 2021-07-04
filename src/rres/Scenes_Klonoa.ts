@@ -7,7 +7,7 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { assert } from '../util';
@@ -16,7 +16,7 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const id = 'klonoa';
 const name = "Klonoa";
@@ -52,7 +52,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -71,7 +71,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, KlonoaPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, KlonoaPass.SKYBOX);
             });
         });
 
@@ -81,7 +81,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, KlonoaPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, KlonoaPass.MAIN);
             });
         });
 
@@ -97,7 +97,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer, scope) => {
                     const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
                     this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
-                    executeOnPass(renderInstManager, device, passRenderer, KlonoaPass.INDIRECT);
+                    executeOnPass(renderInstManager, passRenderer, KlonoaPass.INDIRECT);
                 });
             });
         }
@@ -105,13 +105,13 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);

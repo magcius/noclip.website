@@ -58,12 +58,13 @@ vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord, in vec2 t_Asp
 }
 
 abstract class ImageEffectBase extends NameObj {
+    public visibleScenario = true;
     public active = false;
     public visible = false;
     public strength = 0.0;
 
     public isOn(): boolean {
-        return this.visible || this.active;
+        return this.visibleScenario && (this.visible || this.active);
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder): void {
@@ -225,9 +226,9 @@ export class BloomEffect extends ImageEffectBase {
     private blitProgram: GfxProgram;
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
-        blendMode: GfxBlendMode.ADD,
-        blendSrcFactor: GfxBlendFactor.ONE,
-        blendDstFactor: GfxBlendFactor.ONE,
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.One,
     }), fullscreenMegaState);
 
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -242,22 +243,22 @@ export class BloomEffect extends ImageEffectBase {
         connectToSceneNormalBloom(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        const cache = sceneObjHolder.modelCache.cache;
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
         this.textureMapping[0].gfxSampler = linearSampler;
 
-        this.thresholdProgram = cache.createProgram(device, new BloomPassThresholdProgram());
-        this.blur1Program = cache.createProgram(device, new BloomPassBlur1Program());
-        this.blur2Program = cache.createProgram(device, new BloomPassBlur2Program());
-        this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
+        this.thresholdProgram = cache.createProgram(new BloomPassThresholdProgram());
+        this.blur1Program = cache.createProgram(new BloomPassBlur1Program());
+        this.blur2Program = cache.createProgram(new BloomPassBlur2Program());
+        this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
@@ -275,8 +276,6 @@ export class BloomEffect extends ImageEffectBase {
     public pushPassesBloom(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number): void {
         if (!this.isOn())
             return;
-
-        const device = sceneObjHolder.modelCache.device;
 
         const bloomObjectsTargetDesc = builder.getRenderTargetDescription(bloomObjectsTargetID);
 
@@ -310,7 +309,7 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -327,7 +326,7 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -345,7 +344,7 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -362,7 +361,7 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -379,7 +378,7 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -395,7 +394,7 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL2ResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }
@@ -474,9 +473,9 @@ export class BloomEffectSimple extends ImageEffectBase {
     private blurProgram: GfxProgram;
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
-        blendMode: GfxBlendMode.ADD,
-        blendSrcFactor: GfxBlendFactor.ONE,
-        blendDstFactor: GfxBlendFactor.ONE,
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.One,
     }), fullscreenMegaState);
 
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -490,19 +489,19 @@ export class BloomEffectSimple extends ImageEffectBase {
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
         this.textureMapping[0].gfxSampler = linearSampler;
 
-        this.thresholdProgram = cache.createProgram(device, new BloomSimpleThresholdProgram());
-        this.blurProgram = cache.createProgram(device, new BloomSimpleBlurProgram(8, 0.009, 1.0));
+        this.thresholdProgram = cache.createProgram(new BloomSimpleThresholdProgram());
+        this.blurProgram = cache.createProgram(new BloomSimpleBlurProgram(8, 0.009, 1.0));
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
@@ -519,8 +518,6 @@ export class BloomEffectSimple extends ImageEffectBase {
     public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
         if (!this.isOn())
             return;
-
-        const device = sceneObjHolder.modelCache.device;
 
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
         const targetWidth = mainColorTargetDesc.width >> 2;
@@ -548,7 +545,7 @@ export class BloomEffectSimple extends ImageEffectBase {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -565,7 +562,7 @@ export class BloomEffectSimple extends ImageEffectBase {
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }
@@ -615,9 +612,9 @@ void main() {
     float t_TexCoord = saturate((t_TexCoord128 + 0.5) / 128.0);
 
     // Do the "indirect texture lookup"
-    float t_BlurAmount = saturate(invlerp(t_TexCoord, u_BlurMinDist, u_BlurMaxDist));
+    float t_BlurAmount = saturate(invlerp(u_BlurMinDist, u_BlurMaxDist, t_TexCoord));
 
-    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_TextureColor));
     vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord, t_Aspect);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
 }
@@ -632,9 +629,9 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
-        blendMode: GfxBlendMode.ADD,
-        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-        blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
     }), fullscreenMegaState);
 
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -649,30 +646,30 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const linearSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
         this.textureMapping[0].gfxSampler = linearSampler;
 
-        const nearestSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        const nearestSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
         this.textureMapping[1].gfxSampler = nearestSampler;
 
-        this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
-        this.depthOfFieldProgram = cache.createProgram(device, new DepthOfFieldProgram());
+        this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
+        this.depthOfFieldProgram = cache.createProgram(new DepthOfFieldProgram());
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
@@ -688,8 +685,6 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
         if (!this.isOn())
             return;
-
-        const device = sceneObjHolder.modelCache.device;
 
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
         const targetWidth = mainColorTargetDesc.width >> 2;
@@ -719,7 +714,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -740,7 +735,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }

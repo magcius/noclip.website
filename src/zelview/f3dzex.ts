@@ -90,45 +90,45 @@ export const enum ZMode {
 
 function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
     if (paramB === BlendParam_B.G_BL_1MA) {
-        if (srcParam === GfxBlendFactor.SRC_ALPHA)
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        if (srcParam === GfxBlendFactor.ONE)
-            return GfxBlendFactor.ZERO;
-        return GfxBlendFactor.ONE;
+        if (srcParam === GfxBlendFactor.SrcAlpha)
+            return GfxBlendFactor.OneMinusSrcAlpha;
+        if (srcParam === GfxBlendFactor.One)
+            return GfxBlendFactor.Zero;
+        return GfxBlendFactor.One;
     }
     if (paramB === BlendParam_B.G_BL_A_MEM)
-        return GfxBlendFactor.DST_ALPHA;
+        return GfxBlendFactor.DstAlpha;
     if (paramB === BlendParam_B.G_BL_1)
-        return GfxBlendFactor.ONE;
+        return GfxBlendFactor.One;
     if (paramB === BlendParam_B.G_BL_0)
-        return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.Zero;
 
     throw "Unknown Blend Param B: "+paramB;
 }
 
 function translateZMode(zmode: ZMode): GfxCompareMode {
     if (zmode === ZMode.ZMODE_OPA)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_XLU)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_DEC)
-        return GfxCompareMode.GEQUAL;
+        return GfxCompareMode.GreaterEqual;
     throw "Unknown Z mode: " + zmode;
 }
 
 export function translateCullMode(geoMode: number): GfxCullMode {
     if (geoMode & RSP_Geometry.G_CULL_BACK) {
         if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            return GfxCullMode.FRONT_AND_BACK;
+            return GfxCullMode.FrontAndBack;
         } else {
-            return GfxCullMode.BACK;
+            return GfxCullMode.Back;
         }
     } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     } else {
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
     }
 }
 
@@ -146,27 +146,27 @@ export function translateBlendMode(renderMode: number): Partial<GfxMegaStateDesc
 
         let blendSrcFactor: GfxBlendFactor;
         if (srcFactor === BlendParam_A.G_BL_0) {
-            blendSrcFactor = GfxBlendFactor.ZERO;
+            blendSrcFactor = GfxBlendFactor.Zero;
         } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
             !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
             // this is technically "coverage", admitting blending on edges
-            blendSrcFactor = GfxBlendFactor.ONE;
+            blendSrcFactor = GfxBlendFactor.One;
         } else {
-            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            blendSrcFactor = GfxBlendFactor.SrcAlpha;
         }
         setAttachmentStateSimple(out, {
             blendSrcFactor: blendSrcFactor,
             blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
-            blendMode: GfxBlendMode.ADD,
+            blendMode: GfxBlendMode.Add,
         });
     } else {
         // without FORCE_BL, blending only happens for AA of internal edges
         // since we are ignoring n64 coverage values and AA, this means "never"
         // if dstColor isn't the framebuffer, we'll take care of the "blending" in the shader
         setAttachmentStateSimple(out, {
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ZERO,
-            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.Zero,
+            blendMode: GfxBlendMode.Add,
         });
     }
 

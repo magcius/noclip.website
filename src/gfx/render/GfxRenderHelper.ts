@@ -4,7 +4,51 @@ import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderInstManager";
 import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph";
-import { DebugThumbnailDrawer } from "../helpers/DebugThumbnailHelpers";
+import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpers";
+
+class GfxRenderHelperBase {
+    public renderCache: GfxRenderCache;
+    public renderGraph: GfxrRenderGraph;
+    public renderInstManager: GfxRenderInstManager;
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+    public debugThumbnails: DebugThumbnailDrawer;
+
+    constructor(public device: GfxDevice, renderCache: GfxRenderCache | null = null) {
+        this.renderCache = renderCache !== null ? renderCache : new GfxRenderCache(device);
+        this.renderGraph = new GfxrRenderGraphImpl(this.device);
+        this.renderInstManager = new GfxRenderInstManager(this.renderCache);
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
+        this.debugThumbnails = new DebugThumbnailDrawer(this as unknown as GfxRenderHelper);
+    }
+
+    public pushTemplateRenderInst(): GfxRenderInst {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        return template;
+    }
+
+    public prepareToRender(): void {
+        this.uniformBuffer.prepareToRender();
+    }
+
+    public destroy(): void {
+        this.uniformBuffer.destroy();
+        this.renderInstManager.destroy();
+        this.renderCache.destroy();
+        this.renderGraph.destroy();
+    }
+
+    public getDebugTextDrawer(): TextDrawer | null {
+        return null;
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderCache;
+    }
+}
+
+// Debug Thumbnails
+// TODO(jstpierre): Find a way to re-add these (maybe by rewriting the DebugTextDrawer system...)
 import { SceneContext } from "../../SceneBase";
 import type { DebugTextDrawer } from "../helpers/DebugTextDrawer";
 
@@ -33,46 +77,23 @@ class PromiseWithSavedValue<T> {
     }
 }
 
-export class GfxRenderHelper {
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
-    public renderInstManager: GfxRenderInstManager;
-    public renderCache = new GfxRenderCache();
-    public renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
-    public debugThumbnails: DebugThumbnailDrawer;
+export class GfxRenderHelper extends GfxRenderHelperBase {
     private debugTextDrawer: PromiseWithSavedValue<DebugTextDrawer | null>;
 
-    constructor(public device: GfxDevice, context: SceneContext | null = null) {
-        this.renderInstManager = new GfxRenderInstManager(this.device, this.renderCache);
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
-        this.debugThumbnails = new DebugThumbnailDrawer(this);
+    constructor(device: GfxDevice, context: SceneContext | null = null, renderCache: GfxRenderCache | null = null) {
+        super(device, renderCache);
         this.debugTextDrawer = new PromiseWithSavedValue<DebugTextDrawer | null>(async () => {
             const { makeDebugTextDrawer } = await import('../helpers/DebugTextDrawer');
             return context !== null ? makeDebugTextDrawer(context) : null;
         });
     }
 
-    public pushTemplateRenderInst(): GfxRenderInst {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
-        return template;
-    }
-
-    public prepareToRender(device: GfxDevice): void {
-        this.uniformBuffer.prepareToRender(this.device);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.uniformBuffer.destroy(this.device);
-        this.renderInstManager.destroy(this.device);
-        this.renderCache.destroy(this.device);
-        this.renderGraph.destroy(this.device);
-    }
-
-    public getCache(): GfxRenderCache {
-        return this.renderCache;
-    }
-
-    public getDebugTextDrawer(): DebugTextDrawer | null {
+    public getDebugTextDrawer(): TextDrawer | null {
         return this.debugTextDrawer.getValueOrStart();
+    }
+
+    public destroy(): void {
+        super.destroy();
+        this.debugThumbnails.destroy();
     }
 }

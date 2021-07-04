@@ -233,7 +233,7 @@ export class GravityExplainer extends LiveActor {
         this.ddraw.beginDraw();
         for (let i = 0; i < this.arrows.length; i++)
             this.drawArrow(this.arrows[i], this.ddraw, viewerInput.camera);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();

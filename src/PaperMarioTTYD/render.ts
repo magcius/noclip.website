@@ -128,7 +128,7 @@ class MaterialInstance {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial);
         // Cull mode is set by the node
         this.materialHelper.megaStateFlags.cullMode = undefined;
-        this.materialHelper.cacheProgram(device, cache);
+        this.materialHelper.cacheProgram(cache);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
             return MaterialInstance.translateSampler(device, cache, sampler);
@@ -159,10 +159,10 @@ class MaterialInstance {
     }
 
     private static translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: Sampler): GfxSampler {
-        return cache.createSampler(device, {
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.LINEAR,
+        return cache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
             wrapS: translateWrapModeGfx(sampler.wrapS),
             wrapT: translateWrapModeGfx(sampler.wrapT),
             maxLOD: 100,
@@ -373,7 +373,7 @@ class NodeInstance {
         };
         this.collisionMaterialInstance = new MaterialInstance(device, cache, collisionMaterial);
         this.collisionMaterialInstance.materialHelper.megaStateFlags.polygonOffset = true;
-        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.NONE;
+        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.None;
         fillDebugColorFromCollisionFlags(this.collisionMaterialInstance.konst0, this.node.collisionFlags);
     }
 
@@ -608,7 +608,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
             this.mobj[i].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public createPanels(): UI.Panel[] {

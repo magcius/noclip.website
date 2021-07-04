@@ -58,14 +58,14 @@ export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderH
         fillVec4(d, offs, 1.0 / renderInput.backbufferWidth, 1.0 / renderInput.backbufferHeight);
 
         const fxaaProgram = new FXAAProgram();
-        const gfxProgram = renderHelper.renderCache.createProgram(renderHelper.device, fxaaProgram);
+        const gfxProgram = renderHelper.renderCache.createProgram(fxaaProgram);
 
         renderInst.setGfxProgram(gfxProgram);
 
         pass.exec((passRenderer, scope) => {
             textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
             renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
-            renderInst.drawOnPass(renderHelper.device, renderHelper.renderCache, passRenderer);
+            renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
         });
     });
 }

@@ -152,6 +152,9 @@ export class GfxRenderInst {
     // TODO(jstpierre): Remove when we remove legacy GfxRenderInstManager.
     public filterKey: number = 0;
 
+    // Debugging pointer for whomever wants it...
+    public debug: any = null;
+
     // Pipeline building.
     private _renderPipelineDescriptor: GfxRenderPipelineDescriptor;
 
@@ -172,7 +175,7 @@ export class GfxRenderInst {
             inputLayout: null,
             megaStateDescriptor: copyMegaState(defaultMegaState),
             program: null!,
-            topology: GfxPrimitiveTopology.TRIANGLES,
+            topology: GfxPrimitiveTopology.Triangles,
             colorAttachmentFormats: [],
             depthStencilAttachmentFormat: null,
             sampleCount: 1,
@@ -435,8 +438,8 @@ export class GfxRenderInst {
      * to override this and force the render inst to draw, please use {@see setAllowSkippingIfPipelineNotReady}.
      */
     public queryPipelineReady(device: GfxDevice, cache: GfxRenderCache): boolean {
-        const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
-        return device.queryPipelineReady(gfxPipeline);
+        const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
+        return cache.device.queryPipelineReady(gfxPipeline);
     }
 
     /**
@@ -454,20 +457,36 @@ export class GfxRenderInst {
     private setAttachmentFormatsFromRenderPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
         const passDescriptor = device.queryRenderPass(passRenderer);
 
-        const colorAttachmentDescriptor = passDescriptor.colorAttachment !== null ? device.queryRenderTarget(passDescriptor.colorAttachment) : null;
-        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
+        let sampleCount = -1;
+        for (let i = 0; i < passDescriptor.colorAttachment.length; i++) {
+            const colorAttachmentDescriptor = passDescriptor.colorAttachment[i] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[i]!) : null;
+            this._renderPipelineDescriptor.colorAttachmentFormats[i] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
+            if (colorAttachmentDescriptor !== null) {
+                if (sampleCount === -1)
+                    sampleCount = colorAttachmentDescriptor.sampleCount;
+                else
+                    assert(sampleCount === colorAttachmentDescriptor.sampleCount);
+            }
+        }
 
-        this._renderPipelineDescriptor.colorAttachmentFormats[0] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
+        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
-        this._renderPipelineDescriptor.sampleCount = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.sampleCount : depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.sampleCount : 0;
+
+        this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 
-    public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
+    public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
+        const device = cache.device;
         this.setAttachmentFormatsFromRenderPass(device, passRenderer);
 
-        const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
-        if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady) && !device.queryPipelineReady(gfxPipeline))
-            return false;
+        const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
+
+        const pipelineReady = device.queryPipelineReady(gfxPipeline);
+        if (!pipelineReady) {
+            const needsToSkip = !device.queryVendorInfo().supportsSyncPipelineCompilation;
+            if (needsToSkip || !!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady))
+                return false;
+        }
 
         if (SET_DEBUG_POINTER)
             passRenderer.setDebugPointer(this);
@@ -477,10 +496,10 @@ export class GfxRenderInst {
         passRenderer.setInputState(this._inputState);
 
         for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
-            this._bindingDescriptors[0].uniformBufferBindings[i].buffer = this._uniformBuffer.gfxUniformBuffer!;
+            this._bindingDescriptors[0].uniformBufferBindings[i].buffer = assertExists(this._uniformBuffer.gfxBuffer);
 
         // TODO(jstpierre): Support multiple binding descriptors.
-        const gfxBindings = cache.createBindings(device, this._bindingDescriptors[0]);
+        const gfxBindings = cache.createBindings(this._bindingDescriptors[0]);
         passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferByteOffsets);
 
         if (this._drawInstanceCount > 1) {
@@ -534,7 +553,7 @@ export class GfxRenderInstList {
      * the position specified by the compare function, so the render inst must be
      * fully constructed at this point.
      */
-    public insertSorted(renderInst: GfxRenderInst): void {
+    private insertSorted(renderInst: GfxRenderInst): void {
         if (this.compareFunction === null) {
             this.renderInsts.push(renderInst);
         } else if (this.usePostSort) {
@@ -544,6 +563,11 @@ export class GfxRenderInstList {
         }
 
         this.checkUsePostSort();
+    }
+
+    public submitRenderInst(renderInst: GfxRenderInst): void {
+        renderInst._flags |= GfxRenderInstFlags.Draw;
+        this.insertSorted(renderInst);
     }
 
     public hasLateSamplerBinding(name: string): boolean {
@@ -562,7 +586,7 @@ export class GfxRenderInstList {
             this.renderInsts[i].resolveLateSamplerBinding(name, binding);
     }
 
-    private drawOnPassRendererNoReset(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         if (this.renderInsts.length === 0)
             return;
 
@@ -573,10 +597,10 @@ export class GfxRenderInstList {
 
         if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
             for (let i = 0; i < this.renderInsts.length; i++)
-                this.renderInsts[i].drawOnPass(device, cache, passRenderer);
+                this.renderInsts[i].drawOnPass(cache, passRenderer);
         } else {
             for (let i = this.renderInsts.length - 1; i >= 0; i--)
-                this.renderInsts[i].drawOnPass(device, cache, passRenderer);
+                this.renderInsts[i].drawOnPass(cache, passRenderer);
         }
     }
 
@@ -589,8 +613,8 @@ export class GfxRenderInstList {
      * using {@param device} and {@param cache} to create any device-specific resources
      * necessary to complete the draws.
      */
-    public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        this.drawOnPassRendererNoReset(device, cache, passRenderer);
+    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+        this.drawOnPassRendererNoReset(cache, passRenderer);
         this.reset();
     }
 }
@@ -636,7 +660,7 @@ export class GfxRenderInstManager {
     public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     public currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
-    constructor(public device: GfxDevice, public gfxRenderCache: GfxRenderCache) {
+    constructor(public gfxRenderCache: GfxRenderCache) {
     }
 
     /**
@@ -648,6 +672,7 @@ export class GfxRenderInstManager {
         const templateIndex = this.templatePool.allocCount - 1;
         const renderInstIndex = this.instPool.allocRenderInstIndex();
         const renderInst = this.instPool.pool[renderInstIndex];
+        renderInst.debug = null;
         if (templateIndex >= 0)
             renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         return renderInst;
@@ -658,9 +683,8 @@ export class GfxRenderInstManager {
      * this assumes the render inst was fully filled in, so do not modify it
      * after submitting it.
      */
-    public submitRenderInst(renderInst: GfxRenderInst): void {
-        renderInst._flags |= GfxRenderInstFlags.Draw;
-        this.currentRenderInstList.insertSorted(renderInst);
+    public submitRenderInst(renderInst: GfxRenderInst, list: GfxRenderInstList = this.currentRenderInstList): void {
+        list.submitRenderInst(renderInst);
     }
 
     /**
@@ -716,9 +740,9 @@ export class GfxRenderInstManager {
         assert(this.templatePool.allocCount === 0);
     }
 
-    public destroy(device: GfxDevice): void {
+    public destroy(): void {
         this.instPool.destroy();
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
     }
 
     /**
@@ -735,7 +759,7 @@ export class GfxRenderInstManager {
      * necessary to complete the draws.
      */
     public drawListOnPassRenderer(list: GfxRenderInstList, passRenderer: GfxRenderPass): void {
-        list.drawOnPassRenderer(this.device, this.gfxRenderCache, passRenderer);
+        list.drawOnPassRenderer(this.gfxRenderCache, passRenderer);
     }
     //#region Legacy render inst list management API.
 
@@ -750,7 +774,7 @@ export class GfxRenderInstManager {
 
         for (let i = 0; i < this.instPool.allocCount; i++)
             if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
-                list.insertSorted(this.instPool.pool[i]);
+                list.submitRenderInst(this.instPool.pool[i]);
     }
 
     /**
@@ -769,9 +793,9 @@ export class GfxRenderInstManager {
         list.renderInsts.length = 0;
     }
 
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {
+    public drawOnPassRenderer(passRenderer: GfxRenderPass): void {
         const list = assertExists(this.simpleRenderInstList);
-        list.drawOnPassRenderer(this.device, this.gfxRenderCache, passRenderer);
+        list.drawOnPassRenderer(this.gfxRenderCache, passRenderer);
     }
     //#endregion
 }
@@ -779,9 +803,9 @@ export class GfxRenderInstManager {
 /**
  * {@deprecated}
  */
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, resetState: boolean = true): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, passRenderer: GfxRenderPass, passMask: number): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer);
+    renderInstManager.drawOnPassRenderer(passRenderer);
 }
 
 /**

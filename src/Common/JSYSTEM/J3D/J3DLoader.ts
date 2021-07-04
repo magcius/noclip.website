@@ -42,6 +42,7 @@ export class JSystemFileReaderHelper {
     public magic: string;
     public size: number;
     public numChunks: number;
+    public subversion: string;
     public offs: number = 0x20;
 
     constructor(public buffer: ArrayBufferSlice) {
@@ -49,6 +50,7 @@ export class JSystemFileReaderHelper {
         this.magic = readString(this.buffer, 0, 8);
         this.size = this.view.getUint32(0x08);
         this.numChunks = this.view.getUint32(0x0C);
+        this.subversion = readString(this.buffer, 0x10, 0x10);
         this.offs = 0x20;
     }
 
@@ -689,7 +691,15 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const index = i;
         const name = nameTable[i];
         const materialEntryIdx = materialEntryTableOffs + (0x014C * remapTable[i]);
+
         const materialMode = view.getUint8(materialEntryIdx + 0x00);
+        // I believe this is a bitfield with three bits:
+        //   0x01: OPA (Opaque)
+        //   0x02: EDG (TexEdge / Masked)
+        //   0x04: XLU (Translucent)
+        // I haven't seen anything but OPA/XLU in the wild.
+        assert(materialMode === 0x01 || materialMode === 0x04);
+
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const colorChanNumIndex = view.getUint8(materialEntryIdx + 0x02);
         // const texGenNumIndex = view.getUint8(materialEntryIdx + 0x03);
@@ -992,7 +1002,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         fogBlock.AdjTable.set(fogAdjTable);
         fogBlock.AdjCenter = fogAdjCenter;
 
-        const translucent = !(materialMode & 0x03);
+        const translucent = materialMode === 0x04;
         const colorUpdate = true, alphaUpdate = false;
 
         const ropInfo: GX_Material.RopInfo = {
@@ -1044,7 +1054,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             attnFn === 2 ? GX.AttenuationFunction.NONE :
             attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
         );
-        assert(attenuationFunction !== -1);
+        assert((attenuationFunction as number) !== -1);
         const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
 
         const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
@@ -1056,7 +1066,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
         const info = view.getUint8(texMtxOffs + 0x01);
 
-        const matrixMode: TexMtxMapMode = info & 0x3F;
+        const matrixMode = info & 0x3F;
 
         // Detect uses of unlikely map modes.
         if (matrixMode === TexMtxMapMode.ProjmapBasic || matrixMode === TexMtxMapMode.ViewProjmapBasic ||
@@ -1260,6 +1270,7 @@ export class BMD {
     public static parseReader(j3d: JSystemFileReaderHelper): BMD {
         const bmd = new BMD();
 
+        bmd.subversion = j3d.subversion;
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
         bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
         bmd.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
@@ -1281,6 +1292,7 @@ export class BMD {
         return this.parseReader(j3d);
     }
 
+    public subversion: string;
     public inf1: INF1;
     public vtx1: VTX1;
     public evp1: EVP1;

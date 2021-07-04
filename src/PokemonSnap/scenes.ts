@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import * as BYML from '../byml';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
@@ -15,7 +15,7 @@ import { hexzero } from '../util';
 import { CameraController } from '../Camera';
 import { createActor, LevelGlobals, sceneActorInit } from './actor';
 import { ParticleManager } from './particles';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `PokemonSnap`;
 
@@ -98,7 +98,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.globals.particles.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -115,7 +115,7 @@ class SnapRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SnapPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, SnapPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -124,19 +124,19 @@ class SnapRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SnapPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, SnapPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.renderData.length; i++)
             this.renderData[i].destroy(device);
         this.globals.particles.destroy(device);

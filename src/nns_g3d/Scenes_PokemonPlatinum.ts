@@ -10,7 +10,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
 import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { parseNSBMD, BTX0, parseNSBTX, fx32, TEX0, MDL0Model } from './NNS_G3D';
@@ -18,7 +18,7 @@ import { CameraController } from '../Camera';
 import { AABB } from '../Geometry';
 import { NITRO_Program } from '../SuperMario64DS/render';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
@@ -96,7 +96,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -113,7 +113,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, G3DPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, G3DPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -122,19 +122,19 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, G3DPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, G3DPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);

@@ -36,7 +36,8 @@ export class WebXRContext {
     public isSupported = false;
 
     constructor(private swapChain: GfxSwapChain) {
-        this.checkIsSupported();
+        // TODO(jstpierre): Re-enable WebXR when we support it again.
+        // this.checkIsSupported();
     }
 
     private async checkIsSupported() {

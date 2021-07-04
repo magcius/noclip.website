@@ -506,7 +506,7 @@ class FurCtrl {
             vtxDatas.push(new ArrayBufferSlice(calcFurVertexData(shapeData.shape, lengthMap, maxLength)));
         }
 
-        const coalescedBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vtxDatas);
+        const coalescedBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, vtxDatas);
         this.ownCoalescedBufferData = coalescedBuffers[0].buffer;
 
         for (let i = 0; i < numLayers; i++) {

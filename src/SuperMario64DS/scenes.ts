@@ -8,10 +8,10 @@ import * as LZ77 from './lz77';
 import * as BMD from './sm64ds_bmd';
 import * as BCA from './sm64ds_bca';
 
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
@@ -21,7 +21,7 @@ import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants, clamp, scaleMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
@@ -390,9 +390,10 @@ class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private modelCache = new Map<string, BMDData>();
-    private gfxRenderCache = new GfxRenderCache();
+    private gfxRenderCache: GfxRenderCache;
 
-    constructor(private dataFetcher: DataFetcher) {
+    constructor(device: GfxDevice, private dataFetcher: DataFetcher) {
+        this.gfxRenderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<any> {
@@ -461,7 +462,7 @@ class ModelCache {
     public destroy(device: GfxDevice): void {
         for (const model of this.modelCache.values())
             model.destroy(device);
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
     }
 }
 
@@ -501,7 +502,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -518,7 +519,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SM64DSPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, SM64DSPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -527,14 +528,14 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, SM64DSPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, SM64DSPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -610,7 +611,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
     }
 }
 
@@ -1670,7 +1671,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
                 dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs4.narc`),
             ]);
     
-            const modelCache = new ModelCache(dataFetcher);
+            const modelCache = new ModelCache(device, dataFetcher);
             const crg1 = BYML.parse<Sm64DSCRG1>(crg1Buffer, BYML.FileType.CRG1);
 
             for (let i = 0; i < narcBuffers.length; i++)

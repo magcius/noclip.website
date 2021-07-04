@@ -17,7 +17,7 @@ import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask, GfxProgram, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxChannelWriteMask, GfxProgram, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -186,8 +186,8 @@ class dDlst_alphaModel_c {
         frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
         this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
 
-        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
-        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
+        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
+        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
 
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);
 
@@ -215,7 +215,7 @@ class dDlst_alphaModel_c {
         this.orthoQuad.position3f32(1, 1, 0);
         this.orthoQuad.position3f32(0, 1, 0);
         this.orthoQuad.end();
-        this.orthoQuad.endDraw(device, cache);
+        this.orthoQuad.endDraw(cache);
     }
 
     private reset(): void {
@@ -544,7 +544,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
-        this.fullscreenBlitProgram = this.renderCache.createProgramSimple(device, preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS));
+        this.fullscreenBlitProgram = this.renderCache.createProgramSimple(preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS));
     }
 
     private setVisibleLayerMask(m: number): void {
@@ -785,13 +785,13 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderHelper.prepareToRender(device);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.prepareToRender();
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.extraTextures.destroy(device);
         this.globals.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
@@ -803,13 +803,14 @@ export class ModelCache {
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archivePromiseCache = new Map<string, Promise<RARC.JKRArchive>>();
     private archiveCache = new Map<string, RARC.JKRArchive>();
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
 
     public resCtrl = new dRes_control_c();
     public currentStage: string;
     public onloadedcallback: (() => void) | null = null;
 
     constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private decompressor: RARC.JKRDecompressor) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<any> {
@@ -926,7 +927,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         this.resCtrl.destroy(device);
     }
 }

@@ -1492,7 +1492,7 @@ export class dDlst_2DStatic_c {
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
         this.ddraw.end();
 
-        this.ddraw.endDraw(device, cache);
+        this.ddraw.endDraw(cache);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -2292,7 +2292,7 @@ class dCloth_packet_c {
 
     private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
         this.plot(ddraw, front);
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
@@ -2330,7 +2330,7 @@ class dCloth_packet_c {
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, ((this.flyGridSize - 1) * this.hoistGridSize) * 2 * 2);
         this.drawSide(device, renderInstManager, ddraw, true);
         this.drawSide(device, renderInstManager, ddraw, false);
-        ddraw.endAndUpload(device, renderInstManager);
+        ddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -2777,7 +2777,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
     private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
         this.plot(ddraw, front);
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
@@ -2822,7 +2822,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, (11 + 9 + 7 + 5 + 3 + 1) * 2);
         this.drawSide(device, renderInstManager, ddraw, true);
         this.drawSide(device, renderInstManager, ddraw, false);
-        ddraw.endAndUpload(device, renderInstManager);
+        ddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }

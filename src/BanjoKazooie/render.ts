@@ -470,11 +470,11 @@ export class RenderData {
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -483,7 +483,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -515,13 +515,13 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x1000);
     const cullBack = !!(m & 0x2000);
     if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     else if (cullFront)
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     else if (cullBack)
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     else
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
 }
 
 const viewMatrixScratch = mat4.create();
@@ -589,7 +589,7 @@ class DrawCallInstance {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.None;
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -627,7 +627,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -1108,9 +1108,9 @@ export class GeometryRenderer {
     constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         const geo = this.geometryData.geo;
@@ -1134,8 +1134,8 @@ export class GeometryRenderer {
             this.vertexBufferData = new Float32Array(this.geometryData.renderData.vertexBufferData);
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Dynamic
             );
             this.inputState = device.createInputState(this.geometryData.renderData.inputLayout,
                 [{ buffer: this.vertexBuffer, byteOffset: 0, }],
@@ -1512,7 +1512,7 @@ export class FlipbookRenderer {
             this.textureMappings[i].gfxTexture = renderData.textures[i];
             this.textureMappings[i].gfxSampler = renderData.samplers[i];
         }
-        setAttachmentStateSimple(this.megaStateFlags, { blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA });
+        setAttachmentStateSimple(this.megaStateFlags, { blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
         this.mode = flipbookData.mode;
         this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
@@ -1569,7 +1569,7 @@ export class FlipbookRenderer {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        this.megaStateFlags.cullMode = GfxCullMode.NONE;
+        this.megaStateFlags.cullMode = GfxCullMode.None;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -1631,7 +1631,7 @@ export class FlipbookRenderer {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animateFlipbook(texMappingScratch, texMatrixScratch);

@@ -20,8 +20,8 @@ import { DataFetcher } from '../DataFetcher';
 import { MathConstants, scaleMatrix } from '../MathHelpers';
 import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles';
 import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 
 const pathBase = `BanjoKazooie`;
 
@@ -104,7 +104,7 @@ class BKRenderer implements Viewer.SceneGfx {
             this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.sceneEmitters.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -122,7 +122,7 @@ class BKRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, BKPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, BKPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -131,19 +131,19 @@ class BKRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, BKPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, BKPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.geoDatas.length; i++)
             this.geoDatas[i].destroy(device);
         this.textureHolder.destroy(device);
@@ -271,9 +271,10 @@ export function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
 
 class ObjectData {
     public geoData: (GeometryData | FlipbookData | null)[] = [];
-    public gfxCache = new GfxRenderCache();
+    public gfxCache: GfxRenderCache;
 
-    constructor(private objectSetupData: ObjectSetupData) {
+    constructor(device: GfxDevice, private objectSetupData: ObjectSetupData) {
+        this.gfxCache = new GfxRenderCache(device);
     }
 
     public ensureGeoData(device: GfxDevice, geoFileID: number, objectID = -1): GeometryData | FlipbookData | null {
@@ -467,14 +468,14 @@ class ObjectData {
                 data.renderData.destroy(device);
         }
 
-        this.gfxCache.destroy(device);
+        this.gfxCache.destroy();
     }
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
     const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=10`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
-    return new ObjectData(objectSetup);
+    return new ObjectData(device, objectSetup);
 }
 
 interface MovementFactory {

@@ -362,17 +362,17 @@ export class ParticleManager {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private level: ParticleSystem, private common: ParticleSystem) {
         // build shared particle sprite buffers
-        const vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
-        const indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint8Array([0, 2, 3, 0, 1, 3]).buffer);
+        const vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
+        const indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([0, 2, 3, 0, 1, 3]).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: ParticleProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         const inputLayout = device.createInputLayout({
-            indexBufferFormat: GfxFormat.U8_R,
+            indexBufferFormat: GfxFormat.U16_R,
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
         });
@@ -403,14 +403,14 @@ export class ParticleManager {
         }
 
         this.megaStateFlags = {
-            depthCompare: GfxCompareMode.GREATER,
+            depthCompare: GfxCompareMode.Greater,
             depthWrite: false,
-            cullMode: GfxCullMode.NONE,
+            cullMode: GfxCullMode.None,
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
     }
 
@@ -604,13 +604,13 @@ void main() {
     public frag = `
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
-    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
     vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
     t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
-    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
-    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    vec4 t_S0 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - t_Offs / t_Size);
+    vec4 t_S1 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
+    vec4 t_S2 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
@@ -619,7 +619,7 @@ void main() {
     vec4 t_Tex = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Tex = Texture2D_N64_Bilerp(u_Texture, v_TexCoord);
+    t_Tex = Texture2D_N64_Bilerp(PP_SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
 #ifdef TEX_LERP
@@ -960,7 +960,7 @@ class Particle {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);

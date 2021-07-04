@@ -36,8 +36,8 @@ class MyShapeHelper {
 
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
-                dynamicVertices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
+                dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
 
             buffers.push({
@@ -48,17 +48,17 @@ class MyShapeHelper {
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
             buffers.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
         }
 
-        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
-        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
-            dynamicIndices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
+            dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
         const indexBufferDesc: GfxIndexBufferDescriptor = {
             buffer: this.indexBuffer,
@@ -164,6 +164,15 @@ export class ShapeGeometry {
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
 
+        // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
+        // The translucent flag must be set before calling setSortKeyDepth, otherwise errors will occur.
+        if (overrideSortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
+        else if (this.sortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + this.sortLayer);
+        else
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT);
+
         if (overrideSortDepth !== undefined)
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, overrideSortDepth);
         else if (this.aabb !== undefined) {
@@ -173,17 +182,13 @@ export class ShapeGeometry {
             vec3.transformMat4(scratchVec0, scratchVec0, modelViewMtx);
             const depth = -scratchVec0[2];
 
+            // const debugCtx = getDebugOverlayCanvas2D();
+            // drawWorldSpaceAABB(debugCtx, camera.clipFromWorldMatrix, this.aabb, matrix);
+
             // XXX: the game has a max sort-key of 0x7fffff, whereas we have a max of 0xffff.
             // Hopefully our depth range is adequate.
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
-
-        // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
-        // FIXME: Depth sorting errors abound.
-        if (overrideSortLayer !== undefined)
-            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
-        else if (this.sortLayer !== undefined)
-            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + this.sortLayer);
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
             // If fine-skinning is enabled, matrix 9 is overridden with the identity matrix.

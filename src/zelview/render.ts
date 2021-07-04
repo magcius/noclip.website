@@ -34,13 +34,13 @@ const enum TexCM {
 
 function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    case TexCM.WRAP:   return GfxWrapMode.Repeat;
+    case TexCM.MIRROR: return GfxWrapMode.Mirror;
+    case TexCM.CLAMP:  return GfxWrapMode.Clamp;
     // TODO: handle TexCM.MIRROR | TexCM.CLAMP (0x3) -- "mirror once" mode; occurs in Forest Temple
     default:
         console.warn(`Unknown TexCM ${cm}`);
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
     }
 }
 
@@ -72,12 +72,12 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
 }
 
 function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+    return cache.createSampler({
         wrapS: translateCM(texture.tile.cmS),
         wrapT: translateCM(texture.tile.cmT),
-        minFilter: GfxTexFilterMode.POINT,
-        magFilter: GfxTexFilterMode.POINT,
-        mipFilter: GfxMipFilterMode.NO_MIP,
+        minFilter: GfxTexFilterMode.Point,
+        magFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.NoMip,
         minLOD: 0, maxLOD: 0,
     });
 }
@@ -95,16 +95,16 @@ export class RenderData {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Dynamic
             );
         } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -113,7 +113,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -241,7 +241,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -359,9 +359,9 @@ export class RootMeshRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, private geometryData: MeshData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         const geo = this.geometryData.mesh;

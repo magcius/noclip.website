@@ -8,6 +8,7 @@ import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, 
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { mat4 } from "gl-matrix";
+import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -396,23 +397,23 @@ export function translateToGfxTexture(device: GfxDevice, texture: Texture): GfxT
 
 export function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
+    case TexCM.WRAP:   return GfxWrapMode.Repeat;
+    case TexCM.MIRROR: return GfxWrapMode.Mirror;
+    case TexCM.CLAMP:  return GfxWrapMode.Clamp;
+    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.Mirror;
     }
 }
 
 export function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+    return cache.createSampler({
         // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
         // it should repeat within the coordinate range, and clamp outside
         // then ignore clamping here, and handle it in the shader
         wrapS: translateCM(getMaskedCMS(texture.tile)),
         wrapT: translateCM(getMaskedCMT(texture.tile)),
-        minFilter: GfxTexFilterMode.POINT,
-        magFilter: GfxTexFilterMode.POINT,
-        mipFilter: GfxMipFilterMode.NO_MIP,
+        minFilter: GfxTexFilterMode.Point,
+        magFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.NoMip,
         minLOD: 0, maxLOD: 0,
     });
 }
@@ -481,13 +482,13 @@ export const enum ZMode {
 
 function translateZMode(zmode: ZMode): GfxCompareMode {
     if (zmode === ZMode.ZMODE_OPA)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Less;
     if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Less;
     if (zmode === ZMode.ZMODE_XLU)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Less;
     if (zmode === ZMode.ZMODE_DEC)
-        return GfxCompareMode.GEQUAL;
+        return GfxCompareMode.LessEqual;
     throw "Unknown Z mode: " + zmode;
 }
 
@@ -514,17 +515,17 @@ export const enum BlendParam_B {
 
 function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
     if (paramB === BlendParam_B.G_BL_1MA) {
-        if (srcParam === GfxBlendFactor.SRC_ALPHA)
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        if (srcParam === GfxBlendFactor.ONE)
-            return GfxBlendFactor.ZERO;
-        return GfxBlendFactor.ONE;
+        if (srcParam === GfxBlendFactor.SrcAlpha)
+            return GfxBlendFactor.OneMinusSrcAlpha;
+        if (srcParam === GfxBlendFactor.One)
+            return GfxBlendFactor.Zero;
+        return GfxBlendFactor.One;
     } else if (paramB === BlendParam_B.G_BL_A_MEM) {
-        return GfxBlendFactor.DST_ALPHA;
+        return GfxBlendFactor.DstAlpha;
     } else if (paramB === BlendParam_B.G_BL_1) {
-        return GfxBlendFactor.ONE;
+        return GfxBlendFactor.One;
     } else if (paramB === BlendParam_B.G_BL_0) {
-        return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.Zero;
     }
 
     throw "Unknown Blend Param B: "+paramB;
@@ -544,33 +545,33 @@ export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDes
 
         let blendSrcFactor: GfxBlendFactor;
         if (srcFactor === BlendParam_A.G_BL_0) {
-            blendSrcFactor = GfxBlendFactor.ZERO;
+            blendSrcFactor = GfxBlendFactor.Zero;
         } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
             !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
             // this is technically "coverage", admitting blending on edges
-            blendSrcFactor = GfxBlendFactor.ONE;
+            blendSrcFactor = GfxBlendFactor.One;
         } else {
-            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            blendSrcFactor = GfxBlendFactor.SrcAlpha;
         }
         setAttachmentStateSimple(out, {
             blendSrcFactor: blendSrcFactor,
             blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
-            blendMode: GfxBlendMode.ADD,
+            blendMode: GfxBlendMode.Add,
         });
     } else {
         // without FORCE_BL, blending only happens for AA of internal edges
         // since we are ignoring n64 coverage values and AA, this means "never"
         // if dstColor isn't the framebuffer, we'll take care of the "blending" in the shader
         setAttachmentStateSimple(out, {
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ZERO,
-            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.Zero,
+            blendMode: GfxBlendMode.Add,
         });
     }
 
     if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
         const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
-        out.depthCompare = translateZMode(zmode);
+        out.depthCompare = reverseDepthForCompareMode(translateZMode(zmode));
     }
 
     const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;

@@ -8,14 +8,14 @@ import { Entity } from "./Entity";
 import { mat4 } from "gl-matrix";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
 import { TheWitnessGlobals } from "./Globals";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 const pathBase = `TheWitness`;
 
@@ -138,7 +138,7 @@ class Device_Material {
         for (let i = 0; i < 4; i++)
             this.load_texture_into_texture_mapping(globals, 8 + i, this.render_material.blend_map_names[i]);
 
-        this.gfx_program = globals.asset_manager.cache.createProgram(globals.asset_manager.device, this.program);
+        this.gfx_program = globals.asset_manager.cache.createProgram(this.program);
     }
 
     private load_texture_into_texture_mapping(globals: TheWitnessGlobals, i: number, texture_name: string | null): void {
@@ -224,7 +224,7 @@ class TheWitnessRenderer implements SceneGfx {
         for (let i = 0; i < this.mesh_instance_array.length; i++)
             this.mesh_instance_array[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -241,14 +241,14 @@ class TheWitnessRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
 
         /*
@@ -262,7 +262,7 @@ class TheWitnessRenderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
     }
 }
 

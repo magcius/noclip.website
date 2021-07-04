@@ -1,6 +1,6 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
@@ -21,7 +21,7 @@ import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { FloatingPanel } from "../DebugFloaters";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 function setLateTextureMapping(m: TextureMapping, lateBinding: string): void {
     m.lateBinding = lateBinding;
@@ -64,7 +64,10 @@ class BasicEffectSystem {
     public resourceDataUsesFB(resourceData: JPA.JPAResourceData): boolean {
         for (let i = 0; i < resourceData.textureIds.length; i++) {
             const texID = resourceData.textureIds[i];
-            const textureName = this.jpacData.jpac.textures[texID].texture.name;
+            const jpaTexture = this.jpacData.jpac.textures[texID];
+            if (jpaTexture === undefined)
+                continue;
+            const textureName = jpaTexture.texture.name;
             if (this.fbTextureNames.includes(textureName))
                 return true;
         }
@@ -194,7 +197,7 @@ function makeDataList(strings: string[]): HTMLDataListElement {
 
 const enum Pass { MAIN, INDIRECT }
 
-const clearPass = makeClearRenderPassDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
+const clearPass = makeAttachmentClearDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class Explorer implements SceneGfx {
@@ -455,7 +458,7 @@ export class Explorer implements SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -473,7 +476,7 @@ export class Explorer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, Pass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, Pass.MAIN);
             });
         });
 
@@ -488,14 +491,14 @@ export class Explorer implements SceneGfx {
                 const opaqueSceneTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
                 renderInstManager.setVisibleByFilterKeyExact(Pass.INDIRECT);
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null, lateBinding: null });
-                executeOnPass(renderInstManager, device, passRenderer, Pass.INDIRECT);
+                executeOnPass(renderInstManager, passRenderer, Pass.INDIRECT);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 

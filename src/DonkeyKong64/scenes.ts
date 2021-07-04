@@ -4,7 +4,7 @@ import * as BYML from '../byml';
 
 import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
 import { translateBlendMode, RSP_Geometry, translateCullMode } from '../zelview/f3dzex';
 import { nArray, align, assert } from '../util';
@@ -27,7 +27,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Pako from 'pako';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `DonkeyKong64`;
 
@@ -38,13 +38,13 @@ function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     return gfxTexture;
 }
 
-function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+function translateSampler(cache: GfxRenderCache, texture: Texture): GfxSampler {
+    return cache.createSampler({
         wrapS: translateCM(texture.tile.cms),
         wrapT: translateCM(texture.tile.cmt),
-        minFilter: GfxTexFilterMode.POINT,
-        magFilter: GfxTexFilterMode.POINT,
-        mipFilter: GfxMipFilterMode.NO_MIP,
+        minFilter: GfxTexFilterMode.Point,
+        magFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.NoMip,
         minLOD: 0, maxLOD: 0,
     });
 }
@@ -85,7 +85,7 @@ class DrawCallInstance {
             if (tex) {
                 this.textureEntry[i] = tex;
                 this.textureMappings[i].gfxTexture = translateTexture(device, tex);
-                this.textureMappings[i].gfxSampler = translateSampler(device, cache, tex);
+                this.textureMappings[i].gfxSampler = translateSampler(cache, tex);
             }
         }
 
@@ -128,7 +128,7 @@ class DrawCallInstance {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.None;
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -166,7 +166,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -238,16 +238,16 @@ export class RenderData {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Dynamic
             );
         } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -256,7 +256,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -350,9 +350,9 @@ export class RootMeshRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, private geometryData: MeshData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         const geo = this.geometryData.mesh;
@@ -462,7 +462,7 @@ class DK64Renderer implements Viewer.SceneGfx {
             this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -479,19 +479,19 @@ class DK64Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].destroy(device);
         for (let i = 0; i < this.meshDatas.length; i++)

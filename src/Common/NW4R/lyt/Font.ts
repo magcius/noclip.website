@@ -280,8 +280,11 @@ export class CharWriter {
         this.charSpacing = charSpacing;
         this.scale[0] = fontWidth !== null ? (fontWidth / rfnt.width) : 1;
         this.scale[1] = fontHeight !== null ? (fontHeight / rfnt.height) : 1;
-        // TODO(jstpierre): This isn't correct
-        this.lineHeight = lineHeight - (rfnt.advanceHeight * this.scale[1]);
+        this.lineHeight = lineHeight;
+    }
+
+    public getScaledLineHeight(): number {
+        return this.lineHeight + (this.font.rfnt.advanceHeight * this.scale[1]);
     }
 
     public calcRect(dst: vec4, str: string): void {
@@ -310,7 +313,7 @@ export class CharWriter {
             x += glyphWidth;
         }
     
-        const y = this.lineHeight;
+        const y = this.getScaledLineHeight();
     
         const x0 = Math.min(x, 0), x1 = Math.max(x, 0);
         const y0 = Math.min(y, 0), y1 = Math.max(y, 0);
@@ -350,30 +353,30 @@ export class CharWriter {
         ddraw.end();
     }
 
-    private drawStringFlush(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
+    private drawStringFlush(renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
         if (!ddraw.canMakeRenderInst())
             return;
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public drawString(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string): void {
+    public drawString(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string): void {
         const cache = renderInstManager.gfxRenderCache;
 
-        this.textureMapping[0].gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        this.textureMapping[0].gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
 
         const template = renderInstManager.pushTemplateRenderInst();
-        this.font.materialHelper.setOnRenderInst(device, cache, template);
+        this.font.materialHelper.setOnRenderInst(cache.device, cache, template);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.color1);
         this.font.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -400,7 +403,7 @@ export class CharWriter {
             // If we're going to switch textures, flush the previous batch.
             const gfxTexture = this.font.gfxTextures[glyphInfo.textureIndex];
             if (gfxTexture !== this.textureMapping[0].gfxTexture) {
-                this.drawStringFlush(device, renderInstManager, ddraw);
+                this.drawStringFlush(renderInstManager, ddraw);
                 this.textureMapping[0].gfxTexture = gfxTexture;
             }
 
@@ -409,7 +412,7 @@ export class CharWriter {
             this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
         }
 
-        this.drawStringFlush(device, renderInstManager, ddraw);
+        this.drawStringFlush(renderInstManager, ddraw);
         renderInstManager.popTemplateRenderInst();
     }
 }

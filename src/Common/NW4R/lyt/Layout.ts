@@ -1279,7 +1279,7 @@ export class LayoutPicture extends LayoutPane {
 
         const template = renderInstManager.pushTemplateRenderInst();
         this.setOnRenderInst(template);
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
         renderInstManager.popTemplateRenderInst();
     }
@@ -1399,7 +1399,7 @@ export class LayoutTextbox extends LayoutPane {
         const y0 = this.getBasePositionY() - (this.height - h) * this.getTextPositionY();
 
         vec3.set(charWriter.cursor, x0, y0, 0);
-        charWriter.drawString(device, renderInstManager, ddraw, this.str);
+        charWriter.drawString(renderInstManager, ddraw, this.str);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -1521,7 +1521,7 @@ export class LayoutWindow extends LayoutPane {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
     }
 
@@ -1568,7 +1568,7 @@ export class LayoutWindow extends LayoutPane {
         drawQuad(ddraw, baseX, baseY, baseZ, width, height, vertexColors, alpha, this.texCoords);
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
     }
 
@@ -1799,7 +1799,7 @@ export class Layout {
 
         this.ddraw.beginDraw();
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {

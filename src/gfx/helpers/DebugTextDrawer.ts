@@ -2,18 +2,21 @@
 import { SceneContext } from "../../SceneBase";
 import { GfxDevice } from "../platform/GfxPlatform";
 
-import { decompress } from "../../Common/Compression/Yaz0";
-import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
 import * as GX from '../../gx/gx_enum';
-import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font";
 import { GfxRenderInst, GfxRenderInstManager } from "../render/GfxRenderInstManager";
-import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
-import { GX_Program } from "../../gx/gx_material";
 import { fillMatrix4x3 } from "./UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
 import { computeProjectionMatrixFromCuboid, MathConstants } from "../../MathHelpers";
 import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color";
+
+// TODO(jstpierre): Don't use the Super Mario Galaxy system for this... use our own font data,
+// or use HTML5 canvas? It would be helpful to have in any case...
+import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font";
+import { decompress } from "../../Common/Compression/Yaz0";
+import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
+import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
+import { GX_Program } from "../../gx/gx_material";
+import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();
@@ -26,7 +29,7 @@ export class DebugTextDrawer {
     public textColor = colorNewCopy(White);
     public strokeColor = colorNewCopy(OpaqueBlack);
 
-    constructor(context: SceneContext, private fontData: ResFont) {
+    constructor(private fontData: ResFont) {
         this.charWriter.setFont(fontData, 0, 0);
 
         const ddraw = this.ddraw;
@@ -57,12 +60,16 @@ export class DebugTextDrawer {
     }
 
     public endDraw(renderInstManager: GfxRenderInstManager): void {
-        this.ddraw.endAndUpload(renderInstManager.device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public setFontScale(scale: number): void {
         this.charWriter.scale[0] = scale;
         this.charWriter.scale[1] = scale;
+    }
+
+    public getScaledLineHeight(): number {
+        return this.charWriter.getScaledLineHeight();
     }
 
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
@@ -84,13 +91,13 @@ export class DebugTextDrawer {
             const theta = i * MathConstants.TAU / strokeNum;
             const sy = strokeWidth * Math.sin(theta), sx = strokeWidth * Math.cos(theta);
             vec3.set(this.charWriter.cursor, x + sx, y + sy, 0);
-            this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
+            this.charWriter.drawString(renderInstManager, this.ddraw, str);
         }
 
         // Main fill
         colorCopy(this.charWriter.color1, this.textColor);
         vec3.set(this.charWriter.cursor, x, y, 0);
-        this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
+        this.charWriter.drawString(renderInstManager, this.ddraw, str);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -106,6 +113,6 @@ export async function makeDebugTextDrawer(context: SceneContext): Promise<DebugT
         const fontArcData = await context.dataFetcher.fetchData(`SuperMarioGalaxy/LayoutData/Font.arc`);
         const fontArc = JKRArchive.parse(await decompress(fontArcData));
         const fontData = new ResFont(context.device, parseBRFNT(fontArc.findFileData(`messagefont26.brfnt`)!));
-        return new DebugTextDrawer(context, fontData);
+        return new DebugTextDrawer(fontData);
     });
 }

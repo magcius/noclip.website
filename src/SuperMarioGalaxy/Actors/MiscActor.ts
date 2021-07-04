@@ -36,7 +36,7 @@ import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType }
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail, RailRider } from '../RailRider';
-import { addShadowVolumeCylinder, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
+import { addShadowVolumeCylinder, addShadowVolumeLine, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
@@ -612,6 +612,10 @@ class Coin extends LiveActor<CoinNrv> {
         addHitSensor(sceneObjHolder, this, 'coin', HitSensorType.Coin, 4, 55.0, scratchVec3a);
         this.initBinder(55.0, 70.0, 0);
         // setBinderExceptSensorType
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        if (infoIter !== null)
+            this.setShadowAndPoseModeFromJMapIter(infoIter);
 
         this.initShadow(sceneObjHolder, infoIter);
         this.flashingCtrl = new FlashingCtrl(sceneObjHolder, this, true);
@@ -908,6 +912,14 @@ export function createCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjH
 export function createDirectSetPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
     const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
     coin.initialize(sceneObjHolder, infoIter);
+    // TODO(jstpierre): PurpleCoinHolder
+    return coin;
+}
+
+export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
+    const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
+    coin.initialize(sceneObjHolder, infoIter);
+    // TODO(jstpierre): PurpleCoinHolder
     return coin;
 }
 
@@ -936,7 +948,7 @@ abstract class CoinGroup extends LiveActor<CoinGroupNrv> {
 
         for (let i = 0; i < coinCount; i++) {
             if (this.isPurpleCoin) {
-                this.coinArray.push(createDirectSetPurpleCoin(zoneAndLayer, sceneObjHolder, null));
+                this.coinArray.push(createPurpleCoin(zoneAndLayer, sceneObjHolder, null));
             } else {
                 this.coinArray.push(createCoin(zoneAndLayer, sceneObjHolder, this, null));
             }
@@ -2587,8 +2599,8 @@ class SpinDriverPathDrawer extends LiveActor {
         const texMtx0 = materialParams.u_TexMtx[0];
         mat4.identity(texMtx0);
 
-        const renderInst = ddraw.endDraw(renderInstManager.device, renderInstManager);
-        materialHelper.setOnRenderInst(renderInstManager.device, renderInstManager.gfxRenderCache, renderInst);
+        const renderInst = ddraw.endDraw(renderInstManager);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache.device, renderInstManager.gfxRenderCache, renderInst);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         packetParams.clear();
@@ -3599,7 +3611,7 @@ class WarpPodPathDrawer {
 
         this.ddraw.beginDraw();
         this.drawPath(viewerInput.camera);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();
@@ -3982,7 +3994,7 @@ export class WaterPlant extends LiveActor {
         }
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
         const materialHelper = waterPlantDrawInit.materialHelper;
@@ -4401,7 +4413,7 @@ export class SwingRope extends LiveActor {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
         swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -4638,7 +4650,7 @@ export class Trapeze extends LiveActor {
         this.drawRope(scratchVec3a, scratchVec3b, this.swingRopePoint.axisX, this.swingRopePoint.axisZ, 0.0, 0.003 * this.height);
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
         trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -4827,7 +4839,7 @@ export class Creeper extends LiveActor {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = this.materialHelper;
@@ -5019,7 +5031,7 @@ class OceanRingDrawer {
         }
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
         setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
@@ -5285,8 +5297,8 @@ class OceanRingPipe extends LiveActor {
             moveCoord(this, segmentSize);
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },
@@ -5294,10 +5306,10 @@ class OceanRingPipe extends LiveActor {
             { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -5803,7 +5815,7 @@ export class Flag extends LiveActor {
         }
 
         const device = sceneObjHolder.modelCache.device;
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
@@ -6188,8 +6200,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         if (railShadowDropLength > 0.0 || pointShadowDropLength > 0.0) {
             initShadowController(this);
 
-            if (pointShadowDropLength <= 0.0)
+            let useLine = false;
+            if (pointShadowDropLength <= 0.0) {
                 pointShadowDropLength = railShadowDropLength;
+                useLine = true;
+            }
 
             addShadowVolumeCylinder(sceneObjHolder, this, 'start', 20.0);
             addShadowVolumeCylinder(sceneObjHolder, this, 'end', 20.0);
@@ -6202,7 +6217,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
             onCalcShadowDropPrivateGravity(this, 'start');
             onCalcShadowDropPrivateGravity(this, 'end');
 
-            // TODO(jstpierre): ElectricRailShadowDrawer / addShadowVolumeLine
+            if (useLine) {
+                addShadowVolumeLine(sceneObjHolder, this, "line", this, "start", 20.0, this, "end", 20.0);
+            } else {
+                // TODO(jstpierre): ElectricRailShadowDrawer
+            }
         }
     }
 
@@ -6248,7 +6267,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.drawPlane(this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const modelCache = sceneObjHolder.modelCache;
-        this.ddraw.endDraw(modelCache.device, modelCache.cache);
+        this.ddraw.endDraw(modelCache.cache);
     }
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
@@ -6500,7 +6519,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.drawPlane(sceneObjHolder, this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const modelCache = sceneObjHolder.modelCache;
-        this.ddraw.endDraw(modelCache.device, modelCache.cache);
+        this.ddraw.endDraw(modelCache.cache);
     }
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
@@ -7994,7 +8013,7 @@ class AstroDomeOrbit extends LiveActor {
         this.drawCeiling(ddraw, width, false, height);
         this.drawSide(ddraw, width, true, height);
         this.drawSide(ddraw, width, false, height);
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], color);
 
@@ -8899,7 +8918,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.drawPlane(this.ddraw, -0.5, -Math.SQRT1_2,  0.5, -Math.SQRT1_2, this.texCoordS + 3/6, this.texCoordS + 4/6);
         this.drawPlane(this.ddraw,  0.5, -Math.SQRT1_2,  1.0,  0.0,          this.texCoordS + 4/6, this.texCoordS + 5/6);
         this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);

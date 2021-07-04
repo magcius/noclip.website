@@ -1,26 +1,23 @@
 
-import { GfxDevice, GfxUniformBuffer } from "../platform/GfxPlatform";
-import { assert, assertExists, alignNonPowerOfTwo } from "../../util";
-
-// TODO(jstpierre): Maybe this makes more sense as a native platform object
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
+import { assert, assertExists, alignNonPowerOfTwo } from "../platform/GfxPlatformUtil";
 
 // This is a very basic linear allocator. We allocate offsets in-order.
 export class GfxRenderDynamicUniformBuffer {
     private uniformBufferWordAlignment: number;
     private uniformBufferMaxPageWordSize: number;
 
+    private currentBufferWordSize: number = -1;
     private currentWordOffset: number = 0;
-    public gfxUniformBuffer: GfxUniformBuffer;
+    public gfxBuffer: GfxBuffer | null = null;
 
     private shadowBufferF32: Float32Array | null = null;
     private shadowBufferU8: Uint8Array | null = null;
 
-    constructor(device: GfxDevice) {
+    constructor(private device: GfxDevice) {
         const limits = device.queryLimits();
         this.uniformBufferWordAlignment = limits.uniformBufferWordAlignment;
         this.uniformBufferMaxPageWordSize = limits.uniformBufferMaxPageWordSize;
-
-        this.gfxUniformBuffer = device.createUniformBuffer();
     }
 
     private findPageIndex(wordOffset: number): number {
@@ -72,23 +69,39 @@ export class GfxRenderDynamicUniformBuffer {
         return assertExists(this.shadowBufferF32);
     }
 
-    public prepareToRender(device: GfxDevice): void {
+    public prepareToRender(): void {
         if (this.shadowBufferF32 === null) {
             // Nothing to do.
             return;
         }
 
+        const shadowBufferF32 = assertExists(this.shadowBufferF32);
+
+        if (shadowBufferF32.length !== this.currentBufferWordSize) {
+            this.currentBufferWordSize = shadowBufferF32.length;
+
+            if (this.gfxBuffer !== null)
+                this.device.destroyBuffer(this.gfxBuffer);
+
+            this.gfxBuffer = this.device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.Uniform, GfxBufferFrequencyHint.Dynamic);
+        }
+
         const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
-        const gfxBuffer = assertExists(this.gfxUniformBuffer);
-        device.uploadUniformBufferData(gfxBuffer, this.shadowBufferU8!, wordCount * 4);
+        if (!(wordCount <= this.currentBufferWordSize))
+            throw new Error(`Assert fail: wordCount [${wordCount}] (${this.currentWordOffset} aligned ${this.uniformBufferMaxPageWordSize}) <= this.currentBufferWordSize [${this.currentBufferWordSize}]`);
+
+        const gfxBuffer = assertExists(this.gfxBuffer);
+        this.device.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount * 4);
 
         // Reset the offset for next frame.
         // TODO(jstpierre): Should this be a separate step?
         this.currentWordOffset = 0;
     }
 
-    public destroy(device: GfxDevice): void {
-        device.destroyUniformBuffer(this.gfxUniformBuffer);
+    public destroy(): void {
+        if (this.gfxBuffer !== null)
+            this.device.destroyBuffer(this.gfxBuffer);
+
         this.shadowBufferF32 = null;
         this.shadowBufferU8 = null;
     }

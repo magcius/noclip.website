@@ -145,9 +145,9 @@ class Command_Bin {
             const gfxSampler = device.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
-                minFilter: GfxTexFilterMode.BILINEAR,
-                magFilter: GfxTexFilterMode.BILINEAR,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
                 minLOD: 0,
                 maxLOD: 100,
             });
@@ -194,7 +194,7 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
             this.binCommands[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {

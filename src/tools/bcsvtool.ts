@@ -8,7 +8,7 @@ import { assert } from 'console';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(new Uint8Array(b).buffer as ArrayBuffer);
+    return new ArrayBufferSlice(new Uint8Array(b).buffer);
 }
 
 class CSVWriter {

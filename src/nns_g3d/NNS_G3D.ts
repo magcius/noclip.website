@@ -220,13 +220,13 @@ function expand5to8(n: number): number {
 function translateCullMode(renderWhichFaces: number): GfxCullMode {
     switch (renderWhichFaces) {
     case 0x00: // Render Nothing
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     case 0x01: // Render Back
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     case 0x02: // Render Front
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     case 0x03: // Render Front and Back
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
     default:
         throw new Error("Unknown renderWhichFaces");
     }

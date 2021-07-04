@@ -97,21 +97,21 @@ export class SFARenderer implements Viewer.SceneGfx {
         };
 
         const cache = this.renderHelper.getCache();
-        this.opaqueColorTextureMapping.gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        this.opaqueColorTextureMapping.gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
-        this.opaqueDepthTextureMapping.gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        this.opaqueDepthTextureMapping.gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -172,7 +172,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
         this.shimmerddraw.end();
 
-        const renderInst = this.shimmerddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = this.shimmerddraw.makeRenderInst(renderInstManager);
 
         if (this.heatShimmerMaterial === undefined)
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
@@ -194,7 +194,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         }
         setGXMaterialOnRenderInst(device, renderInstManager, this.heatShimmerMaterial!.getGXMaterialHelper(), renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
 
-        this.shimmerddraw.endAndUpload(device, renderInstManager);
+        this.shimmerddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
 
@@ -216,7 +216,7 @@ export class SFARenderer implements Viewer.SceneGfx {
                 renderInst.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
                 this.opaqueDepthTextureMapping.gfxTexture = scope.getResolveTextureForID(resampledDepthResolveTextureID);
                 renderInst.resolveLateSamplerBinding('opaque-depth-texture-downscale-2x', this.opaqueDepthTextureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }
@@ -310,13 +310,13 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.prepareToRender();
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.temporalTexture.destroy(device);
     }
 }

@@ -554,9 +554,9 @@ const enum TexCM {
 
 function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-        case TexCM.WRAP: return GfxWrapMode.REPEAT;
-        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
+        case TexCM.WRAP: return GfxWrapMode.Repeat;
+        case TexCM.MIRROR: return GfxWrapMode.Mirror;
+        case TexCM.CLAMP: return GfxWrapMode.Clamp;
     }
 }
 
@@ -579,9 +579,9 @@ class TextureData {
         this.gfxSampler = device.createSampler({
             wrapS: translateCM(rspState.primitiveTile.cms),
             wrapT: translateCM(rspState.primitiveTile.cmt),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
     }

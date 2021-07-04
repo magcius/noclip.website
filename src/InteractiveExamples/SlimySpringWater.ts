@@ -20,7 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, SceneDesc } from '../SceneBase';
 import { assert } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { createModelInstance } from '../j3d/scenes';
 import { computeModelMatrixS } from '../MathHelpers';
 import { AABB } from '../Geometry';
@@ -28,7 +28,7 @@ import * as GX from '../gx/gx_enum';
 import { colorNewCopy, White } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dfUsePercent } from '../DebugFloaters';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -108,8 +108,8 @@ class PlaneShape {
         }
         assert(indexOffs === this.indexCount);
 
-        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GX_Material.getVertexInputLocation(VertexAttributeInput.POS),   format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, bufferIndex: 0, },
@@ -118,11 +118,11 @@ class PlaneShape {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 9*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 9*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
-        this.inputLayout = cache.createInputLayout(device, {
+        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
@@ -205,7 +205,7 @@ class FakeWaterModelInstance {
             mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.RASA, GX.CC.A2, GX.CC.ZERO);
             mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.KONST, GX.CA.A2, GX.CA.ZERO);
 
-            material.tevStages.push.apply(material.tevStages, mb.finish().tevStages);
+            material.tevStages.push(... mb.finish().tevStages);
         }
 
         // Replace the alpha test section with dynamic alpha test based on s_kColor3.
@@ -298,7 +298,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.waterModel.prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -315,19 +315,19 @@ class SlimySpringWaterRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.skybox.destroy(device);
         this.flowerBox.destroy(device);
         this.waterModel.destroy(device);

@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxUniformBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxFormat } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
@@ -32,7 +32,7 @@ export function gfxSamplerBindingNew(): GfxSamplerBinding {
     return { gfxSampler: null, gfxTexture: null, lateBinding: null };
 }
 
-export function gfxUniformBufferBindingCopy(a: Readonly<GfxUniformBufferBinding>): GfxUniformBufferBinding {
+export function gfxBufferBindingCopy(a: Readonly<GfxBufferBinding>): GfxBufferBinding {
     const buffer = a.buffer;
     const wordCount = a.wordCount;
     return { buffer, wordCount };
@@ -41,7 +41,7 @@ export function gfxUniformBufferBindingCopy(a: Readonly<GfxUniformBufferBinding>
 export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): GfxBindingsDescriptor {
     const bindingLayout = a.bindingLayout;
     const samplerBindings = arrayCopy(a.samplerBindings, gfxSamplerBindingCopy);
-    const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxUniformBufferBindingCopy);
+    const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxBufferBindingCopy);
     return { bindingLayout, samplerBindings, uniformBufferBindings };
 }
 
@@ -88,7 +88,7 @@ export function gfxInputLayoutDescriptorCopy(a: Readonly<GfxInputLayoutDescripto
     return { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
 }
 
-function gfxUniformBufferBindingEquals(a: Readonly<GfxUniformBufferBinding>, b: Readonly<GfxUniformBufferBinding>): boolean {
+function gfxBufferBindingEquals(a: Readonly<GfxBufferBinding>, b: Readonly<GfxBufferBinding>): boolean {
     return a.buffer === b.buffer && a.wordCount === b.wordCount;
 }
 
@@ -98,10 +98,16 @@ function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Reado
     return a.gfxSampler === b.gfxSampler && a.gfxTexture === b.gfxTexture;
 }
 
+export function gfxBindingLayoutDescriptorEqual(a: Readonly<GfxBindingLayoutDescriptor>, b: Readonly<GfxBindingLayoutDescriptor>): boolean {
+    if (a.numSamplers !== b.numSamplers) return false;
+    if (a.numUniformBuffers !== b.numUniformBuffers) return false;
+    return true;
+}
+
 export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, b: Readonly<GfxBindingsDescriptor>): boolean {
     if (a.samplerBindings.length !== b.samplerBindings.length) return false;
     if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
-    if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxUniformBufferBindingEquals)) return false;
+    if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxBufferBindingEquals)) return false;
     if (!gfxBindingLayoutEquals(a.bindingLayout, b.bindingLayout)) return false;
     return true;
 }
@@ -113,7 +119,7 @@ function gfxChannelBlendStateEquals(a: Readonly<GfxChannelBlendState>, b: Readon
 function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<GfxAttachmentState>): boolean {
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
     if (!gfxChannelBlendStateEquals(a.alphaBlendState, b.alphaBlendState)) return false;
-    if (a.colorWriteMask !== b.colorWriteMask) return false;
+    if (a.channelWriteMask !== b.channelWriteMask) return false;
     return true;
 }
 
@@ -143,6 +149,10 @@ function gfxProgramEquals(a: Readonly<GfxProgram>, b: Readonly<GfxProgram>): boo
     return a.ResourceUniqueId === b.ResourceUniqueId;
 }
 
+function gfxFormatEquals(a: GfxFormat | null, b: GfxFormat | null): boolean {
+    return a === b;
+}
+
 export function gfxRenderPipelineDescriptorEquals(a: Readonly<GfxRenderPipelineDescriptor>, b: Readonly<GfxRenderPipelineDescriptor>): boolean {
     if (a.topology !== b.topology) return false;
     if (a.inputLayout !== b.inputLayout) return false;
@@ -150,6 +160,8 @@ export function gfxRenderPipelineDescriptorEquals(a: Readonly<GfxRenderPipelineD
     if (!gfxMegaStateDescriptorEquals(a.megaStateDescriptor, b.megaStateDescriptor)) return false;
     if (!gfxProgramEquals(a.program, b.program)) return false;
     if (!arrayEqual(a.bindingLayouts, b.bindingLayouts, gfxBindingLayoutEquals)) return false;
+    if (!arrayEqual(a.colorAttachmentFormats, b.colorAttachmentFormats, gfxFormatEquals)) return false;
+    if (a.depthStencilAttachmentFormat !== b.depthStencilAttachmentFormat) return false;
     return true;
 }
 
@@ -240,4 +252,14 @@ export function nArray<T>(n: number, c: () => T): T[] {
 
 export function nullify<T>(v: T | undefined | null): T | null {
     return v === undefined ? null : v;
+}
+
+// Requires that multiple is a power of two.
+export function align(n: number, multiple: number): number {
+    const mask = (multiple - 1);
+    return (n + mask) & ~mask;
+}
+
+export function alignNonPowerOfTwo(n: number, multiple: number): number {
+    return (((n + multiple - 1) / multiple) | 0) * multiple;
 }

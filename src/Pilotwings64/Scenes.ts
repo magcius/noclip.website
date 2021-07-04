@@ -1,8 +1,9 @@
+
 import * as RDP from '../Common/N64/RDP';
 
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
-    GfxRenderPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
+    GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
     GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
@@ -16,7 +17,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, g
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { standardFullClearRenderPassDescriptor, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers";
 import { CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
 import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
@@ -31,7 +32,7 @@ import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/Gf
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
 import { colorNewFromRGBA } from '../Color';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
 
 interface Pilotwings64FSFileChunk {
@@ -1435,8 +1436,8 @@ class MeshData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, mesh.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
@@ -1444,7 +1445,7 @@ class MeshData {
             { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -1885,9 +1886,11 @@ class MaterialInstance {
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
             }
-            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
-            const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        }
 
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
+        const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        if (this.hasTexture) {
             if (this.uvtx.primitive)
                 fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
             if (this.uvtx.environment)
@@ -1895,7 +1898,7 @@ class MaterialInstance {
         }
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
         renderInstManager.submitRenderInst(renderInst);
@@ -1908,9 +1911,9 @@ const enum TexCM {
 
 function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-        case TexCM.WRAP: return GfxWrapMode.REPEAT;
-        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
+        case TexCM.WRAP: return GfxWrapMode.Repeat;
+        case TexCM.MIRROR: return GfxWrapMode.Mirror;
+        case TexCM.CLAMP: return GfxWrapMode.Clamp;
     }
 }
 
@@ -1950,9 +1953,9 @@ class TextureData {
         this.gfxSampler = device.createSampler({
             wrapS: translateCM(texture.cms),
             wrapT: translateCM(texture.cmt),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
 
@@ -2372,14 +2375,14 @@ class SnowRenderer {
             flakeIndices[6 * i + 5] = 4 * i + 3;
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, flakeVertices.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, flakeIndices.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, flakeVertices.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, flakeIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -2429,7 +2432,7 @@ class SnowRenderer {
         fillVec3v(d, offs, this.snowShift, this.flakeScale);
 
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.snowProgram));
+        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(this.snowProgram));
         renderInst.drawIndexes(6 * this.flakeCount);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -2465,7 +2468,11 @@ class DataHolder {
     public uven: UVEN[] = [];
     public uvtp: UVTP[] = [];
     public splineData = new Map<number, SPTH>();
-    public gfxRenderCache = new GfxRenderCache();
+    public gfxRenderCache: GfxRenderCache;
+
+    constructor(device: GfxDevice) {
+        this.gfxRenderCache = new GfxRenderCache(device);
+    }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureData.length; i++)
@@ -2474,7 +2481,7 @@ class DataHolder {
             this.uvmdData[i].destroy(device);
         for (let i = 0; i < this.uvctData.length; i++)
             this.uvctData[i].destroy(device);
-        this.gfxRenderCache.destroy(device);
+        this.gfxRenderCache.destroy();
     }
 }
 
@@ -2761,7 +2768,7 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     const fsBin = await dataFetcher.fetchData(`${pathBase}/fs.bin`);
     const fs = parsePilotwings64FS(fsBin);
 
-    const dataHolder = new DataHolder();
+    const dataHolder = new DataHolder(device);
     let userFileCounter = 0;
     for (let i = 0; i < fs.files.length; i++) {
         const file = fs.files[i];
@@ -2833,9 +2840,9 @@ class Pilotwings64Renderer implements SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(setAttachmentStateSimple({}, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         }));
 
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
@@ -2860,7 +2867,7 @@ class Pilotwings64Renderer implements SceneGfx {
             this.snowRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     // For console runtime debugging.
@@ -2884,7 +2891,7 @@ class Pilotwings64Renderer implements SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, PW64Pass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -2893,15 +2900,15 @@ class Pilotwings64Renderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, PW64Pass.NORMAL);
-                executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
+                executeOnPass(renderInstManager, passRenderer, PW64Pass.NORMAL);
+                executeOnPass(renderInstManager, passRenderer, PW64Pass.SNOW);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -2939,7 +2946,7 @@ class Pilotwings64Renderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         if (this.snowRenderer !== null)
             this.snowRenderer.destroy(device);
     }
@@ -3080,7 +3087,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const renderer = new Pilotwings64Renderer(device, dataHolder, modelBuilder);
         const clearColor = colorNewFromRGBA(skybox.clearColor[0], skybox.clearColor[1], skybox.clearColor[2]);
-        renderer.renderPassDescriptor = makeClearRenderPassDescriptor(clearColor);
+        renderer.renderPassDescriptor = makeAttachmentClearDescriptor(clearColor);
         const isMap = this.weatherConditions < 0;
 
         if (skybox.skyboxModel !== undefined) {

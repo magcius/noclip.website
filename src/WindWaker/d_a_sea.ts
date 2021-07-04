@@ -523,7 +523,7 @@ export class d_a_sea extends fopAc_ac_c {
         materialParams.m_TextureMapping[2].lodBias = 1.0;
         dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);

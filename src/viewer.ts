@@ -4,13 +4,12 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { AntialiasingMode, makeClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers';
-import { OpaqueBlack } from './Color';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
@@ -100,7 +99,6 @@ export class Viewer {
 
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-    private clearDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -143,16 +141,8 @@ export class Viewer {
     }
 
     private renderViewport(): void {
-        if (this.scene !== null) {
+        if (this.scene !== null)
             this.scene.render(this.gfxDevice, this.viewerRenderInput);
-        } else {
-            // Clear to black.
-            this.clearDescriptor.colorAttachment = null;
-            this.clearDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-
-            const emptyRenderPass = this.gfxDevice.createRenderPass(this.clearDescriptor);
-            this.gfxDevice.submitPass(emptyRenderPass);
-        }
     }
 
     private render(): void {
@@ -339,16 +329,10 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.NO_WEBGL2_GENERIC;
     }
 
-    // Test for no MS depthbuffer support (as seen in SwiftShader).
-    const samplesArray = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES);
-    if (samplesArray === null || samplesArray.length === 0) {
-        const ext = gl.getExtension('WEBGL_debug_renderer_info');
-        console.warn(`samplesArray = ${samplesArray}`);
-        if (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
-            return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
-        else
-            return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
-    }
+    // SwiftShader is trash and I don't trust it.
+    const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
+    if (WEBGL_debug_renderer_info && gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
+        return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
 
     const config = new GfxPlatformWebGL2Config();
     config.trackResources = IS_DEVELOPMENT;

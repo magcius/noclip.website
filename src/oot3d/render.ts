@@ -121,14 +121,14 @@ uniform sampler2D u_Texture[3];
     private generateAlphaTestCompare(compare: GfxCompareMode, reference: number): string {
         const ref = this.generateFloat(reference);
         switch (compare) {
-        case GfxCompareMode.NEVER:   return `false`;
-        case GfxCompareMode.LESS:    return `t_CmbOut.a <  ${ref}`;
-        case GfxCompareMode.LEQUAL:  return `t_CmbOut.a <= ${ref}`;
-        case GfxCompareMode.EQUAL:   return `t_CmbOut.a == ${ref}`;
-        case GfxCompareMode.NEQUAL:  return `t_CmbOut.a != ${ref}`;
-        case GfxCompareMode.GREATER: return `t_CmbOut.a >  ${ref}`;
-        case GfxCompareMode.GEQUAL:  return `t_CmbOut.a >= ${ref}`;
-        case GfxCompareMode.ALWAYS:  return `true`;
+        case GfxCompareMode.Never:   return `false`;
+        case GfxCompareMode.Less:    return `t_CmbOut.a <  ${ref}`;
+        case GfxCompareMode.LessEqual:  return `t_CmbOut.a <= ${ref}`;
+        case GfxCompareMode.Equal:   return `t_CmbOut.a == ${ref}`;
+        case GfxCompareMode.NotEqual:  return `t_CmbOut.a != ${ref}`;
+        case GfxCompareMode.Greater: return `t_CmbOut.a >  ${ref}`;
+        case GfxCompareMode.GreaterEqual:  return `t_CmbOut.a >= ${ref}`;
+        case GfxCompareMode.Always:  return `true`;
         default: throw "whoops";
         }
     }
@@ -566,7 +566,7 @@ class MaterialInstance {
         template.setMegaStateFlags(this.material.renderFlags);
 
         if (this.gfxProgram === null)
-            this.gfxProgram = cache.createProgram(device, this.program!);
+            this.gfxProgram = cache.createProgram(this.program!);
         template.setGfxProgram(this.gfxProgram);
 
         const mapped = template.mapUniformBufferF32(DMPProgram.ub_MaterialParams);
@@ -627,10 +627,10 @@ class MaterialInstance {
 
     private translateWrapMode(wrapMode: CMB.TextureWrapMode): GfxWrapMode {
         switch (wrapMode) {
-        case CMB.TextureWrapMode.CLAMP: return GfxWrapMode.CLAMP;
-        case CMB.TextureWrapMode.CLAMP_TO_EDGE: return GfxWrapMode.CLAMP;
-        case CMB.TextureWrapMode.REPEAT: return GfxWrapMode.REPEAT;
-        case CMB.TextureWrapMode.MIRRORED_REPEAT: return GfxWrapMode.MIRROR;
+        case CMB.TextureWrapMode.CLAMP: return GfxWrapMode.Clamp;
+        case CMB.TextureWrapMode.CLAMP_TO_EDGE: return GfxWrapMode.Clamp;
+        case CMB.TextureWrapMode.REPEAT: return GfxWrapMode.Repeat;
+        case CMB.TextureWrapMode.MIRRORED_REPEAT: return GfxWrapMode.Mirror;
         default: throw new Error();
         }
     }
@@ -638,17 +638,17 @@ class MaterialInstance {
     private translateTextureFilter(filter: CMB.TextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
         switch (filter) {
         case CMB.TextureFilter.LINEAR:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
         case CMB.TextureFilter.NEAREST:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
         case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
         case CMB.TextureFilter.NEAREST_MIPMAP_LINEAR:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Linear];
         case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Nearest];
         default: throw new Error();
         }
     }
@@ -674,7 +674,7 @@ function translateDataType(dataType: CMB.DataType, size: number, normalized: boo
 
     const formatTypeFlags = translateDataTypeFlags(dataType);
     const formatCompFlags = size as FormatCompFlags;
-    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.NORMALIZED : FormatFlags.NONE;
+    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.Normalized : FormatFlags.None;
     return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
 }
 
@@ -700,7 +700,7 @@ class SepdData {
         const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
             const format = translateDataType(vertexAttrib.dataType, size, normalized);
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: vertexAttrib.start });
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1, bufferByteOffset: bufferOffs + vertexAttrib.start });
             } else {
                 vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset * 0x04 });
                 perInstanceBufferData.set(vertexAttrib.constant, perInstanceBufferWordOffset);
@@ -725,21 +725,13 @@ class SepdData {
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
-            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer).buffer);
+            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(perInstanceBufferData.buffer).buffer);
             perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
         }
 
         const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // position
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // normal
-            null, // tangent
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // color
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord0
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord1
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord2
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneIndices
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneWeights
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerInstance, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         let indexBufferCount = 0;
@@ -763,21 +755,13 @@ class SepdData {
             indexBufferOffs += prms.prm.count;
         }
 
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             perInstanceBinding,
-            { buffer: vertexBuffer, byteOffset: vatr.positionByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.normalByteOffset },
-            null, // tangent
-            { buffer: vertexBuffer, byteOffset: vatr.colorByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord0ByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord1ByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord2ByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.boneIndicesByteOffset },
-            { buffer: vertexBuffer, byteOffset: vatr.boneWeightsByteOffset },
+            { buffer: vertexBuffer, byteOffset: 0 },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
@@ -853,7 +837,7 @@ export class CmbData {
     private vertexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, public cmb: CMB.CMB) {
-        this.vertexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, cmb.vatrChunk.dataBuffer);
+        this.vertexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, cmb.vatrChunk.dataBuffer);
 
         const vatrChunk = cmb.vatrChunk;
 

@@ -6,8 +6,8 @@ import * as Pako from "pako";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";
-import { assert, assertExists, decodeString, fallbackUndefined } from "../util";
-import { parseZipFile, ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
+import { assert, assertExists, decodeString, nullify } from "../util";
+import { decompressZipFileEntry, parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile";
 
 export class DataManager {
     private path: string;
@@ -89,7 +89,7 @@ export class DataManager {
     }
 
     private getZipEntry(filename: string): ZipFileEntry | null {
-        return fallbackUndefined(this.zipFile.find((entry) => entry.filename === filename), null);
+        return nullify(this.zipFile.find((entry) => entry.filename === filename));
     }
 
     private async getFileFromZip(filename: string): Promise<ArrayBufferSlice> {
@@ -97,14 +97,7 @@ export class DataManager {
         if (zipEntry === null)
             throw new Error(`Could not find zip entry for filename: ${filename}`);
 
-        if (zipEntry.compressionMethod === ZipCompressionMethod.None) {
-            return zipEntry.data;
-        } else if (zipEntry.compressionMethod === ZipCompressionMethod.DEFLATE) {
-            const decompressed = Pako.inflateRaw(zipEntry.data.createTypedArray(Uint8Array));
-            return new ArrayBufferSlice(decompressed.buffer);
-        } else {
-            throw new Error("unknown compression method");
-        }
+        return decompressZipFileEntry(zipEntry);
     }
     
     public signalDoneFlag(): void {

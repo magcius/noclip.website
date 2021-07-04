@@ -140,14 +140,14 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
 
     if (geoMode & RSP_Geometry.G_CULL_BACK) {
         if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            out.cullMode = GfxCullMode.FRONT_AND_BACK;
+            out.cullMode = GfxCullMode.FrontAndBack;
         } else {
-            out.cullMode = GfxCullMode.BACK;
+            out.cullMode = GfxCullMode.Back;
         }
     } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        out.cullMode = GfxCullMode.FRONT;
+        out.cullMode = GfxCullMode.Front;
     } else {
-        out.cullMode = GfxCullMode.NONE;
+        out.cullMode = GfxCullMode.None;
     }
 
     return out;

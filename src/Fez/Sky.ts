@@ -73,34 +73,34 @@ export class SkyData {
 
         this.backgroundTexture = makeTextureFromXNA_Texture2D(device, backgroundImage);
         this.backgroundTextureMapping[0].gfxTexture = this.backgroundTexture;
-        this.backgroundTextureMapping[0].gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        this.backgroundTextureMapping[0].gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
 
         this.starsTexture = starsImage !== null ? makeTextureFromXNA_Texture2D(device, starsImage) : null;
         this.starsTextureMapping[0].gfxTexture = this.starsTexture;
-        this.starsTextureMapping[0].gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        this.starsTextureMapping[0].gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
 
         this.shadowsTexture = shadowsImage !== null ? makeTextureFromXNA_Texture2D(device, shadowsImage) : null;
         this.shadowsTextureMapping[0].gfxTexture = this.shadowsTexture;
-        this.shadowsTextureMapping[0].gfxSampler = cache.createSampler(device, {
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+        this.shadowsTextureMapping[0].gfxSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
     }
@@ -207,7 +207,7 @@ export class SkyRenderer {
             if (starsOpacity > 0.0) {
                 const renderInst = renderInstManager.newRenderInst();
                 renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND + 1, this.skyData.backgroundProgram.ResourceUniqueId);
-                setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA });
+                setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
                 renderInst.setSamplerBindingsFromTextureMappings(this.skyData.starsTextureMapping);
 
                 const view = viewerInput.camera.viewMatrix;

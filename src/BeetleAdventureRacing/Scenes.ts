@@ -1,8 +1,8 @@
 import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import InputManager from "../InputManager";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
@@ -55,7 +55,7 @@ class BARRenderer implements SceneGfx {
     private texScrollAnims: TexScrollAnim[];
     private texSeqAnims: TexSeqAnim[];
 
-    private renderPassDescriptor: GfxRenderPassDescriptor;
+    private attachmentClearDescriptor: GfxrAttachmentClearDescriptor;
 
     private trackDataRenderer: TrackDataRenderer;
 
@@ -86,9 +86,9 @@ class BARRenderer implements SceneGfx {
         }
 
         if (uven === null) {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.1, 0.1, 0.1));
+            this.attachmentClearDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(0.1, 0.1, 0.1));
         } else {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
+            this.attachmentClearDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
 
         // TODO: should this be lazy?
@@ -252,7 +252,7 @@ class BARRenderer implements SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         // Upload uniform data to the GPU
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
 
         // For the extra track data display, check to see if we need to toggle the nearest plane on/off
         this.checkCheckpointPlaneToggle(viewerInput);
@@ -273,8 +273,8 @@ class BARRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.attachmentClearDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.attachmentClearDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -283,7 +283,7 @@ class BARRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
 
@@ -293,12 +293,12 @@ class BARRenderer implements SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         if (this.trackDataRenderer !== undefined)
             this.trackDataRenderer.destroy(device);
     }

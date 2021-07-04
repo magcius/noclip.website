@@ -1,5 +1,5 @@
 
-import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
@@ -11,12 +11,12 @@ import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex 
 import { TextureMapping } from '../../../TextureHolder';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
-import { colorCopy, Color, colorClamp, colorClampLDR } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, setMatrixTranslation } from '../../../MathHelpers';
+import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { translateSampler } from '../JUTTexture';
@@ -346,11 +346,11 @@ export class MaterialInstance {
     }
 
     public setColorWriteEnabled(v: boolean): void {
-        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
+        setChanWriteEnabled(this.materialHelper, GfxChannelWriteMask.RGB, v);
     }
 
     public setAlphaWriteEnabled(v: boolean): void {
-        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
+        setChanWriteEnabled(this.materialHelper, GfxChannelWriteMask.Alpha, v);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer, transparent: boolean = this.materialData.material.translucent): void {
@@ -384,7 +384,7 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -418,7 +418,7 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -477,7 +477,7 @@ export class MaterialInstance {
         // ref. J3DTexMtx::calc()
         const tmp1 = matrixScratch;
         const tmp2 = matrixScratch2;
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
             {
                 // J3DGetTextureMtxOld(tmp1)
@@ -622,18 +622,18 @@ export class MaterialInstance {
     public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], ColorRegType.U8);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], ColorRegType.S10);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1], ColorKind.MAT1, material.colorMatRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0], ColorKind.AMB0, material.colorAmbRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1], ColorKind.AMB1, material.colorAmbRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],   ColorKind.K0,   material.colorConstants[0], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],   ColorKind.K1,   material.colorConstants[1], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],   ColorKind.K2,   material.colorConstants[2], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],   ColorKind.K3,   material.colorConstants[3], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],   ColorKind.C0,   material.colorRegisters[0], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],   ColorKind.C1,   material.colorRegisters[1], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],   ColorKind.C2,   material.colorRegisters[2], ColorRegType.S10);
+        colorCopy(materialParams.u_Color[ColorKind.CPREV], White);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -953,7 +953,16 @@ export class J3DModelInstance {
 
         // DRW1 seems to specify each envelope twice. J3D runtime actually corrects for this in J3DModelLoader::readDraw().
         // This appears to be a runtime fix for a toolchain bug.
-        const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length - bmd.evp1.envelopes.length;
+
+        // Don't do this for community tooling, which might not have replicated this bug.
+        let hasEVP1DoubleCountBug = true;
+        if (bmd.subversion === 'SuperBMD - Gamma')
+            hasEVP1DoubleCountBug = false;
+
+        let drawViewMatrixCount = bmd.drw1.matrixDefinitions.length;
+        if (hasEVP1DoubleCountBug)
+            drawViewMatrixCount -= bmd.evp1.envelopes.length;
+
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
     }
@@ -965,6 +974,10 @@ export class J3DModelInstance {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setBaseScale(v: ReadonlyVec3): void {
+        vec3.copy(this.baseScale, v);
     }
 
     public setModelMaterialData(modelMaterialData: BMDModelMaterialData): void {

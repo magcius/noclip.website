@@ -1,11 +1,15 @@
 
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice } from "../platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin } from "../platform/GfxPlatform";
 import { assert } from "../platform/GfxPlatformUtil";
 import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
 type DefineMap = Map<string, string>;
+
+function defineStr(k: string, v: string): string {
+    return `#define ${k} ${v}`;
+}
 
 export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: DefineMap | null = null): string {
     // Garbage WebGL2 shader compiler until I get something better down the line...
@@ -20,11 +24,14 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
 
     let definesString: string = '';
     if (defines !== null)
-        definesString = [... defines.entries()].map(([k, v]) => `#define ${k} ${v}`).join('\n');
+        definesString = [... defines.entries()].map(([k, v]) => defineStr(k, v)).join('\n');
 
     const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
     let extraDefines = '';
+
+    if (vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft)
+        extraDefines += `${defineStr(`VIEWPORT_ORIGIN_TL`, `1`)}\n`;
 
     let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
@@ -34,6 +41,10 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
             const layout2 = layout ? `${layout}, ` : ``;
             return `layout(${layout2}set = ${set}, binding = ${binding++}) uniform ${rest}`;
         });
+
+        // XXX(jstpierre): WebGPU now binds UBOs and textures in different sets as a porting hack, hrm...
+        set++;
+        binding = 0;
 
         assert(vendorInfo.separateSamplerTextures);
         rest = rest.replace(/uniform sampler2D (.*);/g, (substr, samplerName) => {
@@ -50,7 +61,7 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
 
         outLayout = 'layout(location = 0) ';
 
-        extraDefines = `#define gl_VertexID gl_VertexIndex\n`;
+        extraDefines += `${defineStr(`gl_VertexID`, `gl_VertexIndex`)}\n`;
     }
 
     if (vendorInfo.separateSamplerTextures) {

@@ -9,7 +9,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert, assertExists } from '../util';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
@@ -17,7 +17,7 @@ import { CameraController } from '../Camera';
 import BitMap, { bitMapSerialize, bitMapDeserialize, bitMapGetSerializedByteLength } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
 function layerVisibilitySyncToBitMap(layers: UI.Layer[], b: BitMap): void {
@@ -46,7 +46,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.1);
+        c.setSceneMoveSpeedMult(0.01);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -56,7 +56,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput, this.worldAmbientColor);
         this.prepareToRenderSkybox(device, viewerInput);
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -92,7 +92,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, RetroPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, RetroPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -101,25 +101,23 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, RetroPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, RetroPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.modelCache.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
-        if (this.defaultSkyRenderer !== null)
-            this.defaultSkyRenderer.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -180,7 +178,7 @@ class RetroSceneDesc implements Viewer.SceneDesc {
             if (defaultSkyboxCMDL) {
                 const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
                 const defaultSkyboxCMDLData = renderer.modelCache.getCMDLData(device, renderer.textureHolder, cache, defaultSkyboxCMDL);
-                const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
+                const defaultSkyboxRenderer = new CMDLRenderer(cache, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
                 defaultSkyboxRenderer.isSkybox = true;
                 renderer.defaultSkyRenderer = defaultSkyboxRenderer;
             }

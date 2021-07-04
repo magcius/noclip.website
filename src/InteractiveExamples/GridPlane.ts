@@ -51,7 +51,7 @@ ${GfxShaderLibrary.saturate}
 // 1 at t=0, 0 at t=N, 0 at t=1-N, 1 at t=1
 float Notch(float t, float N) {
     float inv = 1.0/N;
-    return saturate((t - (1.0 - N))*inv) + Saturate(1.0 - (t * inv));
+    return saturate((t - (1.0 - N))*inv) + saturate(1.0 - (t * inv));
 }
 
 void main() {
@@ -102,15 +102,15 @@ export class GridPlane {
         vtx[9]  = 1;
         vtx[10] = 0;
         vtx[11] = 1;
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
 
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = device.createInputLayout({
             vertexAttributeDescriptors,
@@ -136,9 +136,9 @@ export class GridPlane {
             depthWrite: false,
         });
         setAttachmentStateSimple(megaState, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
         renderInst.drawIndexes(6);
 

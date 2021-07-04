@@ -76,11 +76,11 @@ class BannerBinRenderer extends BasicGXRendererHelper {
         this.layout.draw(device, this.renderHelper.renderInstManager, this.drawInfo);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.layout.destroy(device);
         this.resourceCollection.destroy(device);
     }

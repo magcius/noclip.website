@@ -61,10 +61,12 @@ import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
 import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource';
+import * as Scenes_CounterStrikeGO from './SourceEngine/Scenes_CounterStrikeGO';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
+import * as Scenes_Portal2 from './SourceEngine/Scenes_Portal2';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
@@ -177,22 +179,13 @@ const sceneGroups = [
     Scenes_TheWitness.sceneGroup,
     Scenes_WiiBanner.sceneGroup,
     Scenes_Zelda_OcarinaOfTime_Beta.sceneGroup,
+    Scenes_Portal2.sceneGroup,
+    Scenes_CounterStrikeGO.sceneGroup,
 ];
-
-function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-    return new Response(blob).arrayBuffer();
-}
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(assertExists(b)), 'image/png'));
 }
-
-// Ideas for option bits. Not used yet.
-const enum OptionsBitsV3 {
-    HasSceneTime       = 0b00000001,
-    ScenePaused        = 0b00000010,
-    LowCameraPrecision = 0b00000100,
-};
 
 const enum SaveStatesAction {
     Load,
@@ -269,6 +262,10 @@ class Main {
 
         this.canvas = document.createElement('canvas');
 
+        this.toplevel.appendChild(this.canvas);
+        window.onresize = this._onResize.bind(this);
+        this._onResize();
+
         const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
             this.toplevel.appendChild(makeErrorUI(errorCode));
@@ -296,10 +293,6 @@ class Main {
             e.preventDefault();
         };
         this.toplevel.ondrop = this._onDrop.bind(this);
-
-        this.toplevel.appendChild(this.canvas);
-        window.onresize = this._onResize.bind(this);
-        this._onResize();
 
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
@@ -486,7 +479,7 @@ class Main {
     private _getSceneSaveState() {
         let byteOffs = 0;
 
-        const optionsBits: OptionsBitsV3 = 0;
+        const optionsBits = 0;
         this._saveStateView.setUint8(byteOffs, optionsBits);
         byteOffs++;
 
@@ -520,7 +513,7 @@ class Main {
         const byteLength = atob(this._saveStateTmp, 0, state);
 
         let byteOffs = 0;
-        const optionsBits: OptionsBitsV3 = this._saveStateView.getUint8(byteOffs + 0x00);
+        const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
         assert(optionsBits === 0);
         byteOffs++;
 

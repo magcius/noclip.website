@@ -90,12 +90,11 @@ export function getMaskName(mask: PVRTMask): string {
 }
 
 function readGlobalIndex(stream: DataStream): PVR_GlobalIndex {
-    
     const chunk = readChunk(stream);
     assert(chunk.magic === "GBIX");
 
-    const index = chunk.data.createDataView().getUint32(0x00, true);
-    return {id: index};
+    const id = chunk.data.createDataView().getUint32(0x00, true);
+    return { id };
 }
 
 function readTexture(stream: DataStream, length?: number): PVR_Texture {
@@ -115,7 +114,7 @@ function readTexture(stream: DataStream, length?: number): PVR_Texture {
     const params = decideParams(mask, width);
     const levels = decideLevels(width, height, params);
 
-    let texture: PVR_Texture = {name: "", width: width, height: height, format: format, mask: mask, levels: []};
+    const texture: PVR_Texture = { name: "", width, height, format, mask, levels: [] };
 
     for(let i = 0; i < levels.length; i++) {
         if (levels[i].offset > dataView.byteLength)
@@ -184,11 +183,11 @@ function untwiddleValue(value: number) : number {
     let untwiddled = 0;
 
     for (let i = 0; i < 10; i++) {
-        const shift = Math.pow(2, i);
+        const shift = 1 << i;
         if (value & shift)
             untwiddled |= (shift << i);
     }
-    
+
     return untwiddled;
 }
 
@@ -230,7 +229,7 @@ function unpackTexelToRGBA(srcTexel: number, srcFormat: PVRTFormat, dst: Uint8Ar
     }
 }
 
-function MipMapsCountFromWidth(width: number) : number {
+function mipMapCountFromWidth(width: number) : number {
     let mipMapsCount = 0;
     while (width > 0) {
         ++mipMapsCount;
@@ -259,8 +258,7 @@ interface UnpackedParams {
 }
 
 function decideParams(mask: PVRTMask, width: number): UnpackedParams {
-
-    let params: UnpackedParams = {numCodedComponents: 4, kSrcStride: 2, kDstStride: 4, twiddled: false, mipMaps: false, vqCompressed: false, codeBookSize: 0};
+    const params: UnpackedParams = {numCodedComponents: 4, kSrcStride: 2, kDstStride: 4, twiddled: false, mipMaps: false, vqCompressed: false, codeBookSize: 0};
 
     if (mask === PVRTMask.TwiddledMipMaps) {
         params.twiddled = true;
@@ -309,9 +307,8 @@ function decideLevels(width: number, height: number, params: UnpackedParams): Un
         srcOffset += vqSize;
     }
 
-    let mipMapCount = (params.mipMaps) ? MipMapsCountFromWidth(width) : 1;
-    while (mipMapCount > 0)
-    {
+    let mipMapCount = (params.mipMaps) ? mipMapCountFromWidth(width) : 1;
+    while (mipMapCount > 0) {
         const mipWidth = (width >> (mipMapCount - 1));
         const mipHeight = (height >> (mipMapCount - 1));
         const mipSize = mipWidth * mipHeight;
@@ -326,9 +323,9 @@ function decideLevels(width: number, height: number, params: UnpackedParams): Un
                     srcOffset += Math.max(1, mipSize / 4);
                 else
                     srcOffset += mipSize / 4;
-            }
-            else
+            } else {
                 srcOffset += (params.kSrcStride * mipSize);
+            }
         }
     }
 
@@ -336,9 +333,8 @@ function decideLevels(width: number, height: number, params: UnpackedParams): Un
 }
 
 function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, params: UnpackedParams, level: UnpackedLevel): PVR_TextureLevel {
-
     // Size of RGBA output
-    let dstData = new Uint8Array(level.width * level.height * 4);
+    const dstData = new Uint8Array(level.width * level.height * 4);
 
     let mipWidth = level.width;
     let mipHeight = level.height;
@@ -355,8 +351,8 @@ function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, par
     let x = 0;
     let y = 0;
     
-    let proccessed = 0;
-    while (proccessed < mipSize) {
+    let processed = 0;
+    while (processed < mipSize) {
         if (params.vqCompressed) {
             const codebookIndex = getUntwiddledTexelPosition(x, y);
 
@@ -380,19 +376,18 @@ function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, par
                 ++y;
             }
         } else {
-            x = proccessed % mipWidth;
-            y = Math.floor(proccessed / mipWidth);
+            x = processed % mipWidth;
+            y = Math.floor(processed / mipWidth);
             
-            const srcPos = (params.twiddled ? getUntwiddledTexelPosition(x, y) : proccessed) * params.kSrcStride;
+            const srcPos = (params.twiddled ? getUntwiddledTexelPosition(x, y) : processed) * params.kSrcStride;
             const srcTexel = srcData.getUint16(level.offset + srcPos, true);
-            const dstPos = proccessed * params.kDstStride;
+            const dstPos = processed * params.kDstStride;
 
             unpackTexelToRGBA(srcTexel, format, dstData, dstPos);
         }
         
-        ++proccessed;
+        ++processed;
     }
 
-    return {width: level.width, height: level.height, data: dstData};
+    return { width: level.width, height: level.height, data: dstData };
 }
-

@@ -1532,7 +1532,13 @@ class ViewerSettings extends Panel {
         this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
-        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', ['None', 'FXAA', '4x MSAA']);
+        const limits = this.viewer.gfxDevice.queryLimits();
+
+        const aaModes = ['None', 'FXAA'];
+        if (limits.supportedSampleCounts.includes(4))
+            aaModes.push('4x MSAA');
+
+        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', aaModes);
         this.antialiasingRadioButtons.onselectedchange = () => { GlobalSaveManager.saveSetting(`AntialiasingMode`, this.antialiasingRadioButtons.selectedIndex); };
         this.contents.appendChild(this.antialiasingRadioButtons.elem);
         GlobalSaveManager.addSettingListener('AntialiasingMode', this.antialiasingChanged.bind(this));
@@ -1726,7 +1732,6 @@ class LineGraph {
     }
 }
 
-
 class StatisticsPanel extends Panel {
     public history: RenderStatistics[] = [];
     private fpsGraph = new LineGraph();
@@ -1768,9 +1773,8 @@ class StatisticsPanel extends Panel {
         if (renderStatistics.bufferUploadCount)
             this.fpsGraph.drawText(`Buffer Uploads: ${renderStatistics.bufferUploadCount}`);
 
-        const camPositionX = this.viewer.camera.worldMatrix[12].toFixed(2);
-        const camPositionY = this.viewer.camera.worldMatrix[13].toFixed(2);
-        const camPositionZ = this.viewer.camera.worldMatrix[14].toFixed(2);
+        const worldMatrix = this.viewer.camera.worldMatrix;
+        const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
         this.fpsGraph.drawText(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
 
         const vendorInfo = this.viewer.gfxDevice.queryVendorInfo();

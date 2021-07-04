@@ -15,15 +15,15 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxColorWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers';
 
 export enum ColorKind {
@@ -221,28 +221,28 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
 export function translateWrapModeGfx(wrapMode: GX.WrapMode): GfxWrapMode {
     switch (wrapMode) {
     case GX.WrapMode.CLAMP:
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
     case GX.WrapMode.MIRROR:
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     case GX.WrapMode.REPEAT:
-        return GfxWrapMode.REPEAT;
+        return GfxWrapMode.Repeat;
     }
 }
 
 export function translateTexFilterGfx(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (texFilter) {
     case GX.TexFilter.LINEAR:
-        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
+        return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip ];
     case GX.TexFilter.NEAR:
-        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
+        return [ GfxTexFilterMode.Point, GfxMipFilterMode.NoMip ];
     case GX.TexFilter.LIN_MIP_LIN:
-        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
+        return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear ];
     case GX.TexFilter.NEAR_MIP_LIN:
-        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
+        return [ GfxTexFilterMode.Point, GfxMipFilterMode.Linear ];
     case GX.TexFilter.LIN_MIP_NEAR:
-        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
+        return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest ];
     case GX.TexFilter.NEAR_MIP_NEAR:
-        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
+        return [ GfxTexFilterMode.Point, GfxMipFilterMode.Nearest ];
     }
 }
 
@@ -331,30 +331,30 @@ export function autoOptimizeMaterial(material: GX_Material.GXMaterial): void {
 export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     case GX.CullMode.FRONT:
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     case GX.CullMode.BACK:
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     case GX.CullMode.NONE:
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
     }
 }
 
 function translateBlendFactorCommon(blendFactor: GX.BlendFactor): GfxBlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.ZERO:
-        return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.Zero;
     case GX.BlendFactor.ONE:
-        return GfxBlendFactor.ONE;
+        return GfxBlendFactor.One;
     case GX.BlendFactor.SRCALPHA:
-        return GfxBlendFactor.SRC_ALPHA;
+        return GfxBlendFactor.SrcAlpha;
     case GX.BlendFactor.INVSRCALPHA:
-        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        return GfxBlendFactor.OneMinusSrcAlpha;
     case GX.BlendFactor.DSTALPHA:
-        return GfxBlendFactor.DST_ALPHA;
+        return GfxBlendFactor.DstAlpha;
     case GX.BlendFactor.INVDSTALPHA:
-        return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
+        return GfxBlendFactor.OneMinusDstAlpha;
     default:
         throw new Error("whoops");
     }
@@ -363,9 +363,9 @@ function translateBlendFactorCommon(blendFactor: GX.BlendFactor): GfxBlendFactor
 function translateBlendSrcFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.SRCCLR:
-        return GfxBlendFactor.DST_COLOR;
+        return GfxBlendFactor.Dst;
     case GX.BlendFactor.INVSRCCLR:
-        return GfxBlendFactor.ONE_MINUS_DST_COLOR;
+        return GfxBlendFactor.OneMinusDst;
     default:
         return translateBlendFactorCommon(blendFactor);
     }
@@ -374,9 +374,9 @@ function translateBlendSrcFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
 function translateBlendDstFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.SRCCLR:
-        return GfxBlendFactor.SRC_COLOR;
+        return GfxBlendFactor.Src;
     case GX.BlendFactor.INVSRCCLR:
-        return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
+        return GfxBlendFactor.OneMinusSrc;
     default:
         return translateBlendFactorCommon(blendFactor);
     }
@@ -385,21 +385,21 @@ function translateBlendDstFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
 function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
     switch (compareType) {
     case GX.CompareType.NEVER:
-        return GfxCompareMode.NEVER;
+        return GfxCompareMode.Never;
     case GX.CompareType.LESS:
-        return GfxCompareMode.LESS;
+        return GfxCompareMode.Less;
     case GX.CompareType.EQUAL:
-        return GfxCompareMode.EQUAL;
+        return GfxCompareMode.Equal;
     case GX.CompareType.LEQUAL:
-        return GfxCompareMode.LEQUAL;
+        return GfxCompareMode.LessEqual;
     case GX.CompareType.GREATER:
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     case GX.CompareType.NEQUAL:
-        return GfxCompareMode.NEQUAL;
+        return GfxCompareMode.NotEqual;
     case GX.CompareType.GEQUAL:
-        return GfxCompareMode.GEQUAL;
+        return GfxCompareMode.GreaterEqual;
     case GX.CompareType.ALWAYS:
-        return GfxCompareMode.ALWAYS;
+        return GfxCompareMode.Always;
     }
 }
 
@@ -407,37 +407,37 @@ function translateGfxMegaState(material: GX_Material.GXMaterial) {
     const megaState: Partial<GfxMegaStateDescriptor> = {};
     megaState.cullMode = translateCullMode(material.cullMode);
     megaState.depthWrite = material.ropInfo.depthWrite;
-    megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.ALWAYS;
+    megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.Always;
     megaState.frontFace = GfxFrontFaceMode.CW;
 
     const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
 
     if (material.ropInfo.blendMode === GX.BlendMode.NONE) {
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
+        attachmentStateSimple.blendMode = GfxBlendMode.Add;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.One;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.Zero;
     } else if (material.ropInfo.blendMode === GX.BlendMode.BLEND) {
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendMode = GfxBlendMode.Add;
         attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendSrcFactor);
         attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendDstFactor);
     } else if (material.ropInfo.blendMode === GX.BlendMode.SUBTRACT) {
-        attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendMode = GfxBlendMode.ReverseSubtract;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.One;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.One;
     } else if (material.ropInfo.blendMode === GX.BlendMode.LOGIC) {
         // Sonic Colors uses this? WTF?
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
+        attachmentStateSimple.blendMode = GfxBlendMode.Add;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.One;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.Zero;
         console.warn(`Unimplemented LOGIC blend mode`);
     }
 
-    attachmentStateSimple.colorWriteMask = GfxColorWriteMask.NONE;
+    attachmentStateSimple.channelWriteMask = GfxChannelWriteMask.None;
 
     if (material.ropInfo.colorUpdate)
-        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.COLOR;
+        attachmentStateSimple.channelWriteMask |= GfxChannelWriteMask.RGB;
     if (material.ropInfo.alphaUpdate)
-        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.ALPHA;
+        attachmentStateSimple.channelWriteMask |= GfxChannelWriteMask.Alpha;
 
     setAttachmentStateSimple(megaState, attachmentStateSimple);
     return megaState;
@@ -472,9 +472,11 @@ export class GXMaterialHelperGfx {
         this.megaStateFlags = translateGfxMegaState(this.material);
     }
 
-    public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
-        this.gfxProgram = cache.createProgram(device, this.program);
-        this.programKey = this.gfxProgram.ResourceUniqueId;
+    public cacheProgram(cache: GfxRenderCache): void {
+        if (this.gfxProgram === null) {
+            this.gfxProgram = cache.createProgram(this.program);
+            this.programKey = this.gfxProgram.ResourceUniqueId;
+        }
     }
 
     public createProgram(): void {
@@ -511,20 +513,20 @@ export class GXMaterialHelperGfx {
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
-        this.cacheProgram(device, cache);
+        this.cacheProgram(cache);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setGfxProgram(this.gfxProgram!);
         setSortKeyProgramKey(renderInst.sortKey, this.programKey);
     }
 }
 
-export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
-    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
-    colorWriteMask = setBitFlagEnabled(colorWriteMask, bits, en);
-    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
+export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxChannelWriteMask, en: boolean): void {
+    let channelWriteMask = materialHelper.megaStateFlags.attachmentsState![0].channelWriteMask;
+    channelWriteMask = setBitFlagEnabled(channelWriteMask, bits, en);
+    setAttachmentStateSimple(materialHelper.megaStateFlags, { channelWriteMask });
 }
 
-export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout): GfxInputLayout {
+export function createInputLayout(cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout): GfxInputLayout {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
     for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
@@ -542,12 +544,12 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
     for (let i = 0; i < loadedVertexLayout.vertexBufferStrides.length; i++) {
         vertexBufferDescriptors.push({
             byteStride: loadedVertexLayout.vertexBufferStrides[i],
-            frequency: GfxVertexBufferFrequency.PER_VERTEX,
+            frequency: GfxVertexBufferFrequency.PerVertex,
         });
     }
 
     const indexBufferFormat = loadedVertexLayout.indexFormat;
-    return cache.createInputLayout(device, {
+    return cache.createInputLayout({
         vertexAttributeDescriptors,
         vertexBufferDescriptors,
         indexBufferFormat,
@@ -573,14 +575,14 @@ export class GXShapeHelperGfx {
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
             buffers.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
         }
 
-        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
@@ -654,18 +656,18 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
     }
 }

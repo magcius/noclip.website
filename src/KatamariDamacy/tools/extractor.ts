@@ -11,7 +11,7 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     const b = Buffer.alloc(byteLength);
     readSync(fd, b, 0, byteLength, byteOffset);
     closeSync(fd);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+    return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
 function writeBufferSync(path: string, buffer: ArrayBufferSlice): void {

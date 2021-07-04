@@ -71,7 +71,8 @@ const nameTable = [
     'PlanetLight1PosX', 'PlanetLight1PosY', 'PlanetLight1PosZ', 'PlanetLight1ColorR', 'PlanetLight1ColorG', 'PlanetLight1ColorB', 'PlanetLight1ColorA', 'PlanetLight1FollowCamera',
     'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
     // Shadow
-    'Name', 'GroupName', 'Joint', 'DropOffsetX', 'DropOffsetY', 'DropOffsetZ', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity',
+    'Name', 'GroupName', 'Joint', 'DropOffsetX', 'DropOffsetY', 'DropOffsetZ', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity', 'VolumeStart', 'VolumeEnd',
+    'VolumeCut', 'Type', 'Radius', 'SizeX', 'SizeY', 'SizeZ', 'LineStart', 'LineStartRadius', 'LineEnd', 'LineEndRadius',
     // GeneralPos
     'PosName',
 ];
@@ -215,4 +216,34 @@ export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, na
     if (index === -1)
         return null;
     return record[index] as T;
+}
+
+export function makeTable(bcsv: Bcsv): HTMLTableElement {
+    const table = document.createElement('table');
+    table.border = '1';
+
+    const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+
+    {
+        const tr = document.createElement('tr');
+        tbody.appendChild(tr);
+        bcsv.fields.forEach((field) => {
+            const th = document.createElement('th');
+            th.textContent = field.debugName;
+            tr.appendChild(th);
+        });
+    }
+
+    bcsv.records.forEach((record) => {
+        const tr = document.createElement('tr');
+        tbody.appendChild(tr);
+        record.forEach((record) => {
+            const td = document.createElement('td');
+            td.textContent = record.toString();
+            tr.appendChild(td);
+        });
+    });
+
+    return table;
 }

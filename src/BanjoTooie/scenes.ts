@@ -8,7 +8,7 @@ import { GfxDevice, GfxBufferUsage } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, BKPass, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render';
 import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
@@ -21,7 +21,7 @@ import { MathConstants, computeModelMatrixSRT } from '../MathHelpers';
 import { vec3, mat4, vec4 } from 'gl-matrix';
 import { parseAnimationFile } from '../BanjoKazooie/scenes';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `BanjoTooie`;
 
@@ -78,7 +78,7 @@ class BTRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.geoRenderers.length; i++)
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -96,7 +96,7 @@ class BTRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, BKPass.SKYBOX);
+                executeOnPass(renderInstManager, passRenderer, BKPass.SKYBOX);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -105,19 +105,19 @@ class BTRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, BKPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, BKPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.geoDatas.length; i++)
             this.geoDatas[i].destroy(device);
         this.textureHolder.destroy(device);
@@ -191,7 +191,7 @@ class ModelCache {
     public archivePromiseCache = new Map<string, Promise<ActorArchive | StaticArchive | CRG1File | null>>();
     public archiveCache = new Map<string, ActorArchive | StaticArchive | CRG1File | null>();
     public archiveDataHolder = new Map<number, GeometryData>();
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
 
     public static staticGeometryFlag = 0x1000;
     public static staticFlipbookFlag = 0x2000;
@@ -202,6 +202,7 @@ class ModelCache {
     }
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {
@@ -338,7 +339,7 @@ class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         for (const data of this.archiveDataHolder.values())
             data.renderData.destroy(device);
     }
@@ -371,7 +372,7 @@ function applyPaletteSwap(device: GfxDevice, cache: GfxRenderCache, base: Geomet
     device.destroyBuffer(base.renderData.vertexBuffer);
     device.destroyInputState(base.renderData.inputState);
 
-    base.renderData.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, base.renderData.vertexBufferData.buffer);
+    base.renderData.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, base.renderData.vertexBufferData.buffer);
     base.renderData.inputState = device.createInputState(base.renderData.inputLayout, [
         { buffer: base.renderData.vertexBuffer, byteOffset: 0, },
     ], { buffer: base.renderData.indexBuffer, byteOffset: 0 });

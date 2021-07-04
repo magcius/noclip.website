@@ -2,7 +2,7 @@
 // Valve Packfile. Only handles newest VPK version.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, leftPad, fallbackUndefined, nullify } from "../util";
+import { assert, readString, leftPad, nullify } from "../util";
 import { DataFetcher, AbortedCallback } from "../DataFetcher";
 
 interface VPKFileEntryChunk {
@@ -15,6 +15,7 @@ interface VPKFileEntry {
     path: string;
     crc: number;
     chunks: VPKFileEntryChunk[];
+    metadataChunk: ArrayBufferSlice | null;
 }
 
 interface VPKDirectory {
@@ -26,20 +27,27 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
     const view = buffer.createDataView();
     assert(view.getUint32(0x00, true) === 0x55AA1234);
     const version = view.getUint32(0x04, true);
-    assert(version === 0x02);
     const directorySize = view.getUint32(0x08, true);
-    const embeddedChunkSize = view.getUint32(0x0C, true);
-    assert(embeddedChunkSize === 0);
-    const chunkHashesSize = view.getUint32(0x10, true);
-    const selfHashesSize = view.getUint32(0x14, true);
-    const signatureSize = view.getUint32(0x18, true);
+
+    let idx: number;
+    if (version === 0x01) {
+        idx = 0x0C;
+    } else if (version === 0x02) {
+        const embeddedChunkSize = view.getUint32(0x0C, true);
+        assert(embeddedChunkSize === 0);
+        const chunkHashesSize = view.getUint32(0x10, true);
+        const selfHashesSize = view.getUint32(0x14, true);
+        const signatureSize = view.getUint32(0x18, true);
+        idx = 0x1C;
+    } else {
+        throw "whoops";
+    }
 
     // Parse directory.
 
     let maxPackFile = 0;
 
     const entries: VPKFileEntry[] = [];
-    let idx = 0x1C;
     while (true) {
         const ext = readString(buffer, idx);
         idx += ext.length + 1;
@@ -81,13 +89,17 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
                     const chunkSize = view.getUint32(idx + 0x04, true);
                     idx += 0x08;
 
+                    if (chunkSize === 0)
+                        continue;
+
                     chunks.push({ packFileIdx, chunkOffset, chunkSize });
                 }
 
-                // Skip over metadata.
+                // Read metadata.
+                const metadataChunk = metadataSize !== 0 ? buffer.subarray(idx, metadataSize) : null;
                 idx += metadataSize;
 
-                entries.push({ crc, path, chunks });
+                entries.push({ crc, path, chunks, metadataChunk });
             }
         }
     }
@@ -114,22 +126,39 @@ export class VPKMount {
         const promises = [];
         let size = 0;
 
+        const metadataSize = entry.metadataChunk !== null ? entry.metadataChunk.byteLength : 0;
+        size += metadataSize;
+
         for (let i = 0; i < entry.chunks.length; i++) {
             const chunk = entry.chunks[i];
             promises.push(this.fetchChunk(chunk, abortedCallback));
             size += chunk.chunkSize;
         }
 
+        if (promises.length === 0) {
+            assert(entry.metadataChunk !== null);
+            return entry.metadataChunk;
+        }
+
         const chunks = await Promise.all(promises);
-        if (chunks.length === 1)
+        if (chunks.length === 1 && entry.metadataChunk === null)
             return chunks[0];
 
-        const buf = new Uint8Array(size);
+        const buf = new Uint8Array(metadataSize + size);
+
         let offs = 0;
+
+        // Metadata comes first.
+        if (entry.metadataChunk !== null) {
+            buf.set(entry.metadataChunk.createTypedArray(Uint8Array), offs);
+            offs += entry.metadataChunk.byteLength;
+        }
+
         for (let i = 0; i < chunks.length; i++) {
             buf.set(chunks[i].createTypedArray(Uint8Array), offs);
             offs += chunks[i].byteLength;
         }
+
         return new ArrayBufferSlice(buf.buffer);
     }
 

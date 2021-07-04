@@ -8,12 +8,12 @@ import * as UI from '../ui';
 import * as IV from './iv';
 import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -112,8 +112,8 @@ class Chunk {
             nrmData[(i + 2) * 3 + 2] = t[2];
         }
 
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posData.buffer);
-        this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, nrmData.buffer);
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, posData.buffer);
+        this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, nrmData.buffer);
 
         this.inputState = device.createInputState(inputLayout, [
             { buffer: this.posBuffer, byteOffset: 0, },
@@ -193,8 +193,8 @@ export class Scene implements Viewer.SceneGfx {
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat: GfxFormat | null = null;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -214,7 +214,7 @@ export class Scene implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
-        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(IVProgram.ub_SceneParams);
@@ -225,7 +225,7 @@ export class Scene implements Viewer.SceneGfx {
             this.ivRenderers[i].prepareToRender(this.renderHelper.renderInstManager);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -243,14 +243,14 @@ export class Scene implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -258,7 +258,7 @@ export class Scene implements Viewer.SceneGfx {
         device.destroyInputLayout(this.inputLayout);
         device.destroyProgram(this.program);
         this.ivRenderers.forEach((r) => r.destroy(device));
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
     }
 
     public createPanels(): UI.Panel[] {

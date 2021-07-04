@@ -1,7 +1,8 @@
 
-import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
+import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4 } from "gl-matrix";
 import { nArray } from "./util";
 
+const scratchVec4 = vec4.create();
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
 
@@ -18,6 +19,17 @@ export class Plane {
     public distance(x: number, y: number, z: number): number {
         const dot = x*this.x + y*this.y + z*this.z;
         return this.d + dot;
+    }
+
+    public getVec4v(dst: vec4): void {
+        vec4.set(dst, this.x, this.y, this.z, this.d);
+    }
+
+    public setVec4v(v: ReadonlyVec4): void {
+        this.x = v[0];
+        this.y = v[1];
+        this.z = v[2];
+        this.d = v[3];
     }
 
     public getNormal(dst: vec3): void {
@@ -43,18 +55,28 @@ export class Plane {
         this.z = z / h;
         this.d = d / h;
     }
-    
+
+    public intersectLine(dst: vec3, p0: ReadonlyVec3, dir: ReadonlyVec3): void {
+        const n = Plane.scratchVec3[0];
+        vec3.set(n, this.x, this.y, this.z);
+        const t = -(vec3.dot(n, p0) + this.d) / vec3.dot(n, dir);
+        vec3.scaleAndAdd(dst, p0, dir, t);
+    }
+
     // Compute point where line segment intersects plane
     public intersectLineSegment(dst: vec3, p0: ReadonlyVec3, p1: ReadonlyVec3) {
-        const p0_p1 = Plane.scratchVec3[0];
-        const n = Plane.scratchVec3[1];
-        vec3.sub(p0_p1, p1, p0);
-        vec3.set(n, this.x, this.y, this.z);
-        const t = -(vec3.dot(n, p0) + this.d) / vec3.dot(n, p0_p1);
-        vec3.copy(dst, p0);
-        vec3.scaleAndAdd(dst, dst, p0_p1, t);
+        const dir = Plane.scratchVec3[1];
+        vec3.sub(dir, p1, p0);
+        this.intersectLine(dst, p0, dir);
     }
-    
+
+    public transform(mtx: ReadonlyMat4): void {
+        // You might have to retrieve the adjugate / inverse here if you're doing scaling. I'm using this
+        // with view matrices which shouldn't ever have non-homogenous scaling.
+        this.getVec4v(scratchVec4);
+        vec4.transformMat4(scratchVec4, scratchVec4, mtx);
+        this.setVec4v(scratchVec4);
+    }
 }
 
 const scratchVec3a = vec3.create();

@@ -2,10 +2,10 @@
 import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureMapping } from '../TextureHolder';
@@ -21,7 +21,7 @@ import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';
 import { GridPlane } from './GridPlane';
 import { dfRange, dfShow } from '../DebugFloaters';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `FoxFur`;
 
@@ -305,8 +305,8 @@ class FurObj {
         this.textureMapping[2].gfxTexture = this.indTex;
 
         const obj = parseObjFile(objText);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, obj.vertexBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, obj.indexBuffer.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, obj.vertexBuffer.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, obj.indexBuffer.buffer);
         this.indexCount = obj.indexBuffer.length;
 
         this.inputLayout = device.createInputLayout({
@@ -317,7 +317,7 @@ class FurObj {
                 { location: 2, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 6*0x04 },
             ],
             vertexBufferDescriptors: [
-                { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+                { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
             ]
         });
 
@@ -337,7 +337,7 @@ class FurObj {
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
-        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         for (let i = 0; i < this.numLayers; i++) {
             const renderInst = renderInstManager.newRenderInst();
@@ -368,16 +368,16 @@ class FurObj {
                 renderInst.setMegaStateFlags({
                     attachmentsState: [
                         {
-                            colorWriteMask: GfxColorWriteMask.ALL,
+                            channelWriteMask: GfxChannelWriteMask.AllChannels,
                             rgbBlendState: {
-                                blendMode: GfxBlendMode.ADD,
-                                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                                blendMode: GfxBlendMode.Add,
+                                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                             },
                             alphaBlendState: {
-                                blendMode: GfxBlendMode.ADD,
-                                blendSrcFactor: GfxBlendFactor.ONE,
-                                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                                blendMode: GfxBlendMode.Add,
+                                blendSrcFactor: GfxBlendFactor.One,
+                                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                             },
                         }
                     ],
@@ -396,7 +396,7 @@ class FurObj {
     }
 }
 
-const clearPass = makeClearRenderPassDescriptor(TransparentBlack);
+const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
 export class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;
@@ -417,7 +417,7 @@ export class SceneRenderer implements SceneGfx {
         for (let i = 0; i < this.obj.length; i++)
             this.obj[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -435,14 +435,14 @@ export class SceneRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 

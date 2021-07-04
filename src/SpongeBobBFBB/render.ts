@@ -20,13 +20,13 @@ import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from '../Ca
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { RWAtomicStruct, RWChunk, parseRWAtomic, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
 import { EventID } from './enums';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { MathConstants } from '../MathHelpers';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const MAX_DRAW_DISTANCE = 1000.0;
 
@@ -91,7 +91,7 @@ export class TextureData {
         this.gfxSampler = device.createSampler({
             magFilter: this.filter,
             minFilter: this.filter,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 1000,
             wrapS: this.wrapS,
@@ -122,19 +122,19 @@ export class TextureData {
 }
 
 function convertFilterMode(filter: number): GfxTexFilterMode {
-    return GfxTexFilterMode.BILINEAR;
+    return GfxTexFilterMode.Bilinear;
 }
 
 function convertWrapMode(addressing: number): GfxWrapMode {
     switch (addressing) {
         case rw.Texture.Addressing.MIRROR:
-            return GfxWrapMode.MIRROR;
+            return GfxWrapMode.Mirror;
         case rw.Texture.Addressing.WRAP:
-            return GfxWrapMode.REPEAT;
+            return GfxWrapMode.Repeat;
         case rw.Texture.Addressing.CLAMP:
         case rw.Texture.Addressing.BORDER:
         default:
-            return GfxWrapMode.CLAMP;
+            return GfxWrapMode.Clamp;
     }
 }
 
@@ -492,25 +492,25 @@ export class BaseRenderer {
 function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFactor {
     switch (blend) {
         case Assets.PipeBlendFunction.Zero:
-            return GfxBlendFactor.ZERO;
+            return GfxBlendFactor.Zero;
         case Assets.PipeBlendFunction.One:
-            return GfxBlendFactor.ONE;
+            return GfxBlendFactor.One;
         case Assets.PipeBlendFunction.SrcColor:
-            return GfxBlendFactor.SRC_COLOR;
+            return GfxBlendFactor.Src;
         case Assets.PipeBlendFunction.InvSrcColor:
-            return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
+            return GfxBlendFactor.OneMinusSrc;
         case Assets.PipeBlendFunction.SrcAlpha:
-            return GfxBlendFactor.SRC_ALPHA;
+            return GfxBlendFactor.SrcAlpha;
         case Assets.PipeBlendFunction.InvSrcAlpha:
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+            return GfxBlendFactor.OneMinusSrcAlpha;
         case Assets.PipeBlendFunction.DestAlpha:
-            return GfxBlendFactor.DST_ALPHA;
+            return GfxBlendFactor.DstAlpha;
         case Assets.PipeBlendFunction.InvDestAlpha:
-            return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
+            return GfxBlendFactor.OneMinusDstAlpha;
         case Assets.PipeBlendFunction.DestColor:
-            return GfxBlendFactor.DST_COLOR;
+            return GfxBlendFactor.Dst;
         case Assets.PipeBlendFunction.InvDestColor:
-            return GfxBlendFactor.ONE_MINUS_DST_COLOR;
+            return GfxBlendFactor.OneMinusDst;
         case Assets.PipeBlendFunction.SrcAlphaSat:
         case Assets.PipeBlendFunction.NA:
         default:
@@ -573,8 +573,8 @@ export class FragRenderer extends BaseRenderer {
             ibuf[ioffs++] = frag.indices[i];
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
+        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: BFBBProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset:  0  * 0x04 },
@@ -583,7 +583,7 @@ export class FragRenderer extends BaseRenderer {
             { location: BFBBProgram.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset:  10 * 0x04 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
         const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
@@ -591,13 +591,13 @@ export class FragRenderer extends BaseRenderer {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
 
         this.megaStateFlags = {
-            cullMode: GfxCullMode.NONE,
+            cullMode: GfxCullMode.None,
             depthWrite: !frag.transparentTexture,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL)
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual)
         };
-        let blendMode = GfxBlendMode.ADD;
-        let blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        let blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        let blendMode = GfxBlendMode.Add;
+        let blendDstFactor = GfxBlendFactor.OneMinusSrcAlpha;
+        let blendSrcFactor = GfxBlendFactor.SrcAlpha;
 
         let useFog = !defines.SKY;
         let useLighting = !defines.SKY;
@@ -608,14 +608,14 @@ export class FragRenderer extends BaseRenderer {
         if (this.pipeInfo && (this.pipeInfo.SubObjectBits & subObject!)) {
             switch (this.pipeInfo.PipeFlags.cullMode) {
                 case Assets.PipeCullMode.None:
-                    this.megaStateFlags.cullMode = GfxCullMode.NONE;
+                    this.megaStateFlags.cullMode = GfxCullMode.None;
                     break;
                 case Assets.PipeCullMode.Back:
-                    this.megaStateFlags.cullMode = GfxCullMode.BACK;
+                    this.megaStateFlags.cullMode = GfxCullMode.Back;
                     break;
                 case Assets.PipeCullMode.Dual:
                     this.dualCull = true;
-                    this.megaStateFlags.cullMode = GfxCullMode.FRONT;
+                    this.megaStateFlags.cullMode = GfxCullMode.Front;
                     break;
             }
             
@@ -675,7 +675,7 @@ export class FragRenderer extends BaseRenderer {
         const oldDepthWrite = this.megaStateFlags.depthWrite;
 
         if (this.dualCull)
-            this.megaStateFlags.cullMode = secondPass ? GfxCullMode.BACK : GfxCullMode.FRONT;
+            this.megaStateFlags.cullMode = secondPass ? GfxCullMode.Back : GfxCullMode.Front;
         else if (this.dualZWrite)
             this.megaStateFlags.depthWrite = secondPass;
         
@@ -1068,7 +1068,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -1078,7 +1078,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         const fogEnabled = this.renderHacks.fog && this.fog;
         this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
 
-        const clearColorPassDescriptor = makeClearRenderPassDescriptor(this.clearColor);
+        const clearColorPassDescriptor = makeAttachmentClearDescriptor(this.clearColor);
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearColorPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearColorPassDescriptor);
 
@@ -1089,7 +1089,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, BFBBPass.SKYDOME);
+                executeOnPass(renderInstManager, passRenderer, BFBBPass.SKYDOME);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -1098,14 +1098,14 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, BFBBPass.MAIN);
+                executeOnPass(renderInstManager, passRenderer, BFBBPass.MAIN);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -1143,7 +1143,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].destroy(device);
         this.renderers.length = 0;

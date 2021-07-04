@@ -34,14 +34,14 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
 export function translateCullMode(geoMode: number): GfxCullMode {
     if (geoMode & RSP_Geometry.G_CULL_BACK) {
         if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            return GfxCullMode.FRONT_AND_BACK;
+            return GfxCullMode.FrontAndBack;
         } else {
-            return GfxCullMode.BACK;
+            return GfxCullMode.Back;
         }
     } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     }
-    return GfxCullMode.NONE;
+    return GfxCullMode.None;
 }
 
 export class DrawCall extends F3DEX.DrawCall {

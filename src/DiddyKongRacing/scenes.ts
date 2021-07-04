@@ -14,9 +14,9 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, SingleSelect, Slider } from '../ui';
 import { DkrControlGlobals } from './DkrControlGlobals';
 import { IMG_LOADING_ASSETS } from './DkrLoadingMessage'
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { trackParams } from './scenes_TrackParams';
 
 const pathBase = `DiddyKongRacing`;
@@ -32,7 +32,7 @@ class DKRRenderer implements Viewer.SceneGfx {
     public isInteractive = true;
     private hasStarted = false;
 
-    public renderPassDescriptor: GfxRenderPassDescriptor;
+    public renderPassDescriptor: GfxrAttachmentClearDescriptor;
 
     private level: DkrLevel | null = null;
 
@@ -60,7 +60,7 @@ class DKRRenderer implements Viewer.SceneGfx {
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -79,7 +79,7 @@ class DKRRenderer implements Viewer.SceneGfx {
         if(!!this.level) {
             clearColor = this.level.getClearColor();
         }
-        this.renderPassDescriptor = makeClearRenderPassDescriptor(clearColor);
+        this.renderPassDescriptor = makeAttachmentClearDescriptor(clearColor);
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
@@ -90,18 +90,18 @@ class DKRRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, 0);
+                executeOnPass(renderInstManager, passRenderer, 0);
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         if(!!this.level) {
             this.level.destroy(device);
         }

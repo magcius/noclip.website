@@ -1,3 +1,4 @@
+
 export function generateCycleDependentBlenderSettingsString(settings: number) {
     let pm = [
         "CLR_IN",
@@ -31,5 +32,3 @@ export function generateCycleDependentBlenderSettingsString(settings: number) {
     return `Cycle 0: (${p1} * ${a1} + ${m1} * ${b1}) / (${a1} + ${b1})
 Cycle 1: (${p2} * ${a2} + ${m2} * ${b2}) / (${a2} + ${b2})`;
 }
-
-

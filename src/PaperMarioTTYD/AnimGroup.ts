@@ -526,7 +526,7 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
-    const gfxSampler = cache.createSampler(device, {
+    const gfxSampler = cache.createSampler({
         wrapS: translateWrapModeGfx(wrapS),
         wrapT: translateWrapModeGfx(wrapT),
         minFilter, mipFilter, magFilter,
@@ -557,8 +557,8 @@ class AnimGroupInstance_Shape {
             vtxByteCount += this.shape.draws[i].loadedVertexData.vertexBuffers[0].byteLength;
             idxByteCount += this.shape.draws[i].loadedVertexData.indexData.byteLength;
         }
-        this.vtxBuffer = device.createBuffer(align(vtxByteCount, 4) / 4, GfxBufferUsage.VERTEX, this.animGroupData.animGroup.hasAnyVtxAnm ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
-        this.idxBuffer = device.createBuffer(align(idxByteCount, 4) / 4, GfxBufferUsage.INDEX, GfxBufferFrequencyHint.STATIC);
+        this.vtxBuffer = device.createBuffer(align(vtxByteCount, 4) / 4, GfxBufferUsage.Vertex, this.animGroupData.animGroup.hasAnyVtxAnm ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
+        this.idxBuffer = device.createBuffer(align(idxByteCount, 4) / 4, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
 
         let vtxByteOffset = 0, idxByteOffset = 0;
         this.shapeHelper = this.shape.draws.map((draw, i) => {
@@ -975,9 +975,10 @@ export class AnimGroupInstance {
 export class AnimGroupDataCache {
     public animGroupDataCache = new Map<string, AnimGroupData>();
     public promiseCache = new Map<string, Promise<AnimGroupData>>();
-    private cache = new GfxRenderCache();
+    private cache: GfxRenderCache;
 
     constructor(private device: GfxDevice, private dataFetcher: DataFetcher, private pathBase: string) {
+        this.cache = new GfxRenderCache(device);
     }
 
     private async requestAnimGroupDataInternal(ag: string, abortedCallback: AbortedCallback): Promise<AnimGroupData> {
@@ -1009,7 +1010,7 @@ export class AnimGroupDataCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         for (const animGroupData of this.animGroupDataCache.values())
             animGroupData.destroy(device);
     }
