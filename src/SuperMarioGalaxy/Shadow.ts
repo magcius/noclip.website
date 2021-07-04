@@ -5,15 +5,15 @@ import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, ScenePara
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos } from "./ActorUtil";
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement, drawSimpleModel } from "./ActorUtil";
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert, nArray } from "../util";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
@@ -62,6 +62,7 @@ class ShadowController {
     private calcDropGravityMode = CalcDropGravityMode.Off;
 
     private dropPosMtxRef: ReadonlyMat4 | null = null;
+    private dropPosTxformMtxRef: ReadonlyMat4 | null = null;
     private dropPosRef: ReadonlyVec3 | null = null;
     private dropPosFix = vec3.create();
     private dropDirRef: ReadonlyVec3 | null = null;
@@ -83,8 +84,8 @@ class ShadowController {
     public getDropPos(dst: vec3): void {
         if (this.dropPosRef !== null)
             vec3.copy(dst, this.dropPosRef);
-        else if (this.dropPosMtxRef !== null)
-            transformVec3Mat4w1(dst, this.dropPosMtxRef, this.dropPosFix);
+        else if (this.dropPosTxformMtxRef !== null)
+            transformVec3Mat4w1(dst, this.dropPosTxformMtxRef, this.dropPosFix);
         else
             vec3.copy(dst, this.dropPosFix);
     }
@@ -121,6 +122,7 @@ class ShadowController {
 
     public setDropPosMtxPtr(mtx: ReadonlyMat4 | null, offs: ReadonlyVec3): void {
         this.dropPosMtxRef = mtx;
+        this.dropPosTxformMtxRef = mtx;
         vec3.copy(this.dropPosFix, offs);
     }
 
@@ -130,6 +132,8 @@ class ShadowController {
 
     public setDropPosFix(v: ReadonlyVec3): void {
         vec3.copy(this.dropPosFix, v);
+        this.dropPosRef = null;
+        this.dropPosTxformMtxRef = null;
     }
 
     public setDropPosPtr(v: ReadonlyVec3): void {
@@ -196,6 +200,9 @@ class ShadowController {
 
         if (this.visibleSyncHost)
             return isValidDraw(this.host);
+
+        if (!this.host.visibleScenario)
+            return false;
 
         return true;
     }
@@ -366,7 +373,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
-        this.ddraw.endAndUpload(sceneObjHolder.modelCache.device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -413,7 +420,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         this.materialBack = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Back'));
 
         assert(this.materialBack.materialParamsBufferSize === this.materialFront.materialParamsBufferSize);
-        assert(this.materialBack.packetParamsBufferSize === this.materialFront.packetParamsBufferSize);
+        assert(this.materialBack.drawParamsBufferSize === this.materialFront.drawParamsBufferSize);
     }
 
     protected isDraw(): boolean {
@@ -465,24 +472,15 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
     }
 
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
-        const shapeData = this.modelData!.shapeData;
+        const template = renderInstManager.pushTemplateRenderInst();
 
-        for (let i = 0; i < shapeData.length; i++) {
-            const template = renderInstManager.pushTemplateRenderInst();
+        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
 
-            assert(shapeData[i].draws.length === 1);
-            shapeData[i].shapeHelper.setOnRenderInst(template, shapeData[i].draws[0]);
+        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
 
-            const front = renderInstManager.newRenderInst();
-            this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, front);
-            renderInstManager.submitRenderInst(front);
-
-            const back = renderInstManager.newRenderInst();
-            this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, back);
-            renderInstManager.submitRenderInst(back);
-
-            renderInstManager.popTemplateRenderInst();
-        }
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -550,11 +548,11 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         vec3.normalize(scratchVec3b, scratchVec3b);
 
         getMatrixAxis(scratchVec3a, null, null, scratchMat4a);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -vec3.dot(scratchVec3a, scratchVec3b));
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
         setMatrixAxis(scratchMat4a, scratchVec3a, null, null);
 
         getMatrixAxis(null, null, scratchVec3a, scratchMat4a);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -vec3.dot(scratchVec3a, scratchVec3b));
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
         setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
 
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
@@ -562,6 +560,57 @@ class ShadowVolumeOval extends ShadowVolumeModel {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
+    }
+}
+
+class ShadowVolumeOvalPole extends ShadowVolumeModel {
+    public size = vec3.fromValues(100.0, 100.0, 200.0);
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowVolumeOvalPole', controller);
+        this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
+    }
+
+    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+        vec3.scale(scratchVec3a, this.size, 1 / 100.0);
+        scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
+        scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
+        scratchVec3a[2] = Math.max(scratchVec3a[2], 0.01);
+
+        if (this.controller.followHostScale)
+            vec3.mul(scratchVec3a, scratchVec3a, this.controller.host.scale);
+
+        computeMatrixWithoutTranslation(scratchMat4a, this.controller.getDropPosMtxPtr()!);
+        mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+        mat4.invert(scratchMat4b, scratchMat4a);
+        vec3.negate(scratchVec3a, this.controller.getDropDir());
+        transformVec3Mat4w0(scratchVec3a, scratchMat4b, scratchVec3a);
+        makeMtxUpNoSupport(scratchMat4b, scratchVec3a);
+        mat4.mul(scratchMat4a, scratchMat4a, scratchMat4b);
+
+        this.calcBaseDropPosition(scratchVec3a);
+        setMatrixTranslation(scratchMat4a, scratchVec3a);
+
+        getMatrixAxis(null, scratchVec3b, null, scratchMat4a);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        getMatrixAxis(scratchVec3a, null, null, scratchMat4a);
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+        setMatrixAxis(scratchMat4a, scratchVec3a, null, null);
+
+        getMatrixAxis(null, null, scratchVec3a, scratchMat4a);
+        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+        setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
+
+        const baseDropLength = this.calcBaseDropLength();
+        vec3.scale(scratchVec3b, scratchVec3b, baseDropLength / 100.0);
+        setMatrixAxis(scratchMat4a, null, scratchVec3b, null);
+
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
     }
 }
 
@@ -615,8 +664,9 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     }
 
     private makeVertexBuffer(): void {
-        const dropPosMtx = this.controller.getDropPosMtxPtr()!;
         this.calcBaseDropPosition(scratchVec3d);
+
+        const dropPosMtx = this.controller.getDropPosMtxPtr()!;
         getMatrixAxis(scratchVec3a, scratchVec3b, scratchVec3c, dropPosMtx);
 
         const dropDir = this.controller.getDropDir();
@@ -767,9 +817,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(device, renderInstManager);
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst._flags &= ~(1 << 2);
+        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
         front.setFromTemplate(shapeRenderInst);
@@ -780,6 +828,114 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         back.setFromTemplate(shapeRenderInst);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
+
+        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
+        shapeRenderInst.reset();
+    }
+
+    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+class ShadowVolumeLine extends ShadowVolumeDrawer {
+    public fromController: ShadowController | null = null;
+    public toController: ShadowController | null = null;
+    public fromWidth: number = 100.0;
+    public toWidth: number = 100.0;
+
+    private ddraw = new TDDraw();
+    private vtx: vec3[] = nArray(8, () => vec3.create());
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowVolumeLine', controller);
+
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+    }
+
+    protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
+        if (this.fromController === null || this.toController === null)
+            return;
+
+        this.calcBaseDropPosition(scratchVec3a, this.fromController);
+        this.calcBaseDropPosition(scratchVec3b, this.toController);
+
+        // Direction of line.
+        vec3.sub(scratchVec3c, scratchVec3b, scratchVec3a);
+        if (isNearZero(vec3.length(scratchVec3c), 0.001))
+            return;
+
+        vec3.normalize(scratchVec3c, scratchVec3c);
+
+        // Axis vectors relative to the drop direction.
+
+        // Compute the eight corners of our line box.
+        const dropDirFrom = this.fromController.getDropDir();
+        const dropLengthFrom = this.calcBaseDropLength(this.fromController) + this.fromWidth;
+        vec3.cross(scratchVec3d, dropDirFrom, scratchVec3c);
+        vec3.scaleAndAdd(this.vtx[0], scratchVec3a, scratchVec3d, -this.fromWidth);
+        vec3.scaleAndAdd(this.vtx[1], scratchVec3a, scratchVec3d, +this.fromWidth);
+        vec3.scaleAndAdd(this.vtx[2], this.vtx[0], dropDirFrom, dropLengthFrom);
+        vec3.scaleAndAdd(this.vtx[3], this.vtx[1], dropDirFrom, dropLengthFrom);
+
+        const dropDirTo = this.toController.getDropDir();
+        const dropLengthTo = this.calcBaseDropLength(this.toController) + this.toWidth;
+        vec3.cross(scratchVec3d, dropDirTo, scratchVec3c);
+        vec3.scaleAndAdd(this.vtx[4], scratchVec3b, scratchVec3d, -this.toWidth);
+        vec3.scaleAndAdd(this.vtx[5], scratchVec3b, scratchVec3d, +this.toWidth);
+        vec3.scaleAndAdd(this.vtx[6], this.vtx[4], dropDirTo, dropLengthTo);
+        vec3.scaleAndAdd(this.vtx[7], this.vtx[5], dropDirTo, dropLengthTo);
+
+        // Now send our points over.
+        this.ddraw.beginDraw();
+
+        this.ddraw.begin(GX.Command.DRAW_QUADS);
+        this.ddraw.position3vec3(this.vtx[1]);
+        this.ddraw.position3vec3(this.vtx[5]);
+        this.ddraw.position3vec3(this.vtx[7]);
+        this.ddraw.position3vec3(this.vtx[3]);
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_QUADS);
+        this.ddraw.position3vec3(this.vtx[0]);
+        this.ddraw.position3vec3(this.vtx[2]);
+        this.ddraw.position3vec3(this.vtx[6]);
+        this.ddraw.position3vec3(this.vtx[4]);
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        this.ddraw.position3vec3(this.vtx[0]);
+        this.ddraw.position3vec3(this.vtx[1]);
+        this.ddraw.position3vec3(this.vtx[2]);
+        this.ddraw.position3vec3(this.vtx[3]);
+        this.ddraw.position3vec3(this.vtx[6]);
+        this.ddraw.position3vec3(this.vtx[7]);
+        this.ddraw.position3vec3(this.vtx[4]);
+        this.ddraw.position3vec3(this.vtx[5]);
+        this.ddraw.position3vec3(this.vtx[0]);
+        this.ddraw.position3vec3(this.vtx[1]);
+        this.ddraw.end();
+
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+
+        const front = renderInstManager.newRenderInst();
+        front.setFromTemplate(shapeRenderInst);
+        this.materialFront.setOnRenderInst(device, cache, front);
+        renderInstManager.submitRenderInst(front);
+
+        const back = renderInstManager.newRenderInst();
+        back.setFromTemplate(shapeRenderInst);
+        this.materialBack.setOnRenderInst(device, cache, back);
+        renderInstManager.submitRenderInst(back);
+
+        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
+        shapeRenderInst.reset();
     }
 
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
@@ -915,7 +1071,7 @@ class AlphaShadow extends NameObj {
         this.orthoQuad.position3f32(0, 1, 0);
         this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 0, 1);
         this.orthoQuad.end();
-        this.orthoQuad.endDraw(device, cache);
+        this.orthoQuad.endDraw(cache);
 
         sceneObjHolder.specialTextureBinder.registerTextureMapping(this.textureMapping, SpecialTextureType.OpaqueSceneTexture);
     }
@@ -984,6 +1140,7 @@ export class ShadowControllerHolder extends NameObj {
         ShadowVolumeSphere.requestArchives(sceneObjHolder);
         ShadowVolumeOval.requestArchives(sceneObjHolder);
         ShadowVolumeCylinder.requestArchives(sceneObjHolder);
+        ShadowVolumeOvalPole.requestArchives(sceneObjHolder);
     }
 }
 
@@ -1016,7 +1173,7 @@ function getJMapInfoV3f(dst: vec3, infoIter: JMapInfoIter, prefix: string): void
 function setUpShadowControlBaseMtxFromCSV(controller: ShadowController, actor: LiveActor, infoIter: JMapInfoIter): void {
     const jointName = infoIter.getValueString('Joint');
 
-    if (jointName === null || jointName === '::ACTOR_TRANS' || jointName === '::OTHER_TRANS') {
+    if (jointName === null || jointName === '' || jointName === '::ACTOR_TRANS' || jointName === '::OTHER_TRANS') {
         controller.setDropPosPtr(actor.translation);
     } else if (jointName === '::FIX_POSITION') {
         controller.setDropPosFix(actor.translation);
@@ -1097,6 +1254,18 @@ function createShadowVolumeOvalFromCSV(sceneObjHolder: SceneObjHolder, actor: Li
     controller.shadowDrawer = drawer;
 }
 
+function createShadowVolumeOvalPoleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeNormal();
+
+    const drawer = new ShadowVolumeOvalPole(sceneObjHolder, controller);
+    setUpShadowVolumeFromCSV(drawer, infoIter);
+    vec3.set(drawer.size, 100.0, 100.0, 100.0);
+    getJMapInfoV3f(drawer.size, infoIter, `Size`);
+
+    controller.shadowDrawer = drawer;
+}
+
 function createShadowVolumeCylinderFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
     controller.setDropTypeNormal();
@@ -1119,6 +1288,20 @@ function createShadowVolumeBoxFromCSV(sceneObjHolder: SceneObjHolder, actor: Liv
     controller.shadowDrawer = drawer;
 }
 
+function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeNormal();
+
+    const drawer = new ShadowVolumeLine(sceneObjHolder, controller);
+    setUpShadowVolumeFromCSV(drawer, infoIter);
+    drawer.fromController = actor.shadowControllerList!.getController(infoIter.getValueString('LineStart'));
+    drawer.toController = actor.shadowControllerList!.getController(infoIter.getValueString('LineEnd'));
+    drawer.fromWidth = fallback(infoIter.getValueNumber('LineStartRadius'), 100.0);
+    drawer.toWidth = fallback(infoIter.getValueNumber('LineEndRadius'), 100.0);
+
+    controller.shadowDrawer = drawer;
+}
+
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
@@ -1130,12 +1313,15 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeOval') {
         createShadowVolumeOvalFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOvalPole') {
+        createShadowVolumeOvalPoleFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeCylinder') {
         createShadowVolumeCylinderFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeBox') {
         createShadowVolumeBoxFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeFlatModel') {
+        debugger;
     } else if (shadowType === 'VolumeLine') {
+        createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {
         throw "whoops";
     }
@@ -1151,15 +1337,19 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     else
         throw "whoops";
 
-    if (shadowFile === null)
-        return;
-
     actor.shadowControllerList = new ShadowControllerList();
 
-    const shadowData = createCsvParser(shadowFile);
-    shadowData.mapRecords((infoIter) => {
-        addShadowFromCSV(sceneObjHolder, actor, infoIter);
-    });
+    if (shadowFile !== null) {
+        const shadowData = createCsvParser(shadowFile);
+        shadowData.mapRecords((infoIter) => {
+            addShadowFromCSV(sceneObjHolder, actor, infoIter);
+        });
+    } else {
+        // Create a dummy shadow controller.
+        const controller = new ShadowController(sceneObjHolder, actor, filename);
+        actor.shadowControllerList!.addController(controller);
+        return;
+    }
 }
 
 function createShadowControllerSurfaceParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'default'): ShadowController {
@@ -1212,7 +1402,7 @@ export function addShadowVolumeCylinder(sceneObjHolder: SceneObjHolder, actor: L
     controller.setCalcCollisionMode(CalcCollisionMode.Off);
 }
 
-export function addShadowVolumeBox(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, size: ReadonlyVec3, dropMtxPtr: ReadonlyMat4): void {
+export function addShadowVolumeBox(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, size: ReadonlyVec3, dropMtxPtr: ReadonlyMat4 = actor.getBaseMtx()!): void {
     const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
     const drawer = new ShadowVolumeBox(sceneObjHolder, controller);
     vec3.copy(drawer.size, size);
@@ -1226,6 +1416,17 @@ export function addShadowVolumeFlatModel(sceneObjHolder: SceneObjHolder, actor: 
     controller.shadowDrawer = drawer;
     controller.setCalcCollisionMode(CalcCollisionMode.Off);
     drawer.setBaseMtxPtr(baseMtxPtr);
+}
+
+export function addShadowVolumeLine(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, fromActor: LiveActor, fromName: string, fromWidth: number, toActor: LiveActor, toName: string, toWidth: number): void {
+    const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
+    const drawer = new ShadowVolumeLine(sceneObjHolder, controller);
+    controller.setCalcCollisionMode(CalcCollisionMode.Off);
+    drawer.fromController = fromActor.shadowControllerList!.getController(fromName);
+    drawer.fromWidth = fromWidth;
+    drawer.toController = toActor.shadowControllerList!.getController(toName);
+    drawer.toWidth = toWidth;
+    controller.shadowDrawer = drawer;
 }
 
 export function initShadowController(actor: LiveActor): void {
@@ -1270,8 +1471,21 @@ export function setShadowDropPosition(actor: LiveActor, name: string | null, v: 
     actor.shadowControllerList!.getController(name)!.setDropPosFix(v);
 }
 
+export function setShadowDropPositionAtJoint(actor: LiveActor, name: string | null, jointName: string, offset: ReadonlyVec3): void {
+    const jointMtx = getJointMtxByName(actor, jointName);
+    actor.shadowControllerList!.getController(name)!.setDropPosMtxPtr(jointMtx, offset);
+}
+
 export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
+}
+
+export function setShadowDropDirection(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
+    actor.shadowControllerList!.getController(name)!.setDropDirPtr(v);
+}
+
+export function offCalcShadow(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name)!.setCalcCollisionMode(CalcCollisionMode.Off);
 }
 
 export function onCalcShadow(actor: LiveActor, name: string | null = null): void {
@@ -1306,12 +1520,20 @@ function getShadowVolumeSphere(actor: LiveActor, name: string | null): ShadowVol
     return getShadowVolumeDrawer(actor, name) as ShadowVolumeSphere;
 }
 
+function getShadowVolumeBox(actor: LiveActor, name: string | null): ShadowVolumeBox {
+    return getShadowVolumeDrawer(actor, name) as ShadowVolumeBox;
+}
+
 export function setShadowVolumeSphereRadius(actor: LiveActor, name: string | null, v: number): void {
     getShadowVolumeSphere(actor, name).radius = v;
 }
 
 export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | null, v: number): void {
     getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
+}
+
+export function setShadowVolumeBoxSize(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
+    vec3.copy(getShadowVolumeBox(actor, name).size, v);
 }
 
 export function isExistShadow(actor: LiveActor, name: string | null): boolean {
@@ -1332,4 +1554,29 @@ export function getShadowProjectionPos(actor: LiveActor, name: string | null): R
 
 export function getShadowProjectedSensor(actor: LiveActor, name: string | null): HitSensor {
     return actor.shadowControllerList!.getController(name)!.triHitSensor!;
+}
+
+export function getShadowProjectionLength(actor: LiveActor, name: string | null): number | null {
+    const controller = actor.shadowControllerList!.getController(name)!;
+    if (controller.isProjected)
+        return controller.getProjectionLength();
+    else
+        return null;
+}
+
+export function isShadowProjectedAny(actor: LiveActor): boolean {
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++)
+        if (actor.shadowControllerList!.shadowControllers[i].isProjected)
+            return true;
+    return false;
+}
+
+export function getShadowNearProjectionLength(actor: LiveActor): number | null {
+    let closestLength = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++) {
+        const controller = actor.shadowControllerList!.shadowControllers[i];
+        if (controller.isProjected)
+            closestLength = Math.min(controller.getProjectionLength(), closestLength);
+    }
+    return closestLength === Number.POSITIVE_INFINITY ? null : closestLength;
 }

@@ -5,19 +5,28 @@ import * as GX from './gx_enum';
 
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { vec3, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
-import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
-import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers';
 import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
 import { DeviceProgram } from '../Program';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
 export const EFB_HEIGHT = 528;
+
+export namespace GXShaderLibrary {
+
+export const TevOverflow = `
+float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
+vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
+vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
+`;
+
+}
 
 // #region Material definition.
 export interface GXMaterial {
@@ -61,7 +70,7 @@ export class Light {
     }
 
     public reset(): void {
-        vec3.set(this.Position, 0, 0, 0);
+        vec3.zero(this.Position);
         vec3.set(this.Direction, 0, 0, -1);
         vec3.set(this.DistAtten, 1, 0, 0);
         vec3.set(this.CosAtten, 1, 0, 0);
@@ -180,6 +189,7 @@ export interface TevStage {
     indTexStage: GX.IndTexStageID;
     indTexFormat: GX.IndTexFormat;
     indTexBiasSel: GX.IndTexBiasSel;
+    indTexAlphaSel: GX.IndTexAlphaSel;
     indTexMatrix: GX.IndTexMtxID;
     indTexWrapS: GX.IndTexWrap;
     indTexWrapT: GX.IndTexWrap;
@@ -284,6 +294,11 @@ export function materialUsePnMtxIdx(material: { usePnMtxIdx?: boolean }): boolea
     return material.usePnMtxIdx !== undefined ? material.usePnMtxIdx : true;
 }
 
+export function materialUseTexMtxIdx(material: { useTexMtxIdx?: boolean[] }, i: number): boolean {
+    // Dynamic TexMtxIdx is off by default.
+    return material.useTexMtxIdx !== undefined ? material.useTexMtxIdx[i] : false;
+}
+
 export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: boolean }): boolean {
     return material.hasDynamicAlphaTest !== undefined ? material.hasDynamicAlphaTest : false;
 }
@@ -342,8 +357,8 @@ ${materialHasDynamicAlphaTest(material) ? `
 };
 
 // Expected to change with each shape draw.
-// TODO(jstpierre): Rename from ub_PacketParams.
-layout(std140) uniform ub_PacketParams {
+// TODO(jstpierre): Rename from ub_DrawParams.
+layout(std140) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
     Mat4x3 u_PosMtx[10];
 ` : `
@@ -369,7 +384,7 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export function getPacketParamsBlockSize(material: GXMaterial): number {
+export function getDrawParamsBlockSize(material: GXMaterial): number {
     let size = 0;
 
     if (materialUsePnMtxIdx(material))
@@ -383,7 +398,7 @@ export function getPacketParamsBlockSize(material: GXMaterial): number {
 export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_PacketParams = 2;
+    public static ub_DrawParams = 2;
 
     public name: string;
 
@@ -394,10 +409,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateFloat(v: number): string {
-        let s = v.toString();
-        if (!s.includes('.'))
-            s += '.0';
-        return s;
+        return glslGenerateFloat(v);
     }
 
     // Color Channels
@@ -600,11 +612,7 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     // Output is a vec3, src is a vec3.
     private generateTexGenMatrixMult(texCoordGenIndex: number, src: string) {
-        // Dynamic TexMtxIdx is off by default.
-        let useTexMtxIdx = false;
-        if (this.material.useTexMtxIdx !== undefined && !!this.material.useTexMtxIdx[texCoordGenIndex])
-            useTexMtxIdx = true;
-        if (useTexMtxIdx) {
+        if (materialUseTexMtxIdx(this.material, texCoordGenIndex)) {
             const attrStr = this.generateTexMtxIdxAttr(texCoordGenIndex);
             return this.generateMulPntMatrixDynamic(attrStr, src);
         } else {
@@ -800,11 +808,40 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
+    private generateIndTexCoordBase(stage: TevStage) {
+        return `(t_IndTexCoord${stage.indTexStage})`;
+    }
+
+    private generateAlphaBumpSelChannel(stage: TevStage) {
+        const baseCoord = this.generateIndTexCoordBase(stage);
+        switch (stage.indTexAlphaSel) {
+        case GX.IndTexAlphaSel.S: return `${baseCoord}.x`;
+        case GX.IndTexAlphaSel.T: return `${baseCoord}.y`;
+        case GX.IndTexAlphaSel.U: return `${baseCoord}.z`;
+        default:
+            throw "whoops";
+        }
+    }
+
+    private generateAlphaBumpSel(stage: TevStage) {
+        const baseCoord = this.generateAlphaBumpSelChannel(stage);
+        switch (stage.indTexFormat) {
+        case GX.IndTexFormat._8: return `TevMask(${baseCoord}, 0xF8)`;
+        case GX.IndTexFormat._5: return `TevMask(${baseCoord}, 0xE0)`;
+        case GX.IndTexFormat._4: return `TevMask(${baseCoord}, 0xF0)`;
+        case GX.IndTexFormat._3: return `TevMask(${baseCoord}, 0xF8)`;
+        default:
+            throw "whoops";
+        }
+    }
+
     private generateRas(stage: TevStage) {
         switch (stage.channelId) {
-        case GX.RasColorChannelID.COLOR0A0:   return `v_Color0`;
-        case GX.RasColorChannelID.COLOR1A1:   return `v_Color1`;
-        case GX.RasColorChannelID.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
+        case GX.RasColorChannelID.COLOR0A0:     return `v_Color0`;
+        case GX.RasColorChannelID.COLOR1A1:     return `v_Color1`;
+        case GX.RasColorChannelID.ALPHA_BUMP:   return `vec4(${this.generateAlphaBumpSel(stage)})`;
+        case GX.RasColorChannelID.ALPHA_BUMP_N: return `vec4(${this.generateAlphaBumpSel(stage)} * (255.0/248.0))`;
+        case GX.RasColorChannelID.COLOR_ZERO:   return `vec4(0, 0, 0, 0)`;
         default:
             throw new Error(`whoops ${stage.channelId}`);
         }
@@ -868,8 +905,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CC.A2:    return `t_Color2.aaa`;
         case GX.CC.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
         case GX.CC.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
-        case GX.CC.RASC:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
-        case GX.CC.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CC.RASC:  return `saturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CC.RASA:  return `saturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
         case GX.CC.ONE:   return `vec3(1)`;
         case GX.CC.HALF:  return `vec3(1.0/2.0)`;
         case GX.CC.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
@@ -884,7 +921,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CA.A1:    return `t_Color1.a`;
         case GX.CA.A2:    return `t_Color2.a`;
         case GX.CA.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
-        case GX.CA.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
+        case GX.CA.RASA:  return `saturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
         case GX.CA.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CA.ZERO:  return `0.0`;
         default:
@@ -953,7 +990,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         const expr = this.generateTevOp(op, bias, scale, a, b, c, d, zero);
 
         if (clamp)
-            return `TevSaturate(${expr})`;
+            return `saturate(${expr})`;
         else
             return expr;
     }
@@ -1018,7 +1055,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndTexCoord(stage: TevStage): string {
-        const baseCoord = `(t_IndTexCoord${stage.indTexStage})`;
+        const baseCoord = this.generateIndTexCoordBase(stage);
         switch (stage.indTexFormat) {
         case GX.IndTexFormat._8: return baseCoord;
         default:
@@ -1027,16 +1064,16 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndirectMtx(stage: TevStage): string {
-        const indTevCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
+        const indTexCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
 
         switch (stage.indTexMatrix) {
-        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTevCoord}, 0.0))`;
-        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTevCoord}, 0.0))`;
-        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTexCoord}, 0.0))`;
         // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
         default:
             console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
-            return `${indTevCoord}.xy`;
+            return `${indTexCoord}.xy`;
         }
     }
 
@@ -1199,7 +1236,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         return `
     float t_FogBase = ${this.generateFogBase()};
 ${this.generateFogAdj(`t_FogBase`)}
-    float t_Fog = TevSaturate(t_FogBase - ${C});
+    float t_Fog = saturate(t_FogBase - ${C});
 ${this.generateFogFunc(`t_Fog`)}
     t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_Fog);
 `;
@@ -1225,8 +1262,60 @@ ${this.generateFogFunc(`t_Fog`)}
         }
     }
 
+    private usesColorChannel(c: ColorChannelControl): boolean {
+        return c.matColorSource === GX.ColorSrc.VTX || c.ambColorSource === GX.ColorSrc.VTX;
+    }
+
+    private usesLightChannel(c: LightChannelControl | undefined): boolean {
+        if (c === undefined)
+            return false;
+        return this.usesColorChannel(c.colorChannel) || this.usesColorChannel(c.alphaChannel);
+    }
+
+    private usesNormalColorChannel(c: ColorChannelControl): boolean {
+        if (!c.lightingEnabled || c.litMask === 0)
+            return false;
+        if (c.diffuseFunction !== GX.DiffuseFunction.NONE)
+            return true;
+        if (c.attenuationFunction === GX.AttenuationFunction.SPEC)
+            return true;
+        return false;
+    }
+
+    private usesNormal(): boolean {
+        return this.material.lightChannels.some((c) => {
+            return this.usesNormalColorChannel(c.colorChannel) || this.usesNormalColorChannel(c.alphaChannel);
+        });
+    }
+
+    private usesTexGenInput(s: GX.TexGenSrc): boolean {
+        return this.material.texGens.some((g) => {
+            return g.source === s;
+        });
+    }
+
+    private usesAttrib(a: VertexAttributeGenDef): boolean {
+        switch (a.attrInput) {
+        case VertexAttributeInput.POS: return true;
+        case VertexAttributeInput.TEX0123MTXIDX: return materialUseTexMtxIdx(this.material, 0) || materialUseTexMtxIdx(this.material, 1) || materialUseTexMtxIdx(this.material, 2) || materialUseTexMtxIdx(this.material, 3);
+        case VertexAttributeInput.TEX4567MTXIDX: return materialUseTexMtxIdx(this.material, 4) || materialUseTexMtxIdx(this.material, 5) || materialUseTexMtxIdx(this.material, 6) || materialUseTexMtxIdx(this.material, 7);
+        case VertexAttributeInput.NRM: return this.usesNormal() || this.usesTexGenInput(GX.TexGenSrc.NRM);
+        case VertexAttributeInput.TANGENT: return this.usesTexGenInput(GX.TexGenSrc.TANGENT);
+        case VertexAttributeInput.BINRM: return this.usesTexGenInput(GX.TexGenSrc.BINRM);
+        case VertexAttributeInput.CLR0: return this.usesLightChannel(this.material.lightChannels[0]);
+        case VertexAttributeInput.CLR1: return this.usesLightChannel(this.material.lightChannels[1]);
+        case VertexAttributeInput.TEX01: return this.usesTexGenInput(GX.TexGenSrc.TEX0) || this.usesTexGenInput(GX.TexGenSrc.TEX1);
+        case VertexAttributeInput.TEX23: return this.usesTexGenInput(GX.TexGenSrc.TEX2) || this.usesTexGenInput(GX.TexGenSrc.TEX3);
+        case VertexAttributeInput.TEX45: return this.usesTexGenInput(GX.TexGenSrc.TEX4) || this.usesTexGenInput(GX.TexGenSrc.TEX5);
+        case VertexAttributeInput.TEX67: return this.usesTexGenInput(GX.TexGenSrc.TEX6) || this.usesTexGenInput(GX.TexGenSrc.TEX7);
+        default: return false;
+        }
+    }
+
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
+            if (!this.usesAttrib(a))
+                return ``;
             return `layout(location = ${i}) in ${this.generateAttributeStorageType(a.format)} a_${a.name};`;
         }).join('\n');
     }
@@ -1240,7 +1329,7 @@ ${this.generateFogFunc(`t_Fog`)}
     }
 
     private generateMulNrm(): string {
-        const src = `vec4(a_Normal.xyz, 0.0)`;
+        const src = this.usesNormal() ? `vec4(a_Normal.xyz, 0.0)` : `vec4(0.0)`;
         if (materialUsePnMtxIdx(this.material))
             return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
         else
@@ -1254,6 +1343,8 @@ ${this.generateFogFunc(`t_Fog`)}
 // ${this.material.name}
 precision mediump float;
 ${bindingsDefinition}
+${GfxShaderLibrary.saturate}
+${GXShaderLibrary.TevOverflow}
 
 varying vec3 v_Position;
 varying vec4 v_Color0;
@@ -1321,16 +1412,13 @@ vec2 TextureInvScale(int index) { return 1.0 / TextureScale(index); }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
-vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
-float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
-float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
-vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 float TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }
 float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
 float TevPerCompGT(float a, float b) { return float(a >  b); }
 float TevPerCompEQ(float a, float b) { return float(a == b); }
 vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
+float TevMask(float n, int mask) { return float(int((n * 255.0)) & mask) / 255.0; }
 
 void main() {
     vec4 s_kColor0   = u_KonstColor[0];
@@ -1357,121 +1445,6 @@ ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
     }
-}
-// #endregion
-
-// #region Material flags generation.
-export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
-    switch (cullMode) {
-    case GX.CullMode.ALL:
-        return GfxCullMode.FRONT_AND_BACK;
-    case GX.CullMode.FRONT:
-        return GfxCullMode.FRONT;
-    case GX.CullMode.BACK:
-        return GfxCullMode.BACK;
-    case GX.CullMode.NONE:
-        return GfxCullMode.NONE;
-    }
-}
-
-function translateBlendFactorCommon(blendFactor: GX.BlendFactor): GfxBlendFactor {
-    switch (blendFactor) {
-    case GX.BlendFactor.ZERO:
-        return GfxBlendFactor.ZERO;
-    case GX.BlendFactor.ONE:
-        return GfxBlendFactor.ONE;
-    case GX.BlendFactor.SRCALPHA:
-        return GfxBlendFactor.SRC_ALPHA;
-    case GX.BlendFactor.INVSRCALPHA:
-        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-    case GX.BlendFactor.DSTALPHA:
-        return GfxBlendFactor.DST_ALPHA;
-    case GX.BlendFactor.INVDSTALPHA:
-        return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
-    default:
-        throw new Error("whoops");
-    }
-}
-
-function translateBlendSrcFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
-    switch (blendFactor) {
-    case GX.BlendFactor.SRCCLR:
-        return GfxBlendFactor.DST_COLOR;
-    case GX.BlendFactor.INVSRCCLR:
-        return GfxBlendFactor.ONE_MINUS_DST_COLOR;
-    default:
-        return translateBlendFactorCommon(blendFactor);
-    }
-}
-
-function translateBlendDstFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
-    switch (blendFactor) {
-    case GX.BlendFactor.SRCCLR:
-        return GfxBlendFactor.SRC_COLOR;
-    case GX.BlendFactor.INVSRCCLR:
-        return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
-    default:
-        return translateBlendFactorCommon(blendFactor);
-    }
-}
-
-function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
-    switch (compareType) {
-    case GX.CompareType.NEVER:
-        return GfxCompareMode.NEVER;
-    case GX.CompareType.LESS:
-        return GfxCompareMode.LESS;
-    case GX.CompareType.EQUAL:
-        return GfxCompareMode.EQUAL;
-    case GX.CompareType.LEQUAL:
-        return GfxCompareMode.LEQUAL;
-    case GX.CompareType.GREATER:
-        return GfxCompareMode.GREATER;
-    case GX.CompareType.NEQUAL:
-        return GfxCompareMode.NEQUAL;
-    case GX.CompareType.GEQUAL:
-        return GfxCompareMode.GEQUAL;
-    case GX.CompareType.ALWAYS:
-        return GfxCompareMode.ALWAYS;
-    }
-}
-
-export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>, material: GXMaterial) {
-    megaState.cullMode = translateCullMode(material.cullMode);
-    megaState.depthWrite = material.ropInfo.depthWrite;
-    megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.ALWAYS;
-    megaState.frontFace = GfxFrontFaceMode.CW;
-
-    const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
-
-    if (material.ropInfo.blendMode === GX.BlendMode.NONE) {
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
-    } else if (material.ropInfo.blendMode === GX.BlendMode.BLEND) {
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendSrcFactor);
-        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendDstFactor);
-    } else if (material.ropInfo.blendMode === GX.BlendMode.SUBTRACT) {
-        attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
-    } else if (material.ropInfo.blendMode === GX.BlendMode.LOGIC) {
-        // Sonic Colors uses this? WTF?
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
-        console.warn(`Unimplemented LOGIC blend mode`);
-    }
-
-    attachmentStateSimple.colorWriteMask = GfxColorWriteMask.NONE;
-
-    if (material.ropInfo.colorUpdate)
-        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.COLOR;
-    if (material.ropInfo.alphaUpdate)
-        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.ALPHA;
-
-    setAttachmentStateSimple(megaState, attachmentStateSimple);
 }
 // #endregion
 
@@ -1666,15 +1639,15 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
         const konstAlphaSel: GX.KonstAlphaSel = ((i & 1) ? (ksel >>> 19) : (ksel >>> 9)) & 0x1F;
 
         const indCmd = r.bp[GX.BPRegister.IND_CMD0_ID + i];
-        const indTexStage: GX.IndTexStageID =   (indCmd >>>  0) & 0x03;
-        const indTexFormat: GX.IndTexFormat =   (indCmd >>>  2) & 0x03;
-        const indTexBiasSel: GX.IndTexBiasSel = (indCmd >>>  4) & 0x07;
-        // alpha sel
-        const indTexMatrix: GX.IndTexMtxID =    (indCmd >>>  9) & 0x0F;
-        const indTexWrapS: GX.IndTexWrap =      (indCmd >>> 13) & 0x07;
-        const indTexWrapT: GX.IndTexWrap =      (indCmd >>> 16) & 0x07;
-        const indTexUseOrigLOD: boolean =    !!((indCmd >>> 19) & 0x01);
-        const indTexAddPrev: boolean =       !!((indCmd >>> 20) & 0x01);
+        const indTexStage: GX.IndTexStageID =     (indCmd >>>  0) & 0x03;
+        const indTexFormat: GX.IndTexFormat =     (indCmd >>>  2) & 0x03;
+        const indTexBiasSel: GX.IndTexBiasSel =   (indCmd >>>  4) & 0x07;
+        const indTexAlphaSel: GX.IndTexAlphaSel = (indCmd >>>  7) & 0x03;
+        const indTexMatrix: GX.IndTexMtxID =      (indCmd >>>  9) & 0x0F;
+        const indTexWrapS: GX.IndTexWrap =        (indCmd >>> 13) & 0x07;
+        const indTexWrapT: GX.IndTexWrap =        (indCmd >>> 16) & 0x07;
+        const indTexUseOrigLOD: boolean =      !!((indCmd >>> 19) & 0x01);
+        const indTexAddPrev: boolean =         !!((indCmd >>> 20) & 0x01);
 
         const rasSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2)];
         const rasSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2) + 1];
@@ -1707,7 +1680,7 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
             konstColorSel, konstAlphaSel,
             rasSwapTable, texSwapTable,
 
-            indTexStage, indTexFormat, indTexBiasSel, indTexMatrix, indTexWrapS, indTexWrapT, indTexAddPrev, indTexUseOrigLOD,
+            indTexStage, indTexFormat, indTexBiasSel, indTexAlphaSel, indTexMatrix, indTexWrapS, indTexWrapT, indTexAddPrev, indTexUseOrigLOD,
         };
 
         tevStages.push(tevStage);

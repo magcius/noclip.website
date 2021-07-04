@@ -6,21 +6,22 @@ import * as Flipbook from './flipbook';
 import * as BYML from '../byml';
 import * as Actors from './actors';
 
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { depthClearRenderPassDescriptor, BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero, assertExists, hexdump } from '../util';
+import { assert, hexzero, assertExists } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants, scaleMatrix } from '../MathHelpers';
 import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles';
 import { CameraController } from '../Camera';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 
 const pathBase = `BanjoKazooie`;
 
@@ -31,7 +32,6 @@ class BKRenderer implements Viewer.SceneGfx {
     public sceneEmitters: SceneEmitterHolder;
     public rails: Actors.Rail[] = [];
 
-    public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public objectData: ObjectData) {
@@ -96,7 +96,7 @@ class BKRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.geoRenderers.length; i++)
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -104,33 +104,46 @@ class BKRenderer implements Viewer.SceneGfx {
             this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.sceneEmitters.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        executeOnPass(renderInstManager, device, skyboxPassRenderer, BKPass.SKYBOX);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-        executeOnPass(renderInstManager, device, mainPassRenderer, BKPass.MAIN);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
 
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, passRenderer, BKPass.SKYBOX);
+            });
+        });
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, passRenderer, BKPass.MAIN);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
-
-        return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.geoDatas.length; i++)
             this.geoDatas[i].destroy(device);
         this.textureHolder.destroy(device);
@@ -258,12 +271,13 @@ export function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
 
 class ObjectData {
     public geoData: (GeometryData | FlipbookData | null)[] = [];
-    public gfxCache = new GfxRenderCache();
+    public gfxCache: GfxRenderCache;
 
-    constructor(private objectSetupData: ObjectSetupData) {
+    constructor(device: GfxDevice, private objectSetupData: ObjectSetupData) {
+        this.gfxCache = new GfxRenderCache(device);
     }
 
-    public ensureGeoData(device: GfxDevice, geoFileID: number): GeometryData | FlipbookData | null {
+    public ensureGeoData(device: GfxDevice, geoFileID: number, objectID = -1): GeometryData | FlipbookData | null {
         if (this.geoData[geoFileID] === undefined) {
             if (geoFileID === 50 || geoFileID === 51 || geoFileID === 52) {
                 // there are three models (objects 480, 411, 693) that look for a texture in a segment we don't have
@@ -286,7 +300,7 @@ class ObjectData {
                 // but most objects support switching beteween opaque and translucent,
                 // so setting translucent by default seems safe
                 const geo = Geo.parseBK(geoData, Geo.RenderZMode.OPA, false);
-                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
+                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo, objectID);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);
             }
@@ -333,7 +347,7 @@ class ObjectData {
     }
 
     private baseSpawnObject(device: GfxDevice, emitters: SceneEmitterHolder, objectID: number, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
-        const geoData = this.ensureGeoData(device, fileID);
+        const geoData = this.ensureGeoData(device, fileID, objectID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
             return null;
@@ -454,14 +468,14 @@ class ObjectData {
                 data.renderData.destroy(device);
         }
 
-        this.gfxCache.destroy(device);
+        this.gfxCache.destroy();
     }
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
     const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=10`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
-    return new ObjectData(objectSetup);
+    return new ObjectData(device, objectSetup);
 }
 
 interface MovementFactory {

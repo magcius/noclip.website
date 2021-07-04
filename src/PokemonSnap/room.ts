@@ -2346,7 +2346,7 @@ function buildEggData(dataMap: DataMap, id: number): Float32Array | undefined {
 }
 
 export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Float32Array): void {
-    const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertices.buffer);
+    const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer);
     data.dynamicBufferCopies.push(eggBuffer); // put it here to make sure it gets destroyed later
 
     // clear existing input objects, but leave the buffers
@@ -2362,8 +2362,8 @@ export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Flo
     ];
 
     const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-        { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-        { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+        { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
     ];
 
     data.inputLayout = device.createInputLayout({

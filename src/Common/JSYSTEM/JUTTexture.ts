@@ -74,7 +74,7 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampl
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
-    const gfxSampler = cache.createSampler(device, {
+    const gfxSampler = cache.createSampler({
         wrapS: translateWrapModeGfx(sampler.wrapS),
         wrapT: translateWrapModeGfx(sampler.wrapT),
         minFilter, mipFilter, magFilter,

@@ -5,7 +5,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer);
 }
 
 function main(): void {

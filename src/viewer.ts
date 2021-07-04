@@ -4,16 +4,16 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor } from './gfx/platform/GfxPlatform';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
-import { downloadTextureToCanvas } from './Screenshot';
+import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
-import { OpaqueBlack } from './Color';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
+import { GlobalSaveManager } from './SaveManager';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -27,6 +27,11 @@ export interface Texture {
     activate?: () => Promise<void>;
 }
 
+interface MouseLocation {
+    mouseX: number;
+    mouseY: number;
+}
+
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
@@ -35,6 +40,8 @@ export interface ViewerRenderInput {
     backbufferHeight: number;
     viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
+    antialiasingMode: AntialiasingMode;
+    mouseLocation: MouseLocation;
 }
 
 export interface SceneGfx {
@@ -46,7 +53,7 @@ export interface SceneGfx {
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
-    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass | null;
+    render(device: GfxDevice, renderInput: ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
 }
 
@@ -63,30 +70,6 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
     canvas.width = width * devicePixelRatio;
     canvas.height = height * devicePixelRatio;
-}
-
-// TODO(jstpierre): Find a more elegant way to write this that doesn't take as many resources.
-class ClearScene {
-    public colorAttachment = new ColorAttachment();
-    private renderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
-
-    public minimize(device: GfxDevice): void {
-        this.colorAttachment.setParameters(device, 1, 1, 1);
-        device.setResourceLeakCheck(this.colorAttachment.gfxAttachment!, false);
-    }
-
-    public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass | null {
-        this.colorAttachment.setParameters(device, viewerRenderInput.backbufferWidth, viewerRenderInput.backbufferHeight);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
-        this.renderPassDescriptor.colorResolveTo = viewerRenderInput.onscreenTexture;
-        const renderPass = device.createRenderPass(this.renderPassDescriptor);
-        device.submitPass(renderPass);
-        return null;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorAttachment.destroy(device);
-    }
 }
 
 export class Viewer {
@@ -116,8 +99,6 @@ export class Viewer {
 
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-    private clearScene: ClearScene = new ClearScene();
-    private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -133,7 +114,14 @@ export class Viewer {
             backbufferHeight: 0,
             viewport: this.viewport,
             onscreenTexture: null!,
+            antialiasingMode: AntialiasingMode.None,
+            mouseLocation: this.inputManager,
         };
+
+        GlobalSaveManager.addSettingListener('AntialiasingMode', (saveManager, key) => {
+            const antialiasingMode = saveManager.loadSetting<AntialiasingMode>(key, AntialiasingMode.FXAA);
+            this.viewerRenderInput.antialiasingMode = antialiasingMode;
+        });
     }
 
     private onKeyMoveSpeed(): void {
@@ -152,28 +140,9 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private renderViewport() {
-        let renderPass: GfxRenderPass | null = null;
-        if (this.scene !== null) {
-            renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
-            this.clearScene.minimize(this.gfxDevice);
-        } else {
-            this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
-        }
-
-        if (renderPass !== null) {
-            // Legacy API: needs resolve.
-            const descriptor = this.gfxDevice.queryRenderPass(renderPass);
-
-            this.gfxDevice.submitPass(renderPass);
-
-            // Resolve.
-            this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
-            this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-            this.resolveRenderPassDescriptor.depthStencilAttachment = descriptor.depthStencilAttachment;
-            const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-            this.gfxDevice.submitPass(resolvePass);
-        }
+    private renderViewport(): void {
+        if (this.scene !== null)
+            this.scene.render(this.gfxDevice, this.viewerRenderInput);
     }
 
     private render(): void {
@@ -181,6 +150,7 @@ export class Viewer {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
+        this.viewerRenderInput.viewport = this.viewport;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
@@ -216,7 +186,7 @@ export class Viewer {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = fbw;
         this.viewerRenderInput.backbufferHeight = fbh;
-        this.gfxSwapChain.configureSwapChain(fbw, fbh);
+        this.gfxSwapChain.configureSwapChain(fbw, fbh, framebuffer);
 
         this.renderStatisticsTracker.beginFrame();
 
@@ -236,16 +206,16 @@ export class Viewer {
 
             const widthRatio: number = xrViewPort.width / fbw;
             const heightRatio: number = xrViewPort.height / fbh;
-
-            this.renderViewport();
-
-            const viewportForBlitting = {
+            this.viewerRenderInput.viewport = {
                 x: xrViewPort.x / xrViewPort.width * widthRatio,
                 y: xrViewPort.y / xrViewPort.height * heightRatio,
                 w: widthRatio,
                 h: heightRatio
             };
-            this.gfxSwapChain.present(framebuffer, viewportForBlitting);
+
+            this.renderViewport();
+
+            this.gfxSwapChain.present();
         }
 
         this.gfxDevice.popDebugGroup();
@@ -326,14 +296,14 @@ export class Viewer {
             // TODO(jstpierre): Implement in Gfx somehow.
             const gl = gfxDeviceGetImpl_GL(this.gfxDevice).gl;
             const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            downloadTextureToCanvas(gl, getPlatformTexture_GL(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas, opaque);
+            downloadFrontBufferToCanvas(gl, width, height, canvas, opaque);
         }
 
         return canvas;
     }
 }
 
-export { SceneDesc, SceneGroup };
+export type { SceneDesc, SceneGroup };
 
 interface ViewerOut {
     viewer: Viewer;
@@ -349,7 +319,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
+    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {
@@ -359,16 +329,10 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.NO_WEBGL2_GENERIC;
     }
 
-    // Test for no MS depthbuffer support (as seen in SwiftShader).
-    const samplesArray = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES);
-    if (samplesArray === null || samplesArray.length === 0) {
-        const ext = gl.getExtension('WEBGL_debug_renderer_info');
-        console.warn(`samplesArray = ${samplesArray}`);
-        if (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
-            return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
-        else
-            return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
-    }
+    // SwiftShader is trash and I don't trust it.
+    const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
+    if (WEBGL_debug_renderer_info && gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
+        return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
 
     const config = new GfxPlatformWebGL2Config();
     config.trackResources = IS_DEVELOPMENT;
@@ -427,7 +391,7 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
         return makeErrorMessageUI(`
 <p>This application requires hardware acceleration to be enabled.
 <p>Please enable hardware acceleration in your's browser settings.
-<p>If you have enabled hardware acceleration and are still getting this error message, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
+<p>If you have enabled hardware acceleration and are still getting this error message, try restarting your browser and computer.
 <p style="text-align: right">Thanks, Jasper.
 `);
     else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_GENERIC)

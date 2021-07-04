@@ -7,7 +7,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { Filesystem } from "./Filesystem";
@@ -250,20 +250,20 @@ export class TranslucentPlaneRenderer {
         this.gfxProgram = null;
 
         const vertexData = new Float32Array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5]);
-        const indices = new Int8Array([0, 1, 2, 0, 2, 3]);
+        const indices = new Uint8Array([0, 1, 2, 0, 2, 3]);
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indices.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
 
         this.inputLayout = device.createInputLayout({
-            indexBufferFormat: GfxFormat.U8_R,
+            indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
@@ -279,12 +279,12 @@ export class TranslucentPlaneRenderer {
         const renderInst = renderInstManager.newRenderInst();
 
         renderInst.setMegaStateFlags(setAttachmentStateSimple({
-            cullMode: GfxCullMode.NONE,
+            cullMode: GfxCullMode.None,
             depthWrite: false // So that they wont block each other
         }, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         }));
 
         // Always draw these planes after everything else has been rendered
@@ -315,7 +315,7 @@ export class TranslucentPlaneRenderer {
 
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(6, 0);

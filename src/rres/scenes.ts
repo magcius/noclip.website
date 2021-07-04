@@ -6,13 +6,13 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { U8Archive } from "./u8";
-import { createMarioKartWiiSceneFromU8Archive } from "./Scenes_MarioKartWii";
+import { createMarioKartWiiSceneFromU8Archive } from "../MarioKartWii/Scenes_MarioKartWii";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString } from "../util";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 
@@ -72,7 +72,7 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
         return panels;
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         for (let i = 0; i < this.scn0Animators.length; i++)
@@ -83,7 +83,7 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {
@@ -140,7 +140,7 @@ export function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBuff
 
     // If we have a course.kmp, that means we're a Mario Kart Wii archive.
     if (arc.findFile('./course.kmp') !== null)
-        return createMarioKartWiiSceneFromU8Archive(device, arc);
+        return createMarioKartWiiSceneFromU8Archive(context, arc);
 
     // Otherwise, assume that we have a basic scene.
     return createBasicRRESRendererFromU8Archive(device, arc);

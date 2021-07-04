@@ -14,9 +14,9 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import { PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
-import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { computeViewMatrix, OrbitCameraController } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -63,8 +63,8 @@ class PlaneShape {
         vtx[18] = 2;
         vtx[19] = 2;
 
-        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GX_Material.getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
@@ -72,12 +72,12 @@ class PlaneShape {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
+            { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerInstance, },
         ];
 
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
-        this.inputLayout = cache.createInputLayout(device, {
+        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
@@ -218,11 +218,11 @@ class SeaRenderer extends SunshineRenderer {
         return new OrbitCameraController(true);
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         this.sunshineWaterModel.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        super.prepareToRender(device, hostAccessPass, viewerInput);
+        super.prepareToRender(device, viewerInput);
     }
 }
 

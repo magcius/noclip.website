@@ -21,7 +21,7 @@ export interface SFATextureArray {
 }
 
 export abstract class TextureFetcher {
-    public abstract async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher): Promise<void>;
+    public abstract loadSubdirs(subdirs: string[], dataFetcher: DataFetcher): Promise<void>;
     public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
     public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
         const texArray = this.getTextureArray(device, num, alwaysUseTex1);
@@ -131,11 +131,11 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
 
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, DIM, DIM, 1));
     const gfxSampler = device.createSampler({
-        wrapS: GfxWrapMode.REPEAT,
-        wrapT: GfxWrapMode.REPEAT,
-        minFilter: GfxTexFilterMode.BILINEAR,
-        magFilter: GfxTexFilterMode.BILINEAR,
-        mipFilter: GfxMipFilterMode.NO_MIP,
+        wrapS: GfxWrapMode.Repeat,
+        wrapT: GfxWrapMode.Repeat,
+        minFilter: GfxTexFilterMode.Bilinear,
+        magFilter: GfxTexFilterMode.Bilinear,
+        mipFilter: GfxMipFilterMode.NoMip,
         minLOD: 0,
         maxLOD: 100,
     });
@@ -168,9 +168,7 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
         }
     }
 
-    const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(gfxTexture, 0, [pixels]);
 
     return {
         textures: [{

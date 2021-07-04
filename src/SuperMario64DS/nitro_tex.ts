@@ -325,11 +325,11 @@ export function getFormatName(format: Format): string {
 
 function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
     if (repeat && flip)
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     else if (repeat)
-        return GfxWrapMode.REPEAT;
+        return GfxWrapMode.Repeat;
     else
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
 }
 
 export function parseTexImageParamWrapModeS(w0: number): GfxWrapMode {

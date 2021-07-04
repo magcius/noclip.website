@@ -2,18 +2,21 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import * as Viewer from "../viewer";
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext } from '../SceneBase';
+import { White } from '../Color';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyKeyframeToModel } from './animation';
 import { SFARenderer, SceneRenderContext } from './render';
-import { ModelFetcher, ModelInstance, ModelVersion, ModelRenderContext } from './models';
+import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
-import { dataSubarray, createDownloadLink, readUint16 } from './util';
+import { dataSubarray, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
-import { White } from '../Color';
+import { ModelVersion } from './modelloader';
+import { downloadBufferSlice } from '../DownloadUtils';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
@@ -31,8 +34,8 @@ class ModelExhibitRenderer extends SFARenderer {
     private useGlobalAnimNum: boolean = false;
     private autogenAmap: boolean = false;
 
-    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
-        super(device, animController);
+    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
+        super(device, animController, materialFactory);
     }
 
     public createPanels(): UI.Panel[] {
@@ -89,8 +92,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     public downloadModel() {
         if (this.modelInst !== null && this.modelInst !== undefined) {
-            const link = createDownloadLink(this.modelInst.model.modelData, `model_${this.subdir}_${this.modelNum}${this.modelInst.model.modelVersion === ModelVersion.Beta ? '_beta' : ''}.bin`);
-            link.click();
+            downloadBufferSlice(`model_${this.subdir}_${this.modelNum}${this.modelInst.model.version === ModelVersion.Beta ? '_beta' : ''}.bin`, ArrayBufferSlice.fromView(this.modelInst.model.modelData));
         }
     }
 
@@ -228,14 +230,14 @@ class ModelExhibitRenderer extends SFARenderer {
 
         // Render opaques
 
-        this.beginPass(sceneCtx.viewerInput);
+        // this.beginPass(sceneCtx.viewerInput);
 
         if (this.modelInst !== null) {
             const mtx = mat4.create();
             this.renderModel(device, renderInstManager, sceneCtx, mtx, this.modelInst);
         }
 
-        this.endPass(device);
+        // this.endPass(device);
         // TODO: render furs and translucents
     }
 
@@ -247,7 +249,7 @@ class ModelExhibitRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix);
+        modelInst.addRenderInsts(device, renderInstManager, modelCtx, null, matrix);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines
@@ -287,7 +289,7 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, this.modelVersion === ModelVersion.Beta);
         await texFetcher.loadSubdirs([this.subdir], context.dataFetcher);
-        const modelFetcher = await ModelFetcher.create(device, this.gameInfo, context.dataFetcher, Promise.resolve(texFetcher), materialFactory, animController, this.modelVersion);
+        const modelFetcher = await ModelFetcher.create(this.gameInfo, Promise.resolve(texFetcher), materialFactory, animController, this.modelVersion);
         await modelFetcher.loadSubdirs([this.subdir], context.dataFetcher);
 
         return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelFetcher, animColl, amapColl, modanimColl);

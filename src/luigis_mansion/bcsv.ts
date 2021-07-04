@@ -1,13 +1,9 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, decodeString } from "../util";
+import { readString } from "../util";
 
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
-    const view = buffer.createDataView(offs);
-    let i = 0;
-    while (view.getUint8(i) !== 0)
-        i++;
-    return decodeString(buffer.subarray(offs, i), 'sjis');
+    return readString(buffer, offs, -1, true, 'sjis');
 }
 
 // Luigi's Mansion
@@ -75,7 +71,10 @@ const nameTable = [
     'PlanetLight1PosX', 'PlanetLight1PosY', 'PlanetLight1PosZ', 'PlanetLight1ColorR', 'PlanetLight1ColorG', 'PlanetLight1ColorB', 'PlanetLight1ColorA', 'PlanetLight1FollowCamera',
     'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
     // Shadow
-    'Name', 'GroupName', 'Joint', 'DropOffsetX', 'DropOffsetY', 'DropOffsetZ', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity',
+    'Name', 'GroupName', 'Joint', 'DropOffsetX', 'DropOffsetY', 'DropOffsetZ', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity', 'VolumeStart', 'VolumeEnd',
+    'VolumeCut', 'Type', 'Radius', 'SizeX', 'SizeY', 'SizeZ', 'LineStart', 'LineStartRadius', 'LineEnd', 'LineEndRadius',
+    // GeneralPos
+    'PosName',
 ];
 
 const hashLookup = new Map<number, string>();
@@ -217,4 +216,34 @@ export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, na
     if (index === -1)
         return null;
     return record[index] as T;
+}
+
+export function makeTable(bcsv: Bcsv): HTMLTableElement {
+    const table = document.createElement('table');
+    table.border = '1';
+
+    const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+
+    {
+        const tr = document.createElement('tr');
+        tbody.appendChild(tr);
+        bcsv.fields.forEach((field) => {
+            const th = document.createElement('th');
+            th.textContent = field.debugName;
+            tr.appendChild(th);
+        });
+    }
+
+    bcsv.records.forEach((record) => {
+        const tr = document.createElement('tr');
+        tbody.appendChild(tr);
+        record.forEach((record) => {
+            const td = document.createElement('td');
+            td.textContent = record.toString();
+            tr.appendChild(td);
+        });
+    });
+
+    return table;
 }

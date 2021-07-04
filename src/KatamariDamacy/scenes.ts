@@ -5,22 +5,23 @@ import { Camera, CameraController } from '../Camera';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder, TextureMapping } from '../TextureHolder';
 import * as UI from '../ui';
-import { assert, assertExists, decodeString } from '../util';
+import { assert, assertExists, decodeString, mod } from '../util';
 import * as Viewer from '../viewer';
 import * as BIN from "./bin";
 import { GallerySceneRenderer } from './Gallery';
 import { ObjectRenderer, CameraGameState, updateCameraGameState, KDLayer } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { parseAnimationList, ObjectAnimationList } from './animation';
+import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -163,15 +164,10 @@ export function fillSceneParamsData(d: Float32Array, camera: Camera, lightingInd
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 
-function mod(a: number, b: number) {
-    return (a + b) % b;
-}
-
 const tutorialScratch = vec3.create();
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private currentAreaNo: number = 0;
-    private sceneTexture = new ColorTexture();
-    public renderTarget = new BasicRenderTarget();
+    private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
     public modelSectorData: BINModelSectorData[] = [];
     public framebufferTextureMapping = new TextureMapping();
@@ -194,7 +190,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     public addTextureData(sector: BINModelSectorData): void {
         for (let i = 0; i < sector.textureData.length; i++)
-            [].push.apply(this.textureHolder.viewerTextures, sector.textureData[i].viewerTexture);
+            this.textureHolder.viewerTextures.push(... sector.textureData[i].viewerTexture);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -218,21 +214,41 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         }
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+        this.sceneTexture.setDescription(device, mainColorDesc);
 
-        this.framebufferTextureMapping.gfxTexture = this.sceneTexture!.gfxTexture;
-        renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
+                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
+        // Maybe have copyTextureToTexture as a native device method?
+        builder.pushPass((pass) => {
+            pass.setDebugName('Copy to Temporal Texture');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
 
         if (this.motionCache !== null && this.drawPaths) {
@@ -242,8 +258,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 this.drawPath(viewerInput, v.pathPoints);
             }
         }
-
-        return passRenderer;
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
@@ -259,7 +273,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         return offs;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16 + 20);
@@ -277,7 +291,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 this.currentPalette, this.cameraGameState);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
     public setCurrentAreaNo(areaNo: number): void {
@@ -322,9 +336,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.sceneTexture.destroy(device);
-        this.renderTarget.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);

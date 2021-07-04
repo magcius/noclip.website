@@ -2,9 +2,11 @@
 import * as BCSV from '../luigis_mansion/bcsv';
 import { vec3 } from 'gl-matrix';
 import { MathConstants } from '../MathHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { fallback } from '../util';
+import { assertExists, fallback } from '../util';
 import type { SceneObjHolder } from './Main';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { ZoneAndLayer } from './LiveActor';
+import { UI } from '../ui';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg0'); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg1'); }
@@ -48,7 +50,7 @@ export function getJMapInfoGroupId(infoIter: JMapInfoIter): number | null {
 type Callback<T> = (jmp: JMapInfoIter, i: number) => T;
 
 export class JMapInfoIter {
-    constructor(public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
+    constructor(public filename: string | null, public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
     }
 
     public getNumRecords(): number {
@@ -91,15 +93,24 @@ export class JMapInfoIter {
             return null;
         return v;
     }
+
+    public popDebug(): void {
+        const ui: UI = window.main.ui;
+        const debugFloater = ui.debugFloaterHolder.makeFloatingPanel(fallback(this.filename, 'BCSV'));
+        debugFloater.contents.style.overflow = 'auto';
+
+        const table = BCSV.makeTable(this.bcsv);
+        debugFloater.contents.appendChild(table);
+    }
 }
 
-export function createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
+export function createCsvParser(buffer: ArrayBufferSlice, filename: string | null = null): JMapInfoIter {
     const bcsv = BCSV.parse(buffer);
-    return new JMapInfoIter(bcsv, bcsv.records[0]);
+    return new JMapInfoIter(filename, bcsv, bcsv.records[0]);
 }
 
 export class JMapIdInfo {
-    constructor(public zoneId: number, public infoId: number) {
+    constructor(public readonly zoneId: number, public readonly infoId: number) {
     }
 
     public equals(other: Readonly<JMapIdInfo>): boolean {
@@ -111,7 +122,64 @@ function getPlacedZoneId(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter)
     return sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter)!.zoneId;
 }
 
+function getJMapInfoLinkID(infoIter: JMapInfoIter) {
+    return assertExists(infoIter.getValueNumber('l_id'));
+}
+
+export function iterChildObj(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, callback: (childInfoIter: JMapInfoIter, zoneAndLayer: ZoneAndLayer) => void): void {
+    const linkID = getJMapInfoLinkID(infoIter);
+    const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter)!;
+    stageDataHolder.iterChildObjInternal(linkID, callback);
+}
+
 export function createJMapIdInfoFromIter(sceneObjHolder: SceneObjHolder, infoId: number, infoIter: JMapInfoIter): JMapIdInfo {
     const zoneId = getPlacedZoneId(sceneObjHolder, infoIter);
     return new JMapIdInfo(zoneId, infoId);
+}
+
+const enum LinkTagType { None = -1, MapParts, Obj, ChildObj }
+export class JMapLinkInfo {
+    private constructor(public readonly zoneId: number, public readonly objId: number, public readonly linkTagType: LinkTagType) {
+    }
+
+    public equals(other: Readonly<JMapLinkInfo>): boolean {
+        return this.zoneId === other.zoneId && this.objId === other.objId && this.linkTagType === other.linkTagType;
+    }
+
+    public static createLinkInfo(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): JMapLinkInfo | null {
+        const zoneId = getPlacedZoneId(sceneObjHolder, infoIter);
+
+        let objId: number | null;
+
+        objId = infoIter.getValueNumber('MapParts_ID');
+        if (objId !== null)
+            return new JMapLinkInfo(zoneId, objId, LinkTagType.MapParts);
+
+        objId = infoIter.getValueNumber('Obj_ID');
+        if (objId !== null)
+            return new JMapLinkInfo(zoneId, objId, LinkTagType.Obj);
+
+        objId = infoIter.getValueNumber('ChildObjId');
+        if (objId !== null)
+            return new JMapLinkInfo(zoneId, objId, LinkTagType.ChildObj);
+
+        return null;
+    }
+
+    public static createLinkedInfo(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): JMapLinkInfo | null {
+        const zoneId = getPlacedZoneId(sceneObjHolder, infoIter);
+
+        const objId = infoIter.getValueNumber('l_id');
+        if (objId === null)
+            return null;
+
+        if (infoIter.filename === 'mappartsinfo')
+            return new JMapLinkInfo(zoneId, objId, LinkTagType.MapParts);
+        else if (infoIter.filename === 'objinfo')
+            return new JMapLinkInfo(zoneId, objId, LinkTagType.Obj);
+        else if (infoIter.filename === 'childobjinfo')
+            return new JMapLinkInfo(zoneId, objId, LinkTagType.ChildObj);
+
+        return null;
+    }
 }

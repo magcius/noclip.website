@@ -3,13 +3,13 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBufferBinding, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres';
-import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from './nngfx_enum';
 import { nArray, assert, assertExists } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
@@ -20,9 +20,10 @@ import { AABB } from '../Geometry';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { DeviceProgram } from '../Program';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -34,14 +35,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
-        const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D,
-            pixelFormat: translateImageFormat(textureEntry.imageFormat),
-            width: textureEntry.width,
-            height: textureEntry.height,
-            depth: 1,
-            numLevels: textureEntry.mipBuffers.length,
-        });
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
         const canvases: HTMLCanvasElement[] = [];
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
@@ -57,12 +51,11 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
             const rgbaPixels = rgbaTexture.pixels;
 
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-            device.submitPass(hostAccessPass);
+
+            device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
 
             const canvas = document.createElement('canvas');
-            surfaceToCanvas(canvas, rgbaTexture, 0);
+            surfaceToCanvas(canvas, rgbaTexture);
             canvases.push(canvas);
         }
 
@@ -77,15 +70,15 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
 function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
     switch (addrMode) {
     case TextureAddressMode.Repeat:
-        return GfxWrapMode.REPEAT;
+        return GfxWrapMode.Repeat;
     case TextureAddressMode.ClampToEdge:
     case TextureAddressMode.ClampToBorder:
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
     case TextureAddressMode.Mirror:
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     case TextureAddressMode.MirrorClampToEdge:
         // TODO(jstpierre): This requires GL_ARB_texture_mirror_clamp_to_edge
-        return GfxWrapMode.MIRROR;
+        return GfxWrapMode.Mirror;
     default:
         throw "whoops";
     }
@@ -94,11 +87,11 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
 function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
     switch (filterMode) {
     case FilterMode.Linear:
-        return GfxMipFilterMode.LINEAR;
+        return GfxMipFilterMode.Linear;
     case FilterMode.Point:
-        return GfxMipFilterMode.NEAREST;
+        return GfxMipFilterMode.Nearest;
     case 0:
-        return GfxMipFilterMode.NO_MIP;
+        return GfxMipFilterMode.NoMip;
     default:
         throw "whoops";
     }
@@ -107,9 +100,9 @@ function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
 function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
     switch (filterMode) {
     case FilterMode.Linear:
-        return GfxTexFilterMode.BILINEAR;
+        return GfxTexFilterMode.Bilinear;
     case FilterMode.Point:
-        return GfxTexFilterMode.POINT;
+        return GfxTexFilterMode.Point;
     default:
         throw "whoops";
     }
@@ -382,11 +375,11 @@ function translateRenderInfoBoolean(renderInfo: FMAT_RenderInfo): boolean {
 function translateCullMode(fmat: FMAT): GfxCullMode {
     const display_face = translateRenderInfoSingleString(fmat.renderInfo.get('display_face')!);
     if (display_face === 'front')
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     else if (display_face === 'back')
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     else if (display_face === 'both')
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
     else
         throw "whoops";
 }
@@ -399,24 +392,24 @@ function translateDepthCompare(fmat: FMAT): GfxCompareMode {
     if (translateRenderInfoBoolean(fmat.renderInfo.get('enable_depth_test')!)) {
         const depth_test_func = translateRenderInfoSingleString(fmat.renderInfo.get('depth_test_func')!);
         if (depth_test_func === 'Lequal')
-            return GfxCompareMode.LEQUAL;
+            return GfxCompareMode.LessEqual;
         else
             throw "whoops";
     } else {
-        return GfxCompareMode.ALWAYS;
+        return GfxCompareMode.Always;
     }
 }
 
 function translateRenderInfoBlendFactor(renderInfo: FMAT_RenderInfo): GfxBlendFactor {
     const value = translateRenderInfoSingleString(renderInfo);
     if (value === 'src_alpha')
-        return GfxBlendFactor.SRC_ALPHA;
+        return GfxBlendFactor.SrcAlpha;
     else if (value === 'one_minus_src_alpha')
-        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        return GfxBlendFactor.OneMinusSrcAlpha;
     else if (value === 'one')
-        return GfxBlendFactor.ONE;
+        return GfxBlendFactor.One;
     else if (value === 'zero')
-        return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.Zero;
     else
         throw "whoops";
 }
@@ -445,7 +438,7 @@ class FMATInstance {
         this.textureMapping = nArray(8, () => new TextureMapping());
         for (let i = 0; i < fmat.samplerInfo.length; i++) {
             const samplerInfo = fmat.samplerInfo[i];
-            const gfxSampler = cache.createSampler(device, {
+            const gfxSampler = cache.createSampler({
                 wrapS: translateAddressMode(samplerInfo.addrModeU),
                 wrapT: translateAddressMode(samplerInfo.addrModeV),
                 mipFilter: translateMipFilterMode((samplerInfo.filterMode >>> FilterMode.MipShift) & 0x03),
@@ -472,9 +465,9 @@ class FMATInstance {
             depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: isTranslucent ? translateBlendSrcFactor(fmat) : GfxBlendFactor.ONE,
-            blendDstFactor: isTranslucent ? translateBlendDstFactor(fmat) : GfxBlendFactor.ZERO,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: isTranslucent ? translateBlendSrcFactor(fmat) : GfxBlendFactor.One,
+            blendDstFactor: isTranslucent ? translateBlendDstFactor(fmat) : GfxBlendFactor.Zero,
         });
     }
 
@@ -527,7 +520,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
 
 interface ConvertedVertexAttribute {
     format: GfxFormat;
-    data: ArrayBuffer;
+    data: ArrayBufferLike;
     stride: number;
 }
 
@@ -561,10 +554,10 @@ class FVTXData {
 
                 this.inputBufferDescriptors[attribBufferIndex] = {
                     byteStride: convertedAttribute.stride,
-                    frequency: GfxVertexBufferFrequency.PER_VERTEX,
+                    frequency: GfxVertexBufferFrequency.PerVertex,
                 };
 
-                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedAttribute.data);
+                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, convertedAttribute.data);
                 this.vertexBufferDescriptors[attribBufferIndex] = {
                     buffer: gfxBuffer,
                     byteOffset: 0,
@@ -579,11 +572,11 @@ class FVTXData {
                 });
 
                 if (!this.vertexBufferDescriptors[bufferIndex]) {
-                    const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, vertexBuffer.data);
+                    const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, vertexBuffer.data);
 
                     this.inputBufferDescriptors[bufferIndex] = {
                         byteStride: vertexBuffer.stride,
-                        frequency: GfxVertexBufferFrequency.PER_VERTEX,
+                        frequency: GfxVertexBufferFrequency.PerVertex,
                     };
 
                     this.vertexBufferDescriptors[bufferIndex] = {
@@ -648,7 +641,7 @@ export class FSHPMeshData {
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
     
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, mesh.indexBufferData);
+        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, mesh.indexBufferData);
         const indexBufferDescriptor: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, fvtxData.vertexBufferDescriptors, indexBufferDescriptor);
     }
@@ -813,7 +806,6 @@ export class FMDLRenderer {
 
 export class BasicFRESRenderer {
     public renderHelper: GfxRenderHelper;
-    private renderTarget = new BasicRenderTarget();
     public fmdlRenderers: FMDLRenderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: BRTITextureHolder) {
@@ -826,7 +818,7 @@ export class BasicFRESRenderer {
         return [layersPanel];
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         this.renderHelper.pushTemplateRenderInst();
@@ -834,24 +826,37 @@ export class BasicFRESRenderer {
             this.fmdlRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
-        this.renderHelper.renderInstManager.resetRenderInsts();
-        return passRenderer;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].destroy(device);
     }

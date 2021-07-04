@@ -8,15 +8,17 @@ import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, ModelCache }
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert, assertExists } from '../util';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
-import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
+import BitMap, { bitMapSerialize, bitMapDeserialize, bitMapGetSerializedByteLength } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
 function layerVisibilitySyncToBitMap(layers: UI.Layer[], b: BitMap): void {
     for (let i = 0; i < layers.length; i++)
@@ -31,7 +33,6 @@ function layerVisibilitySyncFromBitMap(layers: UI.Layer[], b: BitMap): void {
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
-    public renderTarget = new BasicRenderTarget();
     public modelCache = new ModelCache();
     public areaRenderers: MREARenderer[] = [];
     public defaultSkyRenderer: CMDLRenderer | null = null;
@@ -45,17 +46,17 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.1);
+        c.setSceneMoveSpeedMult(0.01);
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(0.2);
         fillSceneParamsDataOnTemplate(template, viewerInput, 0);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput, this.worldAmbientColor);
         this.prepareToRenderSkybox(device, viewerInput);
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -77,39 +78,46 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             skybox.prepareToRender(device, this.renderHelper, viewerInput);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, passRenderer, RetroPass.SKYBOX);
+            });
+        });
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, passRenderer, RetroPass.MAIN);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(RetroPass.SKYBOX);
-        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(RetroPass.MAIN);
-        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
-
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
-
-        return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderTarget.destroy(device);
-        this.renderHelper.destroy(device);
+        this.renderHelper.destroy();
         this.modelCache.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
-        if (this.defaultSkyRenderer !== null)
-            this.defaultSkyRenderer.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -130,7 +138,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
-        const numBytes = (this.areaRenderers.length + 7) >>> 3;
+        const numBytes = bitMapGetSerializedByteLength(this.areaRenderers.length);
         if (offs + numBytes <= byteLength) {
             const b = new BitMap(this.areaRenderers.length);
             offs = bitMapDeserialize(view, offs, b);
@@ -170,7 +178,7 @@ class RetroSceneDesc implements Viewer.SceneDesc {
             if (defaultSkyboxCMDL) {
                 const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
                 const defaultSkyboxCMDLData = renderer.modelCache.getCMDLData(device, renderer.textureHolder, cache, defaultSkyboxCMDL);
-                const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
+                const defaultSkyboxRenderer = new CMDLRenderer(cache, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
                 defaultSkyboxRenderer.isSkybox = true;
                 renderer.defaultSkyRenderer = defaultSkyboxRenderer;
             }

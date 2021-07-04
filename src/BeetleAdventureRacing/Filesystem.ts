@@ -21,8 +21,6 @@ export class UVFile {
 
 // Everything is set up to be lazy for now
 export class Filesystem {
-    //TODO: use magicstr()
-
     private fileTypeToFileLocations: Map<string, number[]> = new Map();
     private filesBuffer: ArrayBufferSlice;
     private filesDataView: DataView;

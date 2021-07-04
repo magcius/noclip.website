@@ -14,7 +14,7 @@ import { connectToScene, getRandomFloat, calcGravityVector } from '../ActorUtil'
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
 import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../../MathHelpers';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera } from '../../Camera';
 
@@ -233,7 +233,7 @@ export class GravityExplainer extends LiveActor {
         this.ddraw.beginDraw();
         for (let i = 0; i < this.arrows.length; i++)
             this.drawArrow(this.arrows[i], this.ddraw, viewerInput.camera);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();

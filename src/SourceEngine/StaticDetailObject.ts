@@ -1,21 +1,21 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, nArray } from "../util";
-import { vec4, vec3, mat4 } from "gl-matrix";
-import { Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from "../Color";
+import { assert, readString } from "../util";
+import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { Color, colorClampLDR, colorCopy, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
-import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { StudioModelInstance, HardwareVertData } from "./Studio";
-import { computeModelMatrixPosRot } from "./Main";
+import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
 import BitMap from "../BitMap";
-import { BSPFile, computeAmbientCubeFromLeaf } from "./BSPFile";
+import { BSPFile, BSPLeaf } from "./BSPFile";
 import { AABB } from "../Geometry";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -44,6 +44,7 @@ interface DetailSpriteDef {
 }
 
 export interface DetailObjects {
+    detailModelDict: string[];
     detailSpriteDict: DetailSpriteDef[];
     detailModels: DetailModel[];
     leafDetailModels: Map<number, DetailModel[]>;
@@ -86,7 +87,7 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
     const detailModels: DetailModel[] = [];
     const detailModelCount = dprp.getUint32(idx, true);
     idx += 0x04;
-    for (let i = 0; i < detailModelCount; i++) {
+    for (let i = 0; i < detailModelCount; i++, idx += 0x34) {
         const posX = dprp.getFloat32(idx + 0x00, true);
         const posY = dprp.getFloat32(idx + 0x04, true);
         const posZ = dprp.getFloat32(idx + 0x08, true);
@@ -111,7 +112,6 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
         const rot = vec3.fromValues(rotX, rotY, rotZ);
         const lighting = colorNewFromRGBA(lightingR, lightingG, lightingB);
         detailModels.push({ pos, rot, detailModel, leaf, lighting, lightStyles, lightStyleCount, swayAmount, shapeAngle, shapeSize, orientation, type, scale });
-        idx += 0x34;
     }
 
     const leafDetailModels = new Map<number, DetailModel[]>();
@@ -122,7 +122,7 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
         leafDetailModels.get(leaf)!.push(detailModels[i]);
     }
 
-    return { detailSpriteDict, detailModels, leafDetailModels };
+    return { detailModelDict, detailSpriteDict, detailModels, leafDetailModels };
 }
 
 class DetailSpriteEntry {
@@ -140,7 +140,7 @@ class DetailSpriteEntry {
 }
 
 // Compute a rotation matrix given a forward direction, in Source Engine space.
-function computeMatrixForForwardDir(dst: mat4, fwd: vec3, pos: vec3): void {
+function computeMatrixForForwardDir(dst: mat4, fwd: ReadonlyVec3, pos: ReadonlyVec3): void {
     let yaw = 0, pitch = 0;
 
     if (fwd[1] === 0 && fwd[0] === 0) {
@@ -153,23 +153,41 @@ function computeMatrixForForwardDir(dst: mat4, fwd: vec3, pos: vec3): void {
     computeModelMatrixSRT(dst, 1, 1, 1, 0, pitch, yaw, pos[0], pos[1], pos[2]);
 }
 
+function linearToTexGamma(v: number): number {
+    const texGamma = 2.2;
+    return Math.pow(v, 1.0 / texGamma);
+}
+
+function colorLinearToTexGamma(c: Color): Color {
+    const r = linearToTexGamma(c.r);
+    const g = linearToTexGamma(c.g);
+    const b = linearToTexGamma(c.b);
+    const ret = colorNewFromRGBA(r, g, b, c.a);
+    colorClampLDR(ret, ret);
+    return ret;
+}
+
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class DetailPropLeafRenderer {
+    private visible = true;
+
     private materialInstance: BaseMaterial | null = null;
     private inputLayout: GfxInputLayout;
 
     // For each sprite, store an origin and a radius for easy culling.
     private spriteEntries: DetailSpriteEntry[] = [];
+    private modelEntries: StudioModelInstance[] = [];
 
     private vertexData: Float32Array;
     private indexData: Uint16Array;
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputState: GfxInputState;
+    private centerPoint = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, private objects: DetailObjects, public leaf: number) {
-        const device = renderContext.device, cache = renderContext.cache;
+    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number) {
+        const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
@@ -177,16 +195,16 @@ export class DetailPropLeafRenderer {
             { location: MaterialProgramBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         // Create a vertex buffer for our detail sprites.
-
         let vertexCount = 0;
         let indexCount = 0;
-        const detailModels = this.objects.leafDetailModels.get(this.leaf)!;
+        const objects = bspFile.detailObjects!;
+        const detailModels = objects.leafDetailModels.get(leaf)!;
         for (let i = 0; i < detailModels.length; i++) {
             const detailModel = detailModels[i];
 
@@ -207,19 +225,25 @@ export class DetailPropLeafRenderer {
                 entry.origin[2] -= entry.height * 0.5;
                 entry.pos = detailModel.pos;
                 entry.texcoord = desc.texcoord;
-                entry.color = detailModel.lighting;
+                entry.color = colorLinearToTexGamma(detailModel.lighting);
 
+                vec3.add(this.centerPoint, this.centerPoint, entry.pos);
                 this.spriteEntries.push(entry);
+            } else if (detailModel.type === DetailPropType.MODEL) {
+                const modelName = objects.detailModelDict[detailModel.detailModel];
+                this.createModelDetailProp(renderContext, modelName, detailModel);
             }
 
             // TODO(jstpierre): Cross & Tri shapes.
         }
 
+        vec3.scale(this.centerPoint, this.centerPoint, 1 / this.spriteEntries.length);
+
         this.vertexData = new Float32Array(vertexCount * 9);
         this.indexData = new Uint16Array(indexCount);
 
-        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
-        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.INDEX, GfxBufferFrequencyHint.DYNAMIC);
+        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
@@ -227,7 +251,21 @@ export class DetailPropLeafRenderer {
         this.bindMaterial(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    private async createModelDetailProp(renderContext: SourceRenderContext, modelName: string, detailModel: DetailModel): Promise<void> {
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName);
+
+        const materialParams = new EntityMaterialParameters();
+        const studioModelInstance = new StudioModelInstance(renderContext, modelData, materialParams);
+        studioModelInstance.setSkin(renderContext, 0);
+
+        computeModelMatrixPosQAngle(studioModelInstance.modelMatrix, detailModel.pos, detailModel.rot);
+        getMatrixTranslation(materialParams.position, studioModelInstance.modelMatrix);
+        colorCopy(materialParams.blendColor, detailModel.lighting);
+
+        this.modelEntries.push(studioModelInstance);
+    }
+
+    private prepareToRenderSprites(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
         if (this.materialInstance === null)
             return;
 
@@ -235,7 +273,6 @@ export class DetailPropLeafRenderer {
         const vertexData = this.vertexData;
         const indexData = this.indexData;
 
-        // TODO(jstpierre): Sort models based on distance to camera.
         let vertexOffs = 0;
         let vertexBase = 0;
         let indexOffs = 0;
@@ -258,7 +295,6 @@ export class DetailPropLeafRenderer {
             vec3.sub(scratchVec3, view.cameraPos, entry.pos);
             scratchVec3[2] = 0.0;
             computeMatrixForForwardDir(scratchMatrix, scratchVec3, entry.pos);
-            // mat4.fromTranslation(scratchMatrix, entry.pos);
 
             // top left
             vec3.set(scratchVec3, 0, -entry.halfWidth, -entry.height);
@@ -311,28 +347,54 @@ export class DetailPropLeafRenderer {
         }
 
         const device = renderContext.device;
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
-        hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer));
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer));
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         mat4.identity(scratchMatrix);
+
         this.materialInstance.setOnRenderInst(renderContext, renderInst, scratchMatrix);
+
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.centerPoint);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+
         renderInst.drawIndexes(indexOffs);
-        renderInstManager.submitRenderInst(renderInst);
+        renderInst.debug = this;
+        this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
+    }
+
+    private prepareToRenderModels(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        for (let i = 0; i < this.modelEntries.length; i++)
+            this.modelEntries[i].prepareToRender(renderContext, renderInstManager);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.visible)
+            return;
+
+        this.prepareToRenderSprites(renderContext, renderInstManager, view);
+        this.prepareToRenderModels(renderContext, renderInstManager, view);
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.modelEntries.length; i++)
+            this.modelEntries[i].movement(renderContext);
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
+        for (let i = 0; i < this.modelEntries.length; i++)
+            this.modelEntries[i].destroy(device);
     }
 
     private async bindMaterial(renderContext: SourceRenderContext) {
         const materialCache = renderContext.materialCache;
-        this.materialInstance = await materialCache.createMaterialInstance(renderContext, `detail/detailsprites`);
+        const materialInstance = await materialCache.createMaterialInstance(`detail/detailsprites`);
+        await materialInstance.init(renderContext);
+        this.materialInstance = materialInstance;
     }
 }
 //#endregion
@@ -351,6 +413,7 @@ interface StaticProp {
     index: number;
     pos: vec3;
     rot: vec3;
+    scale: number;
     flags: StaticPropFlags;
     skin: number;
     propName: string;
@@ -364,8 +427,8 @@ export interface StaticObjects {
     staticProps: StaticProp[];
 }
 
-export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number): StaticObjects | null {
-    assert(version === 4 || version === 5 || version === 6 || version === 10);
+export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number, bspVersion: number): StaticObjects | null {
+    assert(version === 4 || version === 5 || version === 6 || version === 9 || version === 10 || version === 11);
     const sprp = buffer.createDataView();
     let idx = 0x00;
 
@@ -386,6 +449,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
     const staticObjectCount = sprp.getUint32(idx, true);
     idx += 0x04;
     for (let i = 0; i < staticObjectCount; i++) {
+        let propStartIdx = idx;
         const posX = sprp.getFloat32(idx + 0x00, true);
         const posY = sprp.getFloat32(idx + 0x04, true);
         const posZ = sprp.getFloat32(idx + 0x08, true);
@@ -412,17 +476,59 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         }
 
         let minDXLevel = -1, maxDXLevel = -1;
-        if (version >= 6) {
+        if (version >= 6 && version <= 7) {
             minDXLevel = sprp.getUint16(idx + 0x00, true);
             maxDXLevel = sprp.getUint16(idx + 0x02, true);
             idx += 0x04;
         }
 
-        if (version >= 7) {
-            flags = sprp.getUint32(idx + 0x00, true);
-            const lightmapResolutionX = sprp.getUint16(idx + 0x04, true);
-            const lightmapResolutionY = sprp.getUint16(idx + 0x06, true);
-            idx += 0x08;
+        if (version >= 8) {
+            const minCPULevel = sprp.getUint8(idx + 0x00);
+            const maxCPULevel = sprp.getUint8(idx + 0x01);
+            const minGPULevel = sprp.getUint8(idx + 0x02);
+            const maxGPULevel = sprp.getUint8(idx + 0x03);
+            idx += 0x04;
+        }
+
+        let scale = 1.0;
+
+        // The version seems to have significantly forked after this...
+        // TF2's 7-10 seem to use this below, which is 8 bytes.
+        // The version 10 that CS:GO and Portal 2 use (bspfile version 21) is very different.
+
+        if (bspVersion === 21) {
+            // CS:GO, Portal 2
+
+            if (version >= 7) {
+                const diffuseModulation = sprp.getUint32(idx + 0x00, false);
+                idx += 0x04;
+            }
+
+            // TODO(jstpierre): Wiki says disableX360 was removed in V11 but that doesn't
+            // match the data I see on CS:GO de_dust2.
+            if (version >= 9) {
+                const disableX360 = sprp.getUint32(idx + 0x00, true);
+                idx += 0x04;
+            }
+
+            if (version >= 10) {
+                const flagsEx = sprp.getUint32(idx + 0x00, true);
+                idx += 0x04;
+            }
+
+            if (version >= 11) {
+                scale = sprp.getFloat32(idx + 0x00, true);
+                idx += 0x04;
+            }
+        } else if (bspVersion === 19 || bspVersion === 20) {
+            // TF2
+
+            if (version >= 7) {
+                flags = sprp.getUint32(idx + 0x00, true);
+                const lightmapResolutionX = sprp.getUint16(idx + 0x04, true);
+                const lightmapResolutionY = sprp.getUint16(idx + 0x06, true);
+                idx += 0x08;
+            }
         }
 
         let lightingOrigin: vec3 | null = null;
@@ -431,11 +537,10 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
 
         const index = i;
         const pos = vec3.fromValues(posX, posY, posZ);
-        // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
-        const rot = vec3.fromValues(rotZ, rotX, rotY);
+        const rot = vec3.fromValues(rotX, rotY, rotZ);
         const propName = staticModelDict[propType];
         const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
-        staticProps.push({ index, pos, rot, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist, lightingOrigin });
+        staticProps.push({ index, pos, rot, scale, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist, lightingOrigin });
     }
 
     return { staticProps };
@@ -447,34 +552,34 @@ export class StaticPropRenderer {
     private colorMeshData: HardwareVertData | null = null;
     private bbox = new AABB();
     private materialParams = new EntityMaterialParameters();
+    private lightingOrigin = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, bsp: BSPFile, private staticProp: StaticProp) {
+    constructor(renderContext: SourceRenderContext, private bsp: BSPFile, private staticProp: StaticProp) {
         this.createInstance(renderContext, bsp);
     }
 
     private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
 
-        // TODO(jstpierre): studiohdr2_t illumposition
-        const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
-        const leafidx = bsp.findLeafForPoint(lightingOrigin);
-        assert(leafidx >= 0);
-        const leaf = bsp.leaflist[leafidx];
-        const ambientCube = nArray(6, () => colorNewCopy(TransparentBlack));
-        computeAmbientCubeFromLeaf(ambientCube, leaf, lightingOrigin);
-        this.materialParams.ambientCube = ambientCube;
-
-        computeModelMatrixPosRot(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
+        computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
+        scaleMatrix(scratchMatrix, scratchMatrix, this.staticProp.scale);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
-        this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);;
+        if (this.staticProp.lightingOrigin !== null)
+            vec3.copy(this.lightingOrigin, this.staticProp.lightingOrigin);
+        else
+            transformVec3Mat4w1(this.lightingOrigin, scratchMatrix, modelData.illumPosition);
+        this.materialParams.lightCache = new LightCache(bsp, this.lightingOrigin, this.bbox);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
+        this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);
         mat4.copy(this.studioModelInstance.modelMatrix, scratchMatrix);
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
-            const staticLightingData = await renderContext.filesystem.fetchFileData(`sp_${this.staticProp.index}.vhv`);
+            // TODO(HDR)
+            const spPrefix = (false && this.bsp.usingHDR) ? `sp_hdr` : `sp`;
+            const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
             if (staticLightingData !== null) {
                 this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);
                 this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
@@ -509,6 +614,7 @@ export class StaticPropRenderer {
         if (!visible)
             return;
 
+        computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
         getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);
     }
@@ -520,4 +626,4 @@ export class StaticPropRenderer {
             this.colorMeshData.destroy(device);
     }
 }
-////#endregion
+//#endregion

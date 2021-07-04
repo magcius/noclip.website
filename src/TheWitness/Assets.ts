@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZ4 from "../Common/Compression/LZ4";
 import { assert, nArray } from "../util";
 import { ZipFile, parseZipFile } from "../ZipFile";
-import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { Color } from "../Color";
 import { _T, GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
@@ -15,7 +15,7 @@ import { vec3, vec2, vec4 } from "gl-matrix";
 import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat";
 import { Destroyable } from "../SceneBase";
-import { GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../TextureHolder";
 
 export const enum Asset_Type {
@@ -134,6 +134,7 @@ class Texture_Asset {
             depth: this.depth,
             numLevels: this.mipmap_count,
             pixelFormat: get_gfx_format(d3d_format, !!(this.flags & Texture_Asset_Flags.Is_sRGB)),
+            usage: GfxTextureUsage.Sampled,
         });
         device.setResourceName(this.texture, name);
 
@@ -147,9 +148,7 @@ class Texture_Asset {
             d = Math.max((d >>> 1), 1);
         }
 
-        const pass = device.createHostAccessPass();
-        pass.uploadTextureData(this.texture, 0, levelData);
-        device.submitPass(pass);
+        device.uploadTextureData(this.texture, 0, levelData);
     }
 
     public fillTextureMapping(m: TextureMapping): void {
@@ -358,10 +357,10 @@ class Device_Mesh {
         this.vertex_count = sub_mesh_asset.vertex_count;
         this.index_count = sub_mesh_asset.index_count;
 
-        this.vertex_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, sub_mesh_asset.vertex_data);
+        this.vertex_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, sub_mesh_asset.vertex_data);
 
         if (this.index_count > 0) {
-            this.index_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, sub_mesh_asset.index_data);
+            this.index_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, sub_mesh_asset.index_data);
         } else {
             this.index_buffer = null;
         }
@@ -469,10 +468,10 @@ class Device_Mesh {
         }
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: sub_mesh_asset.vertex_size, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: sub_mesh_asset.vertex_size, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.input_layout = cache.createInputLayout(device, {
+        this.input_layout = cache.createInputLayout({
             indexBufferFormat,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -596,11 +595,12 @@ function get_processed_filename(type: Asset_Type, source_name: string, options_h
 
 export class Asset_Manager {
     private bundles: ZipFile[] = [];
-    public cache = new GfxRenderCache();
+    public cache: GfxRenderCache;
     private destroyables: Destroyable[] = [];
     private asset_cache = new Map<string, any>();
 
     constructor(public device: GfxDevice) {
+        this.cache = new GfxRenderCache(device);
     }
 
     public add_bundle(bundle: ZipFile) {
@@ -637,7 +637,7 @@ export class Asset_Manager {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy(device);
+        this.cache.destroy();
         for (let i = 0; i < this.destroyables.length; i++)
             this.destroyables[i].destroy(device);
     }

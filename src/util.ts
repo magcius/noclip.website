@@ -19,22 +19,36 @@ export function nullify<T>(v: T | undefined | null): T | null {
     return v === undefined ? null : v;
 }
 
-export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true): string {
+export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true, encoding: string | null = null): string {
+    const buf = buffer.createTypedArray(Uint8Array, offs);
+    let byteLength = 0;
+    while (true) {
+        if (length >= 0 && byteLength >= length)
+            break;
+        if (nulTerminated && buf[byteLength] === 0)
+            break;
+        byteLength++;
+    }
+
+    if (byteLength === 0)
+        return "";
+
+    if (encoding !== null) {
+        return decodeString(buffer, offs, byteLength, encoding);
+    } else {
+        return copyBufferToString(buffer, offs, byteLength);
+    }
+}
+
+function copyBufferToString(buffer: ArrayBufferSlice, offs: number, byteLength: number): string {
     const buf = buffer.createTypedArray(Uint8Array, offs);
     let S = '';
-    let i = 0;
-    while (true) {
-        if (length >= 0 && i >= length)
-            break;
-        if (nulTerminated && buf[i] === 0)
-            break;
+    for (let i = 0; i < byteLength; i++)
         S += String.fromCharCode(buf[i]);
-        i++;
-    }
     return S;
 }
 
-export function decodeString(buffer: ArrayBufferSlice, encoding = 'utf8'): string {
+export function decodeString(buffer: ArrayBufferSlice, offs: number | undefined = undefined, byteLength: number | undefined = undefined, encoding = 'utf8'): string {
     // ts-ignore here is required for node / tool builds, which doesn't specify TextDecoder.
     // TODO(jstpierre): Support both node and browser through a different method, since
     // I think this might pull in iconv-lite to the web build...
@@ -42,13 +56,13 @@ export function decodeString(buffer: ArrayBufferSlice, encoding = 'utf8'): strin
     // @ts-ignore
     if (typeof TextDecoder !== 'undefined') {
         // @ts-ignore
-        return new TextDecoder(encoding)!.decode(buffer.copyToBuffer());
+        return new TextDecoder(encoding)!.decode(buffer.copyToBuffer(offs, byteLength));
     // @ts-ignore
     } else if (typeof require !== 'undefined') {
         // @ts-ignore
         const iconv = require('iconv-lite');
         // @ts-ignore
-        return iconv.decode(Buffer.from(buffer.copyToBuffer()), encoding);
+        return iconv.decode(Buffer.from(buffer.copyToBuffer(offs, byteLength)), encoding);
     } else {
         throw "whoops";
     }
@@ -90,59 +104,10 @@ export function hexzero0x(n: number, spaces: number = 8): string {
         return `0x${hexzero(n, spaces)}`;
 }
 
-export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
-    const buffer: ArrayBufferSlice = b_ instanceof ArrayBufferSlice ? b_ : new ArrayBufferSlice(b_);
-    const groupSize_ = 16;
-    let S = '';
-    const arr = buffer.createTypedArray(Uint8Array, offs);
-    length = Math.min(length, arr.byteLength);
-    for (let i = 0; i < length; i += groupSize_) {
-        let groupSize = Math.min(length - i, groupSize_);
-        const addr = offs + i;
-        S += `${hexzero(addr, 8)}    `;
-        for (let j = 0; j < groupSize; j++) {
-            const b = arr[i + j];
-            S += ` ${hexzero(b, 2)}`;
-        }
-        for (let j = groupSize; j < groupSize_; j++)
-            S += `   `;
-
-        S += '  ';
-        for (let j = 0; j < groupSize; j++) {
-            const b = arr[i + j];
-            const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
-            S += `${c}`;
-        }
-        for (let j = groupSize; j < groupSize_; j++)
-            S += ` `;
-
-        S += '\n';
-    }
-    console.log(S);
-}
-
-export function magicstr(v: number): string {
-    v = v & 0xFFFFFFFF;
-    const a0 = String.fromCharCode((v >>> 24) & 0xFF);
-    const a1 = String.fromCharCode((v >>> 16) & 0xFF);
-    const a2 = String.fromCharCode((v >>>  8) & 0xFF);
-    const a3 = String.fromCharCode((v >>>  0) & 0xFF);
-    return a0 + a1 + a2 + a3;
-}
-
-export function wordCountFromByteCount(byteCount: number): number {
-    return align(byteCount, 4) / 4;
-}
-
-export function concat<T>(dst: T[], src: T[]): void {
-    for (let i = 0; i < src.length; i++)
-        dst.push(src[i]);
-}
-
 export function flatten<T>(L: T[][]): T[] {
     const R: T[] = [];
     for (let i = 0; i < L.length; i++)
-        R.push.apply(R, L[i]);
+        R.push(... L[i]);
     return R;
 }
 
@@ -184,4 +149,16 @@ export function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): n
 export function spliceBisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): void {
     const idx = bisectRight(L, e, compare);
     L.splice(idx, 0, e);
+}
+
+export function setBitFlagEnabled(v: number, mask: number, enabled: boolean): number {
+    if (enabled)
+        v |= mask;
+    else
+        v &= ~mask;
+    return v;
+}
+
+export function mod(a: number, b: number): number {
+    return (a + b) % b;
 }

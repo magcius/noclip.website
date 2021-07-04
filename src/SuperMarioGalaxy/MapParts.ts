@@ -5,21 +5,20 @@ import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
-import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from '../MathHelpers';
+import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
 import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection } from './ActorUtil';
-import { calcDropShadowVectorOrZero } from './Shadow';
+import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow';
+import { getRailArg } from './RailRider';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
-
 export function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): MoveConditionType {
     return fallback(infoIter.getValueNumberNoInit('MoveConditionType'), MoveConditionType.Unconditionally);
 }
 
 // Seems to be additional slots at 3, 4, 5...
 const enum SignMotionType { None, MoveStart, MoveWait }
-
 function getMapPartsArgSignMotionType(infoIter: JMapInfoIter): SignMotionType {
     return fallback(infoIter.getValueNumberNoInit('SignMotionType'), SignMotionType.None);
 }
@@ -28,16 +27,23 @@ function hasMapPartsMoveStartSignMotion(signMotionType: SignMotionType): boolean
     return signMotionType === SignMotionType.MoveStart || signMotionType === SignMotionType.MoveWait;
 }
 
-const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
+export const enum MapPartsShadowType { None }
+export function getMapPartsArgShadowType(infoIter: JMapInfoIter): MapPartsShadowType {
+    return fallback(infoIter.getValueNumberNoInit('ShadowType'), MapPartsShadowType.None);
+}
 
+export function hasMapPartsShadow(shadowType: MapPartsShadowType): boolean {
+    return shadowType !== MapPartsShadowType.None;
+}
+
+const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
 function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
-    return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg1'), MoveStopType.Mirror);
+    return fallback(getRailArg(actor.railRider!, 'path_arg1'), MoveStopType.Mirror);
 }
 
 export const enum RailGuideType { None, Draw, DrawForward, DrawPoints }
-
 export function getMapPartsArgRailGuideType(actor: LiveActor): RailGuideType {
-    return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg2'), RailGuideType.None);
+    return fallback(getRailArg(actor.railRider!, 'path_arg2'), RailGuideType.None);
 }
 
 function getMapPartsArgMoveSpeed(actor: LiveActor): number | null {
@@ -67,14 +73,12 @@ function getMoveStartSignalTime(): number {
 }
 
 const enum RailInitPosType { NearestPos, NearestPoint, Point0 }
-
 function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
-    const railRider = assertExists(actor.railRider);
-    return fallback(railRider.bezierRail.railIter.getValueNumberNoInit('path_arg4'), RailInitPosType.NearestPos);
+    return fallback(getRailArg(actor.railRider!, 'path_arg4'), RailInitPosType.NearestPos);
 }
 
 const enum AxisType { X, Y, Z }
-const enum AccelType { Normal, Reverse, Timed }
+const enum AccelType { Normal, Swing, Timed }
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -190,13 +194,29 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
         this.spine.setNerve(MapPartsRotatorNrv.Wait);
     }
 
-    private updateVelocity(): void {
-        if (this.rotateAngle !== 0 && this.rotateAccelType === AccelType.Reverse) {
-            // TODO(jstpierre): Reverse accel type
-        }
+    private updateVelocity(deltaTimeFrames: number): void {
+        if (this.rotateAngle !== 0.0 && this.rotateAccelType === AccelType.Swing) {
+            const sign = Math.sign(this.rotateSpeed);
+            let velocityStep = ((this.rotateSpeed ** 2) * sign) / this.rotateAngle;
 
-        this.isOnReverse = false;
-        this.velocity = this.rotateSpeed;
+            let reachedTarget = false;
+            if (this.rotateSpeed <= 0.0) {
+                reachedTarget = this.angle <= (this.targetAngle + velocityStep * 0.5);
+            } else {
+                reachedTarget = this.angle >= (this.targetAngle - velocityStep * 0.5);
+            }
+
+            if (reachedTarget)
+                velocityStep *= -1.0;
+
+            const oldVelocity = this.velocity;
+            this.velocity += velocityStep * deltaTimeFrames;
+
+            this.isOnReverse = Math.sign(oldVelocity) !== Math.sign(this.velocity);
+        } else {
+            this.velocity = this.rotateSpeed;
+            this.isOnReverse = false;
+        }
     }
 
     private updateAngle(dt: number): void {
@@ -229,7 +249,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
 
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRotatorNrv, deltaTimeFrames: number): void {
         if (currentNerve === MapPartsRotatorNrv.Rotate) {
-            this.updateVelocity();
+            this.updateVelocity(deltaTimeFrames);
             this.updateAngle(deltaTimeFrames);
 
             if ((this.rotateAccelType === AccelType.Normal || this.rotateAccelType === AccelType.Timed) && this.isReachedTargetAngle()) {
@@ -241,7 +261,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
                 else
                     this.spine.setNerve(MapPartsRotatorNrv.StopAtEnd);
             } else {
-                if (this.rotateAccelType === AccelType.Reverse && this.velocity === 0)
+                if (this.rotateAccelType === AccelType.Swing && isNearZero(this.velocity, 1.0e-5))
                     this.spine.setNerve(MapPartsRotatorNrv.StopAtEnd);
                 else
                     this.updateRotateMtx();
@@ -255,7 +275,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
 
 export const enum MovePostureType { None, RailDirRail, RailDir, RailDirRailUseShadowGravity }
 export function getMapPartsArgMovePosture(actor: LiveActor): MovePostureType {
-    return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg0'), MovePostureType.None);
+    return fallback(getRailArg(actor.railRider!, 'path_arg0'), MovePostureType.None);
 }
 
 const enum MapPartsRailPostureNrv { DoNothing, Move }
@@ -321,7 +341,7 @@ export class MapPartsRailPosture extends MapPartsFunction<MapPartsRailPostureNrv
     }
 }
 
-class MapPartsRailPointPassChecker {
+export class MapPartsRailPointPassChecker {
     public currentRailPointId: number = -1;
 
     constructor(private actor: LiveActor) {
@@ -679,10 +699,16 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
 const enum MapPartsRailGuideDrawerNrv { HideAll, Draw, DrawForward }
 class MapPartsRailGuidePoint extends LiveActor {
-    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number) {
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number, private hasShadow: boolean) {
         super(actor.zoneAndLayer, sceneObjHolder, 'MapPartsRailGuidePoint');
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         calcRailPosAtCoord(this.translation, actor, coord);
+
+        if (this.hasShadow) {
+            initShadowVolumeSphere(sceneObjHolder, this, 20.0);
+            setShadowDropLength(this, null, 5000.0);
+            onCalcShadowOneTime(this);
+        }
 
         connectToSceneMapObjNoMovement(sceneObjHolder, this);
         this.makeActorDead(sceneObjHolder);
@@ -693,7 +719,7 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
     private guidePoints: MapPartsRailGuidePoint[] = [];
     private guideType: RailGuideType;
 
-    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, private pointModelName: string, public railId: number) {
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, private pointModelName: string, public railId: number, infoIter: JMapInfoIter) {
         super(sceneObjHolder, actor, 'MapPartsRailGuideDrawer');
 
         this.guideType = fallback(getMapPartsArgRailGuideType(this.actor), RailGuideType.None);
@@ -701,7 +727,7 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
         if (this.guideType === RailGuideType.None) {
             this.spine.setNerve(MapPartsRailGuideDrawerNrv.HideAll);
         } else {
-            this.initGuidePoints(sceneObjHolder);
+            this.initGuidePoints(sceneObjHolder, infoIter);
             if (this.guideType === RailGuideType.DrawForward)
                 this.spine.setNerve(MapPartsRailGuideDrawerNrv.DrawForward);
             else
@@ -739,17 +765,20 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
             this.guidePoints[i].makeActorDead(sceneObjHolder);
     }
 
-    private initGuidePoints(sceneObjHolder: SceneObjHolder) {
+    private initGuidePoints(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const shadowType = getMapPartsArgShadowType(infoIter);
+        const hasShadow = hasMapPartsShadow(shadowType);
+
         const railLength = getRailTotalLength(this.actor);
 
         for (let coord = 0; coord < railLength; coord += 200.0)
-            this.guidePoints.push(new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord));
+            this.guidePoints.push(new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord, hasShadow));
 
         if (this.guideType === RailGuideType.DrawPoints) {
             for (let i = 0; i < this.actor.railRider!.getPointNum(); i++) {
                 const coord = this.actor.railRider!.getPointCoord(i);
-                const point = new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord);
-                vec3.set(point.scale, 2.0, 2.0, 2.0);
+                const point = new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord, hasShadow);
+                vec3SetAll(point.scale, 2.0);
                 this.guidePoints.push(point);
             }
         }
@@ -769,7 +798,7 @@ export class MapPartsRailGuideHolder extends NameObj {
             if (this.railDrawers[i].railId === railId)
                 return this.railDrawers[i];
 
-        const railDrawer = new MapPartsRailGuideDrawer(sceneObjHolder, actor, pointModelName, railId);
+        const railDrawer = new MapPartsRailGuideDrawer(sceneObjHolder, actor, pointModelName, railId, infoIter);
         this.railDrawers.push(railDrawer);
         return railDrawer;
     }

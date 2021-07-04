@@ -1,5 +1,5 @@
 
-import { lerp } from "../MathHelpers";
+import { lerp, saturate } from "../MathHelpers";
 import { SceneObjHolder } from "./Main";
 import { assert } from "../util";
 
@@ -24,7 +24,7 @@ export function isLessStep(host: SpineHost, v: number): boolean {
 }
 
 export function calcNerveRate(host: SpineHost, v: number): number {
-    return host.spine!.getNerveStep() / v;
+    return saturate(host.spine!.getNerveStep() / v);
 }
 
 export function calcNerveValue(host: SpineHost, nerveStepMax: number, a: number, b: number): number {

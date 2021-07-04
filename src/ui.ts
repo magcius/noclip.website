@@ -16,6 +16,7 @@ import { DraggingMode } from './InputManager';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1158,21 +1159,30 @@ export interface TextureListHolder {
 }
 
 class FrameDebouncer {
-    private queued: boolean = false;
+    private timeoutId: number | null = null;
     public callback: (() => void) | null = null;
+
+    constructor(public timeout = 100) {
+    }
 
     private onframe = (): void => {
         if (this.callback !== null)
             this.callback();
-        this.queued = false;
+        this.timeoutId = null;
     }
 
     public trigger(): void {
-        if (this.queued)
-            return;
+        if (this.timeoutId !== null)
+            this.clear();
         if (this.callback !== null)
-            window.requestAnimationFrame(this.onframe);
-        this.queued = true;
+            this.timeoutId = setTimeout(this.onframe, this.timeout);
+    }
+
+    public clear() {
+        if (this.timeoutId === null)
+            return;
+        clearTimeout(this.timeoutId);
+        this.timeoutId = null;
     }
 }
 
@@ -1425,81 +1435,113 @@ export class Slider implements Widget {
     }
 }
 
+class RadioButtons implements Widget {
+    public elem: HTMLElement;
+    public selectedIndex: number = -1;
+    public onselectedchange: ((() => void) | null) = null;
+    private options: HTMLElement[] = [];
+
+    constructor(title: string, optionNames: string[]) {
+        this.elem = document.createElement('div');
+
+        this.elem.style.display = 'grid';
+
+        const fr = `${optionNames.length}fr ${optionNames.map(() => '1fr').join(' ')}`;
+        this.elem.style.gridTemplateColumns = fr;
+        this.elem.style.alignItems = 'center';
+
+        const header = document.createElement('div');
+        header.style.fontWeight = 'bold';
+        header.textContent = title;
+
+        this.elem.appendChild(header);
+
+        optionNames.forEach((optionName, i) => {
+            const option = document.createElement('div');
+            option.style.fontWeight = `bold`;
+            option.style.textAlign = `center`;
+            option.style.lineHeight = `24px`;
+            option.style.cursor = `pointer`;
+            option.textContent = optionName;
+            option.onclick = () => {
+                this.setSelectedIndex(i);
+            };
+
+            this.elem.appendChild(option);
+            this.options.push(option);
+        });
+    }
+
+    private sync(): void {
+        this.options.forEach((option, i) => {
+            setElementHighlighted(option, i === this.selectedIndex);
+        });
+    }
+
+    public setSelectedIndex(i: number): void {
+        if (this.selectedIndex === i)
+            return;
+
+        this.selectedIndex = i;
+        this.sync();
+
+        if (this.onselectedchange !== null)
+            this.onselectedchange();
+    }
+}
+
 class ViewerSettings extends Panel {
     private fovSlider: Slider;
+    private camControllerClasses: CameraControllerClass[] = [FPSCameraController, OrbitCameraController, OrthoCameraController];
+    private camRadioButtons: RadioButtons;
     private camSpeedSlider: Slider;
-    private cameraControllerWASD: HTMLElement;
-    private cameraControllerOrbit: HTMLElement;
-    private cameraControllerOrtho: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
+    private antialiasingRadioButtons: RadioButtons;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
 
-        // TODO(jstpierre): make css not leak
-        this.contents.innerHTML = `
-<style>
-.SettingsHeader, .SettingsButton {
-    font-weight: bold;
-}
-.SettingsButton {
-    background: #444;
-    text-align: center;
-    line-height: 24px;
-    cursor: pointer;
-}
-</style>
-
-<div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-items: center;">
-<div class="SettingsHeader">Camera Controller</div>
-<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div>
-</div>
-
-<div class="SliderContainer">
-</div>
-`;
         this.contents.style.lineHeight = '36px';
 
-        const sliderContainer = this.contents.querySelector('.SliderContainer')!;
+         // Don't change the order
+        this.camRadioButtons = new RadioButtons('Camera Controls', ['WASD', 'Orbit', 'Ortho']);
+        this.camRadioButtons.onselectedchange = () => {
+            if (ui.studioModeEnabled)
+                return;
+
+            this.setCameraControllerIndex(this.camRadioButtons.selectedIndex);
+        };
+        this.contents.appendChild(this.camRadioButtons.elem);
+
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
         this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / Math.PI * 100);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
-        sliderContainer.appendChild(this.fovSlider.elem);
+        this.contents.appendChild(this.fovSlider.elem);
 
         this.camSpeedSlider = new Slider();
         this.camSpeedSlider.setLabel("Camera Speed");
         this.camSpeedSlider.setRange(0, 200);
         this.camSpeedSlider.onvalue = this.updateCameraSpeedFromSlider.bind(this);
-        sliderContainer.appendChild(this.camSpeedSlider.elem);
+        this.contents.appendChild(this.camSpeedSlider.elem);
 
         this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
-        this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
-        this.cameraControllerWASD.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(FPSCameraController);
-            }
-        };
+        const limits = this.viewer.gfxDevice.queryLimits();
 
-        this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
-        this.cameraControllerOrbit.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(OrbitCameraController);
-            }
-        };
+        const aaModes = ['None', 'FXAA'];
+        if (limits.supportedSampleCounts.includes(4))
+            aaModes.push('4x MSAA');
 
-        this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
-        this.cameraControllerOrtho.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(OrthoCameraController);
-            }
-        };
+        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', aaModes);
+        this.antialiasingRadioButtons.onselectedchange = () => { GlobalSaveManager.saveSetting(`AntialiasingMode`, this.antialiasingRadioButtons.selectedIndex); };
+        this.contents.appendChild(this.antialiasingRadioButtons.elem);
+        GlobalSaveManager.addSettingListener('AntialiasingMode', this.antialiasingChanged.bind(this));
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
@@ -1510,6 +1552,12 @@ class ViewerSettings extends Panel {
         this.invertXCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertX`, this.invertXCheckbox.checked); };
         this.contents.appendChild(this.invertXCheckbox.elem);
         GlobalSaveManager.addSettingListener('InvertX', this.invertXChanged.bind(this));
+    }
+
+    public setCameraControllerIndex(idx: number) {
+        const index = this.camRadioButtons.selectedIndex;
+        const cameraControllerClass = this.camControllerClasses[index];
+        this.setCameraControllerClass(cameraControllerClass);
     }
 
     private onFovSliderChange(e: UIEvent): void {
@@ -1549,11 +1597,8 @@ class ViewerSettings extends Panel {
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
-        setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
-        setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
-        setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
-
-        setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
+        this.camRadioButtons.setSelectedIndex(this.camControllerClasses.indexOf(cameraControllerClass));
+        setElementVisible(this.fovSlider.elem, cameraControllerClass !== OrthoCameraController);
     }
 
     private invertYChanged(saveManager: SaveManager, key: string): void {
@@ -1564,6 +1609,11 @@ class ViewerSettings extends Panel {
     private invertXChanged(saveManager: SaveManager, key: string): void {
         const invertX = saveManager.loadSetting<boolean>(key, false);
         this.invertXCheckbox.setChecked(invertX);
+    }
+
+    private antialiasingChanged(saveManager: SaveManager, key: string): void {
+        const antialiasingMode = saveManager.loadSetting<AntialiasingMode>(key, AntialiasingMode.FXAA);
+        this.antialiasingRadioButtons.setSelectedIndex(antialiasingMode);
     }
 }
 
@@ -1682,7 +1732,6 @@ class LineGraph {
     }
 }
 
-
 class StatisticsPanel extends Panel {
     public history: RenderStatistics[] = [];
     private fpsGraph = new LineGraph();
@@ -1724,9 +1773,8 @@ class StatisticsPanel extends Panel {
         if (renderStatistics.bufferUploadCount)
             this.fpsGraph.drawText(`Buffer Uploads: ${renderStatistics.bufferUploadCount}`);
 
-        const camPositionX = this.viewer.camera.worldMatrix[12].toFixed(2);
-        const camPositionY = this.viewer.camera.worldMatrix[13].toFixed(2);
-        const camPositionZ = this.viewer.camera.worldMatrix[14].toFixed(2);
+        const worldMatrix = this.viewer.camera.worldMatrix;
+        const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
         this.fpsGraph.drawText(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
 
         const vendorInfo = this.viewer.gfxDevice.queryVendorInfo();
@@ -1804,10 +1852,25 @@ class StudioPanel extends FloatingPanel {
         };
         this.elem.style.opacity = '0.8';
         this.setTitle(CLAPBOARD_ICON, 'Studio');
+        document.head.insertAdjacentHTML('beforeend', `
+        <style>
+            button.SettingsButton {
+                font: 16px monospace;
+                font-weight: bold;
+                border: none;
+                width: 100%;
+                color: inherit;
+                padding: 0.15rem;
+                text-align: center;
+                background-color: rgb(64, 64, 64);
+            }
+        </style>
+        `);
         this.contents.insertAdjacentHTML('beforeend', `
         <div style="display: grid; grid-template-columns: 3fr 1fr 1fr; align-items: center;">
             <div class="SettingsHeader">Studio Mode</div>
-            <div id="enableStudioBtn" class="SettingsButton EnableStudioMode">Enable</div><div id="disableStudioBtn" class="SettingsButton DisableStudioMode">Disable</div>
+            <button id="enableStudioBtn" class="SettingsButton EnableStudioMode">Enable</button>
+            <button id="disableStudioBtn" class="SettingsButton DisableStudioMode">Disable</button>
         </div>
         <div id="studioPanelContents" hidden></div>
         `);
@@ -1824,8 +1887,8 @@ class StudioPanel extends FloatingPanel {
 
         this.enableStudioBtn.onclick = () => {
             if (!ui.studioModeEnabled) {
-                // Switch to the FPS Camera Controller ().
-                (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
+                // Switch to the FPS Camera Controller.
+                ui.viewerSettings.setCameraControllerIndex(0);
                 ui.studioModeEnabled = true;
                 // Disable switching of camera controllers in studio mode.
                 ui.viewerSettings.contents.querySelectorAll('.SettingsButton').forEach(el => {
@@ -1915,14 +1978,6 @@ class StudioPanel extends FloatingPanel {
             #playbackControls {
                 padding: 0 5rem 1rem;
                 border-top: 1px solid #444;
-            }
-            button.SettingsButton {
-                font: 16px monospace;
-                font-weight: bold;
-                border: none;
-                width: 100%;
-                color: inherit;
-                padding: 0.15rem;
             }
         </style>
         `);
@@ -2489,7 +2544,7 @@ class StudioPanel extends FloatingPanel {
         keyframeListItem.dataset.name = keyframeListItem.innerText;
         keyframeListItem.onclick = (e: MouseEvent) => this.selectKeyframeListItem(e);
         const clearButton = document.createElement('button');
-        clearButton.textContent = '🗙';
+        clearButton.textContent = '×';
         clearButton.type = 'button';
         clearButton.style.color = 'white';
         clearButton.style.position = 'absolute';
@@ -2502,7 +2557,7 @@ class StudioPanel extends FloatingPanel {
         clearButton.style.cursor = 'pointer';
         clearButton.style.backgroundColor = 'transparent';
         clearButton.style.border = '0';
-        clearButton.style.fontSize = '16px';
+        clearButton.style.fontSize = '24px';
         clearButton.style.padding = '0';
         clearButton.style.fontWeight = 'bold';
         clearButton.onclick = e => {
@@ -2795,19 +2850,6 @@ me compare the two.</p>
 <p>If you have a more tech-y background, there's always coding work to be done. All
 the source code to the site is available at <a href="https://github.com/magcius/noclip.website">GitHub</a>,
 whether you want to browse around, use it for your own purposes, or help contribute.</p>
-
-## Why does Skyward Sword have a level called Despacito? Is that its official name?
-
-<p>Nah. The internal names of a lot of the Zelda games is often just a letter-number code,
-something like 'F203_05'. Most of the maps have no real in-game name as far as I can
-tell, so I often spend a lot of time hunting down longplays on YouTube or playing the
-game myself to try and come up with a name for it. I had done this for most of
-Skyward Sword, but got a bit stumped on some of the maps, and put "Despacito" as an
-inside joke.</p>
-
-<p>If you come up with a better name for these maps, feel free to tell me, either on
-the <a href="https://discord.gg/bkJmKKv">official noclip.website Discord</a> or through
-<a href="https://twitter.com/JasperRLZ/">Twitter</a>.</p>
 
 ## Are you afraid of being taken down?
 

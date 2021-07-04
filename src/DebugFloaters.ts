@@ -18,11 +18,13 @@ function getParentMetadata(target: any, key: string) {
 
 export class FloatingPanel implements Widget {
     public elem: HTMLElement;
+    public onclose: (() => void) | null = null;
 
     public customHeaderBackgroundColor: string = '';
     protected header: HTMLElement;
     protected headerContainer: HTMLElement;
     protected svgIcon: SVGSVGElement;
+    protected closeButton: HTMLElement;
 
     private toplevel: HTMLElement;
     public mainPanel: HTMLElement;
@@ -61,13 +63,30 @@ export class FloatingPanel implements Widget {
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
         this.header.style.display = 'grid';
-        this.header.style.gridTemplateColumns = '28px 1fr';
+        this.header.style.gridTemplateColumns = '28px 1fr 28px';
         this.header.style.alignItems = 'center';
         this.header.style.justifyItems = 'center';
         this.header.style.gridAutoFlow = 'column';
-        this.header.addEventListener('mousedown', (e) => {
+        this.header.onmousedown = (e) => {
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: false, useGrabbingCursor: true, releaseOnMouseUp: true });
-        });
+        };
+        this.header.ondblclick = (e) => {
+            this.close();
+        }
+
+        this.closeButton = document.createElement('div');
+        this.closeButton.textContent = '❌';
+        this.closeButton.title = 'Close';
+        this.closeButton.style.gridColumn = '3';
+        this.closeButton.style.lineHeight = '28px';
+        this.closeButton.style.margin = '0';
+        this.closeButton.style.fontSize = '100%';
+        this.closeButton.style.cursor = 'pointer';
+        this.closeButton.style.userSelect = 'none';
+        this.closeButton.style.gridColumn = '3';
+        this.closeButton.onclick = () => {
+            this.close();
+        };
 
         this.headerContainer.appendChild(this.header);
 
@@ -94,9 +113,11 @@ export class FloatingPanel implements Widget {
         this.contents.style.width = `${v}px`;
     }
 
-    public destroy(): void {
+    public close(): void {
         if (this.toplevel.parentElement !== null)
             this.toplevel.parentElement.removeChild(this.toplevel);
+        if (this.onclose)
+            this.onclose();
     }
 
     public onMotion(dx: number, dy: number): void {
@@ -116,6 +137,7 @@ export class FloatingPanel implements Widget {
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
+        this.header.appendChild(this.closeButton);
         this.toplevel.dataset.title = title;
         this.syncHeaderStyle();
     }
@@ -310,7 +332,7 @@ export class DebugFloaterHolder {
 
     public destroyScene(): void {
         for (let i = 0; i < this.floatingPanels.length; i++)
-            this.floatingPanels[i].destroy();
+            this.floatingPanels[i].close();
         this.floatingPanels = [];
     }
 
@@ -335,6 +357,8 @@ export class DebugFloaterHolder {
 
             if (typeof v === "number")
                 panel.bindSingleSlider(`${parentName}.${keyName}`, obj, keyName, parentMetadata, this.midiControls);
+            else if (typeof v === "boolean")
+                panel.bindCheckbox(`${parentName}.${keyName}`, obj, keyName);;
 
             this._bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
         }

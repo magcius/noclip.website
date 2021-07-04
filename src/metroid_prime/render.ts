@@ -13,30 +13,23 @@ import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderInstManager';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix, GX_Program } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
-import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
+import { texEnvMtx, computeNormalMatrix, setMatrixTranslation, getMatrixTranslation } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { areaCollisionLineCheck } from './collision';
 
-const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
+const noclipSpaceFromPrimeSpace = mat4.fromValues(
     1, 0,  0, 0,
     0, 0, -1, 0,
     0, 1,  0, 0,
     0, 0,  0, 1,
 );
-
-// Cheap way to scale up.
-const posScale = 1;
-const posMtx = mat4.create();
-mat4.mul(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, mat4.fromScaling(mat4.create(), [posScale, posScale, posScale]));
-
-const posMtxSkybox = mat4.clone(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong);
 
 export class RetroTextureHolder extends GXTextureHolder<TXTR> {
     public addMaterialSetTextures(device: GfxDevice, materialSet: MaterialSet): void {
@@ -118,6 +111,7 @@ class SurfaceData {
 
 class SurfaceInstance {
     private materialTextureKey: number;
+    private visible = true;
     public packetParams = new PacketParams();
 
     constructor(public surfaceData: SurfaceData, public materialInstance: MaterialInstance, public materialGroupInstance: MaterialGroupInstance, public modelMatrix: mat4) {
@@ -125,18 +119,12 @@ class SurfaceInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
-        if (!this.materialInstance.visible)
+        if (!this.visible || !this.materialInstance.visible)
             return;
 
-        let posModelMtx;
+        mat4.mul(modelMatrixScratch, noclipSpaceFromPrimeSpace, this.modelMatrix);
 
-        if (isSkybox) {
-            posModelMtx = posMtxSkybox;
-            mat4.mul(modelMatrixScratch, posModelMtx, this.modelMatrix);
-        } else {
-            posModelMtx = posMtx;
-            mat4.mul(modelMatrixScratch, posModelMtx, this.modelMatrix);
-
+        if (!isSkybox) {
             bboxScratch.transform(this.surfaceData.bbox, modelMatrixScratch);
             if (!viewerInput.camera.frustum.contains(bboxScratch))
                 return;
@@ -169,22 +157,18 @@ class MaterialGroupInstance {
     public gfxSampler: GfxSampler;
     public materialParamsBlockOffs: number = 0;
 
-    constructor(device: GfxDevice, public material: Material, materialHacks?: GXMaterialHacks) {
+    constructor(cache: GfxRenderCache, public material: Material, materialHacks?: GXMaterialHacks) {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial, materialHacks);
 
-        this.gfxSampler = device.createSampler({
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.LINEAR,
+        this.gfxSampler = cache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
             minLOD: 0,
             maxLOD: 100,
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
         });
-    }
-
-    public destroy(device: GfxDevice) {
-        device.destroySampler(this.gfxSampler);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -213,7 +197,7 @@ class MaterialGroupInstance {
                 colorCopy(materialParams.u_Color[ColorKind.AMB0], worldAmbientColor);
 
             const viewMatrix = scratchMatrix;
-            mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
+            mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromPrimeSpace);
 
             for (let i = 0; i < 8; i++) {
                 if (actorLights !== null && i < actorLights.lights.length) {
@@ -244,17 +228,18 @@ class MaterialGroupInstance {
                 continue;
 
             if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, noclipSpaceFromPrimeSpace);
                 mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, noclipSpaceFromPrimeSpace);
                 mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
-                mat4.invert(scratchMatrix, viewerInput.camera.viewMatrix);
+                getMatrixTranslation(scratchVec3, modelMatrix);
                 vec3.set(scratchVec3, modelMatrix[12], modelMatrix[13], modelMatrix[14]);
-                vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+                vec3.transformMat4(scratchVec3, scratchVec3, viewerInput.camera.worldMatrix);
+                setMatrixTranslation(modelMatrix, scratchVec3);
                 texMtx[12] = scratchVec3[0];
                 texMtx[13] = scratchVec3[1];
                 texMtx[14] = scratchVec3[2];
@@ -290,8 +275,8 @@ class MaterialGroupInstance {
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_CYLINDER) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                mat4.mul(texMtx, texMtx, modelMatrix);
+                mat4.mul(scratchMatrix, viewerInput.camera.worldMatrix, noclipSpaceFromPrimeSpace);
+                mat4.mul(texMtx, scratchMatrix, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 const xy = ((scratchMatrix[12] + scratchMatrix[14]) * 0.025 * uvAnimation.phi) % 1.0;
                 const z = (scratchMatrix[13] * 0.05 * uvAnimation.phi) % 1.0;
@@ -381,9 +366,9 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     const srcDraw = surfaces[0].loadedVertexData.draws[0];
     const indexOffset = 0;
     const indexCount = totalIndexCount;
-    const posNrmMatrixTable = srcDraw.posNrmMatrixTable;
+    const posNrmMatrixTable = srcDraw.posMatrixTable;
     const texMatrixTable = srcDraw.texMatrixTable;
-    draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+    draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
 
     const newLoadedVertexData: LoadedVertexData = {
         indexData: indexData.buffer,
@@ -451,7 +436,7 @@ export class MREARenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupInstances[material.groupIndex] === undefined)
-                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(device, material);
+                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(cache, material);
         }
 
         // Now create the material commands.
@@ -537,7 +522,7 @@ export class MREARenderer {
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     const cmdlData = modelCache.getCMDLData(device, this.textureHolder, cache, model);
-                    const cmdlRenderer = new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData);
+                    const cmdlRenderer = new CMDLRenderer(cache, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData);
                     const actor = new Actor(ent, cmdlRenderer);
                     this.actors.push(actor);
                 }
@@ -553,7 +538,7 @@ export class MREARenderer {
                             const modelMatrix = mat4.create();
 
                             const skyData = modelCache.getCMDLData(device, this.textureHolder, cache, areaAttributes.overrideSky);
-                            this.overrideSky = new CMDLRenderer(device, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, modelMatrix, skyData);
+                            this.overrideSky = new CMDLRenderer(cache, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, modelMatrix, skyData);
                             this.overrideSky.isSkybox = true;
                         }
                     }
@@ -586,16 +571,11 @@ export class MREARenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        this.materialGroupInstances.forEach((cmd) => cmd.destroy(device));
         this.bufferCoalescer.destroy(device);
         for (let i = 0; i < this.cmdlData.length; i++)
             this.cmdlData[i].destroy(device);
-        for (let i = 0; i < this.actors.length; i++)
-            this.actors[i].destroy(device);
         for (let i = 0; i < this.surfaceData.length; i++)
             this.surfaceData[i].destroy(device);
-        if (this.overrideSky !== null)
-            this.overrideSky.destroy(device);
     }
 }
 
@@ -641,7 +621,7 @@ export class CMDLRenderer {
     public isSkybox: boolean = false;
     public modelMatrix: mat4 = mat4.create();
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, modelMatrix: mat4 | null, public cmdlData: CMDLData) {
+    constructor(cache: GfxRenderCache, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, modelMatrix: mat4 | null, public cmdlData: CMDLData) {
         const materialSet = this.cmdlData.cmdl.materialSets[0];
 
         // First, create our group commands. These will store UBO buffer data which is shared between
@@ -649,7 +629,7 @@ export class CMDLRenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupInstances[material.groupIndex] === undefined)
-                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(device, material);
+                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(cache, material);
         }
 
         // Now create the material commands.
@@ -694,10 +674,6 @@ export class CMDLRenderer {
 
         renderHelper.renderInstManager.popTemplateRenderInst();
     }
-
-    public destroy(device: GfxDevice): void {
-        this.materialGroupInstances.forEach((cmd) => cmd.destroy(device));
-    }
 }
 
 class Actor {
@@ -712,9 +688,5 @@ class Actor {
             mat4.rotateZ(this.cmdlRenderer.modelMatrix, this.entity.modelMatrix, 8 * (viewerInput.time / 1000));
 
         this.cmdlRenderer.prepareToRender(device, renderHelper, viewerInput);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.cmdlRenderer.destroy(device);
     }
 }

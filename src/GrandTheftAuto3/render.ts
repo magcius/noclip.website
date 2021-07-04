@@ -5,17 +5,17 @@ import * as rw from "librw";
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxHostAccessPass, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, quat, vec3, vec2, vec4 } from "gl-matrix";
-import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController, CameraController } from "../Camera";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { assert } from "../util";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { mat4, quat, vec3, vec2 } from "gl-matrix";
+import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { assert, mod } from "../util";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ItemInstance, ObjectDefinition } from "./item";
 import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
@@ -23,6 +23,7 @@ import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GraphObjBase } from "../SceneBase";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
 const DRAW_DISTANCE_FACTOR = 2.5;
@@ -74,10 +75,6 @@ export function rwTexture(texture: rw.Texture, txdName: string, useDXT = true): 
     const transparent = image.hasAlpha();
     image.delete();
     return { name, width, height, levels, pixelFormat, transparent };
-}
-
-function mod(a: number, b: number) {
-    return (a % b + b) % b;
 }
 
 function halve(pixels: Uint8Array, width: number, height: number, bpp: number): Uint8Array {
@@ -146,11 +143,10 @@ export class TextureArray extends TextureMapping {
 
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray, pixelFormat,
-            width, height, depth: textures.length, numLevels: mipmaps.length
+            width, height, depth: textures.length, numLevels: mipmaps.length, usage: GfxTextureUsage.Sampled,
         });
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, mipmaps);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, mipmaps);
 
         this.gfxTexture = gfxTexture;
         this.width = width;
@@ -159,13 +155,13 @@ export class TextureArray extends TextureMapping {
         this.transparent = transparent;
 
         this.gfxSampler = device.createSampler({
-            magFilter: GfxTexFilterMode.BILINEAR,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NO_MIP,
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.Linear : GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 1000,
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
         });
     }
 
@@ -229,7 +225,7 @@ class BaseRenderer {
         renderInst.drawIndexes(this.indices);
 
         if (this.gfxProgram === undefined)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -258,16 +254,16 @@ export class SkyRenderer extends BaseRenderer {
              1, -1, 1,
         ]);
         const ibuf = new Uint32Array([0,1,2,0,2,3]);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
+        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
         this.indices = ibuf.length;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = cache.createInputLayout(device, { indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
+        this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
         const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
         const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
@@ -523,8 +519,8 @@ export class SceneRenderer extends BaseRenderer {
             }
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
+        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position,    bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset:  0 * 0x04 },
@@ -533,20 +529,20 @@ export class SceneRenderer extends BaseRenderer {
             { location: GTA3Program.a_TexScroll,   bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 10 * 0x04 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = cache.createInputLayout(device, { indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
+        this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
         const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
         const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
         this.megaStateFlags = {
             depthWrite: !dual,
-            cullMode: this.params.backface ? GfxCullMode.NONE : GfxCullMode.BACK,
+            cullMode: this.params.backface ? GfxCullMode.None : GfxCullMode.Back,
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: this.params.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: this.params.additive ? GfxBlendFactor.One : GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
 
         let renderLayer = this.params.renderLayer;
@@ -612,7 +608,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     public renderers: GraphObjBase[] = [];
     public onstatechanged!: () => void;
 
-    private renderTarget = new BasicRenderTarget();
     private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
     private currentColors = emptyColorSet();
     public renderHelper: GfxRenderHelper;
@@ -627,7 +622,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(0.01);
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const t = viewerInput.time / TIME_FACTOR * this.weatherPeriods / 24;
         const cs1 = this.colorSets[Math.floor(t)   % this.weatherPeriods + this.weatherPeriods * this.weather];
         const cs2 = this.colorSets[Math.floor(t+1) % this.weatherPeriods + this.weatherPeriods * this.weather];
@@ -643,10 +638,10 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.worldMatrix);
-        mapped[offs++] = viewerInput.camera.frustum.right;
-        mapped[offs++] = viewerInput.camera.frustum.top;
-        mapped[offs++] = viewerInput.camera.frustum.near;
-        mapped[offs++] = viewerInput.camera.frustum.far;
+        mapped[offs++] = viewerInput.camera.right;
+        mapped[offs++] = viewerInput.camera.top;
+        mapped[offs++] = viewerInput.camera.near;
+        mapped[offs++] = viewerInput.camera.far;
         offs += fillColor(mapped, offs, this.currentColors.amb);
         offs += fillColor(mapped, offs, this.currentColors.skyTop);
         offs += fillColor(mapped, offs, this.currentColors.skyBot);
@@ -663,21 +658,32 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
-        this.renderHelper.renderInstManager.drawOnPassRenderer(device, finalPassRenderer);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
 
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        return finalPassRenderer;
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public createPanels(): UI.Panel[] {
@@ -704,8 +710,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderHelper.destroy();
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].destroy(device);
     }

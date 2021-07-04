@@ -5,15 +5,17 @@ import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { mat4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -29,8 +31,8 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    vec3 u_LightDirs[2];
-    vec3 u_LightColors[3];
+    vec4 u_LightDirs[2];
+    vec4 u_LightColors[3];
 };
 
 layout(std140) uniform ub_ModelParams {
@@ -38,8 +40,10 @@ layout(std140) uniform ub_ModelParams {
     Mat4x3 u_NormalMatrix[SKINNING_MATRIX_COUNT];
     Mat4x2 u_TextureMatrix[1];
     vec4 u_Color;
-    float u_alphaMult;
+    vec4 u_Misc[1];
 };
+
+#define u_Alpha (u_Misc[0].x)
 
 uniform sampler2D u_Texture[1];
 
@@ -116,16 +120,15 @@ void main() {
     t_Color.rgba *= u_Color.rgba;
 
 #ifdef LIGHTING
-    vec3 t_CombinedIntensity = u_LightColors[2];
-    float t_intensity = max(dot(v_Normal, u_LightDirs[0]), 0.0);
-    t_CombinedIntensity += t_intensity * u_LightColors[0];
-    t_intensity = max(dot(v_Normal, u_LightDirs[1]), 0.0);
-    t_CombinedIntensity += t_intensity * u_LightColors[1];
+    vec3 t_CombinedIntensity = u_LightColors[2].rgb;
+
+    t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[0].xyz), 0.0) * u_LightColors[0].rgb;
+    t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[1].xyz), 0.0) * u_LightColors[1].rgb;
 
     t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
 #endif
 
-    t_Color.a *= u_alphaMult;
+    t_Color.a *= u_Alpha;
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
@@ -143,8 +146,8 @@ export class BINModelData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sectorData: BINModelSectorData, public binModel: BINModel) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.binModel.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.binModel.indexData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.binModel.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.binModel.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: KatamariDamacyProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*4, format: GfxFormat.F32_RGBA },
@@ -153,11 +156,11 @@ export class BINModelData {
         ];
         const VERTEX_STRIDE = 4+3+2;
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
 
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
@@ -177,38 +180,38 @@ enum CLAMP1_WM {
 
 function translateWrapMode(wm: CLAMP1_WM): GfxWrapMode {
     switch (wm) {
-    case CLAMP1_WM.REPEAT: return GfxWrapMode.REPEAT;
-    case CLAMP1_WM.CLAMP: return GfxWrapMode.CLAMP;
+    case CLAMP1_WM.REPEAT: return GfxWrapMode.Repeat;
+    case CLAMP1_WM.CLAMP: return GfxWrapMode.Clamp;
     // TODO(jstpierre): Support REGION_* clamp modes.
-    case CLAMP1_WM.REGION_REPEAT: return GfxWrapMode.REPEAT;
+    case CLAMP1_WM.REGION_REPEAT: return GfxWrapMode.Repeat;
     default: throw "whoops";
     }
 }
 
 function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
     switch (cmp) {
-    case GSDepthCompareMode.NEVER: return GfxCompareMode.NEVER;
-    case GSDepthCompareMode.ALWAYS: return GfxCompareMode.ALWAYS;
+    case GSDepthCompareMode.NEVER: return GfxCompareMode.Never;
+    case GSDepthCompareMode.ALWAYS: return GfxCompareMode.Always;
     // We use a LESS-style depth buffer.
-    case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LEQUAL;
-    case GSDepthCompareMode.GREATER: return GfxCompareMode.LESS;
+    case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LessEqual;
+    case GSDepthCompareMode.GREATER: return GfxCompareMode.Less;
     }
 }
 
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
     case GSTextureFilter.NEAREST:
-        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NO_MIP];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.NoMip];
     case GSTextureFilter.LINEAR:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
     case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
-        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NEAREST];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.Nearest];
     case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
-        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.LINEAR];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.Linear];
     case GSTextureFilter.LINEAR_MIPMAP_NEAREST:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
     case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
     default: throw new Error();
     }
 }
@@ -226,7 +229,7 @@ export class BINModelPartInstance {
         if (this.binModelPart.lit)
             program.defines.set("LIGHTING", "1");
         program.defines.set("SKINNING_MATRIX_COUNT", this.transformCount.toString());
-        this.gfxProgram = cache.createProgram(device, program);
+        this.gfxProgram = cache.createProgram(program);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
         const ztst: GSDepthCompareMode = (gsConfiguration!.test_1_data0 >>> 17) & 0x03;
@@ -238,15 +241,15 @@ export class BINModelPartInstance {
 
         if (gsConfiguration.alpha_1_data0 === 0x44) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
         } else if (gsConfiguration.alpha_1_data0 === 0x48) {
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.One,
             });
         } else {
             throw "whoops";
@@ -268,7 +271,7 @@ export class BINModelPartInstance {
         const wrapS = translateWrapMode(wms);
         const wrapT = translateWrapMode(wmt);
 
-        this.textureMapping[0].gfxSampler = cache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = cache.createSampler({
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
             minLOD: 0, maxLOD: 100,
@@ -287,15 +290,15 @@ export class BINModelPartInstance {
 
         renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
-        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+1);
-        const mapped = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
+        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+4);
+        const d = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
         for (let i = 0; i < this.transformCount; i++)
-            offs += fillMatrix4x3(mapped, offs, modelViewMatrices[i]);
+            offs += fillMatrix4x3(d, offs, modelViewMatrices[i]);
         for (let i = 0; i < this.transformCount; i++)
-            offs += fillMatrix4x3(mapped, offs, modelMatrices[i]);
-        offs += fillMatrix4x2(mapped, offs, scratchTextureMatrix);
-        offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
-        mapped[offs++] = this.alphaMultiplier;
+            offs += fillMatrix4x3(d, offs, modelMatrices[i]);
+        offs += fillMatrix4x2(d, offs, scratchTextureMatrix);
+        offs += fillColor(d, offs, this.binModelPart.diffuseColor);
+        offs += fillVec4(d, offs, this.alphaMultiplier);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -305,7 +308,7 @@ const scratchModelViews = nArray(6, () => mat4.create());
 const scratchModelMatrices = nArray(6, () => mat4.create());
 const scratchAABB = new AABB();
 const cullModeFlags = {
-    cullMode: GfxCullMode.BACK,
+    cullMode: GfxCullMode.Back,
 };
 export class BINModelInstance {
     public modelMatrix = mat4.create();
@@ -377,9 +380,8 @@ class BINTextureData {
             if (pixels !== 'framebuffer') {
                 const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
                 device.setResourceName(gfxTexture, texture.name);
-                const hostAccessPass = device.createHostAccessPass();
-                hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-                device.submitPass(hostAccessPass);
+
+                device.uploadTextureData(gfxTexture, 0, [pixels]);
                 this.gfxTexture[i] = gfxTexture;
     
                 this.viewerTexture[i] = textureToCanvas(texture, `${texture.name}/${i}`, pixels);
@@ -423,17 +425,9 @@ export class BINModelSectorData {
 }
 
 function textureToCanvas(texture: BINTexture, name: string, pixels: Uint8Array): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = texture.width;
-    const height = texture.height;
-    canvas.width = width;
-    canvas.height = height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), texture.width, texture.height);
     canvas.title = name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
 
     const extraInfo = new Map<string, string>();

@@ -1,15 +1,16 @@
 
-import { SourceFileSystem, SourceRenderer, SkyboxRenderer, BSPRenderer } from "./Main";
+import { SourceFileSystem, SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext } from "./Main";
 import { SceneContext } from "../SceneBase";
 import { BSPFile } from "./BSPFile";
 import { assert } from "../util";
 
-export async function createScene(context: SceneContext, filesystem: SourceFileSystem, mapId: string, mapPath: string): Promise<SourceRenderer> {
+export async function createScene(context: SceneContext, filesystem: SourceFileSystem, mapId: string, mapPath: string, renderContext: SourceRenderContext | null = null): Promise<SourceRenderer> {
     // Clear out old filesystem pakfile.
     filesystem.pakfiles.length = 0;
 
-    const renderer = new SourceRenderer(context, filesystem);
-    const renderContext = renderer.renderContext;
+    if (renderContext === null)
+        renderContext = new SourceRenderContext(context.device, filesystem);
+    const renderer = new SourceRenderer(context, renderContext);
 
     const bsp = await context.dataFetcher.fetchData(mapPath);
     const bspFile = new BSPFile(bsp, mapId);

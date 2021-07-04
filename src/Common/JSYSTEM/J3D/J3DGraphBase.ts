@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
@@ -11,12 +11,12 @@ import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex 
 import { TextureMapping } from '../../../TextureHolder';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
-import { colorCopy, Color } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixS } from '../../../MathHelpers';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
+import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { translateSampler } from '../JUTTexture';
@@ -83,7 +83,7 @@ export class ShapeData {
 }
 
 export class MaterialData {
-    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
     }
@@ -92,67 +92,6 @@ export class MaterialData {
 class JointTreeNode {
     constructor(public jointIndex: number = 0, public children: JointTreeNode[] = []) {
     }
-}
-
-export function J3DCalcBBoardMtx(dst: mat4, m: mat4): void {
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx;
-    dst[4] = 0;
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = my;
-    dst[9] = 0;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = 0;
-    dst[10] = mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-const scratchVec3 = vec3.create();
-export function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    vec3.set(v, 0.0, -m[6], m[5]);
-    vec3.normalize(v, v);
-
-    dst[0] = mx;
-    dst[4] = m[4];
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = m[5];
-    dst[9] = v[1] * mz;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = m[6];
-    dst[10] = v[2] * mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    m[3] = 9999.0;
-    m[7] = 9999.0;
-    m[11] = 9999.0;
-    m[15] = 9999.0;
 }
 
 export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceState: ShapeInstanceState, shape: Shape, mtxGroup: MtxGroup): boolean {
@@ -169,9 +108,9 @@ export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceSt
         const dst = packetParams.u_PosMtx[i];
 
         if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
-            J3DCalcBBoardMtx(dst, drw);
+            calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
-            J3DCalcYBBoardMtx(dst, drw);
+            calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
         else
             mat4.copy(dst, drw);
 
@@ -263,7 +202,7 @@ function J3DMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
     dst[14] = a20*b03 + a21*b13 + a22*b23 + a23*b33;
 }
 
-function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
+function mat43Concat(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
     // This is almost mat4.mul except the inputs/outputs are mat4x3s.
     // Slightly more efficient.
 
@@ -291,7 +230,7 @@ function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
     dst[14] = a20*b03 + a21*b13 + a22*b23 + a23;
 }
 
-function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
+function J3DGetTextureMtx(dst: mat4, srt: ReadonlyMat4): void {
     mat4.copy(dst, srt);
 
     // Move translation to third column.
@@ -304,7 +243,7 @@ function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
     dst[14] = 0;
 }
 
-function J3DGetTextureMtxOld(dst: mat4, srt: mat4): void {
+function J3DGetTextureMtxOld(dst: mat4, srt: ReadonlyMat4): void {
     mat4.copy(dst, srt);
 }
 
@@ -366,6 +305,8 @@ function shapeInstancesUsePnMtxIdx(shapeInstances: ShapeInstance[]): boolean | u
     return false;
 }
 
+const enum ColorRegType { S10, U8, }
+
 const materialParams = new MaterialParams();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
 export class MaterialInstance {
@@ -380,17 +321,16 @@ export class MaterialInstance {
     public sortKey: number = 0;
     public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
     public fogBlock = new GX_Material.FogBlock();
-    public usePnMtxIdx?: boolean = undefined;
 
     constructor(materialData: MaterialData, public shapeInstances: ShapeInstance[], materialHacks?: GX_Material.GXMaterialHacks) {
-        this.usePnMtxIdx = shapeInstancesUsePnMtxIdx(this.shapeInstances);
         this.setMaterialData(materialData, materialHacks);
     }
 
     public setMaterialData(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks): void {
         this.materialData = materialData;
         const material = this.materialData.material;
-        material.gxMaterial.usePnMtxIdx = this.usePnMtxIdx;
+        if (material.gxMaterial.usePnMtxIdx === undefined)
+            material.gxMaterial.usePnMtxIdx = shapeInstancesUsePnMtxIdx(this.shapeInstances);
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
@@ -406,28 +346,24 @@ export class MaterialInstance {
     }
 
     public setColorWriteEnabled(v: boolean): void {
-        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
+        setChanWriteEnabled(this.materialHelper, GfxChannelWriteMask.RGB, v);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        if (this.materialData.material.translucent)
+    public setAlphaWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxChannelWriteMask.Alpha, v);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer, transparent: boolean = this.materialData.material.translucent): void {
+        if (transparent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
-    }
-
-    private clampTo8Bit(color: Color): void {
-        // TODO(jstpierre): Actually clamp. For now, just make sure it doesn't go negative.
-        color.r = Math.max(color.r, 0);
-        color.g = Math.max(color.g, 0);
-        color.b = Math.max(color.b, 0);
-        color.a = Math.max(color.a, 0);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, clampTo8Bit: boolean): void {
+    private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, colorRegType: ColorRegType): void {
         if (this.colorCalc[i]) {
             this.colorCalc[i]!.calcColor(dst);
         } else if (this.colorOverrides[i] !== null) {
@@ -436,15 +372,19 @@ export class MaterialInstance {
             colorCopy(dst, fallbackColor);
         }
 
-        if (clampTo8Bit)
-            this.clampTo8Bit(dst);
+        if (colorRegType === ColorRegType.S10) {
+            // S10 register goes from -1024.0 to 1023.0
+            colorClamp(dst, dst, -1024.0/256.0, 1023.0/256.0);
+        } else {
+            colorClampLDR(dst, dst);
+        }
     }
 
-    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: mat4, modelMatrix: mat4): void {
+    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4): void {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -474,11 +414,11 @@ export class MaterialInstance {
         }
     }
 
-    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
+    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: ReadonlyMat4): void {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -519,7 +459,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
+    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
         // The input matrix is passed in in dst.
 
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
@@ -537,7 +477,7 @@ export class MaterialInstance {
         // ref. J3DTexMtx::calc()
         const tmp1 = matrixScratch;
         const tmp2 = matrixScratch2;
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
             {
                 // J3DGetTextureMtxOld(tmp1)
@@ -679,21 +619,21 @@ export class MaterialInstance {
         }
     }
 
-    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: mat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix = camera.viewMatrix): void {
+    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], true);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1], ColorKind.MAT1, material.colorMatRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0], ColorKind.AMB0, material.colorAmbRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1], ColorKind.AMB1, material.colorAmbRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],   ColorKind.K0,   material.colorConstants[0], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],   ColorKind.K1,   material.colorConstants[1], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],   ColorKind.K2,   material.colorConstants[2], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],   ColorKind.K3,   material.colorConstants[3], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],   ColorKind.C0,   material.colorRegisters[0], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],   ColorKind.C1,   material.colorRegisters[1], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],   ColorKind.C2,   material.colorRegisters[2], ColorRegType.S10);
+        colorCopy(materialParams.u_Color[ColorKind.CPREV], White);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -745,7 +685,7 @@ export class MaterialInstance {
             this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
         this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, packetParams, viewMatrix);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -1013,7 +953,16 @@ export class J3DModelInstance {
 
         // DRW1 seems to specify each envelope twice. J3D runtime actually corrects for this in J3DModelLoader::readDraw().
         // This appears to be a runtime fix for a toolchain bug.
-        const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length - bmd.evp1.envelopes.length;
+
+        // Don't do this for community tooling, which might not have replicated this bug.
+        let hasEVP1DoubleCountBug = true;
+        if (bmd.subversion === 'SuperBMD - Gamma')
+            hasEVP1DoubleCountBug = false;
+
+        let drawViewMatrixCount = bmd.drw1.matrixDefinitions.length;
+        if (hasEVP1DoubleCountBug)
+            drawViewMatrixCount -= bmd.evp1.envelopes.length;
+
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
     }
@@ -1025,6 +974,10 @@ export class J3DModelInstance {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setBaseScale(v: ReadonlyVec3): void {
+        vec3.copy(this.baseScale, v);
     }
 
     public setModelMaterialData(modelMaterialData: BMDModelMaterialData): void {
@@ -1047,9 +1000,9 @@ export class J3DModelInstance {
             this.materialInstances[i].setMaterialHacks(materialHacks);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
+    public setSortKeyLayer(layer: GfxRendererLayer, transparent?: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
+            this.materialInstances[i].setSortKeyLayer(layer, transparent);
     }
 
     /**
@@ -1153,10 +1106,7 @@ export class J3DModelInstance {
      *
      * It is currently not possible to specify a color override per-material.
      *
-     * By default, the alpha value in {@param color} is not used. Set {@param useAlpha}
-     * to true to obey the alpha color override.
-     *
-     * To unset a color override, pass {@constant undefined} as for {@param color}.
+     * To unset a color override, pass {@constant null} as for {@param color}.
      */
     public setColorOverride(colorKind: ColorKind, color: Color | null): void {
         for (let i = 0; i < this.materialInstances.length; i++)

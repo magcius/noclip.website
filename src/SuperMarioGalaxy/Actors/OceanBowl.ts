@@ -13,7 +13,7 @@ import { getVertexInputLocation } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderInstManager";
 import { DrawType, NameObj, MovementType } from "../NameObj";
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
@@ -161,7 +161,7 @@ export class OceanBowl extends LiveActor {
         }
 
         const pointCount = this.points.length;
-        this.positionBuffer = device.createBuffer(pointCount * 3, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+        this.positionBuffer = device.createBuffer(pointCount * 3, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.positionDataF32 = new Float32Array(pointCount * 3);
         this.positionDataU8 = new Uint8Array(this.positionDataF32.buffer);
 
@@ -173,7 +173,7 @@ export class OceanBowl extends LiveActor {
             colorData[colorIdx++] = 0xFF;
             colorData[colorIdx++] = this.points[i].heightScale * 0xFF;
         }
-        this.colorBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, colorData.buffer);
+        this.colorBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, colorData.buffer);
 
         // Texture coordinate buffer
         const texCoordData = new Int16Array(this.points.length * 2);
@@ -184,7 +184,7 @@ export class OceanBowl extends LiveActor {
                 texCoordData[texCoordIdx++] = (x / (gridAxisPointCount - 1)) * 0x7FFF;
             }
         }
-        this.texCoord0Buffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, texCoordData.buffer);
+        this.texCoord0Buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, texCoordData.buffer);
         assert(texCoordIdx === texCoordData.length);
 
         // Create the index buffer. We have (N-1)*(N-1) quads, N being gridAxisPointCount, and we have 6 indices per quad...
@@ -214,7 +214,7 @@ export class OceanBowl extends LiveActor {
         }
         assert(indexIdx === indexBufferCount);
 
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
@@ -222,12 +222,12 @@ export class OceanBowl extends LiveActor {
             { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -335,7 +335,6 @@ export class OceanBowl extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
 
-        const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.points.length; i++) {
             const p = this.points[i];
             let offs = i * 3;
@@ -343,8 +342,7 @@ export class OceanBowl extends LiveActor {
             this.positionDataF32[offs++] = p.drawPosition[1];
             this.positionDataF32[offs++] = p.drawPosition[2];
         }
-        hostAccessPass.uploadBufferData(this.positionBuffer, 0, this.positionDataU8);
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.positionBuffer, 0, this.positionDataU8);
 
         // Fill in our material params.
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);

@@ -94,8 +94,8 @@ export default class InputManager {
                 this.ondraggingmodechanged();
         });
         this.toplevel.addEventListener('mousemove', (e) => {
-            this.mouseX = e.clientX;
-            this.mouseY = e.clientY;
+            this.mouseX = e.clientX * window.devicePixelRatio;
+            this.mouseY = e.clientY * window.devicePixelRatio;
         });
         this.toplevel.addEventListener('mouseup', (e) => {
             this.buttons = e.buttons;
@@ -227,7 +227,8 @@ export default class InputManager {
 
     private _onWheel = (e: WheelEvent) => {
         e.preventDefault();
-        this.dz += Math.sign(e.deltaY) * -4;
+        const scale = (e.deltaMode === WheelEvent.DOM_DELTA_LINE) ? 40 : 1;
+        this.dz += Math.sign(e.deltaY) * -4 * scale;
         this.callScrollListeners();
     };
 

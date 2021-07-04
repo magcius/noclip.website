@@ -10,15 +10,16 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix } from '../MathHelpers';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix, calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -46,7 +47,7 @@ layout(std140) uniform ub_DrawParams {
     Mat4x2 u_TexMatrix[2];
 };
 
-uniform ub_CombineParameters {
+layout(std140) uniform ub_CombineParameters {
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 #ifdef EXTRA_COMBINE
@@ -133,13 +134,6 @@ void main() {
         if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
-
-        // let twoCycle = RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE;
-        // if (RDP.combineParamsUseCombinedInFirstCycle(combParams) || RDP.combineParamsUseT1InFirstCycle(combParams)) {
-        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
-        // } else if (twoCycle && RDP.combineParamsUseTexelsInSecondCycle(combParams)) {
-        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
-        // }
     }
 
     private generateClamp(): string {
@@ -309,15 +303,9 @@ ${this.generateAlphaTest()}
 }
 
 export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
     canvas.title = texture.name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
@@ -482,11 +470,11 @@ export class RenderData {
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -495,7 +483,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -527,13 +515,13 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x1000);
     const cullBack = !!(m & 0x2000);
     if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     else if (cullFront)
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     else if (cullBack)
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     else
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
 }
 
 const viewMatrixScratch = mat4.create();
@@ -601,7 +589,7 @@ class DrawCallInstance {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.None;
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -639,7 +627,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -889,7 +877,7 @@ export class GeometryData {
     public dynamic: boolean;
 
     // forget any game specific data in the geometry, for now
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = 0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = -1) {
         this.renderData = new RenderData(device, cache, geo.sharedOutput);
         this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0) || !!geo.morphs;
     }
@@ -1120,9 +1108,9 @@ export class GeometryRenderer {
     constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         const geo = this.geometryData.geo;
@@ -1146,8 +1134,8 @@ export class GeometryRenderer {
             this.vertexBufferData = new Float32Array(this.geometryData.renderData.vertexBufferData);
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Dynamic
             );
             this.inputState = device.createInputState(this.geometryData.renderData.inputLayout,
                 [{ buffer: this.vertexBuffer, byteOffset: 0, }],
@@ -1443,11 +1431,9 @@ export class GeometryRenderer {
                 }
             }
         }
-        if (this.geometryData.dynamic) {
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
-            device.submitPass(hostAccessPass);
-        }
+
+        if (this.geometryData.dynamic)
+            device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
 
         // reset sort state
         xluSortScratch.key = 0;
@@ -1526,7 +1512,7 @@ export class FlipbookRenderer {
             this.textureMappings[i].gfxTexture = renderData.textures[i];
             this.textureMappings[i].gfxSampler = renderData.samplers[i];
         }
-        setAttachmentStateSimple(this.megaStateFlags, { blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA });
+        setAttachmentStateSimple(this.megaStateFlags, { blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
         this.mode = flipbookData.mode;
         this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
@@ -1583,7 +1569,7 @@ export class FlipbookRenderer {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        this.megaStateFlags.cullMode = GfxCullMode.NONE;
+        this.megaStateFlags.cullMode = GfxCullMode.None;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -1645,7 +1631,7 @@ export class FlipbookRenderer {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animateFlipbook(texMappingScratch, texMatrixScratch);
@@ -1674,7 +1660,7 @@ export class FlipbookRenderer {
 
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
-        J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+        calcBillboardMatrix(modelViewScratch, modelViewScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         // apply screen transformations after billboarding
         mat4.rotateZ(modelViewScratch, modelViewScratch, this.rotationAngle);
         modelViewScratch[12] += this.screenOffset[0];

@@ -90,35 +90,49 @@ export const enum ZMode {
 
 function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
     if (paramB === BlendParam_B.G_BL_1MA) {
-        if (srcParam === GfxBlendFactor.SRC_ALPHA)
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        if (srcParam === GfxBlendFactor.ONE)
-            return GfxBlendFactor.ZERO;
-        return GfxBlendFactor.ONE;
+        if (srcParam === GfxBlendFactor.SrcAlpha)
+            return GfxBlendFactor.OneMinusSrcAlpha;
+        if (srcParam === GfxBlendFactor.One)
+            return GfxBlendFactor.Zero;
+        return GfxBlendFactor.One;
     }
     if (paramB === BlendParam_B.G_BL_A_MEM)
-        return GfxBlendFactor.DST_ALPHA;
+        return GfxBlendFactor.DstAlpha;
     if (paramB === BlendParam_B.G_BL_1)
-        return GfxBlendFactor.ONE;
+        return GfxBlendFactor.One;
     if (paramB === BlendParam_B.G_BL_0)
-        return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.Zero;
 
     throw "Unknown Blend Param B: "+paramB;
 }
 
 function translateZMode(zmode: ZMode): GfxCompareMode {
     if (zmode === ZMode.ZMODE_OPA)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_XLU)
-        return GfxCompareMode.GREATER;
+        return GfxCompareMode.Greater;
     if (zmode === ZMode.ZMODE_DEC)
-        return GfxCompareMode.GEQUAL;
+        return GfxCompareMode.GreaterEqual;
     throw "Unknown Z mode: " + zmode;
 }
 
-export function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
+export function translateCullMode(geoMode: number): GfxCullMode {
+    if (geoMode & RSP_Geometry.G_CULL_BACK) {
+        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+            return GfxCullMode.FrontAndBack;
+        } else {
+            return GfxCullMode.Back;
+        }
+    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+        return GfxCullMode.Front;
+    } else {
+        return GfxCullMode.None;
+    }
+}
+
+export function translateBlendMode(renderMode: number): Partial<GfxMegaStateDescriptor> {
     const out: Partial<GfxMegaStateDescriptor> = {};
 
     const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
@@ -132,40 +146,28 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
 
         let blendSrcFactor: GfxBlendFactor;
         if (srcFactor === BlendParam_A.G_BL_0) {
-            blendSrcFactor = GfxBlendFactor.ZERO;
+            blendSrcFactor = GfxBlendFactor.Zero;
         } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
             !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
             // this is technically "coverage", admitting blending on edges
-            blendSrcFactor = GfxBlendFactor.ONE;
+            blendSrcFactor = GfxBlendFactor.One;
         } else {
-            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            blendSrcFactor = GfxBlendFactor.SrcAlpha;
         }
         setAttachmentStateSimple(out, {
             blendSrcFactor: blendSrcFactor,
             blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
-            blendMode: GfxBlendMode.ADD,
+            blendMode: GfxBlendMode.Add,
         });
     } else {
         // without FORCE_BL, blending only happens for AA of internal edges
         // since we are ignoring n64 coverage values and AA, this means "never"
         // if dstColor isn't the framebuffer, we'll take care of the "blending" in the shader
         setAttachmentStateSimple(out, {
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ZERO,
-            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.Zero,
+            blendMode: GfxBlendMode.Add,
         });
-    }
-
-    if (geoMode & RSP_Geometry.G_CULL_BACK) {
-        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            out.cullMode = GfxCullMode.FRONT_AND_BACK;
-        } else {
-            out.cullMode = GfxCullMode.BACK;
-        }
-    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        out.cullMode = GfxCullMode.FRONT;
-    } else {
-        out.cullMode = GfxCullMode.NONE;
     }
 
     if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
@@ -885,7 +887,7 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             break;
 
         case F3DZEX_GBI.G_GEOMETRYMODE:
-            state.gSPClearGeometryMode(w0 & 0x00FFFFFF);
+            state.gSPClearGeometryMode(~(w0 & 0x00FFFFFF));
             state.gSPSetGeometryMode(w1);
             break;
 

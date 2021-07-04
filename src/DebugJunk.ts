@@ -1,12 +1,12 @@
 // Misc utilities to help me debug various issues. Mostly garbage.
 
 import { AABB } from "./Geometry";
-import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
+import { Color, Magenta, colorToCSS, Red, Green, Blue, OpaqueBlack } from "./Color";
 import { divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
-import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
+import { nArray, assert, assertExists, hexzero } from "./util";
 import { UI, Slider } from "./ui";
-import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, MathConstants, transformVec3Mat4w0, Vec3UnitX } from "./MathHelpers";
+import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, MathConstants, transformVec3Mat4w0, Vec3UnitX, lerp } from "./MathHelpers";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { downloadBufferSlice, downloadBuffer } from "./DownloadUtils";
 
@@ -157,14 +157,14 @@ export function prepareFrameDebugOverlayCanvas2D(): void {
     }
 }
 
-const p = nArray(8, () => vec4.create());
+const p = nArray(10, () => vec4.create());
 
 function transformToClipSpace(m: ReadonlyMat4, p: vec4[], nPoints: number): void {
     for (let i = 0; i < nPoints; i++)
         vec4.transformMat4(p[i], p[i], m);
 }
 
-function clipLineToPlane(a: vec4, b: vec4, plane: ReadonlyVec4): boolean {
+function clipLineToPlane(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4, plane: ReadonlyVec4): boolean {
     const dotA = vec4.dot(a, plane);
     const dotB = vec4.dot(b, plane);
 
@@ -174,33 +174,36 @@ function clipLineToPlane(a: vec4, b: vec4, plane: ReadonlyVec4): boolean {
     }
 
     const t = dotA / (dotA - dotB);
-    if (dotA < 0.0) {
-        vec4.lerp(a, a, b, t);
-    } else if (dotB < 0.0) {
-        vec4.lerp(b, a, b, t);
-    }
+    if (dotA < 0.0)
+        vec4.lerp(da, a, b, t);
+    else
+        vec4.copy(da, a);
+
+    if (dotB < 0.0)
+        vec4.lerp(db, a, b, t);
+    else
+        vec4.copy(db, b);
 
     return true;
 }
 
 const nearPlane = vec4.fromValues(0, 0, -1, 1);
-function clipLineAndDivide(a: vec4, b: vec4): boolean {
-    if (!clipLineToPlane(a, b, nearPlane))
+function clipLineAndDivide(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4): boolean {
+    if (!clipLineToPlane(da, db, a, b, nearPlane))
         return false;
 
-    divideByW(a, a);
-    divideByW(b, b);
-
+    divideByW(da, da);
+    divideByW(db, db);
     return true;
 }
 
-function drawClipSpaceLine(ctx: CanvasRenderingContext2D, p0: vec4, p1: vec4): void {
-    if (!clipLineAndDivide(p0, p1))
+function drawClipSpaceLine(ctx: CanvasRenderingContext2D, p0: ReadonlyVec4, p1: ReadonlyVec4, s0: vec4, s1: vec4): void {
+    if (!clipLineAndDivide(s0, s1, p0, p1))
         return;
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
-    ctx.moveTo((p0[0] + 1) * cw / 2, ((-p0[1] + 1) * ch / 2));
-    ctx.lineTo((p1[0] + 1) * cw / 2, ((-p1[1] + 1) * ch / 2));
+    ctx.moveTo((s0[0] + 1) * cw / 2, ((-s0[1] + 1) * ch / 2));
+    ctx.lineTo((s1[0] + 1) * cw / 2, ((-s1[1] + 1) * ch / 2));
 }
 
 export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v0: ReadonlyVec3, v1: ReadonlyVec3, color: Color = Magenta, thickness = 2): void {
@@ -209,7 +212,7 @@ export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, clipFromWorldM
     transformToClipSpace(clipFromWorldMatrix, p, 2);
 
     ctx.beginPath();
-    drawClipSpaceLine(ctx, p[0], p[1]);
+    drawClipSpaceLine(ctx, p[0], p[1], p[8], p[9]);
     ctx.closePath();
     ctx.lineWidth = thickness;
     ctx.strokeStyle = colorToCSS(color);
@@ -238,7 +241,7 @@ export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, clipFromWorld
     drawWorldSpaceVector(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, mag, Blue, thickness);
 }
 
-export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, aabb: AABB, m: mat4 | null = null, color: Color = Magenta): void {
+export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, aabb: AABB, m: ReadonlyMat4 | null = null, color: Color = Magenta): void {
     vec4.set(p[0], aabb.minX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[1], aabb.maxX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[2], aabb.minX, aabb.maxY, aabb.minZ, 1.0);
@@ -253,18 +256,18 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldM
     transformToClipSpace(clipFromWorldMatrix, p, 8);
 
     ctx.beginPath();
-    drawClipSpaceLine(ctx, p[0], p[1]);
-    drawClipSpaceLine(ctx, p[1], p[3]);
-    drawClipSpaceLine(ctx, p[3], p[2]);
-    drawClipSpaceLine(ctx, p[2], p[0]);
-    drawClipSpaceLine(ctx, p[4], p[5]);
-    drawClipSpaceLine(ctx, p[5], p[7]);
-    drawClipSpaceLine(ctx, p[7], p[6]);
-    drawClipSpaceLine(ctx, p[6], p[4]);
-    drawClipSpaceLine(ctx, p[0], p[4]);
-    drawClipSpaceLine(ctx, p[1], p[5]);
-    drawClipSpaceLine(ctx, p[2], p[6]);
-    drawClipSpaceLine(ctx, p[3], p[7]);
+    drawClipSpaceLine(ctx, p[0], p[1], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[1], p[3], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[3], p[2], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[2], p[0], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[4], p[5], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[5], p[7], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[7], p[6], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[6], p[4], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[0], p[4], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[1], p[5], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[2], p[6], p[8], p[9]);
+    drawClipSpaceLine(ctx, p[3], p[7], p[8], p[9]);
     ctx.closePath();
     ctx.lineWidth = 2;
     ctx.strokeStyle = colorToCSS(color);
@@ -311,6 +314,27 @@ export function drawWorldSpaceCircle(ctx: CanvasRenderingContext2D, clipFromWorl
     }
 }
 
+export function drawWorldSpaceFan(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, center: ReadonlyVec3, radius: number, front: ReadonlyVec3, angle: number, axis: ReadonlyVec3): void {
+    const nPoints = 32;
+    for (let i = 0; i < nPoints; i++) {
+        const t0 = lerp(-angle, angle, (i + 0) / (nPoints - 1));
+        mat4.fromRotation(scratchMatrix, t0, axis);
+        transformVec3Mat4w0(scratchVec3a, scratchMatrix, front);
+        vec3.scaleAndAdd(scratchVec3a, center, scratchVec3a, radius);
+        if (i === 0)
+            drawWorldSpaceLine(ctx, clipFromWorldMatrix, center, scratchVec3a);
+
+        const t1 = lerp(-angle, angle, (i + 1) / (nPoints - 1));
+        mat4.fromRotation(scratchMatrix, t1, axis);
+        transformVec3Mat4w0(scratchVec3b, scratchMatrix, front);
+        vec3.scaleAndAdd(scratchVec3b, center, scratchVec3b, radius);
+        if (i === nPoints - 1)
+            drawWorldSpaceLine(ctx, clipFromWorldMatrix, center, scratchVec3b);
+
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b);
+    }
+}
+
 export function drawWorldSpaceCylinder(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, center: ReadonlyVec3, radius: number, height: number, axis: ReadonlyVec3, nPoints: number = 32): void {
     for (let i = 0; i < nPoints; i++) {
         const t0 = ((i + 0) / nPoints) * MathConstants.TAU;
@@ -342,6 +366,7 @@ interface TextOptions {
     shadowColor?: string;
     shadowBlur?: number;
     outline?: number;
+    align?: CanvasTextAlign;
 }
 
 export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: Color = Magenta, options: TextOptions = {}): void {
@@ -353,13 +378,14 @@ export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y:
     if (options.outline) {
         const oldLineWidth = ctx.lineWidth;
         ctx.lineWidth = options.outline;
-        ctx.strokeStyle = 'black';
+        ctx.strokeStyle = colorToCSS(OpaqueBlack, color.a);
         ctx.strokeText(text, x, y);
         ctx.lineWidth = oldLineWidth;
     }
 
-    ctx.shadowColor = options.shadowColor ?? 'black';
+    ctx.shadowColor = options.shadowColor ?? colorToCSS(OpaqueBlack, color.a);
     ctx.shadowBlur = options.shadowBlur ?? 0;
+    ctx.textAlign = options.align ?? 'start';
     ctx.fillText(text, x, y);
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 0;
@@ -440,12 +466,16 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
 
     doneButton.onclick = () => {
         const index = slider.getValue();
-        debugFloater.destroy();
+        debugFloater.close();
         done(index);
+    };
+
+    debugFloater.onclose = () => {
+        done(-1);
     };
 }
 
-export function interactiveVizSliderSelect(items: any[], fieldName: string = 'visible', callback: ((item: number) => void) | null = null): void {
+export function interactiveVizSliderSelect(items: any[], fieldName: string = 'visible', callback: ((obj: any, itemIndex: number) => void) | null = null): void {
     const visibleItems = items.filter((v) => v[fieldName]);
 
     interactiveSliderSelect(visibleItems, (i, v) => {
@@ -454,14 +484,14 @@ export function interactiveVizSliderSelect(items: any[], fieldName: string = 'vi
         return item.name || item.constructor.name;
     }, (index) => {
         visibleItems.forEach((v) => v[fieldName] = true);
-        if (index >= visibleItems.length)
+        if (index >= visibleItems.length || index < 0)
             return;
         const item = visibleItems[index];
         const origIndex = items.indexOf(item);
         flashItem(item, fieldName);
-        console.log(`Found item @ ${items.indexOf(item)}:`, item);
+        console.log(`Found item @ ${origIndex}:`, item);
         if (callback !== null)
-            callback(origIndex);
+            callback(item, origIndex);
     });
 }
 
@@ -481,6 +511,46 @@ export function ghidraDecode(s: string, encoding = 'sjis'): string {
     const hex = new Uint8Array([...s.matchAll(/[0-9A-Fa-f]{2}h/g)].map((g) => parseInt(g[0].slice(0, 2), 16)));
     console.log([...hex].map((g) => g.toString(16)));
     return new TextDecoder(encoding).decode(hex);
+}
+
+export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
+    const buffer: ArrayBufferSlice = b_ instanceof ArrayBufferSlice ? b_ : new ArrayBufferSlice(b_);
+    const groupSize_ = 16;
+    let S = '';
+    const arr = buffer.createTypedArray(Uint8Array, offs);
+    length = Math.min(length, arr.byteLength);
+    for (let i = 0; i < length; i += groupSize_) {
+        let groupSize = Math.min(length - i, groupSize_);
+        const addr = offs + i;
+        S += `${hexzero(addr, 8)}    `;
+        for (let j = 0; j < groupSize; j++) {
+            const b = arr[i + j];
+            S += ` ${hexzero(b, 2)}`;
+        }
+        for (let j = groupSize; j < groupSize_; j++)
+            S += `   `;
+
+        S += '  ';
+        for (let j = 0; j < groupSize; j++) {
+            const b = arr[i + j];
+            const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
+            S += `${c}`;
+        }
+        for (let j = groupSize; j < groupSize_; j++)
+            S += ` `;
+
+        S += '\n';
+    }
+    console.log(S);
+}
+
+export function magicstr(v: number): string {
+    v = v & 0xFFFFFFFF;
+    const a0 = String.fromCharCode((v >>> 24) & 0xFF);
+    const a1 = String.fromCharCode((v >>> 16) & 0xFF);
+    const a2 = String.fromCharCode((v >>>  8) & 0xFF);
+    const a3 = String.fromCharCode((v >>>  0) & 0xFF);
+    return a0 + a1 + a2 + a3;
 }
 
 // This goes on window.main and is meant as a global "helper utils" thing.

@@ -160,6 +160,7 @@ const name = "Super Mario Galaxy";
 const sceneDescs = [
     "Observatory",
     new SMG1SceneDesc("Comet Observatory", "AstroGalaxy"),
+    new SMG1SceneDesc("Library", "LibraryRoom"),
     new SMG1SceneDesc("Peach's Castle Gardens", "PeachCastleGardenGalaxy"),
     new SMG1SceneDesc("Gateway Galaxy", "HeavensDoorGalaxy"),
     new SMG1SceneDesc("Boo's Boneyard Galaxy", "TeresaMario2DGalaxy"),

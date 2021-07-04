@@ -31,10 +31,10 @@ export class GeometryData {
 
         const indices = Uint32Array.from(geometry.indices);
         this.indexCount = indices.length;
-        this.positionBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posF32A.buffer);
-        this.normalBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, normalF32A.buffer);
-        this.texcoordBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, texcoordF32A.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indices.buffer);
+        this.positionBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, posF32A.buffer);
+        this.normalBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, normalF32A.buffer);
+        this.texcoordBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, texcoordF32A.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Position
@@ -42,11 +42,11 @@ export class GeometryData {
             { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG,  bufferByteOffset: 0, }, // TexCoord
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,

@@ -8,11 +8,11 @@ import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapMod
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
-import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { Camera, computeViewMatrix, CameraController } from "../Camera";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 
 class Command_Material {
     public materialHelper: GXMaterialHelperGfx;
@@ -145,9 +145,9 @@ class Command_Bin {
             const gfxSampler = device.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
-                minFilter: GfxTexFilterMode.BILINEAR,
-                magFilter: GfxTexFilterMode.BILINEAR,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
                 minLOD: 0,
                 maxLOD: 100,
             });
@@ -185,7 +185,7 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
         return [layers];
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
@@ -194,7 +194,7 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
             this.binCommands[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
     public destroy(device: GfxDevice): void {

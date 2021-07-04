@@ -3,52 +3,35 @@ import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
+import * as GX_Material from '../gx/gx_material';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { ViewerRenderInput } from "../viewer";
-import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
-import * as GX_Material from '../gx/gx_material';
+import { colorNewFromRGBA, Color, colorCopy } from '../Color';
+import { computeViewMatrix } from '../Camera';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
-import { ObjectManager, ObjectInstance, ObjectRenderContext } from './objects';
+import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer, SceneRenderContext } from './render';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst, setGXMaterialOnRenderInst } from './render';
 import { MapInstance, loadMap } from './maps';
-import { dataSubarray, readVec3 } from './util';
-import { ModelInstance, ModelRenderContext, DrawStep } from './models';
+import { dataSubarray, readVec3, vecPitch } from './util';
+import { ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
-import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
-import { computeViewMatrix } from '../Camera';
-import { noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
-
-function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, noViewMatrix: boolean = false, materialParams_ = materialParams, packetParams_ = packetParams): void {
-    materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-    renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
-    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    if (noViewMatrix) {
-        mat4.identity(packetParams_.u_PosMtx[0]);
-    } else {
-        mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    }
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams_);
-    renderInstManager.submitRenderInst(renderInst);
-}
-
-function vecPitch(v: vec3): number {
-    return Math.atan2(v[1], Math.hypot(v[2], v[0]));
-}
 
 interface Light {
     position: vec3;
@@ -62,19 +45,17 @@ export class World {
     public envfxMan: EnvfxManager;
     public blockFetcher: SFABlockFetcher;
     public mapInstance: MapInstance | null = null;
-    public materialFactory: MaterialFactory;
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
     public lights: Set<Light> = new Set();
 
-    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
+    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
     }
 
     private async init(dataFetcher: DataFetcher) {
         this.animController = new SFAAnimationController();
         this.envfxMan = await EnvfxManager.create(this, dataFetcher);
-        this.materialFactory = new MaterialFactory(this.device, this.envfxMan);
         
         const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
         const texFetcherPromise = async () => {
@@ -91,8 +72,8 @@ export class World {
         this.objectMan = objectMan;
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[]): Promise<World> {
-        const self = new World(device, gameInfo, subdirs);
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory): Promise<World> {
+        const self = new World(device, gameInfo, subdirs, materialFactory);
         await self.init(dataFetcher);
         return self;
     }
@@ -101,7 +82,7 @@ export class World {
         this.mapInstance = mapInstance;
     }
 
-    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance {
+    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance | null {
         const typeNum = objParams.getUint16(0x0);
         const pos = readVec3(objParams, 0x8);
 
@@ -112,16 +93,22 @@ export class World {
         obj.setParent(parent);
         this.objectInstances.push(obj);
 
-        obj.mount();
+        try {
+            obj.mount();
+        } catch (e) {
+            console.warn("Mounting object failed with exception:");
+            console.error(e);
+            this.objectInstances.pop();
+            return null;
+        }
 
         return obj;
     }
 
     public spawnObjectsFromRomlist(romlist: DataView, parent: ObjectInstance | null = null) {
         const mapObjectOrigin = vec3.create();
-        if (this.mapInstance !== null) {
+        if (this.mapInstance !== null)
             vec3.set(mapObjectOrigin, 640 * this.mapInstance.info.getOrigin()[0], 0, 640 * this.mapInstance.info.getOrigin()[1]);
-        }
 
         let offs = 0;
         let i = 0;
@@ -130,7 +117,8 @@ export class World {
             const objParams = dataSubarray(romlist, offs, entrySize);
 
             const obj = this.spawnObject(objParams, parent, mapObjectOrigin);
-            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
+            if (obj !== null)
+                console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} romlist-type 0x${obj.commonObjectParams.objType.toString(16)} class ${obj.getType().objClass} id 0x${obj.commonObjectParams.id.toString(16)})`);
 
             offs += entrySize;
             i++;
@@ -141,10 +129,9 @@ export class World {
 const scratchMtx0 = mat4.create();
 const scratchVec0 = vec3.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
+const scratchSceneParams = new SceneParams();
 
 class WorldRenderer extends SFARenderer {
-    private ddraw = new TDDraw();
-    private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
     private enableAmbient: boolean = true;
     private layerSelect: UI.Slider;
@@ -153,15 +140,18 @@ class WorldRenderer extends SFARenderer {
     private showDevObjects: boolean = false;
     private enableLights: boolean = true;
 
-    constructor(private world: World) {
-        super(world.device, world.animController);
+    private materialHelperSky: GXMaterialHelperGfx;
+    private skyddraw = new TDDraw();
+
+    constructor(private world: World, materialFactory: MaterialFactory) {
+        super(world.device, world.animController, materialFactory);
 
         packetParams.clear();
 
-        this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.skyddraw.setVtxDesc(GX.Attr.POS, true);
+        this.skyddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         let mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -175,7 +165,7 @@ class WorldRenderer extends SFARenderer {
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
-        this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
+        this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('atmosphere'));
     }
 
     public createPanels(): UI.Panel[] {
@@ -188,25 +178,25 @@ class WorldRenderer extends SFARenderer {
         this.timeSelect.setValue(4);
         timePanel.contents.append(this.timeSelect.elem);
 
-        const enableAmbient = new UI.Checkbox("Enable ambient lighting", true);
-        enableAmbient.onchanged = () => {
-            this.enableAmbient = enableAmbient.checked;
+        const disableAmbient = new UI.Checkbox("Disable ambient lighting", false);
+        disableAmbient.onchanged = () => {
+            this.enableAmbient = !disableAmbient.checked;
         };
-        timePanel.contents.append(enableAmbient.elem);
+        timePanel.contents.append(disableAmbient.elem);
 
         const layerPanel = new UI.Panel();
         layerPanel.setTitle(UI.LAYER_ICON, 'Layers');
 
-        const showObjects = new UI.Checkbox("Show objects", true);
-        showObjects.onchanged = () => {
-            this.showObjects = showObjects.checked;
+        const hideObjects = new UI.Checkbox("Hide objects", false);
+        hideObjects.onchanged = () => {
+            this.showObjects = !hideObjects.checked;
         };
-        layerPanel.contents.append(showObjects.elem);
+        layerPanel.contents.append(hideObjects.elem);
 
         this.layerSelect = new UI.Slider();
         this.layerSelect.setLabel('Layer');
         this.layerSelect.setRange(0, 16, 1);
-        this.layerSelect.setValue(0);
+        this.layerSelect.setValue(1);
         layerPanel.contents.append(this.layerSelect.elem);
 
         const showDevObjects = new UI.Checkbox("Show developer objects", false);
@@ -215,17 +205,17 @@ class WorldRenderer extends SFARenderer {
         };
         layerPanel.contents.append(showDevObjects.elem);
 
-        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
+        const showDevGeometry = new UI.Checkbox("Show developer map shapes", false);
         showDevGeometry.onchanged = () => {
             this.showDevGeometry = showDevGeometry.checked;
         };
         layerPanel.contents.append(showDevGeometry.elem);
 
-        const enableLights = new UI.Checkbox("Enable lights", true);
-        enableLights.onchanged = () => {
-            this.enableLights = enableLights.checked;
+        const disableLights = new UI.Checkbox("Disable lights", false);
+        disableLights.onchanged = () => {
+            this.enableLights = !disableLights.checked;
         }
-        layerPanel.contents.append(enableLights.elem);
+        layerPanel.contents.append(disableLights.elem);
 
         return [timePanel, layerPanel];
     }
@@ -241,81 +231,134 @@ class WorldRenderer extends SFARenderer {
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
-        this.world.materialFactory.update(this.animController);
+
+        this.materialFactory.update(this.animController);
+
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
-        if (!this.enableAmbient) {
+        if (!this.enableAmbient)
             this.world.envfxMan.setOverrideOutdoorAmbientColor(colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
-        } else {
+        else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
+            
+        const updateCtx: ObjectUpdateContext = {
+            viewerInput,
+        };
+
+        for (let i = 0; i < this.world.objectInstances.length; i++) {
+            const obj = this.world.objectInstances[i];
+
+            // FIXME: Is it really true that objects are updated regardless of layer?
+            // This is required for TrigPlns to work.
+            obj.update(updateCtx);
         }
     }
 
-    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    private renderAtmosphere(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
-        if (tex !== null && tex !== undefined) {
-            this.beginPass(sceneCtx.viewerInput, true);
-            materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
-            materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
-            materialParams.m_TextureMapping[0].width = tex.width;
-            materialParams.m_TextureMapping[0].height = tex.height;
-            materialParams.m_TextureMapping[0].lodBias = 0.0;
-            mat4.identity(materialParams.u_TexMtx[0]);
+        if (tex === null || tex === undefined)
+            return;
 
-            // Extract pitch
-            const cameraFwd = scratchVec0;
-            getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
-            vec3.negate(cameraFwd, cameraFwd);
-            const camPitch = vecPitch(cameraFwd);
-            const camRoll = Math.PI / 2;
+        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
+        // to obtain a local SceneParams buffer
+        const template = this.renderHelper.pushTemplateRenderInst();
 
-            // FIXME: This implementation is adapted from the game, but correctness is not verified.
-            // We should probably use a different technique, since this one works poorly in VR.
-            // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
-            const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
-            const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
-            const t0 = (pitchFactor + fovRollFactor) / tex.height;
-            const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
-            // TODO: Verify to make sure the sky isn't upside-down!
+        // Setup to draw in clip space
+        fillSceneParams(scratchSceneParams, mat4.create(), sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
+        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
+        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
+        fillSceneParamsData(d, offs, scratchSceneParams);
 
-            this.ddraw.beginDraw();
-            this.ddraw.begin(GX.Command.DRAW_QUADS);
-            this.ddraw.position3f32(-1, -1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-            this.ddraw.position3f32(-1, 1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-            this.ddraw.position3f32(1, 1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-            this.ddraw.position3f32(1, -1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-            this.ddraw.end();
+        materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
+        materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
+        materialParams.m_TextureMapping[0].width = tex.width;
+        materialParams.m_TextureMapping[0].height = tex.height;
+        materialParams.m_TextureMapping[0].lodBias = 0.0;
+        mat4.identity(materialParams.u_TexMtx[0]);
 
-            const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
-            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true);
+        // Extract pitch
+        const cameraFwd = scratchVec0;
+        getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
+        vec3.negate(cameraFwd, cameraFwd);
+        const camPitch = vecPitch(cameraFwd);
+        const camRoll = Math.PI / 2;
 
-            this.ddraw.endAndUpload(device, renderInstManager);
-            
-            this.endPass(device);
-        }
+        // FIXME: We should probably use a different technique since this one is poorly suited to VR.
+        // TODO: Implement precise time of day. The game blends textures on the CPU to produce
+        // an atmosphere texture for a given time of day.
+        const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+        const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
+        const t0 = (pitchFactor + fovRollFactor) / tex.height;
+        const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
+
+        this.skyddraw.beginDraw();
+        this.skyddraw.begin(GX.Command.DRAW_QUADS);
+        this.skyddraw.position3f32(-1, -1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+        this.skyddraw.position3f32(-1, 1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.skyddraw.position3f32(1, 1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.skyddraw.position3f32(1, -1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+        this.skyddraw.end();
+
+        const renderInst = this.skyddraw.makeRenderInst(renderInstManager);
+        setGXMaterialOnRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true, materialParams, packetParams);
+
+        this.skyddraw.endAndUpload(renderInstManager);
+
+        renderInstManager.popTemplateRenderInst();
         
+        builder.pushPass((pass) => {
+            pass.setDebugName('Atmosphere');
+            pass.setViewport(sceneCtx.viewerInput.viewport);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.exec((passRenderer) => {
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+    }
+
+    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         // Draw skyscape
-        this.beginPass(sceneCtx.viewerInput);
+        if (this.world.envfxMan.skyscape.objects.length !== 0) {
+            renderInstManager.setCurrentRenderInstList(renderLists.skyscape);
 
-        const objectCtx: ObjectRenderContext = {
-            sceneCtx,
-            showDevGeometry: this.showDevGeometry,
-            setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+            const template = renderInstManager.pushTemplateRenderInst();
+            fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
+
+            const objectCtx: ObjectRenderContext = {
+                sceneCtx,
+                showDevGeometry: this.showDevGeometry,
+                setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+            }
+
+            const eyePos = scratchVec0;
+            getCamPos(eyePos, sceneCtx.viewerInput.camera);
+            for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
+                const obj = this.world.envfxMan.skyscape.objects[i];
+                obj.setPosition(eyePos);
+                obj.addRenderInsts(device, renderInstManager, null, objectCtx);
+            }
+
+            renderInstManager.popTemplateRenderInst();
         }
+    }
 
-        const eyePos = scratchVec0;
-        getCamPos(eyePos, sceneCtx.viewerInput.camera);
-        for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
-            const obj = this.world.envfxMan.skyscape.objects[i];
-            obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, objectCtx);
-        }
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, sceneCtx: SceneRenderContext) {
+        this.renderAtmosphere(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
 
-        this.endPass(device);
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skyscape');
+            pass.setViewport(sceneCtx.viewerInput.viewport);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skyscape Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawListOnPassRenderer(renderLists.skyscape, passRenderer);
+            });
+        });
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
@@ -353,13 +396,15 @@ class WorldRenderer extends SFARenderer {
             }
         }
 
-        for (; i < 8; i++) {
+        for (; i < 8; i++)
             lights[i].reset();
-        }
     }
 
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
-        // Render opaques
+    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+        renderInstManager.setCurrentRenderInstList(renderLists.world[0]);
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
         this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map
         const modelCtx: ModelRenderContext = {
@@ -367,14 +412,9 @@ class WorldRenderer extends SFARenderer {
             showDevGeometry: this.showDevGeometry,
             outdoorAmbientColor: scratchColor0,
             setupLights: this.setupLights.bind(this),
-        }
-
-        this.beginPass(sceneCtx.viewerInput);
-        if (this.world.mapInstance !== null)
-            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx);
+        };
 
         if (this.showObjects) {
-            const ctx = getDebugOverlayCanvas2D();
             for (let i = 0; i < this.world.objectInstances.length; i++) {
                 const obj = this.world.objectInstances[i];
     
@@ -382,35 +422,19 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, modelCtx);
+                    obj.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
         
                     const drawLabels = false;
                     if (drawLabels)
-                        drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                        drawWorldSpaceText(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                 }
             }
         }
-
-        // Custom version of this.endPass(device)
-        this.renderInstManager.popTemplateRenderInst();
-
-        let hostAccessPass = device.createHostAccessPass();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
-        device.submitPass(hostAccessPass);
         
-        const renderIntoPass = (keys: number[]) => {
-            this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
-            for (let i = 0; i < keys.length; i++) {
-                this.renderInstManager.setVisibleByFilterKeyExact(keys[i]);
-                this.renderInstManager.drawOnPassRenderer(device, this.renderPass);
-            }
-            device.submitPass(this.renderPass);
-        };
+        if (this.world.mapInstance !== null)
+            this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
-        renderIntoPass([0, DrawStep.Furs]);
-        renderIntoPass([DrawStep.Waters, 1, 2]);
-
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -419,17 +443,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
     private subdirs: string[];
 
     constructor(public id_: string | string[], subdir_: string | string[], private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
-        if (Array.isArray(id_)) {
+        if (Array.isArray(id_))
             this.id = id_[0];
-        } else {
+        else
             this.id = id_;
-        }
 
-        if (Array.isArray(subdir_)) {
+        if (Array.isArray(subdir_))
             this.subdirs = subdir_;
-        } else {
+        else
             this.subdirs = [subdir_];
-        }
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -437,7 +459,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs);
+        const materialFactory = new MaterialFactory(device);
+        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs, materialFactory);
         
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
@@ -455,9 +478,6 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             world.setMapInstance(mapInstance);
         }
-
-        // Set default atmosphere: "InstallShield Blue"
-        // world.envfxMan.loadEnvfx(0x3c);
 
         const romlistNames: string[] = Array.isArray(this.id_) ? this.id_ : [this.id_];
         let parentObj: ObjectInstance | null = null;
@@ -483,7 +503,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        const renderer = new WorldRenderer(world);
+        const renderer = new WorldRenderer(world, materialFactory);
         return renderer;
     }
 }

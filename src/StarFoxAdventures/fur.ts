@@ -162,11 +162,11 @@ export class FurFactory {
         const height = 64;
         const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
         const gfxSampler = this.device.createSampler({
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -184,16 +184,14 @@ export class FurFactory {
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const [I_, A_] = evaluateHairs(x / 64, y / 64, layer, this.hairs);
-                const I = I_ * 0xff
-                const A = A_ * 0xff
-                plot(x, y, I, I, I, A)
+                const I = I_ * 0xff;
+                const A = A_ * 0xff;
+                plot(x, y, I, I, I, A);
             }
         }
     
-        const hostAccessPass = this.device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        this.device.submitPass(hostAccessPass);
+        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
     
-        return { gfxTexture, gfxSampler, width, height }
+        return { gfxTexture, gfxSampler, width, height };
     }
 }

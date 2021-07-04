@@ -64,3 +64,6 @@ deploy_rsa
 deploy_rsa.pub
 
 *.psd
+
+rust/target/
+data/

@@ -5,7 +5,7 @@ import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { LoadedVertexData } from "../gx/gx_displaylist";
-import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
@@ -26,7 +26,7 @@ class HSD_TObj_Data {
         const [minFilter, mipFilter] = translateTexFilterGfx(this.tobj.minFilt);
         const [magFilter]            = translateTexFilterGfx(this.tobj.magFilt);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = cache.createSampler({
             wrapS: translateWrapModeGfx(this.tobj.wrapS),
             wrapT: translateWrapModeGfx(this.tobj.wrapT),
             minFilter, mipFilter, magFilter,
@@ -1179,13 +1179,13 @@ class HSD_DObj_Instance {
             // Override cull-mode.
             const cullMode = pobj.flags & (HSD_PObjFlags.CULLBACK | HSD_PObjFlags.CULLFRONT);
             if (cullMode === 0)
-                megaStateFlags.cullMode = GfxCullMode.NONE;
+                megaStateFlags.cullMode = GfxCullMode.None;
             else if (cullMode === HSD_PObjFlags.CULLFRONT)
-                megaStateFlags.cullMode = GfxCullMode.FRONT;
+                megaStateFlags.cullMode = GfxCullMode.Front;
             else if (cullMode === HSD_PObjFlags.CULLBACK)
-                megaStateFlags.cullMode = GfxCullMode.BACK;
+                megaStateFlags.cullMode = GfxCullMode.Back;
             else
-                megaStateFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
+                megaStateFlags.cullMode = GfxCullMode.FrontAndBack;
 
             shapeHelper.setOnRenderInst(renderInst);
             this.mobj.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);

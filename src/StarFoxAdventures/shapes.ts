@@ -1,21 +1,21 @@
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
+import { Camera, computeViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeDepthKey, makeSortKeyTranslucent, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
 import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { nArray } from '../util';
-import { MaterialRenderContext, SFAMaterial } from './materials';
-import { DrawStep, ModelRenderContext } from './models';
-import { computeModelView } from './util';
 
+import { MaterialRenderContext, SFAMaterial } from './materials';
+import { ModelRenderContext } from './models';
+import { computeModelView } from './util';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -36,8 +36,8 @@ class MyShapeHelper {
 
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
-                dynamicVertices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
+                dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
 
             buffers.push({
@@ -48,17 +48,17 @@ class MyShapeHelper {
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
             buffers.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
         }
 
-        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
-        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
-            dynamicIndices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
+            dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
         const indexBufferDesc: GfxIndexBufferDescriptor = {
             buffer: this.indexBuffer,
@@ -70,17 +70,13 @@ class MyShapeHelper {
     }
 
     public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
-        const hostAccessPass = device.createHostAccessPass();
-
         if (uploadVertices) {
             for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
-                hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+                device.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
         }
 
         if (uploadIndices)
-            hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
-
-        device.submitPass(hostAccessPass);
+            device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
@@ -112,13 +108,14 @@ export class ShapeGeometry {
     private verticesDirty = true;
 
     private aabb?: AABB;
+    private sortLayer?: number;
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
 
-    constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private isDynamic: boolean) {
+    constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: DataView, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.loadedVertexData = this.vtxLoader.parseDisplayList(displayList);
+        this.loadedVertexData = this.vtxLoader.parseDisplayList(ArrayBufferSlice.fromView(displayList));
         this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
         this.reloadVertices();
     }
@@ -133,6 +130,10 @@ export class ShapeGeometry {
         this.aabb = aabb.clone();
     }
 
+    public setSortLayer(sortLayer: number) {
+        this.sortLayer = sortLayer;
+    }
+
     public setPnMatrixMap(pnMatrixMap: number[], hasFineSkinning: boolean) {
         for (let i = 0; i < pnMatrixMap.length; i++)
             this.pnMatrixMap[i] = pnMatrixMap[i];
@@ -140,7 +141,7 @@ export class ShapeGeometry {
     }
 
     public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
-        matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera, setSortDepthFromAabb: boolean)
+        matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera, overrideSortDepth?: number, overrideSortLayer?: number)
     {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
@@ -163,23 +164,26 @@ export class ShapeGeometry {
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
 
-        if (setSortDepthFromAabb && this.aabb !== undefined) {
-            const center = scratchVec0;
-            this.aabb.centerPoint(center);
-            // FIXME: Should aabb.transform be used instead?
-            vec3.transformMat4(center, center, modelViewMtx);
-            const depth = -center[2];
+        // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
+        // The translucent flag must be set before calling setSortKeyDepth, otherwise errors will occur.
+        if (overrideSortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
+        else if (this.sortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + this.sortLayer);
+        else
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT);
 
-            if (false && getSortKeyLayer(renderInst.sortKey) === GfxRendererLayer.TRANSLUCENT) {
-                const ctx = getDebugOverlayCanvas2D();
-                const wsaabb = this.aabb!.clone();
-                wsaabb.transform(wsaabb, matrix);
-                const wcenter = vec3.create();
-                wsaabb.centerPoint(wcenter);
-                drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, wcenter);
-                drawWorldSpaceAABB(ctx, camera.clipFromWorldMatrix, wsaabb);
-                drawWorldSpaceText(ctx, camera.clipFromWorldMatrix, wcenter, `${depth}`);
-            }
+        if (overrideSortDepth !== undefined)
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, overrideSortDepth);
+        else if (this.aabb !== undefined) {
+            // Set sort depth from center of AABB
+            this.aabb.centerPoint(scratchVec0);
+            // FIXME: Should aabb.transform be used instead?
+            vec3.transformMat4(scratchVec0, scratchVec0, modelViewMtx);
+            const depth = -scratchVec0[2];
+
+            // const debugCtx = getDebugOverlayCanvas2D();
+            // drawWorldSpaceAABB(debugCtx, camera.clipFromWorldMatrix, this.aabb, matrix);
 
             // XXX: the game has a max sort-key of 0x7fffff, whereas we have a max of 0xffff.
             // Hopefully our depth range is adequate.
@@ -204,31 +208,18 @@ export interface MaterialOptions {
 }
 
 export class ShapeMaterial {
-    private gxMaterial: GXMaterial | undefined;
-    private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
     private matCtx: MaterialRenderContext | undefined;
 
     public constructor(private material: SFAMaterial) {
-        this.updateMaterialHelper();
     }
 
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
         this.material = material;
-        this.updateMaterialHelper();
-    }
-
-    private updateMaterialHelper() {
-        if (this.gxMaterial !== this.material.getGXMaterial()) {
-            this.gxMaterial = this.material.getGXMaterial();
-            this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
-        }
     }
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
-        this.updateMaterialHelper();
-        
         if (this.matCtx === undefined) {
             this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
@@ -248,11 +239,10 @@ export class ShapeMaterial {
 
         for (let i = 0; i < 8; i++) {
             const tex = this.material.getTexture(i);
-            if (tex !== undefined) {
+            if (tex !== undefined)
                 tex.setOnTextureMapping(this.materialParams.m_TextureMapping[i], this.matCtx);
-            } else {
+            else
                 this.materialParams.m_TextureMapping[i].reset();
-            }
         }
 
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
@@ -270,12 +260,14 @@ export class ShapeMaterial {
             }
         }
 
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
+        const materialHelper = this.material.getGXMaterialHelper();
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
     }
 
     public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        const materialHelper = this.material.getGXMaterialHelper();
+        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
     }
 }
 
@@ -288,14 +280,14 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], setSortDepthFromAabb: boolean) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, setSortDepthFromAabb);
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
         this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], setSortDepthFromAabb: boolean) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette, setSortDepthFromAabb);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette, overrideSortDepth, overrideSortLayer);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
