@@ -152,6 +152,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('pl_bloodwater'),
     new TeamFortress2SceneDesc('pl_borneo'),
     new TeamFortress2SceneDesc('pl_cactuscanyon'),
+    new TeamFortress2SceneDesc('pl_enclosure_final'),
     new TeamFortress2SceneDesc('pl_fifthcurve_event'),
     new TeamFortress2SceneDesc('pl_frontier_final'),
     new TeamFortress2SceneDesc('pl_goldrush'),

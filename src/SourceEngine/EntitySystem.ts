@@ -179,7 +179,7 @@ export class BaseEntity {
             vec3.copy(this.lightingOrigin, materialParams.position);
         }
 
-        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin, this.modelStudio!.modelData.bbox);
+        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin, this.modelStudio!.modelData.viewBB);
     }
 
     protected modelUpdated(): void {
@@ -521,7 +521,7 @@ class func_door extends BaseToggle {
         if (this.modelBSP !== null)
             this.modelBSP.model.bbox.extents(this.modelExtents);
         else if (this.modelStudio !== null)
-            this.modelStudio.modelData.bbox.extents(this.modelExtents);
+            this.modelStudio.modelData.viewBB.extents(this.modelExtents);
 
         angleVec(scratchVec3a, this.moveDir);
         const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0);
@@ -806,7 +806,7 @@ class trigger_multiple extends BaseEntity {
         if (this.modelBSP !== null)
             return this.modelBSP.model.bbox;
         else if (this.modelStudio !== null)
-            return this.modelStudio.modelData.bbox;
+            return this.modelStudio.modelData.viewBB;
         else
             return null;
     }
@@ -1106,7 +1106,7 @@ class info_overlay_accessor extends BaseEntity {
 
         const overlayid = Number(assertExists(this.entity.overlayid));
         const overlay = assertExists(bspRenderer.bsp.overlays[overlayid]);
-        console.log(`info_overlay_accessor spawn`, overlayid, overlay.surfaceIndex);
+        // console.log(`info_overlay_accessor spawn`, overlayid, overlay.surfaceIndex);
         // Overlays are only on the world spawn right now... (maybe this will always be true?)
         this.overlaySurface = bspRenderer.models[0].surfacesByIdx[overlay.surfaceIndex];
 

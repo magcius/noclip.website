@@ -211,7 +211,7 @@ class DomainData {
 }
 
 const scratchMat4 = mat4.create();
-const scratchBBox = new AABB();
+const scratchAABB = new AABB();
 class MeshFragInstance {
     private gfxSamplers: GfxSampler[] = [];
     private gfxProgram: GfxProgram | null = null;
@@ -300,8 +300,8 @@ class MeshFragInstance {
         renderInst.setMegaStateFlags(this.megaState);
 
         renderInst.sortKey = this.sortKey;
-        scratchBBox.transform(this.meshFragData.meshFrag.bbox, modelMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, scratchBBox);
+        scratchAABB.transform(this.meshFragData.meshFrag.bbox, modelMatrix);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, scratchAABB);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
         let offs = renderInst.allocateUniformBuffer(PsychonautsProgram.ub_MeshFragParams, 16);
