@@ -309,7 +309,7 @@ class ParameterMatrix {
         const sections = findall(S, /([a-z]+) ([^a-z]+)/g);
 
         let cx = 0, cy = 0, sx = 1, sy = 1, r = 0, tx = 0, ty = 0;
-        sections.forEach(([mode, items]) => {
+        sections.forEach(([str, mode, items]) => {
             let values = items.split(' ').map((v) => parseFloat(v));
             if (values[1] === undefined)
                 values[1] = values[0];
