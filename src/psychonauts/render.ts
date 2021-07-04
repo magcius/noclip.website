@@ -3,22 +3,24 @@
 import program_glsl from './program.glsl';
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
 import * as Viewer from "../viewer";
 import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture";
-import { EMeshFrag, EMesh, EScene, EDomain } from "./plb";
+import { EMeshFrag, EMesh, EScene, EDomain, MaterialFlags } from "./plb";
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4 } from "gl-matrix";
-import { computeViewMatrix, Camera } from "../Camera";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4, ReadonlyMat4 } from "gl-matrix";
+import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { nArray, assertExists } from "../util";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { AABB } from '../Geometry';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array): DecodedSurfaceSW {
     switch (format) {
@@ -209,21 +211,26 @@ class DomainData {
 }
 
 const scratchMat4 = mat4.create();
+const scratchBBox = new AABB();
 class MeshFragInstance {
     private gfxSamplers: GfxSampler[] = [];
     private gfxProgram: GfxProgram | null = null;
     private program: PsychonautsProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
+    private megaState: Partial<GfxMegaStateDescriptor> = {};
+    private sortKey: number = 0;
 
     constructor(device: GfxDevice, scene: EScene, textureHolder: PsychonautsTextureHolder, public meshFragData: MeshFragData) {
         this.program = new PsychonautsProgram();
 
-        if (meshFragData.meshFrag.textureIds.length >= 1) {
+        const meshFrag = this.meshFragData.meshFrag;
+
+        if (meshFrag.textureIds.length >= 1) {
             const textureMapping = this.textureMapping[0];
 
-            this.program.defines.set('USE_TEXTURE', '1');
+            this.program.setDefineBool('USE_TEXTURE', true);
 
-            const textureId = meshFragData.meshFrag.textureIds[0];
+            const textureId = meshFrag.textureIds[0];
             const textureReference = scene.textureReferences[textureId];
 
             if (textureHolder.hasTexture(textureReference.textureName)) {
@@ -246,17 +253,41 @@ class MeshFragInstance {
             textureMapping.gfxSampler = gfxSampler;
         }
 
-        if (this.meshFragData.meshFrag.streamColor !== null)
-            this.program.defines.set('USE_VERTEX_COLOR', '1');
+        if (!!(meshFrag.materialFlags & MaterialFlags.AdditiveBlended)) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            setAttachmentStateSimple(this.megaState, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.One,
+            });
+        } else if (!!(meshFrag.materialFlags & MaterialFlags.Alpha)) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            setAttachmentStateSimple(this.megaState, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            });
+        } else {
+            this.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+        }
+
+        if (!!(meshFrag.materialFlags & MaterialFlags.Decal))
+            this.megaState.polygonOffset = true;
+
+        this.megaState.frontFace = GfxFrontFaceMode.CW;
+        if (!!(meshFrag.materialFlags & MaterialFlags.DoubleSided))
+            this.megaState.cullMode = GfxCullMode.None;
+        else
+            this.megaState.cullMode = GfxCullMode.Back;
+
+        if (meshFrag.streamColor !== null)
+            this.program.setDefineBool('USE_VERTEX_COLOR', true);
+
+        // TODO(jstpierre): Some way of determining alpha? Game seems to scan texture... :/
+        this.program.setDefineBool('USE_ALPHA_TEST', true);
     }
 
-    private computeModelMatrix(camera: Camera, modelMatrix: mat4): mat4 {
-        computeViewMatrix(scratchMat4, camera);
-        mat4.mul(scratchMat4, scratchMat4, modelMatrix);
-        return scratchMat4;
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, viewerInput: Viewer.ViewerRenderInput) {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.meshFragData.inputLayout, this.meshFragData.inputState);
         renderInst.drawIndexes(this.meshFragData.indexCount);
@@ -266,10 +297,24 @@ class MeshFragInstance {
 
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setMegaStateFlags(this.megaState);
 
-        let offs = renderInst.allocateUniformBuffer(PsychonautsProgram.ub_MeshFragParams, 12);
-        const mapped = renderInst.mapUniformBufferF32(PsychonautsProgram.ub_MeshFragParams);
-        fillMatrix4x3(mapped, offs, this.computeModelMatrix(viewRenderer.camera, modelMatrix));
+        renderInst.sortKey = this.sortKey;
+        scratchBBox.transform(this.meshFragData.meshFrag.bbox, modelMatrix);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, scratchBBox);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+
+        let offs = renderInst.allocateUniformBuffer(PsychonautsProgram.ub_MeshFragParams, 16);
+        const d = renderInst.mapUniformBufferF32(PsychonautsProgram.ub_MeshFragParams);
+        mat4.mul(scratchMat4, viewerInput.camera.viewMatrix, modelMatrix);
+        offs += fillMatrix4x3(d, offs, scratchMat4);
+
+        const time = viewerInput.time / 4000;
+        const texCoordTransVel = this.meshFragData.meshFrag.texCoordTransVel;
+        const texCoordTransX = texCoordTransVel[0] * time;
+        const texCoordTransY = texCoordTransVel[1] * time;
+        offs += fillVec4(d, offs, texCoordTransX, texCoordTransY);
+
         renderInstManager.submitRenderInst(renderInst);
     }
 
