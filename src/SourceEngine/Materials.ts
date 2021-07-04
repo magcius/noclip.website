@@ -147,7 +147,7 @@ void OutputLinearColor(in vec4 t_Color) {
 
 function fillFogParams(d: Float32Array, offs: number, params: Readonly<FogParams>): number {
     const baseOffs = offs;
-    offs += fillColor(d, offs, params.color);
+    offs += fillGammaColor(d, offs, params.color);
     offs += fillVec4(d, offs, params.start, params.end, params.maxdensity);
     return offs - baseOffs;
 }
