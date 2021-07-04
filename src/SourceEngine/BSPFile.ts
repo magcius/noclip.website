@@ -13,7 +13,7 @@ import BitMap from "../BitMap";
 import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
-import { lerp } from "../MathHelpers";
+import { lerp, saturate } from "../MathHelpers";
 
 const enum LumpType {
     ENTITIES                  = 0,
@@ -250,7 +250,7 @@ function buildDisplacement(disp: BSPDispInfo, corners: ReadonlyVec3[], disp_vert
             v.position[2] += (dvz * dvdist);
             v.lightmapUV[0] = tx;
             v.lightmapUV[1] = ty;
-            v.alpha = dvalpha / 0xFF;
+            v.alpha = saturate(dvalpha / 0xFF);
             aabb.unionPoint(v.position);
         }
     }
