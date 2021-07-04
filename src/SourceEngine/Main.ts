@@ -32,10 +32,24 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { OpaqueBlack } from "../Color";
 import * as UI from "../ui";
 
+export class CustomMount {
+    constructor(public path: string, public files: string[] = []) {
+    }
+
+    public hasEntry(resolvedPath: string): boolean {
+        return this.files.includes(resolvedPath);
+    }
+
+    public fetchFileData(dataFetcher: DataFetcher, resolvedPath: string): Promise<ArrayBufferSlice> {
+        return dataFetcher.fetchData(`${this.path}/${resolvedPath}`);
+    }
+}
+
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public zip: ZipFile[] = [];
     public vpk: VPKMount[] = [];
+    public custom: CustomMount[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -90,6 +104,12 @@ export class SourceFileSystem {
     }
 
     public hasEntry(resolvedPath: string): boolean {
+        for (let i = 0; i < this.custom.length; i++) {
+            const custom = this.custom[i];
+            if (custom.hasEntry(resolvedPath))
+                return true;
+        }
+
         for (let i = 0; i < this.vpk.length; i++) {
             const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
@@ -114,6 +134,12 @@ export class SourceFileSystem {
     }
 
     public async fetchFileData(resolvedPath: string): Promise<ArrayBufferSlice | null> {
+        for (let i = 0; i < this.custom.length; i++) {
+            const custom = this.custom[i];
+            if (custom.hasEntry(resolvedPath))
+                return custom.fetchFileData(this.dataFetcher, resolvedPath);
+        }
+
         for (let i = 0; i < this.vpk.length; i++) {
             const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)

@@ -173,10 +173,6 @@ export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Rea
     fillSceneParams(d, offs, view);
 }
 
-function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
-    vec4.set(dst, scale, scale, x, y);
-}
-
 interface Parameter {
     parse(S: string): void;
     index(i: number): Parameter;
