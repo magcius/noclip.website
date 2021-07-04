@@ -171,10 +171,6 @@ class MaterialGroupInstance {
         });
     }
 
-    public destroy(device: GfxDevice) {
-        device.destroySampler(this.gfxSampler);
-    }
-
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
@@ -575,16 +571,11 @@ export class MREARenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        this.materialGroupInstances.forEach((cmd) => cmd.destroy(device));
         this.bufferCoalescer.destroy(device);
         for (let i = 0; i < this.cmdlData.length; i++)
             this.cmdlData[i].destroy(device);
-        for (let i = 0; i < this.actors.length; i++)
-            this.actors[i].destroy(device);
         for (let i = 0; i < this.surfaceData.length; i++)
             this.surfaceData[i].destroy(device);
-        if (this.overrideSky !== null)
-            this.overrideSky.destroy(device);
     }
 }
 
@@ -683,10 +674,6 @@ export class CMDLRenderer {
 
         renderHelper.renderInstManager.popTemplateRenderInst();
     }
-
-    public destroy(device: GfxDevice): void {
-        this.materialGroupInstances.forEach((cmd) => cmd.destroy(device));
-    }
 }
 
 class Actor {
@@ -701,9 +688,5 @@ class Actor {
             mat4.rotateZ(this.cmdlRenderer.modelMatrix, this.entity.modelMatrix, 8 * (viewerInput.time / 1000));
 
         this.cmdlRenderer.prepareToRender(device, renderHelper, viewerInput);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.cmdlRenderer.destroy(device);
     }
 }
