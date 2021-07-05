@@ -515,6 +515,7 @@ export class BSPModelRenderer {
         this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
 
         // Hacky: Always render all overlays. We should probably do it based on the origin faces...
+        // TODO(jstpierre): Implement displacement leaf selection properly...
         for (let i = 0; i < this.bsp.overlays.length; i++)
             this.bsp.overlays[i].surfaceIndexes.forEach((surfaceIndex) => this.liveSurfaceSet.add(surfaceIndex));
 

@@ -397,6 +397,7 @@ interface OverlaySurface {
     vertex: MeshVertex[];
     indices: number[];
     lightmapData: SurfaceLightmapData;
+    leaflist: number[];
 }
 
 interface OverlayResult {
@@ -489,7 +490,7 @@ function calcBarycentricsFromTri(dst: vec2, p: ReadonlyVec3, p0: ReadonlyVec3, p
     dst[1] = calcWedgeArea2(p2, p0, p) / outerTriArea2;
 }
 
-function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceInfo[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
+function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceInfo[], surfaceToLeafIdx: number[][], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
     const surfaces: OverlaySurface[] = [];
     const surfacePoints = nArray(3, () => new MeshVertex());
     const surfacePlane = new Plane();
@@ -500,6 +501,7 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
 
         const vertex: MeshVertex[] = [];
         const indices: number[] = [];
+        const leaflist: number[] = [];
 
         for (let index = info.startIndex; index < info.startIndex + info.indexCount; index += 3) {
             const overlayPoints = nArray(4, () => new MeshVertex());
@@ -563,8 +565,11 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
         if (vertex.length === 0)
             continue;
 
+        for (let j = 0; j < surfaceToLeafIdx[face].length; j++)
+            ensureInList(leaflist, surfaceToLeafIdx[face][j]);
+
         const lightmapData = info.lightmapData;
-        surfaces.push({ vertex, indices, lightmapData });
+        surfaces.push({ vertex, indices, lightmapData, leaflist });
     }
 
     // Sort surface and merge them together.
@@ -582,6 +587,8 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
         s0.vertex.push(...s1.vertex);
         for (let j = 0; j < s1.indices.length; j++)
             s0.indices.push(baseVertex + s1.indices[j]);
+        for (let j = 0; j < s1.leaflist.length; j++)
+            ensureInList(s0.leaflist, s1.leaflist[j]);
         surfaces.splice(i1, 1);
         i--;
     }
@@ -1390,8 +1397,8 @@ export class BSPFile {
             // World surfaces always want the texcoord0 scale.
             const wantsTexCoord0Scale = true;
 
-            const dstFaceInfo = unmergedFaceInfos[basicSurface.index];
-            dstFaceInfo.startIndex = dstOffsIndex;
+            const unmergedFaceInfo = unmergedFaceInfos[basicSurface.index];
+            unmergedFaceInfo.startIndex = dstOffsIndex;
 
             let indexCount = 0;
             let vertexCount = 0;
@@ -1534,8 +1541,8 @@ export class BSPFile {
                 vertexCount = numedges;
             }
 
-            dstFaceInfo.lightmapData = lightmapData;
-            dstFaceInfo.indexCount = indexCount;
+            unmergedFaceInfo.lightmapData = lightmapData;
+            unmergedFaceInfo.indexCount = indexCount;
 
             dstOffsIndex += indexCount;
             dstIndexBase += vertexCount;
@@ -1611,7 +1618,7 @@ export class BSPFile {
 
             const surfaceIndexes: number[] = [];
 
-            const overlayResult = buildOverlay(overlayInfo, unmergedFaceInfos, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
+            const overlayResult = buildOverlay(overlayInfo, unmergedFaceInfos, surfaceToLeafIdx, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
             for (let j = 0; j < overlayResult.surfaces.length; j++) {
                 const overlaySurface = overlayResult.surfaces[j];
 
@@ -1626,6 +1633,9 @@ export class BSPFile {
                 const vertexCount = overlaySurface.vertex.length;
                 const indexCount = overlaySurface.indices.length;
 
+                if (indexCount === 2124)
+                    debugger;
+
                 const startIndex = dstOffsIndex;
                 const indexData = indexBuffer.addUint32(overlaySurface.indices.length);
                 for (let n = 0; n < overlaySurface.indices.length; n++)
@@ -1636,9 +1646,15 @@ export class BSPFile {
                 const surface: Surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, isDisplacement: false, bbox: null };
 
                 const surfaceIndex = this.surfaces.push(surface) - 1;
+                // Currently, overlays are part of the first model. We need to track origin surfaces / models if this differs...
                 this.models[0].surfaces.push(surfaceIndex);
                 surfaceIndexes.push(surfaceIndex);
+
+                // For each overlay surface, push it to the right leaf.
+                for (let n = 0; n < overlaySurface.leaflist.length; n++)
+                    ensureInList(this.leaflist[overlaySurface.leaflist[n]].surfaces, surfaceIndex);
             }
+
             this.overlays.push({ surfaceIndexes });
         }
 
