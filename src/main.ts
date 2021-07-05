@@ -157,6 +157,7 @@ const sceneGroups = [
     Scenes_HalfLife2DM.sceneGroup,
     Scenes_TeamFortress2.sceneGroup,
     Scenes_Portal.sceneGroup,
+    Scenes_Portal2.sceneGroup,
     "Experimental",
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
@@ -177,7 +178,6 @@ const sceneGroups = [
     Scenes_TheWitness.sceneGroup,
     Scenes_WiiBanner.sceneGroup,
     Scenes_Zelda_OcarinaOfTime_Beta.sceneGroup,
-    Scenes_Portal2.sceneGroup,
     Scenes_CounterStrikeGO.sceneGroup,
 ];
 

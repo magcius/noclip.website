@@ -6,7 +6,7 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, Gfx
 import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
@@ -19,7 +19,6 @@ import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 //#region Base Classes
-const scratchVec4 = vec4.create();
 const scratchColor = colorNewCopy(White);
 
 export const enum StaticLightingMode {
@@ -547,6 +546,9 @@ export abstract class BaseMaterial {
         if (this.isToolMaterial && !renderContext.showToolMaterials)
             return false;
 
+        if (this.paramGetBoolean('$decal') && !renderContext.showDecalMaterials)
+            return false;
+
         return true;
     }
 
@@ -751,6 +753,7 @@ export abstract class BaseMaterial {
         p['$vertexalpha']                  = new ParameterBoolean(false, false);
         p['$nocull']                       = new ParameterBoolean(false, false);
         p['$nofog']                        = new ParameterBoolean(false, false);
+        p['$decal']                        = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture(true);
@@ -3231,7 +3234,7 @@ export class LightCache {
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
     private ambientCube: AmbientCube = newAmbientCube();
 
-    constructor(private bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
+    constructor(bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
         this.leaf = bspfile.findLeafIdxForPoint(pos);
         assert(this.leaf >= 0);
 

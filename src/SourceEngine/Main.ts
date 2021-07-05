@@ -29,7 +29,6 @@ import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
-import { OpaqueBlack } from "../Color";
 import * as UI from "../ui";
 
 export class CustomMount {
@@ -956,6 +955,7 @@ export class SourceRenderContext {
     public showTriggerDebug = false;
     public showFog = true;
     public showExpensiveWater = true;
+    public showDecalMaterials = true;
 
     constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
         this.renderCache = new GfxRenderCache(device);
@@ -1318,6 +1318,12 @@ export class SourceRenderer implements SceneGfx {
             this.renderContext.showToolMaterials = v;
         };
         renderHacksPanel.contents.appendChild(showToolMaterials.elem);
+        const showDecalMaterials = new UI.Checkbox('Show Decals', true);
+        showDecalMaterials.onchanged = () => {
+            const v = showDecalMaterials.checked;
+            this.renderContext.showDecalMaterials = v;
+        };
+        renderHacksPanel.contents.appendChild(showDecalMaterials.elem);
         const showTriggerDebug = new UI.Checkbox('Show Trigger Debug', false);
         showTriggerDebug.onchanged = () => {
             const v = showTriggerDebug.checked;
@@ -1345,7 +1351,7 @@ export class SourceRenderer implements SceneGfx {
     }
 
     public prepareToRender(viewerInput: ViewerRenderInput): void {
-        const renderContext = this.renderContext, device = this.renderContext.device;
+        const renderContext = this.renderContext, device = renderContext.device;
 
         // globalTime is in seconds.
         renderContext.globalTime = viewerInput.time / 1000.0;

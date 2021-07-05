@@ -1872,4 +1872,8 @@ export class BSPFile {
                 this.markLeafSet(dst, aabb, node.child1);
         }
     }
+
+    public destroy(): void {
+        // Nothing to do...
+    }
 }

@@ -12,8 +12,10 @@ export async function createScene(context: SceneContext, filesystem: SourceFileS
         renderContext = new SourceRenderContext(context.device, filesystem);
     const renderer = new SourceRenderer(context, renderContext);
 
-    const bsp = await context.dataFetcher.fetchData(mapPath);
-    const bspFile = new BSPFile(bsp, mapId);
+    const bspFile = await context.dataShare.ensureObject(`SourceEngine/${mapPath}`, async () => {
+        const bsp = await context.dataFetcher.fetchData(mapPath);
+        return new BSPFile(bsp, mapId);
+    });
 
     if (bspFile.pakfile !== null)
         filesystem.pakfiles.push(bspFile.pakfile);
