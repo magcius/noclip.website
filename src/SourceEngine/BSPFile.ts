@@ -2,8 +2,8 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray, leftPad } from "../util";
-import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
+import { readString, assertExists, assert, nArray } from "../util";
+import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, BSPEntity } from "./VMT";
@@ -71,7 +71,8 @@ export interface SurfaceLightmapData {
 }
 
 export interface Overlay {
-    surfaceIndex: number;
+    surfaceIndexes: number[];
+    tri: ReadonlyVec3[];
 }
 
 export interface Surface {
@@ -123,6 +124,12 @@ interface TexinfoMapping {
 function calcTexCoord(dst: vec2, v: ReadonlyVec3, m: TexinfoMapping): void {
     dst[0] = v[0]*m.s[0] + v[1]*m.s[1] + v[2]*m.s[2] + m.s[3];
     dst[1] = v[0]*m.t[0] + v[1]*m.t[1] + v[2]*m.t[2] + m.t[3];
+}
+
+function calcLightmapTexcoords(dst: vec2, uv: ReadonlyVec2, lightmapData: SurfaceLightmapData, lightmapPage: LightmapPackerPage): void {
+    // Place into the lightmap page.
+    dst[0] = (uv[0] + lightmapData.pagePosX) / lightmapPage.width;
+    dst[1] = (uv[1] + lightmapData.pagePosY) / lightmapPage.height;
 }
 
 export interface BSPNode {
@@ -202,6 +209,9 @@ interface BSPDispInfo {
     sideLength: number;
     vertexCount: number;
 }
+
+// 3 pos, 4 normal, 4 tangent, 4 uv
+const VERTEX_SIZE = (3+4+4+4);
 
 class MeshVertex {
     public position = vec3.create();
@@ -338,6 +348,235 @@ function buildDisplacement(disp: BSPDispInfo, corners: ReadonlyVec3[], disp_vert
     }
 
     return { vertex, aabb };
+}
+
+function fetchVertexFromBuffer(dst: MeshVertex, vertexData: Float32Array, i: number): void {
+    let offsVertex = i * VERTEX_SIZE;
+
+    // Position
+    dst.position[0] = vertexData[offsVertex++];
+    dst.position[1] = vertexData[offsVertex++];
+    dst.position[2] = vertexData[offsVertex++];
+
+    // Normal
+    dst.normal[0] = vertexData[offsVertex++];
+    dst.normal[1] = vertexData[offsVertex++];
+    dst.normal[2] = vertexData[offsVertex++];
+    dst.alpha = vertexData[offsVertex++];
+
+    // Tangent
+    offsVertex += 3;
+    // Tangent Sign and Lightmap Offset
+    offsVertex++;
+
+    // Texture UV
+    dst.uv[0] = vertexData[offsVertex++];
+    dst.uv[1] = vertexData[offsVertex++];
+
+    // Lightmap UV
+    dst.lightmapUV[0] = vertexData[offsVertex++];
+    dst.lightmapUV[1] = vertexData[offsVertex++];
+}
+
+class UnmergedFaceInfo {
+    public startIndex: number = 0;
+    public indexCount: number = 0;
+    public lightmapData: SurfaceLightmapData;
+}
+
+class OverlayInfo {
+    public faces: number[];
+    public origin = vec3.create();
+    public normal = vec3.create();
+    public basis = nArray(2, () => vec3.create());
+    public planePoints = nArray(4, () => vec2.create());
+    public uv00 = vec2.create();
+    public uv11 = vec2.create();
+}
+
+interface OverlaySurface {
+    vertex: MeshVertex[];
+    indices: number[];
+    lightmapData: SurfaceLightmapData;
+}
+
+interface OverlayResult {
+    surfaces: OverlaySurface[];
+    tri: ReadonlyVec3[];
+}
+
+function buildOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
+    assert(dst.length === 4);
+
+    vec2.set(dst[0].uv, overlayInfo.uv00[0], overlayInfo.uv00[1]);
+    vec2.set(dst[1].uv, overlayInfo.uv00[0], overlayInfo.uv11[1]);
+    vec2.set(dst[2].uv, overlayInfo.uv11[0], overlayInfo.uv11[1]);
+    vec2.set(dst[3].uv, overlayInfo.uv11[0], overlayInfo.uv00[1]);
+
+    for (let i = 0; i < dst.length; i++) {
+        const v = dst[i];
+        vec3.scaleAndAdd(v.position, overlayInfo.origin, overlayInfo.basis[0], overlayInfo.planePoints[i][0]);
+        vec3.scaleAndAdd(v.position, v.position,         overlayInfo.basis[1], overlayInfo.planePoints[i][1]);
+    }
+}
+
+function buildSurfacePlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
+    assert(dst.length === 3);
+
+    for (let i = 0; i < dst.length; i++) {
+        const v = dst[i];
+
+        // Project onto overlay plane.
+        vec3.sub(scratchVec3, v.position, overlayInfo.origin);
+        const m = vec3.dot(overlayInfo.normal, scratchVec3);
+        vec3.scaleAndAdd(v.position, v.position, overlayInfo.normal, -m);
+    }
+}
+
+function clipOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo, p0: MeshVertex, p1: MeshVertex, p2: MeshVertex): void {
+    const plane = new Plane();
+    // First compute our clip plane.
+    vec3.sub(p0.normal, p1.position, p0.position);
+    vec3.normalize(p0.normal, p0.normal);
+    vec3.cross(p0.normal, overlayInfo.normal, p0.normal);
+    plane.set3(p0.normal, -vec3.dot(p0.normal, p0.position));
+
+    if (plane.distanceVec3(p2.position) > 0.0)
+        plane.negate();
+
+    const distance: number[] = [];
+
+    const vertex = dst.slice();
+    dst.length = 0;
+
+    for (let i = 0; i < vertex.length; i++) {
+        const v = vertex[i];
+        distance[i] = plane.distanceVec3(v.position);
+    }
+
+    for (let i = 0; i < vertex.length; i++) {
+        const i0 = i, i1 = (i + 1) % distance.length;
+        const d0 = distance[i0], d1 = distance[i1];
+        const v0 = vertex[i0], v1 = vertex[i1];
+
+        if (d0 <= 0.0)
+            dst.push(v0);
+
+        // Not crossing plane; no need to split.
+        if (Math.sign(d0) === Math.sign(d1) || d0 === 0.0 || d1 === 0.0)
+            continue;
+
+        // Crossing plane, need to split.
+        const t = d0 / (d0 - d1);
+
+        const newVertex = new MeshVertex();
+        vec3.lerp(newVertex.position, v0.position, v1.position, t);
+        vec2.lerp(newVertex.uv, v0.uv, v1.uv, t);
+        vec2.lerp(newVertex.lightmapUV, v0.lightmapUV, v1.lightmapUV, t);
+
+        // Don't care about alpha / normal.
+        dst.push(newVertex);
+    }
+}
+
+function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceInfo[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
+    const surfaces: OverlaySurface[] = [];
+    const surfacePoints = nArray(3, () => new MeshVertex());
+    const surfacePlane = new Plane();
+
+    const tri: ReadonlyVec3[] = [];
+    for (let i = 0; i < overlayInfo.faces.length; i++) {
+        const face = overlayInfo.faces[i];
+        const info = unmergedFaceInfos[face];
+
+        const vertex: MeshVertex[] = [];
+        const indices: number[] = [];
+
+        for (let index = info.startIndex; index < info.startIndex + info.indexCount; index += 3) {
+            const overlayPoints = nArray(4, () => new MeshVertex());
+            buildOverlayPlane(overlayPoints, overlayInfo);
+
+            fetchVertexFromBuffer(surfacePoints[0], vertexData, indexData[index + 0]);
+            fetchVertexFromBuffer(surfacePoints[1], vertexData, indexData[index + 1]);
+            fetchVertexFromBuffer(surfacePoints[2], vertexData, indexData[index + 2]);
+
+            // Store our surface plane for later, so we can re-project back to it...
+            // XXX(jstpierre): Not the cleanest way to compute the surface normal... seems to work though?
+            surfacePlane.set(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
+
+            buildSurfacePlane(surfacePoints, overlayInfo);
+
+            // TODO(jstpierre): Assign lightmapUV through barycentrics.
+
+            /*
+            for (let n = 0; n < surfacePoints.length; n++) {
+                tri.push(vec3.clone(surfacePoints[(n+0)%surfacePoints.length].position));
+                tri.push(vec3.clone(surfacePoints[(n+1)%surfacePoints.length].position));
+            }
+            */
+
+            // Clip the overlay plane to the surface.
+            for (let j0 = 0; j0 < surfacePoints.length; j0++) {
+                const j1 = (j0 + 1) % surfacePoints.length, j2 = (j0 + 2) % surfacePoints.length;
+                const p0 = surfacePoints[j0], p1 = surfacePoints[j1], p2 = surfacePoints[j2];
+                clipOverlayPlane(overlayPoints, overlayInfo, p0, p1, p2);
+            }
+
+            if (overlayPoints.length < 3) {
+                // Not enough to make a triangle. Just skip.
+                continue;
+            }
+
+            for (let j = 0; j < overlayPoints.length; j++) {
+                const v = overlayPoints[j];
+
+                // Set the decal's normal to be the face normal...
+                surfacePlane.getNormal(v.normal);
+
+                // Project back down to the surface plane.
+                const distance = surfacePlane.distanceVec3(v.position);
+                const m = distance / Math.min(1.0, vec3.dot(v.normal, overlayInfo.normal));
+                vec3.scaleAndAdd(v.position, v.position, overlayInfo.normal, -m);
+
+                // Offset the normal just a smidgen...
+                vec3.scaleAndAdd(v.position, v.position, v.normal, 0.1);
+            }
+
+            // We're done! Append the overlay plane to the list.
+            const baseVertex = vertex.length;
+            vertex.push(...overlayPoints);
+            const dstIndexOffs = indices.length;
+            indices.length = indices.length + getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, overlayPoints.length);
+            convertToTrianglesRange(indices, dstIndexOffs, GfxTopology.TRIFAN, baseVertex, overlayPoints.length);
+        }
+
+        if (vertex.length === 0)
+            continue;
+
+        const lightmapData = info.lightmapData;
+        surfaces.push({ vertex, indices, lightmapData });
+    }
+
+    // Sort surface and merge them together.
+    surfaces.sort((a, b) => b.lightmapData.pageIndex - a.lightmapData.pageIndex);
+
+    for (let i = 1; i < surfaces.length; i++) {
+        const i0 = i - 1, i1 = i;
+        const s0 = surfaces[i0], s1 = surfaces[i1];
+
+        if (s0.lightmapData.pageIndex !== s1.lightmapData.pageIndex)
+            continue;
+
+        // Merge s1 into s0, then delete s0.
+        let baseVertex = s0.vertex.length;
+        s0.vertex.push(...s1.vertex);
+        for (let j = 0; j < s1.indices.length; j++)
+            s0.indices.push(baseVertex + s1.indices[j]);
+        surfaces.splice(i1, 1);
+        i--;
+    }
+
+    return { surfaces, tri };
 }
 
 function magicint(S: string): number {
@@ -535,9 +774,21 @@ class ResizableArrayBuffer {
         return new Float32Array(this.buffer, offs, count);
     }
 
+    public getAsUint32Array(): Uint32Array {
+        return new Uint32Array(this.buffer, 0, this.byteSize >>> 2);
+    }
+
+    public getAsFloat32Array(): Float32Array {
+        return new Float32Array(this.buffer, 0, this.byteSize >>> 2);
+    }
+
     public finalize(): ArrayBuffer {
         return ArrayBuffer_slice.call(this.buffer, 0, this.byteSize);
     }
+}
+
+function calcLightmapBumpOffset(lightmapData: SurfaceLightmapData, lightmapPage: LightmapPackerPage): number {
+    return lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / lightmapPage.height) : 1;
 }
 
 const scratchVec3 = vec3.create();
@@ -997,8 +1248,6 @@ export class BSPFile {
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         basicSurfaces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
-        // 3 pos, 4 normal, 4 tangent, 4 uv
-        const vertexSize = (3+4+4+4);
         const vertexBuffer = new ResizableArrayBuffer();
         const indexBuffer = new ResizableArrayBuffer();
 
@@ -1007,10 +1256,54 @@ export class BSPFile {
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
         const disp_verts = getLumpData(LumpType.DISP_VERTS).createTypedArray(Float32Array);
 
-        const scratchVec2 = vec2.create();
-        const scratchPosition = vec3.create();
         const scratchTangentS = vec3.create();
         const scratchTangentT = vec3.create();
+
+        const unmergedFaceInfos: UnmergedFaceInfo[] = nArray(faceCount, () => new UnmergedFaceInfo());
+
+        const addVertexDataToBuffer = (vertex: MeshVertex[], tex: Texinfo, center: vec3 | null, tangentW: number) => {
+            const vertexData = vertexBuffer.addFloat32(vertex.length * VERTEX_SIZE);
+
+            let dstOffsVertex = 0;
+            for (let j = 0; j < vertex.length; j++) {
+                const v = vertex[j];
+
+                // Position
+                vertexData[dstOffsVertex++] = v.position[0];
+                vertexData[dstOffsVertex++] = v.position[1];
+                vertexData[dstOffsVertex++] = v.position[2];
+
+                if (center !== null)
+                    vec3.scaleAndAdd(center, center, v.position, 1 / vertex.length);
+
+                // Normal
+                vertexData[dstOffsVertex++] = v.normal[0];
+                vertexData[dstOffsVertex++] = v.normal[1];
+                vertexData[dstOffsVertex++] = v.normal[2];
+                vertexData[dstOffsVertex++] = v.alpha;
+
+                // Tangent
+                vec3.cross(scratchTangentS, v.normal, scratchTangentT);
+                vertexData[dstOffsVertex++] = scratchTangentS[0];
+                vertexData[dstOffsVertex++] = scratchTangentS[1];
+                vertexData[dstOffsVertex++] = scratchTangentS[2];
+                // Tangent Sign and Lightmap Offset
+                vertexData[dstOffsVertex++] = tangentW;
+
+                // Texture UV
+                vertexData[dstOffsVertex++] = v.uv[0];
+                vertexData[dstOffsVertex++] = v.uv[1];
+
+                // Lightmap UV
+                if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
+                    vertexData[dstOffsVertex++] = 0.5;
+                    vertexData[dstOffsVertex++] = 0.5;
+                } else {
+                    vertexData[dstOffsVertex++] = v.lightmapUV[0];
+                    vertexData[dstOffsVertex++] = v.lightmapUV[1];
+                }
+            }
+        };
 
         // now build buffers
         let dstOffsIndex = 0;
@@ -1024,8 +1317,6 @@ export class BSPFile {
             const isTranslucent = !!(tex.flags & TexinfoFlags.TRANS);
             const center = isTranslucent ? vec3.create() : null;
 
-            const lightmapPageIndex = basicSurface.lightmapData.pageIndex;
-
             // Determine if we can merge with the previous surface for output.
             let mergeSurface: Surface | null = null;
             if (i > 0) {
@@ -1037,7 +1328,7 @@ export class BSPFile {
                     canMerge = false;
                 else if (texinfoa[prevBasicSurface.texinfo].texName !== texName)
                     canMerge = false;
-                else if (prevBasicSurface.lightmapData.pageIndex !== lightmapPageIndex)
+                else if (prevBasicSurface.lightmapData.pageIndex !== basicSurface.lightmapData.pageIndex)
                     canMerge = false;
                 else if (surfaceToModelIdx[prevBasicSurface.index] !== surfaceToModelIdx[basicSurface.index])
                     canMerge = false;
@@ -1078,56 +1369,21 @@ export class BSPFile {
             const tangentSSign = vec3.dot(basicSurface.plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = basicSurface.lightmapData;
+            const lightmapPageIndex = lightmapData.pageIndex;
             const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
-            const lightmapBumpOffset = lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / lightmapPage.height) : 1;
+            const lightmapBumpOffset = calcLightmapBumpOffset(lightmapData, lightmapPage);
+
+            const tangentW = tangentSSign * lightmapBumpOffset;
 
             // World surfaces always want the texcoord0 scale.
             const wantsTexCoord0Scale = true;
 
-            const addVertexDataToBuffer = (vertex: MeshVertex[]) => {
-                const vertexData = vertexBuffer.addFloat32(vertex.length * vertexSize);
+            const dstFaceInfo = unmergedFaceInfos[basicSurface.index];
+            dstFaceInfo.startIndex = dstOffsIndex;
 
-                let dstOffsVertex = 0;
-                for (let j = 0; j < vertex.length; j++) {
-                    const v = vertex[j];
-
-                    // Position
-                    vertexData[dstOffsVertex++] = v.position[0];
-                    vertexData[dstOffsVertex++] = v.position[1];
-                    vertexData[dstOffsVertex++] = v.position[2];
-
-                    if (center !== null)
-                        vec3.scaleAndAdd(center, center, v.position, 1 / vertex.length);
-
-                    // Normal
-                    vertexData[dstOffsVertex++] = v.normal[0];
-                    vertexData[dstOffsVertex++] = v.normal[1];
-                    vertexData[dstOffsVertex++] = v.normal[2];
-                    vertexData[dstOffsVertex++] = v.alpha;
-
-                    // Tangent
-                    vec3.cross(scratchTangentS, v.normal, scratchTangentT);
-                    vertexData[dstOffsVertex++] = scratchTangentS[0];
-                    vertexData[dstOffsVertex++] = scratchTangentS[1];
-                    vertexData[dstOffsVertex++] = scratchTangentS[2];
-                    // Tangent Sign and Lightmap Offset
-                    vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
-
-                    // Texture UV
-                    vertexData[dstOffsVertex++] = v.uv[0];
-                    vertexData[dstOffsVertex++] = v.uv[1];
-
-                    // Lightmap UV
-                    if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
-                        vertexData[dstOffsVertex++] = 0.5;
-                        vertexData[dstOffsVertex++] = 0.5;
-                    } else {
-                        // Place into lightmap page.
-                        vertexData[dstOffsVertex++] = (v.lightmapUV[0] + lightmapData.pagePosX) / lightmapPage.width;
-                        vertexData[dstOffsVertex++] = (v.lightmapUV[1] + lightmapData.pagePosY) / lightmapPage.height;
-                    }
-                }
-            };
+            let indexCount = 0;
+            let vertexCount = 0;
+            let surface: Surface | null = null;
 
             // vertex data
             if (dispinfo >= 0) {
@@ -1164,35 +1420,35 @@ export class BSPFile {
                     // Put lightmap UVs in luxel space.
                     v.lightmapUV[0] = v.lightmapUV[0] * m_LightmapTextureSizeInLuxels[0] + 0.5;
                     v.lightmapUV[1] = v.lightmapUV[1] * m_LightmapTextureSizeInLuxels[1] + 0.5;
+
+                    calcLightmapTexcoords(v.lightmapUV, v.lightmapUV, lightmapData, lightmapPage);
                 }
 
-                addVertexDataToBuffer(result.vertex);
+                addVertexDataToBuffer(result.vertex, tex, center, tangentW);
 
                 // Build grid index buffer.
                 const indexData = indexBuffer.addUint32(((disp.sideLength - 1) ** 2) * 6);
-                let m = 0;
                 for (let y = 0; y < disp.sideLength - 1; y++) {
                     for (let x = 0; x < disp.sideLength - 1; x++) {
                         const base = dstIndexBase + y * disp.sideLength + x;
-                        indexData[dstOffsIndex + m++] = base;
-                        indexData[dstOffsIndex + m++] = base + disp.sideLength;
-                        indexData[dstOffsIndex + m++] = base + disp.sideLength + 1;
-                        indexData[dstOffsIndex + m++] = base;
-                        indexData[dstOffsIndex + m++] = base + disp.sideLength + 1;
-                        indexData[dstOffsIndex + m++] = base + 1;
+                        indexData[dstOffsIndex + indexCount++] = base;
+                        indexData[dstOffsIndex + indexCount++] = base + disp.sideLength;
+                        indexData[dstOffsIndex + indexCount++] = base + disp.sideLength + 1;
+                        indexData[dstOffsIndex + indexCount++] = base;
+                        indexData[dstOffsIndex + indexCount++] = base + disp.sideLength + 1;
+                        indexData[dstOffsIndex + indexCount++] = base + 1;
                     }
                 }
 
-                assert(m === ((disp.sideLength - 1) ** 2) * 6);
+                assert(indexCount === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: result.aabb };
+                surface = { texName, onNode, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: result.aabb };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
 
-                dstOffsIndex += m;
-                dstIndexBase += disp.vertexCount;
+                vertexCount = disp.vertexCount;
             } else {
                 const vertex = nArray(numedges, () => new MeshVertex());
                 for (let j = 0; j < numedges; j++) {
@@ -1221,11 +1477,14 @@ export class BSPFile {
                     calcTexCoord(v.lightmapUV, v.position, tex.lightmapMapping);
                     v.lightmapUV[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
                     v.lightmapUV[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
+
+                    calcLightmapTexcoords(v.lightmapUV, v.lightmapUV, lightmapData, lightmapPage);
                 }
-                addVertexDataToBuffer(vertex);
+
+                addVertexDataToBuffer(vertex, tex, center, tangentW);
 
                 // index buffer
-                const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
                 const indexData = indexBuffer.addUint32(indexCount);
                 if (m_NumPrims !== 0) {
                     const primOffs = firstPrimID * 0x0A;
@@ -1250,7 +1509,7 @@ export class BSPFile {
                     convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
                 }
 
-                let surface = mergeSurface;
+                surface = mergeSurface;
 
                 if (surface === null) {
                     surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null };
@@ -1260,9 +1519,14 @@ export class BSPFile {
                 surface.indexCount += indexCount;
                 surface.lightmapData.push(lightmapData);
 
-                dstOffsIndex += indexCount;
-                dstIndexBase += numedges;
+                vertexCount = numedges;
             }
+
+            dstFaceInfo.lightmapData = lightmapData;
+            dstFaceInfo.indexCount = indexCount;
+
+            dstOffsIndex += indexCount;
+            dstIndexBase += vertexCount;
 
             // Mark surfaces as part of the right model and leaf.
             const surfaceIndex = this.surfaces.length - 1;
@@ -1279,7 +1543,7 @@ export class BSPFile {
         const overlays = getLumpData(LumpType.OVERLAYS).createDataView();
         const testOverlayHacks = true;
 
-        for (let idx = 0; testOverlayHacks && idx < overlays.byteLength;) {
+        for (let i = 0, idx = 0; idx < overlays.byteLength; i++) {
             const nId = overlays.getUint32(idx + 0x00, true);
             const nTexinfo = overlays.getUint16(idx + 0x04, true);
             const m_nFaceCountAndRenderOrder = overlays.getUint16(idx + 0x06, true);
@@ -1287,7 +1551,8 @@ export class BSPFile {
             const m_nRenderOrder = m_nFaceCountAndRenderOrder >>> 14;
             idx += 0x08;
 
-            const aFaces = nArray(m_nFaceCount, (i) => overlays.getInt32(idx + 0x04 * i, true));
+            const overlayInfo = new OverlayInfo();
+            overlayInfo.faces = nArray(m_nFaceCount, (i) => overlays.getInt32(idx + 0x04 * i, true));
             idx += 0x100;
 
             const flU0 = overlays.getFloat32(idx + 0x00, true);
@@ -1308,85 +1573,65 @@ export class BSPFile {
             const vecUVPoint3Z = overlays.getFloat32(idx + 0x3C, true);
             idx += 0x40;
 
-            const vecOrigin = readVec3(overlays, idx + 0x00);
+            overlayInfo.origin[0] = overlays.getFloat32(idx + 0x00, true);
+            overlayInfo.origin[1] = overlays.getFloat32(idx + 0x04, true);
+            overlayInfo.origin[2] = overlays.getFloat32(idx + 0x08, true);
             idx += 0x0C;
 
-            const vecBasisNormal2 = readVec3(overlays, idx + 0x00);
+            overlayInfo.normal[0] = overlays.getFloat32(idx + 0x00, true);
+            overlayInfo.normal[1] = overlays.getFloat32(idx + 0x04, true);
+            overlayInfo.normal[2] = overlays.getFloat32(idx + 0x08, true);
             idx += 0x0C;
 
             // Basis normal 0 is encoded in Z of vecUVPoint data.
-            const vecBasisNormal0 = vec3.fromValues(vecUVPoint0Z, vecUVPoint1Z, vecUVPoint2Z);
-            const vecBasisNormal1 = vec3.cross(vec3.create(), vecBasisNormal2, vecBasisNormal0);
+            vec3.set(overlayInfo.basis[0], vecUVPoint0Z, vecUVPoint1Z, vecUVPoint2Z);
+            vec3.cross(overlayInfo.basis[1], overlayInfo.normal, overlayInfo.basis[0]);
 
             // Compute the four corners of the overlay.
-            const vecUVPoints = [
-                vecUVPoint0X, vecUVPoint0Y,
-                vecUVPoint1X, vecUVPoint1Y,
-                vecUVPoint2X, vecUVPoint2Y,
-                vecUVPoint3X, vecUVPoint3Y,
-            ] as const;
+            vec2.set(overlayInfo.uv00, flU0, flV0);
+            vec2.set(overlayInfo.uv11, flU1, flV1);
 
+            vec2.set(overlayInfo.planePoints[0], vecUVPoint0X, vecUVPoint0Y);
+            vec2.set(overlayInfo.planePoints[1], vecUVPoint1X, vecUVPoint1Y);
+            vec2.set(overlayInfo.planePoints[2], vecUVPoint2X, vecUVPoint2Y);
+            vec2.set(overlayInfo.planePoints[3], vecUVPoint3X, vecUVPoint3Y);
+ 
             const center = vec3.create();
-
-            const indexCount = 6;
-            const vertexCount = 4;
-
-            const vertexData = vertexBuffer.addFloat32(vertexCount * vertexSize);
-            let dstOffsVertex = 0;
-            for (let j = 0; j < vertexCount; j++) {
-                vec3.copy(scratchPosition, vecOrigin);
-                vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal0, vecUVPoints[j * 2 + 0]);
-                vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal1, vecUVPoints[j * 2 + 1]);
-
-                // Offset just a smidgen...
-                vec3.scaleAndAdd(scratchPosition, scratchPosition, vecBasisNormal2, 0.5);
-
-                vec3.scaleAndAdd(center, center, scratchPosition, 1/4);
-
-                // Position.
-                vertexData[dstOffsVertex++] = scratchPosition[0];
-                vertexData[dstOffsVertex++] = scratchPosition[1];
-                vertexData[dstOffsVertex++] = scratchPosition[2];
-
-                // Normal should be the original surface normal, but for now, just set this plane.
-                vertexData[dstOffsVertex++] = vecBasisNormal2[0];
-                vertexData[dstOffsVertex++] = vecBasisNormal2[1];
-                vertexData[dstOffsVertex++] = vecBasisNormal2[2];
-                vertexData[dstOffsVertex++] = 1.0; // Vertex Alpha (Unused)
-
-                // Tangent S
-                vertexData[dstOffsVertex++] = vecBasisNormal0[0];
-                vertexData[dstOffsVertex++] = vecBasisNormal0[1];
-                vertexData[dstOffsVertex++] = vecBasisNormal0[2];
-                vertexData[dstOffsVertex++] = 1.0; // sign / bump offset (huh?)
-
-                // Texture Coord
-                // {0,0}, {0,1}, {1,1}, {1,0}
-                const texCoordRawS = (j === 2 || j === 3) ? 1 : 0;
-                const texCoordRawT = (j === 1 || j === 2) ? 1 : 0;
-
-                const texCoordS = texCoordRawS === 1 ? flU1 : flU0;
-                const texCoordT = texCoordRawT === 1 ? flV1 : flV0;
-                vertexData[dstOffsVertex++] = texCoordS;
-                vertexData[dstOffsVertex++] = texCoordT;
-
-                // Lightmap Coord -- this needs to be per-face.
-                vertexData[dstOffsVertex++] = 0;
-                vertexData[dstOffsVertex++] = 0;
-            }
-
-            const startIndex = dstOffsIndex;
-            const indexData = indexBuffer.addUint32(indexCount);
-            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, vertexCount);
-            dstOffsIndex += indexCount;
-            dstIndexBase += vertexCount;
-
             const tex = texinfoa[nTexinfo];
-            const texName = tex.texName;
-            const surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, isDisplacement: false, bbox: null, overlays: [] };
-            const surfaceIndex = this.surfaces.push(surface) - 1;
-            this.models[0].surfaces.push(surfaceIndex);
-            this.overlays.push({ surfaceIndex });
+
+            const surfaceIndexes: number[] = [];
+
+            let tri: ReadonlyVec3[] = [];
+            const overlayResult = buildOverlay(overlayInfo, unmergedFaceInfos, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
+            for (let j = 0; testOverlayHacks && j < overlayResult.surfaces.length; j++) {
+                const overlaySurface = overlayResult.surfaces[j];
+                tri = overlayResult.tri;
+
+                const lightmapData = overlaySurface.lightmapData;
+                const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
+                const lightmapBumpOffset = calcLightmapBumpOffset(overlaySurface.lightmapData, lightmapPage);
+                // Don't care about tangentS of decals right now...
+                const tangentW = lightmapBumpOffset;
+
+                addVertexDataToBuffer(overlaySurface.vertex, tex, center, tangentW);
+
+                const vertexCount = overlaySurface.vertex.length;
+                const indexCount = overlaySurface.indices.length;
+
+                const startIndex = dstOffsIndex;
+                const indexData = indexBuffer.addUint32(overlaySurface.indices.length);
+                for (let n = 0; n < overlaySurface.indices.length; n++)
+                    indexData[dstOffsIndex++] = dstIndexBase + overlaySurface.indices[n];
+                dstIndexBase += vertexCount;
+
+                const texName = tex.texName;
+                const surface: Surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, isDisplacement: false, bbox: null };
+
+                const surfaceIndex = this.surfaces.push(surface) - 1;
+                this.models[0].surfaces.push(surfaceIndex);
+                surfaceIndexes.push(surfaceIndex);
+            }
+            this.overlays.push({ surfaceIndexes, tri });
         }
 
         this.vertexData = vertexBuffer.finalize();
@@ -1567,7 +1812,7 @@ export class BSPFile {
         if (w2 !== null)
             return w2;
 
-            return null;
+        return null;
     }
 
     public markClusterSet(dst: number[], aabb: AABB, nodeid: number = 0): void {

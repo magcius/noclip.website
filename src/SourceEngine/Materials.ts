@@ -38,7 +38,6 @@ export const enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     FramebufferDepth = `framebuffer-depth`,
     WaterReflection  = `water-reflection`,
-    DeferredLightmap = `deferred-lightmap`,
 }
 
 export class FogParams {
@@ -134,12 +133,10 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 
 #ifdef FRAG
 layout(location = 0) out vec4 o_Color0;
-layout(location = 1) out vec4 o_Color1;
 
 void OutputLinearColor(in vec4 t_Color) {
     // We do gamma correction in post now, as we need linear blending.
     o_Color0.rgba = t_Color.rgba;
-    o_Color1.rgba = vec4(0.0);
 }
 #endif
 `;
@@ -206,7 +203,7 @@ class ParameterTexture {
             if (this.isEnvmap) {
                 if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null)
                     filename = entityParams.lightCache.envCubemap.filename;
-                else if (materialCache.usingHDR)
+                else if (materialCache.isUsingHDR())
                     filename = `${filename}.hdr`;
             }
             this.texture = await materialCache.fetchVTF(filename, this.isSRGB);
@@ -431,21 +428,49 @@ function createParameterAuto(value: any): Parameter | null {
     return null;
 }
 
-function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {
-    for (const key in vmt) {
-        if (!key.startsWith('$'))
+function parseKey(key: string, defines: string[]): string | null {
+    const question = key.indexOf('?');
+    if (question >= 0) {
+        let define = key.slice(0, question);
+
+        let negate = false;
+        if (key.charAt(0) === '!') {
+            define = define.slice(1);
+            negate = true;
+        }
+
+        let isValid = defines.includes(define);
+        if (negate)
+            isValid = !isValid;
+
+        if (!isValid)
+            return null;
+
+        key = key.slice(question + 1);
+    }
+
+    return key;
+}
+
+function setupParametersFromVMT(param: ParameterMap, vmt: VMT, defines: string[]): void {
+    for (const vmtKey in vmt) {
+        const destKey = parseKey(vmtKey, defines);
+        if (destKey === null)
             continue;
-        const value = vmt[key];
-        if (key in param) {
+        if (!destKey.startsWith('$'))
+            continue;
+
+        const value = vmt[vmtKey];
+        if (destKey in param) {
             // Easy case -- existing parameter.
-            param[key].parse(value as string);
+            param[destKey].parse(value as string);
         } else {
             // Hard case -- auto-detect type from string.
             const p = createParameterAuto(value);
             if (p !== null) {
-                param[key] = p;
+                param[destKey] = p;
             } else {
-                console.warn("Could not parse parameter", key, value);
+                console.warn("Could not parse parameter", destKey, value);
             }
         }
     }
@@ -480,7 +505,6 @@ export abstract class BaseMaterial {
     public hasVertexColorInput = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
-    public wantsDeferredLightmap = false;
     public wantsTexCoord0Scale = false;
     public isTranslucent = false;
     public isIndirect = false;
@@ -500,7 +524,7 @@ export abstract class BaseMaterial {
     public async init(renderContext: SourceRenderContext) {
         this.initParameters();
 
-        this.setupParametersFromVMT();
+        this.setupParametersFromVMT(renderContext);
         if (this.vmt.proxies !== undefined)
             this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
 
@@ -530,10 +554,9 @@ export abstract class BaseMaterial {
         // Nothing by default.
     }
 
-    private findFallbackBlock(shaderTypeName: string): any | null {
-        const fallbackSuffixes = [`gpu>=1`, `gpu>=2`, `>=dx90_20b`, `>=dx90`, `>dx90`, `ldr`, `srgb`, `dx9`];
-        for (let i = 0; i < fallbackSuffixes.length; i++) {
-            const suffix = fallbackSuffixes[i];
+    private findFallbackBlock(shaderTypeName: string, materialDefines: string[]): any | null {
+        for (let i = 0; i < materialDefines.length; i++) {
+            const suffix = materialDefines[i];
             let block: any;
 
             block = this.vmt[suffix];
@@ -548,13 +571,15 @@ export abstract class BaseMaterial {
         return null;
     }
 
-    private setupParametersFromVMT(): void {
-        setupParametersFromVMT(this.param, this.vmt);
+    private setupParametersFromVMT(renderContext: SourceRenderContext): void {
+        const materialDefines = renderContext.materialCache.materialDefines;
+
+        setupParametersFromVMT(this.param, this.vmt, materialDefines);
 
         const shaderTypeName = this.vmt._Root.toLowerCase();
-        const fallback = this.findFallbackBlock(shaderTypeName);
+        const fallback = this.findFallbackBlock(shaderTypeName, materialDefines);
         if (fallback !== null)
-            setupParametersFromVMT(this.param, fallback);
+            setupParametersFromVMT(this.param, fallback, materialDefines);
     }
 
     protected paramGetTexture(name: string): ParameterTexture {
@@ -838,9 +863,6 @@ export abstract class BaseMaterial {
         if (this.isIndirect)
             return view.indirectList;
 
-        if (this.wantsDeferredLightmap)
-            return view.deferredDecalList;
-
         return view.mainList;
     }
 }
@@ -923,7 +945,6 @@ layout(std140) uniform ub_SkinningParams {
 #endif
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
-#define HAS_PROJECTED_TEXCOORD (USE_DEFERRED_LIGHTMAP)
 
 // Base, Detail
 varying vec4 v_TexCoord0;
@@ -931,11 +952,6 @@ varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
 // Bumpmap
 varying vec4 v_TexCoord2;
-
-#ifdef HAS_PROJECTED_TEXCOORD
-// Projected TexCoord
-varying vec3 v_TexCoord3;
-#endif
 
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
@@ -1197,12 +1213,6 @@ void mainVS() {
     v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #endif
-
-#ifdef HAS_PROJECTED_TEXCOORD
-    // Convert from projected position to texture space.
-    vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
-    v_TexCoord3.xyz = vec3(t_ProjTexCoord, gl_Position.w);
-#endif
 }
 #endif
 
@@ -1451,11 +1461,6 @@ void mainPS() {
     t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
 #endif
 
-#ifdef USE_DEFERRED_LIGHTMAP
-    vec2 t_ProjTexCoord = v_TexCoord3.xy / v_TexCoord3.z;
-    t_DiffuseLighting.rgb = texture(SAMPLER_2D(u_Texture[3]), t_ProjTexCoord).rgb;
-#endif
-
     t_Albedo *= v_Color;
 
 #ifdef USE_ALPHATEST
@@ -1592,7 +1597,6 @@ void mainPS() {
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
-    o_Color1.rgba = vec4(t_DeferredLightmapOutput.rgb, 0.0);
 }
 #endif
 `;
@@ -1791,15 +1795,8 @@ class Material_Generic extends BaseMaterial {
         }
 
         if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
-            if (this.wantsDeferredLightmap) {
-                this.wantsLightmap = false;
-                this.program.setDefineBool('USE_DEFERRED_LIGHTMAP', true);
-            } else {
-                this.wantsLightmap = true;
-                this.program.setDefineBool('USE_LIGHTMAP', true);
-            }
-        } else {
-            this.wantsDeferredLightmap = false;
+            this.wantsLightmap = true;
+            this.program.setDefineBool('USE_LIGHTMAP', true);
         }
 
         if (this.shaderType === GenericShaderType.WorldVertexTransition) {
@@ -1911,8 +1908,6 @@ class Material_Generic extends BaseMaterial {
         this.updateTextureMappings(renderContext);
         if (this.wantsLightmap)
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
-        else if (this.wantsDeferredLightmap)
-            this.textureMapping[3].lateBinding = LateBindingTexture.DeferredLightmap;
 
         // TODO(jstpierre): The cost of reprocessing shaders every frame toggling between clip planes and not-clip planes is too massive right now...
         // GfxRenderCache happens *post*-preprocess, and the expensive thing appears to be preprocessGLSL.
@@ -2153,6 +2148,8 @@ layout(std140) uniform ub_ObjectParams {
     Mat4x4 u_ProjectedDepthToWorld;
 };
 
+#define u_RefractAmount (u_RefractTint.a)
+#define u_ReflectAmount (u_ReflectTint.a)
 #define u_WaterFogRange (u_WaterFogColor.a)
 
 // Refract Coordinates
@@ -2245,7 +2242,7 @@ void mainPS() {
     vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
 
     float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
-    float t_RefractAmount = u_RefractTint.a * t_RefractFogBendAmount;
+    float t_RefractAmount = u_RefractAmount * t_RefractFogBendAmount;
     vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractAmount);
     vec4 t_RefractSample = texture(SAMPLER_2D(u_Texture[0], t_RefractTexCoord));
     vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
@@ -2260,7 +2257,7 @@ void mainPS() {
 
     vec3 t_ReflectColor = vec3(0.0);
 #ifdef USE_EXPENSIVE_REFLECT
-    float t_ReflectAmount = u_ReflectTint.a * 0.25;
+    float t_ReflectAmount = u_ReflectAmount * 0.25;
     vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
     // Reflection texture is stored upside down
     t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
@@ -2313,6 +2310,7 @@ layout(std140) uniform ub_ObjectParams {
 #define u_FlowBumpStrength                 (u_Misc[2].x)
 #define u_FlowColorDisplacementStrength    (u_Misc[2].y)
 #define u_FlowColorLerpExp                 (u_Misc[2].z)
+#define u_WaterBlendFactor                 (u_Misc[2].w)
 
 // Base Texture, Lightmap
 varying vec4 v_TexCoord0;
@@ -2456,7 +2454,7 @@ void mainPS() {
 #endif
 
     t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_RefractAmount);
-    t_FinalColor.a = 1.0;
+    t_FinalColor.a = u_WaterBlendFactor;
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -2514,6 +2512,7 @@ class Material_Water extends BaseMaterial {
         p['$color_flow_displacebynormalstrength'] = new ParameterNumber(0.0025);
 
         p['$lightmapwaterfog']             = new ParameterBoolean(false, false);
+        p['$waterblendfactor']             = new ParameterNumber(1.0);
         p['$fogcolor']                     = new ParameterColor(0, 0, 0);
 
         // Hacky way to get RT depth
@@ -2605,7 +2604,8 @@ class Material_Water extends BaseMaterial {
             offs += fillVec4(d, offs,
                 this.paramGetNumber('$flow_bumpstrength'),
                 this.paramGetNumber('$color_flow_displacebynormalstrength'),
-                this.paramGetNumber('$color_flow_lerpexp'));
+                this.paramGetNumber('$color_flow_lerpexp'),
+                this.paramGetNumber('$waterblendfactor'));
         } else if (this.shaderType === WaterShaderType.Normal) {
             this.paramGetTexture('$refracttexture').fillTextureMapping(this.textureMapping[0], 0);
             this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
@@ -2956,8 +2956,9 @@ export class MaterialCache {
     private textureCache = new Map<string, VTF>();
     private texturePromiseCache = new Map<string, Promise<VTF>>();
     private materialPromiseCache = new Map<string, Promise<VMT>>();
+    private usingHDR: boolean = false;
     public systemTextures: SystemTextures;
-    public usingHDR: boolean = false;
+    public materialDefines: string[] = [];
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
@@ -2966,6 +2967,17 @@ export class MaterialCache {
         this.textureCache.set('_rt_WaterReflection', new VTF(device, cache, null, '_rt_WaterReflection', false, LateBindingTexture.WaterReflection));
         this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.systemTextures = new SystemTextures(device);
+    }
+
+    public setUsingHDR(hdr: boolean): void {
+        this.usingHDR = hdr;
+
+        this.materialDefines = [`gpu>=1`, `gpu>=2`, `gpu>=3`, `>=dx90_20b`, `>=dx90`, `>dx90`, `srgb`, `srgb_pc`, `dx9`];
+        this.materialDefines.push(this.usingHDR ? `hdr` : `ldr`);
+    }
+
+    public isUsingHDR(): boolean {
+        return this.usingHDR;
     }
 
     public async bindLocalCubemap(cubemap: Cubemap) {
