@@ -12,7 +12,7 @@ import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, saturate } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -3513,7 +3513,102 @@ function lightmapPackRuntime(dst: Uint8ClampedArray, dstOffs: number, src: Float
     }
 }
 
+class LightmapColor {
+    public r: number = 0;
+    public g: number = 0;
+    public b: number = 0;
+    public origMax: number = 0;
+
+    public calcMax(): number {
+        return Math.max(this.r, this.g, this.b);
+    }
+
+    public fetch(src: Float32Array, offs: number): number {
+        this.r = src[offs++];
+        this.g = src[offs++];
+        this.b = src[offs++];
+        return 3;
+    }
+
+    public fill(dst: Uint8ClampedArray, offs: number): number {
+        dst[offs++] = Math.round(this.r * 255.0);
+        dst[offs++] = Math.round(this.g * 255.0);
+        dst[offs++] = Math.round(this.b * 255.0);
+        // offs++;
+        return 4;
+    }
+}
+
+const scratchColors = [new LightmapColor(), new LightmapColor(), new LightmapColor()];
+const scratchColorSort = [0, 1, 2];
 function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
+    const srcSize = texelCount * 3;
+    const dstSize = texelCount * 4;
+
+    let srcOffs0 = srcOffs, srcOffs1 = srcOffs + srcSize * 1, srcOffs2 = srcOffs + srcSize * 2, srcOffs3 = srcOffs + srcSize * 3;
+    let dstOffs0 = dstOffs, dstOffs1 = dstOffs + dstSize * 1, dstOffs2 = dstOffs + dstSize * 2, dstOffs3 = dstOffs + dstSize * 3;
+    for (let i = 0; i < texelCount; i++) {
+        const sr = linearToLightmap(src[srcOffs0++]), sg = linearToLightmap(src[srcOffs0++]), sb = linearToLightmap(src[srcOffs0++]);
+
+        // Lightmap 0 is easy (unused tho).
+        dst[dstOffs0++] = Math.round(sr * 255.0);
+        dst[dstOffs0++] = Math.round(sg * 255.0);
+        dst[dstOffs0++] = Math.round(sb * 255.0);
+        dstOffs0++;
+
+        const c = scratchColors;
+        srcOffs1 += c[0].fetch(src, srcOffs1);
+        srcOffs2 += c[1].fetch(src, srcOffs2);
+        srcOffs3 += c[2].fetch(src, srcOffs3);
+
+        const avgr = sr / Math.max((c[0].r + c[1].r + c[2].r) / 3.0, MathConstants.EPSILON);
+        const avgg = sg / Math.max((c[0].g + c[1].g + c[2].g) / 3.0, MathConstants.EPSILON);
+        const avgb = sb / Math.max((c[0].b + c[1].b + c[2].b) / 3.0, MathConstants.EPSILON);
+        for (let j = 0; j < 3; j++) {
+            const cc = c[j];
+            cc.r *= avgr;
+            cc.g *= avgg;
+            cc.b *= avgb;
+            cc.origMax = cc.calcMax();
+        }
+
+        // Clamp & redistribute colors if necessary
+        if (c[0].origMax > 1.0 || c[1].origMax > 1.0 || c[2].origMax > 1.0) {
+            const sort = scratchColorSort;
+            for (let j = 0; j < 3; j++) { sort[j] = j; }
+            sort.sort((a, b) => c[b].origMax - c[a].origMax);
+
+            for (let j = 0; j < c.length; j++) {
+                const c0 = c[sort[j]];
+                if (c0.origMax > 1.0) {
+                    const max = c0.calcMax();
+                    const m = (max - 1.0) / max;
+                    const mr = m * c0.r, mg = m * c0.g, mb = m * c0.b;
+
+                    c0.r -= mr;
+                    c0.g -= mg;
+                    c0.b -= mb;
+
+                    const c1 = c[sort[(j+1)%3]];
+                    c1.r += mr * 0.5;
+                    c1.g += mg * 0.5;
+                    c1.b += mb * 0.5;
+
+                    const c2 = c[sort[(j+2)%3]];
+                    c2.r += mr * 0.5;
+                    c2.g += mg * 0.5;
+                    c2.b += mb * 0.5;
+                }
+            }
+        }
+
+        dstOffs1 += c[0].fill(dst, dstOffs1);
+        dstOffs2 += c[1].fill(dst, dstOffs2);
+        dstOffs3 += c[2].fill(dst, dstOffs3);
+    }
+}
+
+function lightmapPackRuntimeBumpmap2(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
     const srcSize = texelCount * 3;
     const dstSize = texelCount * 4;
 

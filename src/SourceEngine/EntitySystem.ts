@@ -1256,11 +1256,13 @@ abstract class BaseLight extends BaseEntity {
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
-        if (this.isOn) {
-            const pattern = this.pattern !== null ? this.pattern : 'm';
-            this.setPattern(renderContext, pattern);
-        } else {
-            this.setPattern(renderContext, 'a');
+        if (this.style >= 32) {
+            if (this.isOn) {
+                const pattern = this.pattern !== null ? this.pattern : 'm';
+                this.setPattern(renderContext, pattern);
+            } else {
+                this.setPattern(renderContext, 'a');
+            }
         }
     }
 }
