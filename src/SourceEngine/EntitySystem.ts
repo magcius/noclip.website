@@ -3,12 +3,12 @@ import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { colorCopy, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1, Vec3Zero } from '../MathHelpers';
-import { assert, assertExists, fallbackUndefined } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer } from './Main';
+import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
+import { assert, assertExists, fallbackUndefined, nullify } from '../util';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
@@ -1182,6 +1182,83 @@ class color_correction extends BaseEntity {
     }
 }
 
+abstract class BaseLight extends BaseEntity {
+    private style: number;
+    private defaultstyle: number;
+    private pattern: string | null = null;
+    private isOn: boolean = false;
+    private queuedIsOn: boolean | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.style = Number(fallbackUndefined(this.entity.style, '-1'));
+        this.defaultstyle = Number(fallbackUndefined(this.entity.defaultstyle, '-1'));
+        this.pattern = nullify(this.entity.pattern);
+
+        if (this.entity.pitch !== undefined) {
+            const pitch = Number(this.entity.pitch);
+            this.angles[0] = pitch;
+        }
+
+        const enum SpawnFlags {
+            StartOff = 0x01,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+
+        if (this.style >= 32) {
+            if (this.pattern === null && this.defaultstyle >= 0)
+                this.pattern = renderContext.worldLightingState.stylePatterns[this.defaultstyle];
+
+            this.isOn = !(spawnflags & SpawnFlags.StartOff);
+        } else {
+            this.isOn = true;
+        }
+
+        this.registerInput('turnon', this.input_turnon.bind(this));
+        this.registerInput('turnoff', this.input_turnoff.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('setpattern', this.input_setpattern.bind(this));
+    }
+
+    private setPattern(renderContext: SourceRenderContext, pattern: string): void {
+        renderContext.worldLightingState.stylePatterns[this.style] = pattern;
+    }
+
+    private input_turnon(): void {
+        this.isOn = true;
+    }
+
+    private input_turnoff(): void {
+        this.isOn = false;
+    }
+
+    private input_toggle(): void {
+        this.isOn = !this.isOn;
+    }
+
+    private input_setpattern(entitySystem: EntitySystem, value: string): void {
+        this.pattern = value;
+        this.isOn = true;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.isOn) {
+            const pattern = this.pattern !== null ? this.pattern : 'm';
+            this.setPattern(renderContext, pattern);
+        } else {
+            this.setPattern(renderContext, 'a');
+        }
+    }
+}
+
+class light extends BaseLight { public static classname = 'light'; }
+class light_spot extends BaseLight { public static classname = 'light_spot'; }
+class light_glspot extends BaseLight { public static classname = 'light_glspot'; }
+class light_environment extends BaseLight { public static classname = 'light_environment'; }
+
 interface EntityFactory {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
     classname: string;
@@ -1220,6 +1297,10 @@ export class EntityFactoryRegistry {
         this.registerFactory(material_modify_control);
         this.registerFactory(info_overlay_accessor);
         this.registerFactory(color_correction);
+        this.registerFactory(light);
+        this.registerFactory(light_spot);
+        this.registerFactory(light_glspot);
+        this.registerFactory(light_environment);
     }
 
     public registerFactory(factory: EntityFactory): void {

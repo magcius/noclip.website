@@ -1567,7 +1567,7 @@ export class BSPFile {
         if (w2 !== null)
             return w2;
 
-            return null;
+        return null;
     }
 
     public markClusterSet(dst: number[], aabb: AABB, nodeid: number = 0): void {

@@ -725,7 +725,7 @@ export class BSPRenderer {
         this.entitySystem = new EntitySystem(renderContext.entityFactoryRegistry);
 
         // TODO(jtspierre): Ugly ugly ugly
-        renderContext.materialCache.usingHDR = this.bsp.usingHDR;
+        renderContext.materialCache.setUsingHDR(this.bsp.usingHDR);
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
 
         const device = renderContext.device, cache = renderContext.renderCache;
@@ -1194,6 +1194,8 @@ class SourceWorldViewRenderer {
             });
 
             pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+            if (this.drawDeferredDecals)
+                pass.pushDebugThumbnail(GfxrAttachmentSlot.Color1);
         });
 
         if (this.drawDeferredDecals && this.mainView.deferredDecalList.renderInsts.length > 0) {
