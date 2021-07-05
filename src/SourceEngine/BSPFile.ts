@@ -72,7 +72,6 @@ export interface SurfaceLightmapData {
 
 export interface Overlay {
     surfaceIndexes: number[];
-    tri: ReadonlyVec3[];
 }
 
 export interface Surface {
@@ -402,7 +401,6 @@ interface OverlaySurface {
 
 interface OverlayResult {
     surfaces: OverlaySurface[];
-    tri: ReadonlyVec3[];
 }
 
 function buildOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
@@ -484,7 +482,6 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
     const surfacePoints = nArray(3, () => new MeshVertex());
     const surfacePlane = new Plane();
 
-    const tri: ReadonlyVec3[] = [];
     for (let i = 0; i < overlayInfo.faces.length; i++) {
         const face = overlayInfo.faces[i];
         const info = unmergedFaceInfos[face];
@@ -507,13 +504,6 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
             buildSurfacePlane(surfacePoints, overlayInfo);
 
             // TODO(jstpierre): Assign lightmapUV through barycentrics.
-
-            /*
-            for (let n = 0; n < surfacePoints.length; n++) {
-                tri.push(vec3.clone(surfacePoints[(n+0)%surfacePoints.length].position));
-                tri.push(vec3.clone(surfacePoints[(n+1)%surfacePoints.length].position));
-            }
-            */
 
             // Clip the overlay plane to the surface.
             for (let j0 = 0; j0 < surfacePoints.length; j0++) {
@@ -576,7 +566,7 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
         i--;
     }
 
-    return { surfaces, tri };
+    return { surfaces };
 }
 
 function magicint(S: string): number {
@@ -1541,8 +1531,6 @@ export class BSPFile {
 
         // Slice up overlays
         const overlays = getLumpData(LumpType.OVERLAYS).createDataView();
-        const testOverlayHacks = true;
-
         for (let i = 0, idx = 0; idx < overlays.byteLength; i++) {
             const nId = overlays.getUint32(idx + 0x00, true);
             const nTexinfo = overlays.getUint16(idx + 0x04, true);
@@ -1601,11 +1589,9 @@ export class BSPFile {
 
             const surfaceIndexes: number[] = [];
 
-            let tri: ReadonlyVec3[] = [];
             const overlayResult = buildOverlay(overlayInfo, unmergedFaceInfos, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
-            for (let j = 0; testOverlayHacks && j < overlayResult.surfaces.length; j++) {
+            for (let j = 0; j < overlayResult.surfaces.length; j++) {
                 const overlaySurface = overlayResult.surfaces[j];
-                tri = overlayResult.tri;
 
                 const lightmapData = overlaySurface.lightmapData;
                 const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
@@ -1631,7 +1617,7 @@ export class BSPFile {
                 this.models[0].surfaces.push(surfaceIndex);
                 surfaceIndexes.push(surfaceIndex);
             }
-            this.overlays.push({ surfaceIndexes, tri });
+            this.overlays.push({ surfaceIndexes });
         }
 
         this.vertexData = vertexBuffer.finalize();

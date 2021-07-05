@@ -520,14 +520,6 @@ export class BSPModelRenderer {
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
             this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
-
-        /*
-        for (let i = 0; i < this.bsp.overlays.length; i++) {
-            const o = this.bsp.overlays[i];
-            for (let j = 0; j < o.tri.length; j += 2)
-                drawWorldSpaceLine(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, o.tri[j + 0], o.tri[j + 1]);
-        }
-        */
     }
 }
 
