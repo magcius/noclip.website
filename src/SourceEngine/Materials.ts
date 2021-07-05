@@ -949,12 +949,10 @@ layout(std140) uniform ub_SkinningParams {
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
-// Base, Detail
+// Base, Bumpmap
 varying vec4 v_TexCoord0;
 // Lightmap (0), Envmap Mask
 varying vec4 v_TexCoord1;
-// Bumpmap
-varying vec4 v_TexCoord2;
 
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
@@ -1203,18 +1201,15 @@ void mainVS() {
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
-#ifdef USE_DETAIL
-    v_TexCoord0.zw = v_TexCoord0.xy * u_DetailScale;
+#ifdef USE_BUMPMAP
+    v_LightmapOffset = abs(a_TangentS.w);
+    v_TexCoord0.zw = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #endif
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
 #endif
 #ifdef USE_ENVMAP_MASK
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
-#endif
-#ifdef USE_BUMPMAP
-    v_LightmapOffset = abs(a_TangentS.w);
-    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #endif
 }
 #endif
@@ -1380,7 +1375,8 @@ void mainPS() {
 #endif
 
 #ifdef USE_DETAIL
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
+    vec2 t_DetailTexCoord = v_TexCoord0.xy * u_DetailScale;
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], t_DetailTexCoord)));
     t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
@@ -1388,7 +1384,7 @@ void mainPS() {
 
     vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
-    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord2.xy));
+    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord0.zw));
 
 #ifdef USE_SSBUMP
     // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
