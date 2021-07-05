@@ -612,6 +612,10 @@ class Coin extends LiveActor<CoinNrv> {
         addHitSensor(sceneObjHolder, this, 'coin', HitSensorType.Coin, 4, 55.0, scratchVec3a);
         this.initBinder(55.0, 70.0, 0);
         // setBinderExceptSensorType
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        if (infoIter !== null)
+            this.setShadowAndPoseModeFromJMapIter(infoIter);
 
         this.initShadow(sceneObjHolder, infoIter);
         this.flashingCtrl = new FlashingCtrl(sceneObjHolder, this, true);
@@ -908,6 +912,14 @@ export function createCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjH
 export function createDirectSetPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
     const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
     coin.initialize(sceneObjHolder, infoIter);
+    // TODO(jstpierre): PurpleCoinHolder
+    return coin;
+}
+
+export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
+    const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
+    coin.initialize(sceneObjHolder, infoIter);
+    // TODO(jstpierre): PurpleCoinHolder
     return coin;
 }
 
@@ -936,7 +948,7 @@ abstract class CoinGroup extends LiveActor<CoinGroupNrv> {
 
         for (let i = 0; i < coinCount; i++) {
             if (this.isPurpleCoin) {
-                this.coinArray.push(createDirectSetPurpleCoin(zoneAndLayer, sceneObjHolder, null));
+                this.coinArray.push(createPurpleCoin(zoneAndLayer, sceneObjHolder, null));
             } else {
                 this.coinArray.push(createCoin(zoneAndLayer, sceneObjHolder, this, null));
             }

@@ -17,7 +17,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 import * as GX from "../../gx/gx_enum";
 
 import { assert, readString, assertExists, nArray } from "../../util";
-import { vec3, mat4, vec2 } from "gl-matrix";
+import { vec3, mat4, vec2, ReadonlyVec3 } from "gl-matrix";
 import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
@@ -64,7 +64,7 @@ const enum VolumeType {
     Line     = 0x06,
 }
 
-const enum DynamicsFlags {
+const enum EmitFlags {
     FixedDensity        = 0x01,
     FixedInterval       = 0x02,
     InheritScale        = 0x04,
@@ -73,11 +73,12 @@ const enum DynamicsFlags {
 }
 
 interface JPADynamicsBlock {
-    flags: DynamicsFlags;
+    emitFlags: EmitFlags;
     volumeType: VolumeType;
-    emitterScl: vec3;
-    emitterTrs: vec3;
-    emitterDir: vec3;
+    emitterScl: ReadonlyVec3;
+    emitterRot: ReadonlyVec3;
+    emitterTrs: ReadonlyVec3;
+    emitterDir: ReadonlyVec3;
     initialVelOmni: number;
     initialVelAxis: number;
     initialVelRndm: number;
@@ -95,7 +96,6 @@ interface JPADynamicsBlock {
     momentRndm: number;
     accel: number;
     accelRndm: number;
-    emitterRot: vec3;
     maxFrame: number;
     startFrame: number;
     lifeTime: number;
@@ -1174,7 +1174,7 @@ export const enum JPAEmitterStatus {
     TERMINATE_FLAGGED    = 0x0200,
 }
 
-function JPAGetDirMtx(m: mat4, v: vec3, scratch: vec3 = scratchVec3a): void {
+function JPAGetDirMtx(m: mat4, v: ReadonlyVec3, scratch: vec3 = scratchVec3a): void {
     // Perp
     vec3.set(scratch, v[1], -v[0], 0);
     const mag = vec3.length(scratch);
@@ -1332,7 +1332,7 @@ export class JPABaseEmitter {
     @dfRange(0, 10)
     public awayFromCenterSpeed: number;
     @dfRange(0, 10)
-    public awayFromAxisSpeed: number;
+    public awayFromYAxisSpeed: number;
     @dfRange(0, 10)
     public directionalSpeed: number;
     @dfRange(0, 10)
@@ -1417,7 +1417,11 @@ export class JPABaseEmitter {
         return (!!(this.status & JPAEmitterStatus.TERMINATED)) && this.getParticleNumber() === 0;
     }
 
-    public setGlobalScale(s: vec3): void {
+    public setGlobalTranslation(v: ReadonlyVec3): void {
+        vec3.copy(this.globalTranslation, v);
+    }
+
+    public setGlobalScale(s: ReadonlyVec3): void {
         vec3.copy(this.globalScale, s);
         this.globalParticleScale[0] = s[0];
         this.globalParticleScale[1] = s[1];
@@ -1442,7 +1446,7 @@ export class JPABaseEmitter {
         this.volumeMinRad = bem1.volumeMinRad;
         this.volumeSweep = bem1.volumeSweep;
         this.awayFromCenterSpeed = bem1.initialVelOmni;
-        this.awayFromAxisSpeed = bem1.initialVelAxis;
+        this.awayFromYAxisSpeed = bem1.initialVelAxis;
         this.directionalSpeed = bem1.initialVelDir;
         this.randomDirectionSpeed = bem1.initialVelRndm;
         this.spread = bem1.spread;
@@ -1511,7 +1515,7 @@ export class JPABaseEmitter {
             else if (kfa1.keyType === JPAKeyType.InitialVelOmni)
                 this.awayFromCenterSpeed = v;
             else if (kfa1.keyType === JPAKeyType.InitialVelAxis)
-                this.awayFromAxisSpeed = v;
+                this.awayFromYAxisSpeed = v;
             else if (kfa1.keyType === JPAKeyType.InitialVelDir)
                 this.directionalSpeed = v;
             else if (kfa1.keyType === JPAKeyType.Spread)
@@ -1536,7 +1540,7 @@ export class JPABaseEmitter {
         const bem1 = workData.baseEmitter.resData.res.bem1;
 
         let angle: number, x: number;
-        if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
+        if (!!(bem1.emitFlags & EmitFlags.FixedInterval)) {
             const startAngle = Math.PI;
 
             angle = startAngle;
@@ -1562,7 +1566,7 @@ export class JPABaseEmitter {
         }
 
         let distance = get_rndm_f(this.random);
-        if (!!(bem1.flags & DynamicsFlags.FixedDensity)) {
+        if (!!(bem1.emitFlags & EmitFlags.FixedDensity)) {
             // Fixed density
             distance = 1.0 - (distance * distance * distance);
         }
@@ -1581,7 +1585,7 @@ export class JPABaseEmitter {
         const bem1 = workData.baseEmitter.resData.res.bem1;
 
         let distance = get_rndm_f(this.random);
-        if (!!(bem1.flags & DynamicsFlags.FixedDensity)) {
+        if (!!(bem1.emitFlags & EmitFlags.FixedDensity)) {
             // Fixed density
             distance = 1.0 - (distance * distance);
         }
@@ -1624,7 +1628,7 @@ export class JPABaseEmitter {
         const bem1 = this.resData.res.bem1;
 
         let angle: number;
-        if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
+        if (!!(bem1.emitFlags & EmitFlags.FixedInterval)) {
             // Fixed interval
             const idx = workData.volumeEmitIdx++;
             const idxS = (idx / workData.volumeEmitCount) - 0.5;
@@ -1634,7 +1638,7 @@ export class JPABaseEmitter {
         }
 
         let distance = get_rndm_f(this.random);
-        if (!!(bem1.flags & DynamicsFlags.FixedDensity)) {
+        if (!!(bem1.emitFlags & EmitFlags.FixedDensity)) {
             // Fixed density
             distance = 1.0 - (distance * distance);
         }
@@ -1648,7 +1652,7 @@ export class JPABaseEmitter {
     private calcVolumeLine(workData: JPAEmitterWorkData): void {
         const bem1 = this.resData.res.bem1;
 
-        if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
+        if (!!(bem1.emitFlags & EmitFlags.FixedInterval)) {
             // Fixed interval
             const idx = workData.volumeEmitIdx++;
             vec3.set(workData.volumePos, 0, 0, bem1.volumeSize * ((idx / (workData.volumeEmitCount - 1)) - 0.5));
@@ -1700,7 +1704,7 @@ export class JPABaseEmitter {
         const bem1 = this.resData.res.bem1;
 
         if (!!(this.status & JPAEmitterStatus.RATE_STEP_EMIT)) {
-            if (!!(bem1.flags & DynamicsFlags.FixedInterval)) {
+            if (!!(bem1.emitFlags & EmitFlags.FixedInterval)) {
                 // Fixed Interval
                 if (bem1.volumeType === VolumeType.Sphere)
                     this.emitCount = bem1.divNumber * bem1.divNumber * 4 + 2;
@@ -1714,7 +1718,7 @@ export class JPABaseEmitter {
                 this.emitCount += emitCountIncr;
 
                 // If this is the first emission and we got extremely bad luck, force a particle.
-                if (!!(this.status & JPAEmitterStatus.FIRST_EMISSION) && this.rate != 0 && this.emitCount < 1.0)
+                if (!!(this.status & JPAEmitterStatus.FIRST_EMISSION) && this.rate !== 0.0 && this.emitCount < 1.0)
                     this.emitCount = 1;
             }
 
@@ -2345,12 +2349,12 @@ export class JPABaseParticle {
         this.status = 0;
         this.time = 0;
 
-        const lifeTimeRandom = get_rndm_f(baseEmitter.random);
-        this.lifeTime = baseEmitter.lifeTime * (1.0 - lifeTimeRandom * bem1.lifeTimeRndm);
+        const lifeTimeRndm = get_rndm_f(baseEmitter.random);
+        this.lifeTime = baseEmitter.lifeTime * (1.0 - lifeTimeRndm * bem1.lifeTimeRndm);
 
         transformVec3Mat4w0(this.localPosition, workData.emitterGlobalSR, workData.volumePos);
 
-        if (!!(bem1.flags & DynamicsFlags.FollowEmitter))
+        if (!!(bem1.emitFlags & EmitFlags.FollowEmitter))
             this.status |= JPAParticleStatus.FOLLOW_EMITTER;
 
         vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
@@ -2363,8 +2367,8 @@ export class JPABaseParticle {
 
         if (baseEmitter.awayFromCenterSpeed !== 0)
             normToLengthAndAdd(this.baseVel, workData.velOmni, baseEmitter.awayFromCenterSpeed);
-        if (baseEmitter.awayFromAxisSpeed !== 0)
-            normToLengthAndAdd(this.baseVel, workData.velAxis, baseEmitter.awayFromAxisSpeed);
+        if (baseEmitter.awayFromYAxisSpeed !== 0)
+            normToLengthAndAdd(this.baseVel, workData.velAxis, baseEmitter.awayFromYAxisSpeed);
         if (baseEmitter.directionalSpeed !== 0) {
             const randZ = next_rndm(baseEmitter.random) >>> 16;
             const randY = get_r_zp(baseEmitter.random);
@@ -2386,7 +2390,7 @@ export class JPABaseParticle {
         const velRatio = 1.0 + get_r_zp(baseEmitter.random) * bem1.initialVelRatio;
         vec3.scale(this.baseVel, this.baseVel, velRatio);
 
-        if (!!(bem1.flags & DynamicsFlags.InheritScale))
+        if (!!(bem1.emitFlags & EmitFlags.InheritScale))
             vec3.mul(this.baseVel, this.baseVel, baseEmitter.localScale);
 
         transformVec3Mat4w0(this.baseVel, workData.emitterGlobalRotation, this.baseVel);
@@ -2458,7 +2462,7 @@ export class JPABaseParticle {
             normToLengthAndAdd(this.localPosition, scratchVec3a, rndLength);
         }
 
-        if (!!(bem1.flags & DynamicsFlags.FollowEmitterChild))
+        if (!!(bem1.emitFlags & EmitFlags.FollowEmitterChild))
             this.status |= JPAParticleStatus.FOLLOW_EMITTER;
 
         vec3.copy(this.offsetPosition, parent.offsetPosition);
@@ -3532,7 +3536,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const momentRndm = dynamicsWeightRndm;
 
             bem1 = {
-                flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
+                emitFlags: flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
                 volumeSweep, volumeMinRad, volumeSize, divNumber, spread, rate, rateRndm, rateStep,
                 initialVelOmni, initialVelAxis, initialVelRndm, initialVelDir, initialVelRatio,
                 lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
@@ -4019,7 +4023,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
 
             bem1 = {
-                flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
+                emitFlags: flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
                 volumeSweep, volumeMinRad, volumeSize, divNumber, spread, rate, rateRndm, rateStep,
                 initialVelOmni, initialVelAxis, initialVelRndm, initialVelDir, initialVelRatio,
                 lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
@@ -4465,7 +4469,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const accelRndm = 0.0;
 
             bem1 = {
-                flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
+                emitFlags: flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
                 volumeSweep, volumeMinRad, volumeSize, divNumber, spread, rate, rateRndm, rateStep,
                 initialVelOmni, initialVelAxis, initialVelRndm, initialVelDir, initialVelRatio,
                 lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,

@@ -133,8 +133,14 @@ export class AABB {
         this.set(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
     }
 
+    public copy(other: AABB): void {
+        this.set(other.minX, other.minY, other.minZ, other.maxX, other.maxY, other.maxZ);
+    }
+
     public clone(): AABB {
-        return new AABB(this.minX, this.minY, this.minZ, this.maxX, this.maxY, this.maxZ);
+        const aabb = new AABB();
+        aabb.copy(this);
+        return aabb;
     }
 
     public setFromPoints(points: vec3[]): void {

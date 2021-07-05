@@ -66,7 +66,7 @@ export interface GfxrPass {
     setDebugName(debugName: string): void;
 
     /**
-     * Set whether to output a debug thumbnail. {@default false} by default.
+     * Call when you want to output a debug thumbnail.
      */
     pushDebugThumbnail(attachmentSlot: GfxrAttachmentSlot): void;
 
@@ -281,6 +281,7 @@ export interface GfxrGraphBuilderDebug {
     getPassDebugThumbnails(pass: GfxrPass): boolean[];
     getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): number;
     getRenderTargetIDDebugName(renderTargetID: number): string;
+    getPassDebugName(pass: GfxrPass): string;
 }
 
 class RenderTarget {
@@ -859,6 +860,10 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
     public getRenderTargetIDDebugName(renderTargetID: number): string {
         return this.currentGraph!.renderTargetDebugNames[renderTargetID];
+    }
+
+    public getPassDebugName(pass: GfxrPass): string {
+        return (pass as PassImpl).debugName;
     }
     //#endregion
 

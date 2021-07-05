@@ -32,10 +32,24 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { OpaqueBlack } from "../Color";
 import * as UI from "../ui";
 
+export class CustomMount {
+    constructor(public path: string, public files: string[] = []) {
+    }
+
+    public hasEntry(resolvedPath: string): boolean {
+        return this.files.includes(resolvedPath);
+    }
+
+    public fetchFileData(dataFetcher: DataFetcher, resolvedPath: string): Promise<ArrayBufferSlice> {
+        return dataFetcher.fetchData(`${this.path}/${resolvedPath}`);
+    }
+}
+
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public zip: ZipFile[] = [];
     public vpk: VPKMount[] = [];
+    public custom: CustomMount[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -90,6 +104,12 @@ export class SourceFileSystem {
     }
 
     public hasEntry(resolvedPath: string): boolean {
+        for (let i = 0; i < this.custom.length; i++) {
+            const custom = this.custom[i];
+            if (custom.hasEntry(resolvedPath))
+                return true;
+        }
+
         for (let i = 0; i < this.vpk.length; i++) {
             const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
@@ -114,6 +134,12 @@ export class SourceFileSystem {
     }
 
     public async fetchFileData(resolvedPath: string): Promise<ArrayBufferSlice | null> {
+        for (let i = 0; i < this.custom.length; i++) {
+            const custom = this.custom[i];
+            if (custom.hasEntry(resolvedPath))
+                return custom.fetchFileData(this.dataFetcher, resolvedPath);
+        }
+
         for (let i = 0; i < this.vpk.length; i++) {
             const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
@@ -168,7 +194,7 @@ export class SkyboxRenderer {
         let dstIdx = 0;
 
         function buildPlaneVert(pb: number, s: number, t: number): void {
-            const side = 30000 * Math.sqrt(1/3);
+            const side = 100000 * Math.sqrt(1/3);
             const g = [-s*side, s*side, -t*side, t*side, -side, side];
             vertexData[dstVert++] = g[(pb >>> 8) & 0x0F];
             vertexData[dstVert++] = g[(pb >>> 4) & 0x0F];
@@ -1312,6 +1338,12 @@ export class SourceRenderer implements SceneGfx {
     }
 
     private movement(): void {
+        // Update render context.
+
+        // TODO(jstpierre): The world lighting state should probably be moved to the BSP? Or maybe SourceRenderContext is moved to the BSP...
+        this.renderContext.worldLightingState.update(this.renderContext.globalTime);
+
+        // Update BSP (includes entities).
         this.renderContext.currentView = this.mainViewRenderer.mainView;
 
         for (let i = 0; i < this.bspRenderers.length; i++)
@@ -1333,6 +1365,12 @@ export class SourceRenderer implements SceneGfx {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const enableDecals = new UI.Checkbox('Enable Decals', true);
+        enableDecals.onchanged = () => {
+            const v = enableDecals.checked;
+            this.mainViewRenderer.drawDeferredDecals = v;
+        };
+        renderHacksPanel.contents.appendChild(enableDecals.elem);
         const enableFog = new UI.Checkbox('Enable Fog', true);
         enableFog.onchanged = () => {
             const v = enableFog.checked;
@@ -1403,7 +1441,7 @@ export class SourceRenderer implements SceneGfx {
 
         this.mainViewRenderer.prepareToRender(this);
 
-        // Refraction is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
+        // Reflection is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
         if (this.renderContext.showExpensiveWater) {
             const bsp = this.bspRenderers[0].bsp;
             const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos);
@@ -1472,16 +1510,9 @@ export class SourceRenderer implements SceneGfx {
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
 
-        if (this.reflectViewRenderer.enabled) {
-            const reflectionColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-
-            // Render the reflection view at a smaller resolution...
-            reflectionColorDesc.copyDimensions(mainColorDesc);
-            reflectionColorDesc.width >>= 1;
-            reflectionColorDesc.height >>= 1;
-
-            this.reflectViewRenderer.pushPasses(this, builder, reflectionColorDesc);
-        }
+        // Render reflection view first.
+        if (this.reflectViewRenderer.enabled)
+            this.reflectViewRenderer.pushPasses(this, builder, mainColorDesc);
 
         this.mainViewRenderer.pushPasses(this, builder, mainColorDesc);
         const mainColorTargetID = assertExists(this.mainViewRenderer.outputColorTargetID);

@@ -4,7 +4,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine, drawWorldSpaceText } from "../DebugJunk";
 import { colorNewFromRGBA } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { computeViewMatrix } from '../Camera';
@@ -476,7 +476,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             obj.yaw = angle16ToRads(data.getInt16(0x1a));
             obj.pitch = angle16ToRads(data.getInt16(0x1c));
             obj.roll = angle16ToRads(data.getInt16(0x1e));
-            let objScale = data.getInt8(0x2d);
+            let objScale = data.getInt8(0x3d);
             if (objScale === 0)
                 objScale = 20;
             obj.scale *= objScale / 20;
@@ -1208,6 +1208,9 @@ export class ObjectInstance {
             const viewPos = scratchVec1;
             vec3.transformMat4(viewPos, worldPos, viewMtx);
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
+            // const debugCtx = getDebugOverlayCanvas2D();
+            // drawWorldSpacePoint(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos);
+            // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ")");
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,

@@ -68,6 +68,10 @@ export class DebugTextDrawer {
         this.charWriter.scale[1] = scale;
     }
 
+    public getScaledLineHeight(): number {
+        return this.charWriter.getScaledLineHeight();
+    }
+
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
         this.charWriter.calcRect(scratchVec4, str);
 

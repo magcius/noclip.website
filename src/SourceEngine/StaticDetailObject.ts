@@ -13,7 +13,7 @@ import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
 import BitMap from "../BitMap";
-import { BSPFile, BSPLeaf } from "./BSPFile";
+import { BSPFile } from "./BSPFile";
 import { AABB } from "../Geometry";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
@@ -563,7 +563,7 @@ export class StaticPropRenderer {
 
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         scaleMatrix(scratchMatrix, scratchMatrix, this.staticProp.scale);
-        this.bbox.transform(modelData.bbox, scratchMatrix);
+        this.bbox.transform(modelData.viewBB, scratchMatrix);
 
         if (this.staticProp.lightingOrigin !== null)
             vec3.copy(this.lightingOrigin, this.staticProp.lightingOrigin);

@@ -162,6 +162,10 @@ export class HitSensor {
         return this.sensorType === type;
     }
 
+    public setType(type: HitSensorType): void {
+        this.sensorType = type;
+    }
+
     public addHitSensor(other: HitSensor): void {
         this.pairwiseSensors.push(other);
     }

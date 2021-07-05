@@ -526,7 +526,8 @@ export class StudioModelData {
 
     public bodyPartData: StudioModelBodyPartData[] = [];
     public checksum: number;
-    public bbox: AABB;
+    public hullBB: AABB;
+    public viewBB: AABB;
     public bones: Bone[] = [];
     public illumPosition = vec3.create();
     public anim: AnimDesc[] = [];
@@ -568,14 +569,17 @@ export class StudioModelData {
         const moveHullMaxX = mdlView.getFloat32(0x74, true);
         const moveHullMaxY = mdlView.getFloat32(0x78, true);
         const moveHullMaxZ = mdlView.getFloat32(0x7C, true);
+        this.hullBB = new AABB(moveHullMinX, moveHullMinY, moveHullMinZ, moveHullMaxX, moveHullMaxY, moveHullMaxZ);
 
-        const bboxMinX = mdlView.getFloat32(0x80, true);
-        const bboxMinY = mdlView.getFloat32(0x84, true);
-        const bboxMinZ = mdlView.getFloat32(0x88, true);
-        const bboxMaxX = mdlView.getFloat32(0x8C, true);
-        const bboxMaxY = mdlView.getFloat32(0x90, true);
-        const bboxMaxZ = mdlView.getFloat32(0x94, true);
-        this.bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+        const viewBBoxMinX = mdlView.getFloat32(0x80, true);
+        const viewBBoxMinY = mdlView.getFloat32(0x84, true);
+        const viewBBoxMinZ = mdlView.getFloat32(0x88, true);
+        const viewBBoxMaxX = mdlView.getFloat32(0x8C, true);
+        const viewBBoxMaxY = mdlView.getFloat32(0x90, true);
+        const viewBBoxMaxZ = mdlView.getFloat32(0x94, true);
+        this.viewBB = new AABB(viewBBoxMinX, viewBBoxMinY, viewBBoxMinZ, viewBBoxMaxX, viewBBoxMaxY, viewBBoxMaxZ);
+        if (this.viewBB.isEmpty())
+            this.viewBB.copy(this.hullBB);
 
         const flags: StudioModelFlags = mdlView.getUint32(0x98, true);
         const isStaticProp = !!(flags & StudioModelFlags.STATIC_PROP);
@@ -1671,6 +1675,7 @@ function setupPoseFinalize(worldFromPoseMatrix: mat4[], boneMatrix: ReadonlyMat4
     }
 }
 
+const scratchAABB = new AABB();
 export class StudioModelInstance {
     public visible: boolean = true;
     // Pose data
@@ -1751,6 +1756,10 @@ export class StudioModelInstance {
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
         if (!this.visible)
+            return;
+
+        scratchAABB.transform(this.modelData.viewBB, this.modelMatrix);
+        if (!renderContext.currentView.frustum.contains(scratchAABB))
             return;
 
         const lodIndex = this.getLODModelIndex(renderContext);

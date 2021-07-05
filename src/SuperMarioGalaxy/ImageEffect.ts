@@ -58,12 +58,13 @@ vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord, in vec2 t_Asp
 }
 
 abstract class ImageEffectBase extends NameObj {
+    public visibleScenario = true;
     public active = false;
     public visible = false;
     public strength = 0.0;
 
     public isOn(): boolean {
-        return this.visible || this.active;
+        return this.visibleScenario && (this.visible || this.active);
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder): void {
@@ -242,7 +243,7 @@ export class BloomEffect extends ImageEffectBase {
         connectToSceneNormalBloom(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
@@ -275,8 +276,6 @@ export class BloomEffect extends ImageEffectBase {
     public pushPassesBloom(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number): void {
         if (!this.isOn())
             return;
-
-        const device = sceneObjHolder.modelCache.device;
 
         const bloomObjectsTargetDesc = builder.getRenderTargetDescription(bloomObjectsTargetID);
 
@@ -520,8 +519,6 @@ export class BloomEffectSimple extends ImageEffectBase {
         if (!this.isOn())
             return;
 
-        const device = sceneObjHolder.modelCache.device;
-
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
         const targetWidth = mainColorTargetDesc.width >> 2;
         const targetHeight = mainColorTargetDesc.height >> 2;
@@ -688,8 +685,6 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
         if (!this.isOn())
             return;
-
-        const device = sceneObjHolder.modelCache.device;
 
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
         const targetWidth = mainColorTargetDesc.width >> 2;

@@ -147,7 +147,7 @@ void OutputLinearColor(in vec4 t_Color) {
 
 function fillFogParams(d: Float32Array, offs: number, params: Readonly<FogParams>): number {
     const baseOffs = offs;
-    offs += fillColor(d, offs, params.color);
+    offs += fillGammaColor(d, offs, params.color);
     offs += fillVec4(d, offs, params.start, params.end, params.maxdensity);
     return offs - baseOffs;
 }
@@ -171,10 +171,6 @@ export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Rea
     let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
     fillSceneParams(d, offs, view);
-}
-
-function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
-    vec4.set(dst, scale, scale, x, y);
 }
 
 interface Parameter {
@@ -309,7 +305,7 @@ class ParameterMatrix {
         const sections = findall(S, /([a-z]+) ([^a-z]+)/g);
 
         let cx = 0, cy = 0, sx = 1, sy = 1, r = 0, tx = 0, ty = 0;
-        sections.forEach(([mode, items]) => {
+        sections.forEach(([str, mode, items]) => {
             let values = items.split(' ').map((v) => parseFloat(v));
             if (values[1] === undefined)
                 values[1] = values[0];
@@ -588,7 +584,7 @@ export abstract class BaseMaterial {
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
-        // assert(m[1] === 0.0 && m[2] === 0.0);
+        assert(m[1] === 0.0 && m[2] === 0.0);
         let scaleS = m[0];
         let scaleT = m[5];
         if (useMappingTransform) {
@@ -891,10 +887,7 @@ layout(std140) uniform ub_ObjectParams {
     // We support up to N lights.
     WorldLight u_WorldLights[${Material_Generic_Program.MaxDynamicWorldLights}];
 #endif
-    vec4 u_BaseTextureScaleBias;
-#ifdef USE_DETAIL
-    vec4 u_DetailScaleBias;
-#endif
+    Mat4x2 u_BaseTextureTransform;
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
@@ -917,6 +910,7 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
+#define u_DetailScale        (u_Misc[0].z)
 
 #if SKINNING_MODE != ${SkinningMode.None}
 layout(std140) uniform ub_SkinningParams {
@@ -1189,9 +1183,9 @@ void mainVS() {
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias);
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #ifdef USE_DETAIL
-    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
+    v_TexCoord0.zw = v_TexCoord0.xy * u_DetailScale;
 #endif
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
@@ -1201,7 +1195,7 @@ void mainVS() {
 #endif
 #ifdef USE_BUMPMAP
     v_LightmapOffset = abs(a_TangentS.w);
-    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #endif
 
 #ifdef HAS_PROJECTED_TEXCOORD
@@ -1360,20 +1354,21 @@ void mainPS() {
         return;
     }
 
-    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)));
-
     vec4 t_Albedo, t_BlendedAlpha;
-#ifdef USE_DETAIL
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
-    t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
-#else
-    t_Albedo = t_BaseTexture;
-#endif
+
+    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0]), v_TexCoord0.xy));
 
 #ifdef USE_BASETEXTURE2
     // Blend in BaseTexture2 using blend factor.
     vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy));
-    t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
+    t_Albedo = mix(t_BaseTexture, t_BaseTexture2, v_PositionWorld.w);
+#else
+    t_Albedo = t_BaseTexture;
+#endif
+
+#ifdef USE_DETAIL
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
+    t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
     vec4 t_FinalColor;
@@ -1936,15 +1931,10 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsDynamicLighting) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
-            offs += lightCache.fillWorldLights(d, offs);
+            offs += lightCache.fillWorldLights(d, offs, renderContext.worldLightingState);
         }
 
-        offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
-
-        if (this.wantsDetail) {
-            scaleBiasSet(scratchVec4, this.paramGetNumber('$detailscale'));
-            offs += fillVec4v(d, offs, scratchVec4);
-        }
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
@@ -1989,7 +1979,8 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
+        const detailScale = this.paramGetNumber('$detailscale');
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, detailScale);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -3105,7 +3096,7 @@ function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): numb
 const scratchVec3 = vec3.create();
 const ntscGrayscale = vec3.fromValues(0.299, 0.587, 0.114);
 
-function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null): number {
+function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null, worldLightingState: WorldLightingState): number {
     const base = offs;
 
     if (light === null) {
@@ -3113,31 +3104,39 @@ function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null)
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
-    } else if (light.type === WorldLightType.Surface) {
+        return offs - base;
+    }
+
+    if (light.style >= 0)
+        vec3.scale(scratchVec3, light.intensity, worldLightingState.styleIntensities[light.style]);
+    else
+        vec3.copy(scratchVec3, light.intensity);
+
+    if (light.type === WorldLightType.Surface) {
         // 180 degree spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec4(d, offs, 0, 0, 1);
         offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.Spotlight) {
         // Controllable spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity, light.exponent);
+        offs += fillVec3v(d, offs, scratchVec3, light.exponent);
         offs += fillVec3v(d, offs, light.distAttenuation, light.stopdot);
         offs += fillVec3v(d, offs, light.normal, light.stopdot2);
     } else if (light.type === WorldLightType.Point) {
         const type = ShaderWorldLightType.Point;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec3v(d, offs, light.distAttenuation);
         offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.SkyLight) {
         // Directional.
         const type = ShaderWorldLightType.Directional;
         offs += fillVec3v(d, offs, Vec3Zero, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec4(d, offs, 0);
         offs += fillVec3v(d, offs, light.normal);
     } else {
@@ -3161,8 +3160,8 @@ class LightCacheWorldLight {
         this.intensity = 0;
     }
 
-    public fill(d: Float32Array, offs: number): number {
-        return fillWorldLight(d, offs, this.worldLight);
+    public fill(d: Float32Array, offs: number, worldLightingState: WorldLightingState): number {
+        return fillWorldLight(d, offs, this.worldLight, worldLightingState);
     }
 }
 
@@ -3320,10 +3319,10 @@ export class LightCache {
         return offs - base;
     }
 
-    public fillWorldLights(d: Float32Array, offs: number): number {
+    public fillWorldLights(d: Float32Array, offs: number, worldLightingState: WorldLightingState): number {
         const base = offs;
         for (let i = 0; i < this.worldLights.length; i++)
-            offs += this.worldLights[i].fill(d, offs);
+            offs += this.worldLights[i].fill(d, offs, worldLightingState);
         return offs - base;
     }
 }
@@ -3574,10 +3573,59 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
 }
 
 export class WorldLightingState {
-    public styleIntensities = new Float32Array(255);
+    public styleIntensities = new Float32Array(64);
+    public stylePatterns: string[] = [
+        'm',
+        'mmnmmommommnonmmonqnmmo',
+        'abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba',
+        'mmmmmaaaaammmmmaaaaaabcdefgabcdefg',
+        'mamamamamama',
+        'jklmnopqrstuvwxyzyxwvutsrqponmlkj',
+        'nmonqnmomnmomomno',
+        'mmmaaaabcdefgmmmmaaaammmaamm',
+        'mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa',
+        'aaaaaaaazzzzzzzz',
+        'mmamammmmammamamaaamammma',
+        'abcdefghijklmnopqrrqponmlkjihgfedcba',
+        'mmnnmmnnnmmnn',
+    ];
+    private smoothAnim = false;
 
     constructor() {
         this.styleIntensities.fill(1.0);
+    }
+
+    private styleIntensityFromChar(c: number): number {
+        const alpha = c - 0x61;
+        assert(alpha >= 0 && alpha <= 25);
+        return (alpha * 22) / 264.0;
+    }
+
+    private styleIntensityFromPattern(pattern: string, time: number): number {
+        const t = time % pattern.length;
+        const i0 = t | 0;
+        const p0 = this.styleIntensityFromChar(pattern.charCodeAt(i0));
+
+        if (this.smoothAnim) {
+            const i1 = (i0 + 1) % pattern.length;
+            const t01 = t - i0;
+
+            const p1 = this.styleIntensityFromChar(pattern.charCodeAt(i1));
+            return lerp(p0, p1, t01);
+        } else {
+            return p0;
+        }
+    }
+
+    public update(timeInSeconds: number): void {
+        const time = (timeInSeconds * 10);
+        for (let i = 0; i < this.styleIntensities.length; i++) {
+            const pattern = this.stylePatterns[i];
+            if (pattern === undefined)
+                continue;
+
+            this.styleIntensities[i] = this.styleIntensityFromPattern(pattern, time);
+        }
     }
 }
 

@@ -5,7 +5,7 @@ import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, ScenePara
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement, drawSimpleModel } from "./ActorUtil";
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
@@ -472,24 +472,15 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
     }
 
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
-        const shapeData = this.modelData!.shapeData;
+        const template = renderInstManager.pushTemplateRenderInst();
 
-        for (let i = 0; i < shapeData.length; i++) {
-            const template = renderInstManager.pushTemplateRenderInst();
+        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
 
-            assert(shapeData[i].draws.length === 1);
-            shapeData[i].shapeHelper.setOnRenderInst(template, shapeData[i].draws[0]);
+        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
 
-            const front = renderInstManager.newRenderInst();
-            this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, front);
-            renderInstManager.submitRenderInst(front);
-
-            const back = renderInstManager.newRenderInst();
-            this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, back);
-            renderInstManager.submitRenderInst(back);
-
-            renderInstManager.popTemplateRenderInst();
-        }
+        renderInstManager.popTemplateRenderInst();
     }
 }
 

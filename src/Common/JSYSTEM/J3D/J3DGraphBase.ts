@@ -1,5 +1,5 @@
 
-import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
@@ -384,7 +384,7 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -418,7 +418,7 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
@@ -477,7 +477,7 @@ export class MaterialInstance {
         // ref. J3DTexMtx::calc()
         const tmp1 = matrixScratch;
         const tmp2 = matrixScratch2;
-        switch (matrixMode) {
+        switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
             {
                 // J3DGetTextureMtxOld(tmp1)
@@ -974,6 +974,10 @@ export class J3DModelInstance {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setBaseScale(v: ReadonlyVec3): void {
+        vec3.copy(this.baseScale, v);
     }
 
     public setModelMaterialData(modelMaterialData: BMDModelMaterialData): void {

@@ -13,7 +13,7 @@ import BitMap from "../BitMap";
 import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
-import { lerp } from "../MathHelpers";
+import { lerp, saturate } from "../MathHelpers";
 
 const enum LumpType {
     ENTITIES                  = 0,
@@ -216,7 +216,7 @@ interface DisplacementResult {
     aabb: AABB;
 }
 
-function buildDisplacement(disp: BSPDispInfo, corners: vec3[], disp_verts: Float32Array): DisplacementResult {
+function buildDisplacement(disp: BSPDispInfo, corners: ReadonlyVec3[], disp_verts: Float32Array, texMapping: TexinfoMapping): DisplacementResult {
     const vertex = nArray(disp.vertexCount, () => new MeshVertex());
     const aabb = new AABB();
 
@@ -242,12 +242,15 @@ function buildDisplacement(disp: BSPDispInfo, corners: vec3[], disp_verts: Float
             const v = vertex[y * disp.sideLength + x];
             vec3.lerp(v.position, v0, v1, tx);
 
+            // Calculate texture coordinates before displacement happens.
+            calcTexCoord(v.uv, v.position, texMapping);
+
             v.position[0] += (dvx * dvdist);
             v.position[1] += (dvy * dvdist);
             v.position[2] += (dvz * dvdist);
             v.lightmapUV[0] = tx;
             v.lightmapUV[1] = ty;
-            v.alpha = dvalpha / 0xFF;
+            v.alpha = saturate(dvalpha / 0xFF);
             aabb.unionPoint(v.position);
         }
     }
@@ -1111,9 +1114,8 @@ export class BSPFile {
                     vertexData[dstOffsVertex++] = tangentSSign * lightmapBumpOffset;
 
                     // Texture UV
-                    calcTexCoord(scratchVec2, v.position, tex.textureMapping);
-                    vertexData[dstOffsVertex++] = scratchVec2[0];
-                    vertexData[dstOffsVertex++] = scratchVec2[1];
+                    vertexData[dstOffsVertex++] = v.uv[0];
+                    vertexData[dstOffsVertex++] = v.uv[1];
 
                     // Lightmap UV
                     if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
@@ -1154,10 +1156,11 @@ export class BSPFile {
                 if (startIndex !== 0)
                     corners = corners.slice(startIndex).concat(corners.slice(0, startIndex));
 
-                const result = buildDisplacement(disp, corners, disp_verts);
+                const result = buildDisplacement(disp, corners, disp_verts, tex.textureMapping);
 
                 for (let j = 0; j < result.vertex.length; j++) {
                     const v = result.vertex[j];
+
                     // Put lightmap UVs in luxel space.
                     v.lightmapUV[0] = v.lightmapUV[0] * m_LightmapTextureSizeInLuxels[0] + 0.5;
                     v.lightmapUV[1] = v.lightmapUV[1] * m_LightmapTextureSizeInLuxels[1] + 0.5;
@@ -1210,6 +1213,9 @@ export class BSPFile {
 
                     // Alpha (Unused)
                     v.alpha = 1.0;
+
+                    // Texture Coordinates
+                    calcTexCoord(v.uv, v.position, tex.textureMapping);
 
                     // Lightmap coordinates from the lightmap mapping
                     calcTexCoord(v.lightmapUV, v.position, tex.lightmapMapping);
