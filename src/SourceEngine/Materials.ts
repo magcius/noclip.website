@@ -38,7 +38,6 @@ export const enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     FramebufferDepth = `framebuffer-depth`,
     WaterReflection  = `water-reflection`,
-    DeferredLightmap = `deferred-lightmap`,
 }
 
 export class FogParams {
@@ -134,12 +133,10 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 
 #ifdef FRAG
 layout(location = 0) out vec4 o_Color0;
-layout(location = 1) out vec4 o_Color1;
 
 void OutputLinearColor(in vec4 t_Color) {
     // We do gamma correction in post now, as we need linear blending.
     o_Color0.rgba = t_Color.rgba;
-    o_Color1.rgba = vec4(0.0);
 }
 #endif
 `;
@@ -508,7 +505,6 @@ export abstract class BaseMaterial {
     public hasVertexColorInput = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
-    public wantsDeferredLightmap = false;
     public wantsTexCoord0Scale = false;
     public isTranslucent = false;
     public isIndirect = false;
@@ -867,9 +863,6 @@ export abstract class BaseMaterial {
         if (this.isIndirect)
             return view.indirectList;
 
-        if (this.wantsDeferredLightmap)
-            return view.deferredDecalList;
-
         return view.mainList;
     }
 }
@@ -952,7 +945,6 @@ layout(std140) uniform ub_SkinningParams {
 #endif
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
-#define HAS_PROJECTED_TEXCOORD (USE_DEFERRED_LIGHTMAP)
 
 // Base, Detail
 varying vec4 v_TexCoord0;
@@ -960,11 +952,6 @@ varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
 // Bumpmap
 varying vec4 v_TexCoord2;
-
-#ifdef HAS_PROJECTED_TEXCOORD
-// Projected TexCoord
-varying vec3 v_TexCoord3;
-#endif
 
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
@@ -1226,12 +1213,6 @@ void mainVS() {
     v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
 #endif
-
-#ifdef HAS_PROJECTED_TEXCOORD
-    // Convert from projected position to texture space.
-    vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
-    v_TexCoord3.xyz = vec3(t_ProjTexCoord, gl_Position.w);
-#endif
 }
 #endif
 
@@ -1480,11 +1461,6 @@ void mainPS() {
     t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
 #endif
 
-#ifdef USE_DEFERRED_LIGHTMAP
-    vec2 t_ProjTexCoord = v_TexCoord3.xy / v_TexCoord3.z;
-    t_DiffuseLighting.rgb = texture(SAMPLER_2D(u_Texture[3]), t_ProjTexCoord).rgb;
-#endif
-
     t_Albedo *= v_Color;
 
 #ifdef USE_ALPHATEST
@@ -1621,7 +1597,6 @@ void mainPS() {
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
-    o_Color1.rgba = vec4(t_DeferredLightmapOutput.rgb, 0.0);
 }
 #endif
 `;
@@ -1820,15 +1795,8 @@ class Material_Generic extends BaseMaterial {
         }
 
         if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
-            if (this.wantsDeferredLightmap) {
-                this.wantsLightmap = false;
-                this.program.setDefineBool('USE_DEFERRED_LIGHTMAP', true);
-            } else {
-                this.wantsLightmap = true;
-                this.program.setDefineBool('USE_LIGHTMAP', true);
-            }
-        } else {
-            this.wantsDeferredLightmap = false;
+            this.wantsLightmap = true;
+            this.program.setDefineBool('USE_LIGHTMAP', true);
         }
 
         if (this.shaderType === GenericShaderType.WorldVertexTransition) {
@@ -1940,8 +1908,6 @@ class Material_Generic extends BaseMaterial {
         this.updateTextureMappings(renderContext);
         if (this.wantsLightmap)
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
-        else if (this.wantsDeferredLightmap)
-            this.textureMapping[3].lateBinding = LateBindingTexture.DeferredLightmap;
 
         // TODO(jstpierre): The cost of reprocessing shaders every frame toggling between clip planes and not-clip planes is too massive right now...
         // GfxRenderCache happens *post*-preprocess, and the expensive thing appears to be preprocessGLSL.

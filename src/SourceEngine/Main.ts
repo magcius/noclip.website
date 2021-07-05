@@ -4,7 +4,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -429,10 +429,6 @@ export class BSPModelRenderer {
 
             materialInstance.wantsTexCoord0Scale = surface.surface.wantsTexCoord0Scale;
 
-            // TODO(jstpierre): Refactor this a bit. Maybe use $decal instead?
-            const isOverlay = !surface.surface.wantsTexCoord0Scale;
-            materialInstance.wantsDeferredLightmap = isOverlay;
-
             await materialInstance.init(renderContext);
             surface.bindMaterial(materialInstance, renderContext.lightmapManager);
         }));
@@ -520,15 +516,16 @@ export class BSPModelRenderer {
 
         // Hacky: Always render all overlays. We should probably do it based on the origin faces...
         for (let i = 0; i < this.bsp.overlays.length; i++)
-            this.liveSurfaceSet.add(this.bsp.overlays[i].surfaceIndex);
+            this.bsp.overlays[i].surfaceIndexes.forEach((surfaceIndex) => this.liveSurfaceSet.add(surfaceIndex));
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
             this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
 
         /*
         for (let i = 0; i < this.bsp.overlays.length; i++) {
-            const surface = this.surfacesByIdx[this.bsp.overlays[i].surfaceIndex];
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, surface.surface.center!, surface.surface.texName);
+            const o = this.bsp.overlays[i];
+            for (let j = 0; j < o.tri.length; j += 2)
+                drawWorldSpaceLine(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, o.tri[j + 0], o.tri[j + 1]);
         }
         */
     }
@@ -552,7 +549,6 @@ export class SourceEngineView {
     public frustum = new Frustum();
 
     public mainList = new GfxRenderInstList();
-    public deferredDecalList = new GfxRenderInstList();
     public indirectList = new GfxRenderInstList(null);
 
     public fogParams = new FogParams();
@@ -581,7 +577,6 @@ export class SourceEngineView {
 
     public reset(): void {
         this.mainList.reset();
-        this.deferredDecalList.reset();
         this.indirectList.reset();
     }
 }
@@ -1057,7 +1052,6 @@ class SourceWorldViewRenderer {
     public drawSkybox3D = true;
     public drawWorld = true;
     public drawIndirect = true;
-    public drawDeferredDecals = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities | RenderObjectKind.DebugCube;
     public pvsEnabled = true;
 
@@ -1159,16 +1153,11 @@ class SourceWorldViewRenderer {
         mainColorDesc.copyDimensions(renderTargetDesc);
         mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
 
-        const lightColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-        lightColorDesc.copyDimensions(mainColorDesc);
-        lightColorDesc.colorClearColor = OpaqueBlack;
-
         const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         mainDepthDesc.copyDimensions(mainColorDesc);
         mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, `${this.name} - Main Color (sRGB)`);
-        const lightColorTargetID = builder.createRenderTargetID(lightColorDesc, `${this.name} - Light Color (sRGB)`);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skybox');
@@ -1185,8 +1174,6 @@ class SourceWorldViewRenderer {
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            if (this.drawDeferredDecals)
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color1, lightColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
             pass.exec((passRenderer) => {
@@ -1194,25 +1181,7 @@ class SourceWorldViewRenderer {
             });
 
             pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
-            if (this.drawDeferredDecals)
-                pass.pushDebugThumbnail(GfxrAttachmentSlot.Color1);
         });
-
-        if (this.drawDeferredDecals && this.mainView.deferredDecalList.renderInsts.length > 0) {
-            builder.pushPass((pass) => {
-                pass.setDebugName('Deferred Decals');
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-                const lightColorResolveTextureID = builder.resolveRenderTarget(lightColorTargetID);
-                pass.attachResolveTexture(lightColorResolveTextureID);
-
-                pass.exec((passRenderer, scope) => {
-                    renderer.setLateBindingTexture(LateBindingTexture.DeferredLightmap, scope.getResolveTextureForID(lightColorResolveTextureID), renderer.linearSampler);
-                    renderer.executeOnPass(passRenderer, this.mainView.deferredDecalList);
-                });
-            });
-        }
 
         if (this.drawIndirect && this.mainView.indirectList.renderInsts.length > 0) {
             builder.pushPass((pass) => {
@@ -1287,7 +1256,7 @@ export class SourceRenderer implements SceneGfx {
     public bspRenderers: BSPRenderer[] = [];
 
     private textureMapping = nArray(4, () => new TextureMapping());
-    private bindingMapping: string[] = [LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection, LateBindingTexture.DeferredLightmap];
+    private bindingMapping: string[] = [LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection];
 
     public mainViewRenderer = new SourceWorldViewRenderer(`Main View`);
     public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`);
@@ -1298,7 +1267,6 @@ export class SourceRenderer implements SceneGfx {
     constructor(context: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.drawIndirect = false;
-        this.reflectViewRenderer.drawDeferredDecals = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
         this.reflectViewRenderer.mainView.clipPlaneWorld.push(vec4.create());
 
@@ -1367,12 +1335,6 @@ export class SourceRenderer implements SceneGfx {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        const enableDecals = new UI.Checkbox('Enable Decals', true);
-        enableDecals.onchanged = () => {
-            const v = enableDecals.checked;
-            this.mainViewRenderer.drawDeferredDecals = v;
-        };
-        renderHacksPanel.contents.appendChild(enableDecals.elem);
         const enableFog = new UI.Checkbox('Enable Fog', true);
         enableFog.onchanged = () => {
             const v = enableFog.checked;

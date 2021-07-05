@@ -16,9 +16,20 @@ export class Plane {
     ) {
     }
 
+    public negate(): void {
+        this.x *= -1;
+        this.y *= -1;
+        this.z *= -1;
+        this.d *= -1;
+    }
+
     public distance(x: number, y: number, z: number): number {
         const dot = x*this.x + y*this.y + z*this.z;
         return this.d + dot;
+    }
+
+    public distanceVec3(p: ReadonlyVec3): number {
+        return this.distance(p[0], p[1], p[2]);
     }
 
     public getVec4v(dst: vec4): void {
@@ -36,7 +47,7 @@ export class Plane {
         vec3.set(dst, this.x, this.y, this.z);
     }
 
-    public set(p0: vec3, p1: vec3, p2: vec3): void {
+    public set(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3): void {
         const scratch = Plane.scratchVec3;
         vec3.sub(scratch[0], p1, p0);
         vec3.sub(scratch[1], p2, p0);
@@ -54,6 +65,13 @@ export class Plane {
         this.y = y / h;
         this.z = z / h;
         this.d = d / h;
+    }
+
+    public set3(v: ReadonlyVec3, d: number): void {
+        this.x = v[0];
+        this.y = v[1];
+        this.z = v[2];
+        this.d = d;
     }
 
     public intersectLine(dst: vec3, p0: ReadonlyVec3, dir: ReadonlyVec3): void {

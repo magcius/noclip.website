@@ -1098,8 +1098,8 @@ class material_modify_control extends BaseEntity {
 
 class info_overlay_accessor extends BaseEntity {
     public static classname = `info_overlay_accessor`;
-    private overlaySurface: BSPSurfaceRenderer;
-    private needsMaterialInit = true;
+    private overlaySurfaces: BSPSurfaceRenderer[];
+    private needsMaterialInit: (BSPSurfaceRenderer | null)[] | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -1108,7 +1108,10 @@ class info_overlay_accessor extends BaseEntity {
         const overlay = assertExists(bspRenderer.bsp.overlays[overlayid]);
         // console.log(`info_overlay_accessor spawn`, overlayid, overlay.surfaceIndex);
         // Overlays are only on the world spawn right now... (maybe this will always be true?)
-        this.overlaySurface = bspRenderer.models[0].surfacesByIdx[overlay.surfaceIndex];
+        this.overlaySurfaces = overlay.surfaceIndexes.map((surfaceIndex) => {
+            return bspRenderer.models[0].surfacesByIdx[surfaceIndex];
+        });
+        this.needsMaterialInit = this.overlaySurfaces.slice();
 
         this.materialParams = new EntityMaterialParameters();
     }
@@ -1116,11 +1119,19 @@ class info_overlay_accessor extends BaseEntity {
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
-        if (this.needsMaterialInit && this.overlaySurface.materialInstance !== null) {
-            // Hook up the material params...
-            assert(this.overlaySurface.materialInstance.entityParams === null);
-            this.overlaySurface.materialInstance.entityParams = this.materialParams;
-            this.needsMaterialInit = false;
+        if (this.needsMaterialInit !== null) {
+            let done = 0;
+            for (let i = 0; i < this.needsMaterialInit.length; i++) {
+                const surface = this.needsMaterialInit[i];
+                if (surface !== null) {
+                    if (surface.materialInstance === null)
+                        continue;
+                    surface.materialInstance.entityParams = this.materialParams;
+                }
+                done++;
+            }
+            if (done === this.needsMaterialInit.length)
+                this.needsMaterialInit = null;
         }
     }
 }
