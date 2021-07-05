@@ -425,8 +425,8 @@ function buildSurfacePlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
         const v = dst[i];
 
         // Project onto overlay plane.
-        vec3.sub(scratchVec3, v.position, overlayInfo.origin);
-        const m = vec3.dot(overlayInfo.normal, scratchVec3);
+        vec3.sub(scratchVec3a, v.position, overlayInfo.origin);
+        const m = vec3.dot(overlayInfo.normal, scratchVec3a);
         vec3.scaleAndAdd(v.position, v.position, overlayInfo.normal, -m);
     }
 }
@@ -470,11 +470,23 @@ function clipOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo, p0: MeshV
         const newVertex = new MeshVertex();
         vec3.lerp(newVertex.position, v0.position, v1.position, t);
         vec2.lerp(newVertex.uv, v0.uv, v1.uv, t);
-        vec2.lerp(newVertex.lightmapUV, v0.lightmapUV, v1.lightmapUV, t);
 
-        // Don't care about alpha / normal.
+        // Don't care about alpha / normal / lightmapUV.
         dst.push(newVertex);
     }
+}
+
+function calcWedgeArea2(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3): number {
+    // Compute the wedge p0..p1 / p1..p2
+    vec3.sub(scratchVec3a, p1, p0);
+    vec3.sub(scratchVec3b, p2, p0);
+    vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+    return vec3.len(scratchVec3c);
+}
+
+function calcBarycentricsFromTri(dst: vec2, p: ReadonlyVec3, p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, outerTriArea2: number): void {
+    dst[0] = calcWedgeArea2(p1, p2, p) / outerTriArea2;
+    dst[1] = calcWedgeArea2(p2, p0, p) / outerTriArea2;
 }
 
 function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceInfo[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
@@ -501,9 +513,10 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
             // XXX(jstpierre): Not the cleanest way to compute the surface normal... seems to work though?
             surfacePlane.set(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
 
+            // Project surface down to the overlay plane.
             buildSurfacePlane(surfacePoints, overlayInfo);
 
-            // TODO(jstpierre): Assign lightmapUV through barycentrics.
+            const surfaceTriArea2 = calcWedgeArea2(surfacePoints[0].position, surfacePoints[1].position, surfacePoints[2].position);
 
             // Clip the overlay plane to the surface.
             for (let j0 = 0; j0 < surfacePoints.length; j0++) {
@@ -519,6 +532,13 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
 
             for (let j = 0; j < overlayPoints.length; j++) {
                 const v = overlayPoints[j];
+
+                // Assign lightmapUV from triangle barycentrics.
+                calcBarycentricsFromTri(v.lightmapUV, v.position, surfacePoints[0].position, surfacePoints[1].position, surfacePoints[2].position, surfaceTriArea2);
+                const baryU = v.lightmapUV[0], baryV = v.lightmapUV[1], baryW = (1 - baryU - baryV);
+                vec2.scale(v.lightmapUV, surfacePoints[0].lightmapUV, baryU);
+                vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[1].lightmapUV, baryV);
+                vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[2].lightmapUV, baryW);
 
                 // Set the decal's normal to be the face normal...
                 surfacePlane.getNormal(v.normal);
@@ -781,7 +801,9 @@ function calcLightmapBumpOffset(lightmapData: SurfaceLightmapData, lightmapPage:
     return lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / lightmapPage.height) : 1;
 }
 
-const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 export class BSPFile {
     public version: number;
     public usingHDR: boolean;
@@ -1810,8 +1832,8 @@ export class BSPFile {
             const node = this.nodelist[nodeid];
             let signs = 0;
             for (let i = 0; i < 8; i++) {
-                aabb.cornerPoint(scratchVec3, i);
-                const dot = node.plane.distance(scratchVec3[0], scratchVec3[1], scratchVec3[2]);
+                aabb.cornerPoint(scratchVec3a, i);
+                const dot = node.plane.distance(scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
                 signs |= (dot >= 0 ? 1 : 2);
             }
 
