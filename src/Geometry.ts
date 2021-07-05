@@ -260,6 +260,8 @@ export class AABB {
             vec3.set(dst, this.minX, this.maxY, this.maxZ);
         else if (i === 7)
             vec3.set(dst, this.maxX, this.maxY, this.maxZ);
+        else
+            throw "whoops";
     }
 
     public boundingSphereRadius(): number {

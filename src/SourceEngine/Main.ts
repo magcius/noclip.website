@@ -307,8 +307,6 @@ export class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
     public lightmaps: SurfaceLightmap[] = [];
-    // displacement
-    public clusterset: number[] | null = null;
 
     constructor(public surface: Surface) {
     }
@@ -329,24 +327,9 @@ export class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, pvs: BitMap | null = null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
-
-        if (pvs !== null) {
-            // displacement check
-            const clusterset = assertExists(this.clusterset);
-            let visible = false;
-            for (let i = 0; i < clusterset.length; i++) {
-                if (pvs.getBit(clusterset[i])) {
-                    visible = true;
-                    break;
-                }
-            }
-
-            if (!visible)
-                return;
-        }
 
         if (this.surface.bbox !== null) {
             scratchAABB.transform(this.surface.bbox, modelMatrix);
@@ -388,13 +371,6 @@ export class BSPModelRenderer {
             // TODO(jstpierre): This is ugly
             this.surfaces.push(surface);
             this.surfacesByIdx[surfaceIdx] = surface;
-
-            if (surface.surface.isDisplacement) {
-                const aabb = surface.surface.bbox!;
-                this.displacementSurfaces.push(surface);
-                surface.clusterset = [];
-                this.bsp.markClusterSet(surface.clusterset, aabb);
-            }
         }
 
         this.bindMaterials(renderContext);
@@ -505,19 +481,9 @@ export class BSPModelRenderer {
         if (!this.prepareToRenderCommon(view))
             return;
 
-        // Render all displacement surfaces.
-        // TODO(jstpierre): Move this to the BSP leaves
-        for (let i = 0; i < this.displacementSurfaces.length; i++)
-            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, pvs);
-
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
         this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
-
-        // Hacky: Always render all overlays. We should probably do it based on the origin faces...
-        // TODO(jstpierre): Implement displacement leaf selection properly...
-        for (let i = 0; i < this.bsp.overlays.length; i++)
-            this.bsp.overlays[i].surfaceIndexes.forEach((surfaceIndex) => this.liveSurfaceSet.add(surfaceIndex));
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
             this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
