@@ -15,7 +15,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -1224,8 +1224,8 @@ const scratchPlane = new Plane();
 // http://www.terathon.com/code/oblique.html
 // Plane here needs to be in view-space.
 function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane): void {
-    const x = (Math.sign(plane.x) + m[8]) / m[0];
-    const y = (Math.sign(plane.y) + m[9]) / m[5];
+    const x = (Math.sign(plane.n[0]) + m[8]) / m[0];
+    const y = (Math.sign(plane.n[1]) + m[9]) / m[5];
     const z = -1;
     const w = (1 + m[10]) / m[14];
 
@@ -1408,7 +1408,7 @@ export class SourceRenderer implements SceneGfx {
                 const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
                 if (cameraZ > waterZ) {
                     // Reflection plane
-                    scratchPlane.set4(0, 0, 1, -waterZ);
+                    scratchPlane.set(Vec3UnitZ, -waterZ);
                     scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
 
                     const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);

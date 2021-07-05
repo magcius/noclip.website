@@ -437,7 +437,7 @@ function clipOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo, p0: MeshV
     vec3.sub(p0.normal, p1.position, p0.position);
     vec3.normalize(p0.normal, p0.normal);
     vec3.cross(p0.normal, overlayInfo.normal, p0.normal);
-    plane.set3(p0.normal, -vec3.dot(p0.normal, p0.position));
+    plane.set(p0.normal, -vec3.dot(p0.normal, p0.position));
 
     if (plane.distanceVec3(p2.position) > 0.0)
         plane.negate();
@@ -511,7 +511,7 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
 
             // Store our surface plane for later, so we can re-project back to it...
             // XXX(jstpierre): Not the cleanest way to compute the surface normal... seems to work though?
-            surfacePlane.set(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
+            surfacePlane.setTri(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
 
             // Project surface down to the overlay plane.
             buildSurfacePlane(surfacePoints, overlayInfo);
@@ -541,7 +541,7 @@ function buildOverlay(overlayInfo: OverlayInfo, unmergedFaceInfos: UnmergedFaceI
                 vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[2].lightmapUV, baryW);
 
                 // Set the decal's normal to be the face normal...
-                surfacePlane.getNormal(v.normal);
+                vec3.copy(v.normal, surfacePlane.n);
 
                 // Project back down to the surface plane.
                 const distance = surfacePlane.distanceVec3(v.position);

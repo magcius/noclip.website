@@ -347,14 +347,13 @@ class cBgW {
                 const p0 = this.vtx[tri.vtxIdx0];
                 const p1 = this.vtx[tri.vtxIdx1];
                 const p2 = this.vtx[tri.vtxIdx2];
-                
-                this.triElm[i].set(p0, p1, p2);
+
+                this.triElm[i].setTri(p0, p1, p2);
             }
         } else {
             for (let i = 0; i < this.dt.triTbl.length; i++) {
                 const plane = this.triElm[i];
-                plane.getNormal(scratchVec3);
-                plane.d -= vec3.dot(scratchVec3, this.translationDelta);
+                plane.d -= vec3.dot(plane.n, this.translationDelta);
             }
         }
     }
@@ -374,10 +373,10 @@ class cBgW {
                 const plane = this.triElm[j];
 
                 // Skip degenerate planes.
-                if (Math.abs(plane.x) <= MathConstants.EPSILON && Math.abs(plane.y) <= MathConstants.EPSILON && Math.abs(plane.z) <= MathConstants.EPSILON)
+                if (Math.abs(plane.n[0]) <= MathConstants.EPSILON && Math.abs(plane.n[1]) <= MathConstants.EPSILON && Math.abs(plane.n[2]) <= MathConstants.EPSILON)
                     continue;
 
-                if (plane.y < -0.8) {
+                if (plane.n[1] < -0.8) {
                     // Roof.
 
                     // BlckConnect inlined.
@@ -386,7 +385,7 @@ class cBgW {
                     if (prevRoofIdx >= 0)
                         this.rwg[prevRoofIdx] = j;
                     prevRoofIdx = j;
-                } else if (plane.y < 0.5) {
+                } else if (plane.n[1] < 0.5) {
                     // Wall.
 
                     if (blk.wallIdx < 0)
@@ -601,9 +600,9 @@ class cBgW {
 
         for (; rwgIdx >= 0; rwgIdx = this.rwg[rwgIdx]) {
             const plane = this.triElm[rwgIdx];
-            if (plane.y < 0.014)
+            if (plane.n[1] < 0.014)
                 continue;
-            const y = -(plane.x * chk.pos[0] + plane.z * chk.pos[2] + plane.d) / plane.y;
+            const y = -(plane.n[0] * chk.pos[0] + plane.n[2] * chk.pos[2] + plane.d) / plane.n[1];
             if (this.RwgGroundCheckCommon(y, rwgIdx, chk))
                 ret = true;
         }
@@ -616,7 +615,7 @@ class cBgW {
 
         for (; rwgIdx >= 0; rwgIdx = this.rwg[rwgIdx]) {
             const plane = this.triElm[rwgIdx];
-            const y = -(plane.x * chk.pos[0] + plane.z * chk.pos[2] + plane.d) / plane.y;
+            const y = -(plane.n[0] * chk.pos[0] + plane.n[2] * chk.pos[2] + plane.d) / plane.n[1];
             if (this.RwgGroundCheckCommon(y, rwgIdx, chk))
                 ret = true;
         }
