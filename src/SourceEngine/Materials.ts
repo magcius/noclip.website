@@ -2303,6 +2303,8 @@ void mainPS() {
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #endif
 
+    vec4 t_FinalColor;
+
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
     float t_Fresnel = CalcFresnelTerm5(dot(t_NormalWorld, t_WorldDirectionToEye));
     t_FinalColor.rgb = mix(t_RefractColor, t_ReflectColor, t_Fresnel);
