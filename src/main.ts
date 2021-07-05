@@ -281,15 +281,27 @@ class Main {
         this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
 
         
-        console.log("User Agent: " + navigator.userAgent);
         if(navigator.userAgent.includes('Android') || navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad') || navigator.userAgent.includes('Windows Phone') || navigator.userAgent.includes('iPod touch')) {
-            console.warn('Mobile user detected; This may also be triggered by very narrow viewports.');
+        //if(window.innerWidth <= 600) { // Debugging and preview ONLY!
+            console.warn('Mobile user detected!');
+            //Make the background all dark
+            const popupbackground = document.createElement('div');
+            document.body.appendChild(popupbackground);
+            popupbackground.style.position = "fixed";
+            popupbackground.style.display = 'block';
+            popupbackground.style.top = "0";
+            popupbackground.style.left = '0';
+            popupbackground.style.width = "100vw";
+            popupbackground.style.height = "100vh";
+            popupbackground.style.margin = "0";
+            popupbackground.style.backgroundColor = "rgba(0,0,0,0.8)";
+            popupbackground.style.zIndex = '999';
+            //Now this so we can do the nesty nest
             const mobileWarning = document.createElement('div');
-            document.body.appendChild(mobileWarning); 
+            popupbackground.appendChild(mobileWarning); 
             mobileWarning.innerHTML = `
             <h1>Mobile is not properly supported</h1> 
-            <p>Continuing may cause errors on both Android and iOS, and the controls may not be accessible at all on just a touchscreen. This is due to a combination of issues, the most prevalent being that mobile devices lack great support for 3D rendering on webpages. Yout may experience control issues, graphical errors, and other issues not present on desktop.</p>
-            <p><small>Yes, that includes tablets.</small></p> 
+            <p>Android, iOS, and Windows Phone all lack certain webGL features that are required to make noclip work. In addition, we have not designed controls for mobile. This includes tablets.</p> 
             `;
             //Button constructed here so no need for id
             const mobileclose = document.createElement('button');
@@ -318,20 +330,8 @@ class Main {
             mobileclose.style.backgroundColor = "#186cd4";
             mobileclose.style.border = '0';
             mobileclose.style.padding = "1%";
-            //At last make the background all dark
-            const popupbackground = document.createElement('div');
-            document.body.appendChild(popupbackground);
-            popupbackground.style.position = "fixed";
-            popupbackground.style.display = 'block';
-            popupbackground.style.top = "0";
-            popupbackground.style.left = '0';
-            popupbackground.style.width = "100vw";
-            popupbackground.style.height = "100vh";
-            popupbackground.style.margin = "0";
-            popupbackground.style.backgroundColor = "rgba(0,0,0,0.8)";
-            popupbackground.style.zIndex = '999';
-        }  
-
+        } 
+        
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
                 return;
