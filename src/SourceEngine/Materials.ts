@@ -974,9 +974,16 @@ varying vec4 v_LightAtten;
 #endif
 
 // Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum
-uniform sampler2D u_Texture[8];
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureDetail;
+uniform sampler2D u_TextureBumpmap;
+uniform sampler2D u_TextureLightmap;
+uniform sampler2D u_TextureEnvmapMask;
+uniform sampler2D u_TextureBase2;
+uniform sampler2D u_TextureSpecularExponent;
+uniform sampler2D u_TextureSelfIllum;
 // Envmap
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 // #define DEBUG_DIFFUSEONLY 1
 // #define DEBUG_FULLBRIGHT 1
@@ -1364,11 +1371,11 @@ void mainPS() {
 
     vec4 t_Albedo, t_BlendedAlpha;
 
-    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0]), v_TexCoord0.xy));
+    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
 
 #ifdef USE_BASETEXTURE2
     // Blend in BaseTexture2 using blend factor.
-    vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy));
+    vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
     t_Albedo = mix(t_BaseTexture, t_BaseTexture2, v_PositionWorld.w);
 #else
     t_Albedo = t_BaseTexture;
@@ -1376,7 +1383,7 @@ void mainPS() {
 
 #ifdef USE_DETAIL
     vec2 t_DetailTexCoord = v_TexCoord0.xy * u_DetailScale;
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], t_DetailTexCoord)));
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail, t_DetailTexCoord)));
     t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
@@ -1384,7 +1391,7 @@ void mainPS() {
 
     vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
-    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord0.zw));
+    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_TextureBumpmap, v_TexCoord0.zw));
 
 #ifdef USE_SSBUMP
     // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
@@ -1407,11 +1414,11 @@ void mainPS() {
 #ifdef USE_LIGHTMAP
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
-    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy)).rgb;
+    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy)).rgb;
 #ifdef USE_DIFFUSE_BUMPMAP
-    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
-    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
-    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
+    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
+    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
+    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
 
     vec3 t_Influence;
 
@@ -1501,7 +1508,7 @@ void mainPS() {
     t_SelfIllumMask = vec3(0);
 #else
 #ifdef USE_SELFILLUM_MASK
-    t_SelfIllumMask = texture(SAMPLER_2D(u_Texture[7]), v_TexCoord1.xy).rgb;
+    t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllum), v_TexCoord1.xy).rgb;
 #else
     t_SelfIllumMask = t_BaseTexture.aaa;
 #endif
@@ -1529,7 +1536,7 @@ void mainPS() {
     vec3 t_EnvmapFactor = u_EnvmapTint.rgb;
 
 #ifdef USE_ENVMAP_MASK
-    t_EnvmapFactor *= texture(SAMPLER_2D(u_Texture[4]), v_TexCoord1.zw).rgb;
+    t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
 #endif
 
 #ifdef USE_NORMALMAP_ALPHA_ENVMAP_MASK
@@ -1541,7 +1548,7 @@ void mainPS() {
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
-    vec3 t_EnvmapColor = texture(u_TextureCube[0], t_Reflection).rgb;
+    vec3 t_EnvmapColor = texture(u_TextureEnvmap, t_Reflection).rgb;
     t_EnvmapColor *= t_EnvmapFactor;
 
     // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
@@ -1562,7 +1569,7 @@ void mainPS() {
     t_SpecularLightInput.Fresnel = t_Fresnel;
 
     // TODO(jstpierre): Support $phongexponentfactor override
-    vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_Texture[6]), v_TexCoord0.xy);
+    vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
     t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
     t_SpecularLightInput.RimExponent = 1.0;
 
@@ -2033,7 +2040,8 @@ varying vec3 v_PositionWorld;
 varying vec4 v_TexCoord0;
 
 // Texture1, Texture2
-uniform sampler2D u_Texture[2];
+uniform sampler2D u_Texture1;
+uniform sampler2D u_Texture2;
 
 #ifdef VERT
 layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
@@ -2051,8 +2059,8 @@ void mainVS() {
 
 #ifdef FRAG
 void mainPS() {
-    vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
-    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw));
+    vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture1, v_TexCoord0.xy));
+    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture2, v_TexCoord0.zw));
     vec4 t_FinalColor = t_Texture1 * t_Texture2 * u_ModulationColor;
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
@@ -2163,9 +2171,12 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
 // Refract Texture, Normalmap, Framebuffer Depth Texture, Reflect Texture (Expensive Water)
-uniform sampler2D u_Texture[4];
+uniform sampler2D u_TextureRefract;
+uniform sampler2D u_TextureNormalmap;
+uniform sampler2D u_TextureFramebufferDepth;
+uniform sampler2D u_TextureReflect;
 // Envmap ("Cheap" Water)
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
 layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
@@ -2198,7 +2209,7 @@ void mainVS() {
 
 #ifdef FRAG
 float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
-    float t_DepthSample = texture(SAMPLER_2D(u_Texture[2]), t_ProjTexCoord).r;
+    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), t_ProjTexCoord).r;
 
     // Reconstruct world-space position for the sample.
     vec3 t_DepthSamplePos01 = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
@@ -2223,12 +2234,12 @@ float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
 void mainPS() {
     // Sample our normal map with scroll offsets.
     vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
-    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord0));
+    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord0));
 #ifdef USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
-    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord1));
+    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord1));
     vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
-    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord2));
+    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord2));
     vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
 #else
     vec4 t_BumpmapSample = t_BumpmapSample0;
@@ -2243,7 +2254,7 @@ void mainPS() {
     float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
     float t_RefractAmount = u_RefractAmount * t_RefractFogBendAmount;
     vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractAmount);
-    vec4 t_RefractSample = texture(SAMPLER_2D(u_Texture[0], t_RefractTexCoord));
+    vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract, t_RefractTexCoord));
     vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
 
     float t_RefractFogAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord + (t_TexCoordBumpOffset.xy * -t_RefractAmount));
@@ -2261,10 +2272,10 @@ void mainPS() {
     // Reflection texture is stored upside down
     t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
 
-    vec4 t_ReflectSample = texture(SAMPLER_2D(u_Texture[3]), t_ReflectTexCoord);
+    vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #else
-    vec4 t_ReflectSample = texture(u_TextureCube[0], t_Reflection);
+    vec4 t_ReflectSample = texture(u_TextureEnvmap, t_Reflection);
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #endif
 
@@ -2321,9 +2332,13 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
 // BaseTexture, Lightmap, Normal Map, Flow Map, Flow Noise
-uniform sampler2D u_Texture[5];
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureLightmap;
+uniform sampler2D u_TextureNormalmap;
+uniform sampler2D u_TextureFlowmap;
+uniform sampler2D u_TextureFlowNoise;
 // Envmap
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
 layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
@@ -2356,8 +2371,7 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
     return vec3(t_NormalXY.xy, t_NormalZ);
 }
 
-vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp)
-{
+vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp) {
     float t_ScrollTime1 = fract(t_FlowTimeInIntervals + 0.0);
     float t_ScrollTime2 = fract(t_FlowTimeInIntervals + 0.5);
     float t_ScrollPhase1 = floor(t_FlowTimeInIntervals) * 0.311;
@@ -2385,15 +2399,15 @@ void mainPS() {
 
     vec2 t_TexCoordWorldBase = vec2(v_PositionWorld.x, -v_PositionWorld.y);
     vec2 t_FlowNoiseTexCoord = t_TexCoordWorldBase * u_FlowNoiseTexCoordScale;
-    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_Texture[4]), t_FlowNoiseTexCoord.xy);
+    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_TextureFlowNoise), t_FlowNoiseTexCoord.xy);
 
-    vec4 t_FlowSample = texture(SAMPLER_2D(u_Texture[3]), t_FlowTexCoord.xy);
+    vec4 t_FlowSample = texture(SAMPLER_2D(u_TextureFlowmap), t_FlowTexCoord.xy);
     vec2 t_FlowVectorTangent = UnpackUnsignedNormalMap(t_FlowSample).rg;
 
     vec2 t_FlowNormalTexCoordBase = t_TexCoordWorldBase * u_FlowNormalTexCoordScale;
     float t_FlowTimeInIntervals = u_FlowTimeInIntervals + t_FlowNoiseSample.g;
     float t_FlowNormalLerpExp = 1.0;
-    vec4 t_FlowNormalSample = SampleFlowMap(PP_SAMPLER_2D(u_Texture[2]), t_FlowNormalTexCoordBase.xy, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, t_FlowNormalLerpExp);
+    vec4 t_FlowNormalSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureNormalmap), t_FlowNormalTexCoordBase.xy, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, t_FlowNormalLerpExp);
 
     vec2 t_FlowNormalXY = UnpackUnsignedNormalMap(t_FlowNormalSample).xy * (length(t_FlowVectorTangent.xy) + 0.1) * u_FlowBumpStrength;
     vec4 t_NormalWorld = vec4(ReconstructNormal(t_FlowNormalXY), 1.0);
@@ -2413,7 +2427,7 @@ void mainPS() {
     vec3 t_WaterFogColor = u_WaterFogColor.rgb;
 
 #ifdef USE_LIGHTMAP_WATER_FOG
-    vec3 t_LightmapColor = texture(SAMPLER_2D(u_Texture[1]), v_TexCoord0.zw).rgb;
+    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord0.zw).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
     t_LightmapColor *= t_LightmapScale;
 
@@ -2424,7 +2438,7 @@ void mainPS() {
     t_RefractColor.rgb += t_WaterFogColor;
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld.xyz, t_PositionToEye.xyz);
-    t_ReflectColor += texture(u_TextureCube[0], t_Reflection).rgba;
+    t_ReflectColor += texture(u_TextureEnvmap, t_Reflection).rgba;
 
     float t_RefractAmount = t_Fresnel;
 
@@ -2434,7 +2448,7 @@ void mainPS() {
     vec3 t_InteriorDirection = t_ParallaxStrength * (t_LookDir.xyz - t_NormalWorld.xyz);
     vec2 t_FlowColorTexCoordBase = t_TexCoordWorldBase.xy * u_FlowColorTexCoordScale + t_InteriorDirection.xy;
     float t_FlowColorTimeInIntervals = u_FlowColorTimeInIntervals + t_FlowNoiseSample.g;
-    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_Texture[0]), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
+    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureBase), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
 
     vec4 t_FlowColor = t_FlowColorSample.rgba;
 
@@ -2689,9 +2703,11 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
 // Base Texture, Normalmap, Refract Tint Texture
-uniform sampler2D u_Texture[3];
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureNormalmap;
+uniform sampler2D u_TextureRefractTint;
 // Envmap
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
 layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
@@ -2725,14 +2741,14 @@ void mainVS() {
 void mainPS() {
     // Sample our normal map with scroll offsets.
     vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
-    vec4 t_BumpmapSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_Texture[1]), t_BumpmapCoord0));
+    vec4 t_BumpmapSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0));
     vec3 t_BumpmapNormal = t_BumpmapSample.rgb;
 
     vec4 t_FinalColor = vec4(0);
 
     vec3 t_RefractTint = u_RefractTint.rgb;
 #ifdef USE_REFRACT_TINT_TEXTURE
-    vec4 t_RefractTintTextureSample = texture(SAMPLER_2D(u_Texture[2]), t_BumpmapCoord0);
+    vec4 t_RefractTintTextureSample = texture(SAMPLER_2D(u_TextureRefractTint), t_BumpmapCoord0);
     t_RefractTint *= 2.0 * t_RefractTintTextureSample.rgb;
 #endif
 
@@ -2753,13 +2769,13 @@ void mainPS() {
     t_RefractTexCoordOffs += t_BumpmapNormal.xy;
     t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
 
-    vec2 t_TexSize = vec2(textureSize(u_Texture[0], 0));
+    vec2 t_TexSize = vec2(textureSize(u_TextureBase, 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
     t_RefractTexCoordOffs *= t_Aspect * u_RefractDepth;
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
 
-    vec4 t_Refract1 = texture(SAMPLER_2D(u_Texture[0]), saturate(t_RefractTexCoord));
-    vec4 t_Refract2 = texture(SAMPLER_2D(u_Texture[0]), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
+    vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
+    vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
     vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
     float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
 
@@ -2774,12 +2790,12 @@ void mainPS() {
     int g_BlurWidth = g_BlurAmount * 2 + 1;
     float g_BlurWeight = 1.0 / float(g_BlurWidth * g_BlurWidth);
 
-    vec2 t_FramebufferSize = vec2(textureSize(u_Texture[0], 0));
+    vec2 t_FramebufferSize = vec2(textureSize(u_TextureBase, 0));
     vec2 t_BlurSampleOffset = vec2(1.0) / t_FramebufferSize;
     for (int y = -g_BlurAmount; y <= g_BlurAmount; y++) {
         for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
             vec2 t_TexCoord = t_RefractTexCoord + vec2(t_BlurSampleOffset.x * float(x), t_BlurSampleOffset.y * float(y));
-            t_BlurAccum += g_BlurWeight * texture(SAMPLER_2D(u_Texture[0]), t_TexCoord);
+            t_BlurAccum += g_BlurWeight * texture(SAMPLER_2D(u_TextureBase), t_TexCoord);
         }
     }
 
@@ -2796,7 +2812,7 @@ void mainPS() {
     t_SpecularFactor.rgb *= t_BumpmapSample.a;
 
     vec3 t_SpecularLighting = vec3(0.0);
-    t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
+    t_SpecularLighting += texture(u_TextureEnvmap, t_Reflection).rgb;
     t_SpecularLighting *= t_SpecularFactor;
 
     t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
