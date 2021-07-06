@@ -134,7 +134,7 @@ export function createBasicRRESRendererFromU8Buffer(device: GfxDevice, buffer: A
     });
 }
 
-export function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBufferSlice) {
+export async function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBufferSlice) {
     const device = context.device;
     const arc = U8.parse(buffer);
 
