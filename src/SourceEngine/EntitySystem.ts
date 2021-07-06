@@ -502,7 +502,13 @@ class func_door extends BaseToggle {
         this.registerInput('toggle', this.input_toggle.bind(this));
 
         const spawnpos = Number(fallbackUndefined(this.entity.spawnpos, '0'));
-        if (spawnpos === 1)
+
+        const enum SpawnFlags {
+            START_OPEN_OBSOLETE = 0x01,
+        }
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+
+        if (spawnpos === 1 || !!(spawnflags & SpawnFlags.START_OPEN_OBSOLETE))
             this.toggleState = ToggleState.Top;
         else
             this.toggleState = ToggleState.Bottom;
@@ -526,6 +532,11 @@ class func_door extends BaseToggle {
         angleVec(scratchVec3a, this.moveDir);
         const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0);
         vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
+
+        if (this.toggleState === ToggleState.Top) {
+            // If we should start open, then start open.
+            vec3.copy(this.localOrigin, this.positionOpened);
+        }
     }
 
     protected modelUpdated(): void {

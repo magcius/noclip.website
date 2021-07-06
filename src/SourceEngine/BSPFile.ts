@@ -821,6 +821,7 @@ export class BSPFile {
     public version: number;
     public usingHDR: boolean;
 
+    private entitiesStr: string; // For debugging.
     public entities: BSPEntity[] = [];
     public surfaces: Surface[] = [];
     public overlays: Overlay[] = [];
@@ -930,7 +931,8 @@ export class BSPFile {
         this.visibility = new BSPVisibility(getLumpData(LumpType.VISIBILITY));
 
         // Parse out entities.
-        this.entities = parseEntitiesLump(getLumpData(LumpType.ENTITIES));
+        this.entitiesStr = new TextDecoder('utf8').decode(getLumpData(LumpType.ENTITIES).createTypedArray(Uint8Array));
+        this.entities = parseEntitiesLump(this.entitiesStr);
 
         function readVec4(view: DataView, offs: number): vec4 {
             const x = view.getFloat32(offs + 0x00, true);

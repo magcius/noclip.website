@@ -301,8 +301,7 @@ export interface BSPEntity {
     [k: string]: string;
 }
 
-export function parseEntitiesLump(buffer: ArrayBufferSlice): BSPEntity[] {
-    const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
+export function parseEntitiesLump(str: string): BSPEntity[] {
     const p = new ValveKeyValueParser(str);
     const entities: BSPEntity[] = [];
     while (p.hastok()) {
