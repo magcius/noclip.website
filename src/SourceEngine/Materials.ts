@@ -3918,6 +3918,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_PlayerProximity);
         this.registerProxyFactory(MaterialProxy_GaussianNoise);
         this.registerProxyFactory(MaterialProxy_AnimatedTexture);
+        this.registerProxyFactory(MaterialProxy_MaterialModify);
         this.registerProxyFactory(MaterialProxy_MaterialModifyAnimated);
         this.registerProxyFactory(MaterialProxy_WaterLOD);
         this.registerProxyFactory(MaterialProxy_TextureTransform);
@@ -4276,6 +4277,14 @@ class MaterialProxy_AnimatedTexture {
         }
 
         paramSetNum(map, this.animatedtextureframenumvar, frame);
+    }
+}
+
+class MaterialProxy_MaterialModify {
+    public static type = 'materialmodify';
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        // Nothing to do
     }
 }
 
