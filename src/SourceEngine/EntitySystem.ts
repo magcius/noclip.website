@@ -63,6 +63,7 @@ export class BaseEntity {
     public localOrigin = vec3.create();
     public angles = vec3.create();
     public renderamt: number = 1.0;
+    public rendermode: number = 0;
     public visible = true;
     public materialParams: EntityMaterialParameters | null = null;
     public skin: number = 0;
@@ -92,6 +93,7 @@ export class BaseEntity {
         }
 
         this.renderamt = vmtParseNumber(entity.renderamt, 255.0) / 255.0;
+        this.rendermode = vmtParseNumber(entity.rendermode, 0);
 
         if (entity.targetname)
             this.targetName = '' + entity.targetname;
@@ -275,6 +277,8 @@ export class BaseEntity {
 
             let visible = this.visible;
             if (this.renderamt === 0)
+                visible = false;
+            if (this.rendermode === 10)
                 visible = false;
 
             if (this.modelBSP !== null)
