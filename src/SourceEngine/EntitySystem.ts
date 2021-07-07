@@ -515,6 +515,7 @@ class func_door extends BaseToggle {
     private output_onFullyOpen = new EntityOutput();
 
     private modelExtents = vec3.create();
+    private lip: number;
     private locked: boolean = false;
     protected toggleState: ToggleState;
 
@@ -543,6 +544,8 @@ class func_door extends BaseToggle {
             this.toggleState = ToggleState.Top;
         else
             this.toggleState = ToggleState.Bottom;
+
+        this.lip = Number(fallbackUndefined(this.entity.lip, '0'));
     }
 
     public spawn(entitySystem: EntitySystem): void {
@@ -561,7 +564,7 @@ class func_door extends BaseToggle {
             this.modelStudio.modelData.viewBB.extents(this.modelExtents);
 
         angleVec(scratchVec3a, this.moveDir);
-        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0);
+        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
         vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
 
         if (this.toggleState === ToggleState.Top) {

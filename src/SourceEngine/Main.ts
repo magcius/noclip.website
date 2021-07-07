@@ -193,7 +193,7 @@ export class SkyboxRenderer {
         let dstIdx = 0;
 
         function buildPlaneVert(pb: number, s: number, t: number): void {
-            const side = 100000 * Math.sqrt(1/3);
+            const side = 100000;
             const g = [-s*side, s*side, -t*side, t*side, -side, side];
             vertexData[dstVert++] = g[(pb >>> 8) & 0x0F];
             vertexData[dstVert++] = g[(pb >>> 4) & 0x0F];
