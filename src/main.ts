@@ -304,7 +304,7 @@ class Main {
             popupBackground.appendChild(mobileWarning); 
             mobileWarning.innerHTML = `
             <h1>Mobile is not properly supported</h1> 
-            <p>Android, iOS, and Windows Phone all lack certain webGL features that are required to make noclip work. In addition, we have not designed controls for mobile. This includes tablets.</p> 
+            <p>Android, iOS, and Windows Phone all lack certain webGL features that are required to make noclip work. In addition, controls on mobile are limited. This includes tablets.</p> 
             `;
             //Button constructed here so no need for id
             const closebtn = document.createElement('button');
