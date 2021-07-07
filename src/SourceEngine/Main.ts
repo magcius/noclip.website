@@ -15,7 +15,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -29,7 +29,6 @@ import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
-import { OpaqueBlack } from "../Color";
 import * as UI from "../ui";
 
 export class CustomMount {
@@ -307,8 +306,6 @@ export class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
     public lightmaps: SurfaceLightmap[] = [];
-    // displacement
-    public clusterset: number[] | null = null;
 
     constructor(public surface: Surface) {
     }
@@ -329,24 +326,9 @@ export class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, pvs: BitMap | null = null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
-
-        if (pvs !== null) {
-            // displacement check
-            const clusterset = assertExists(this.clusterset);
-            let visible = false;
-            for (let i = 0; i < clusterset.length; i++) {
-                if (pvs.getBit(clusterset[i])) {
-                    visible = true;
-                    break;
-                }
-            }
-
-            if (!visible)
-                return;
-        }
 
         if (this.surface.bbox !== null) {
             scratchAABB.transform(this.surface.bbox, modelMatrix);
@@ -388,13 +370,6 @@ export class BSPModelRenderer {
             // TODO(jstpierre): This is ugly
             this.surfaces.push(surface);
             this.surfacesByIdx[surfaceIdx] = surface;
-
-            if (surface.surface.isDisplacement) {
-                const aabb = surface.surface.bbox!;
-                this.displacementSurfaces.push(surface);
-                surface.clusterset = [];
-                this.bsp.markClusterSet(surface.clusterset, aabb);
-            }
         }
 
         this.bindMaterials(renderContext);
@@ -505,29 +480,12 @@ export class BSPModelRenderer {
         if (!this.prepareToRenderCommon(view))
             return;
 
-        // Render all displacement surfaces.
-        // TODO(jstpierre): Move this to the BSP leaves
-        for (let i = 0; i < this.displacementSurfaces.length; i++)
-            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, pvs);
-
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
         this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
 
-        // Hacky: Always render all overlays. We should probably do it based on the origin faces...
-        for (let i = 0; i < this.bsp.overlays.length; i++)
-            this.bsp.overlays[i].surfaceIndexes.forEach((surfaceIndex) => this.liveSurfaceSet.add(surfaceIndex));
-
         for (const surfaceIdx of this.liveSurfaceSet.values())
             this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
-
-        /*
-        for (let i = 0; i < this.bsp.overlays.length; i++) {
-            const o = this.bsp.overlays[i];
-            for (let j = 0; j < o.tri.length; j += 2)
-                drawWorldSpaceLine(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, o.tri[j + 0], o.tri[j + 1]);
-        }
-        */
     }
 }
 
@@ -997,6 +955,7 @@ export class SourceRenderContext {
     public showTriggerDebug = false;
     public showFog = true;
     public showExpensiveWater = true;
+    public showDecalMaterials = true;
 
     constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
         this.renderCache = new GfxRenderCache(device);
@@ -1232,8 +1191,8 @@ const scratchPlane = new Plane();
 // http://www.terathon.com/code/oblique.html
 // Plane here needs to be in view-space.
 function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane): void {
-    const x = (Math.sign(plane.x) + m[8]) / m[0];
-    const y = (Math.sign(plane.y) + m[9]) / m[5];
+    const x = (Math.sign(plane.n[0]) + m[8]) / m[0];
+    const y = (Math.sign(plane.n[1]) + m[9]) / m[5];
     const z = -1;
     const w = (1 + m[10]) / m[14];
 
@@ -1359,6 +1318,12 @@ export class SourceRenderer implements SceneGfx {
             this.renderContext.showToolMaterials = v;
         };
         renderHacksPanel.contents.appendChild(showToolMaterials.elem);
+        const showDecalMaterials = new UI.Checkbox('Show Decals', true);
+        showDecalMaterials.onchanged = () => {
+            const v = showDecalMaterials.checked;
+            this.renderContext.showDecalMaterials = v;
+        };
+        renderHacksPanel.contents.appendChild(showDecalMaterials.elem);
         const showTriggerDebug = new UI.Checkbox('Show Trigger Debug', false);
         showTriggerDebug.onchanged = () => {
             const v = showTriggerDebug.checked;
@@ -1386,7 +1351,7 @@ export class SourceRenderer implements SceneGfx {
     }
 
     public prepareToRender(viewerInput: ViewerRenderInput): void {
-        const renderContext = this.renderContext, device = this.renderContext.device;
+        const renderContext = this.renderContext, device = renderContext.device;
 
         // globalTime is in seconds.
         renderContext.globalTime = viewerInput.time / 1000.0;
@@ -1416,7 +1381,7 @@ export class SourceRenderer implements SceneGfx {
                 const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
                 if (cameraZ > waterZ) {
                     // Reflection plane
-                    scratchPlane.set4(0, 0, 1, -waterZ);
+                    scratchPlane.set(Vec3UnitZ, -waterZ);
                     scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
 
                     const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);

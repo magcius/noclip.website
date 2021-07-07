@@ -174,7 +174,7 @@ namespace TriggerClass {
             mat4.invert(scratchMtx1, scratchMtx0);
 
             const plane = new Plane();
-            plane.set(obj.position, scratchVec0, scratchVec1);
+            plane.setTri(obj.position, scratchVec0, scratchVec1);
             const worldToPlaneSpaceMatrix = mat4.clone(scratchMtx1);
             const radius = 100 * obj.scale;
 

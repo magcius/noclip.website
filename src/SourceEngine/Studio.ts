@@ -10,9 +10,10 @@ import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -1555,7 +1556,7 @@ class StudioModelMeshInstance {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[]) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[], depth: number) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
@@ -1577,6 +1578,7 @@ class StudioModelMeshInstance {
                 this.materialInstance.setOnRenderInstSkinningParams(renderInst, boneMatrix, stripData.hardwareBoneTable);
                 renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
                 renderInst.debug = this;
+                renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
                 this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);
             }
         }
@@ -1603,9 +1605,9 @@ class StudioModelLODInstance {
             this.meshInstance[i].movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[]) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[], depth: number) {
         for (let i = 0; i < this.meshInstance.length; i++)
-            this.meshInstance[i].prepareToRender(renderContext, renderInstManager, modelMatrix, boneMatrix);
+            this.meshInstance[i].prepareToRender(renderContext, renderInstManager, modelMatrix, boneMatrix, depth);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1762,8 +1764,11 @@ export class StudioModelInstance {
         if (!renderContext.currentView.frustum.contains(scratchAABB))
             return;
 
+        scratchAABB.centerPoint(scratchVec3);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
+
         const lodIndex = this.getLODModelIndex(renderContext);
-        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix);
+        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix, depth);
     }
 
     public destroy(device: GfxDevice): void {

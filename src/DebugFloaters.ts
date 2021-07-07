@@ -195,6 +195,12 @@ export class FloatingPanel implements Widget {
             usePercent = parentMetadata.usepercent;
         usePercent = !!usePercent;
 
+        let labelNameMetadata = Reflect.getMetadata('df:label', obj, paramName);
+        if (labelNameMetadata === undefined && parentMetadata !== null && parentMetadata.label !== undefined)
+            labelNameMetadata = parentMetadata.label;
+        if (labelNameMetadata !== undefined)
+            labelName = labelNameMetadata;
+
         const fracDig = Math.max(0, -Math.log10(step));
         const slider = new Slider();
 
@@ -311,6 +317,7 @@ export class FloatingPanel implements Widget {
 
 export class DebugFloaterHolder {
     private floatingPanels: FloatingPanel[] = [];
+    private debugFloater: FloatingPanel | null = null;
     public elem: HTMLElement;
     public midiControls = new GlobalMIDIControls();
 
@@ -330,17 +337,17 @@ export class DebugFloaterHolder {
         return panel;
     }
 
-    public destroyScene(): void {
-        for (let i = 0; i < this.floatingPanels.length; i++)
-            this.floatingPanels[i].close();
-        this.floatingPanels = [];
-    }
-
-    private debugFloater: FloatingPanel | null = null;
     private getDebugFloater(): FloatingPanel {
         if (this.debugFloater === null)
             this.debugFloater = this.makeFloatingPanel('Debug');
         return this.debugFloater;
+    }
+
+    public destroyScene(): void {
+        for (let i = 0; i < this.floatingPanels.length; i++)
+            this.floatingPanels[i].close();
+        this.floatingPanels = [];
+        this.debugFloater = null;
     }
 
     private _bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
@@ -504,4 +511,8 @@ export function dfSigFigs(v: number = 2) {
 
 export function dfUsePercent(v: boolean = true) {
     return Reflect.metadata('df:usepercent', v);
+}
+
+export function dfLabel(v: string) {
+    return Reflect.metadata('df:label', v);
 }
