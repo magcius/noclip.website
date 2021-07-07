@@ -287,33 +287,32 @@ class Main {
         
         if(navigator.userAgent.includes('Android') || navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad') || navigator.userAgent.includes('Windows Phone') || navigator.userAgent.includes('iPod touch')) {
         //if(window.innerWidth <= 600) { // Debugging and preview ONLY!
-            console.warn('Mobile user detected!');
             //Make the background all dark
-            const popupbackground = document.createElement('div');
-            document.body.appendChild(popupbackground);
-            popupbackground.style.position = "fixed";
-            popupbackground.style.display = 'block';
-            popupbackground.style.top = "0";
-            popupbackground.style.left = '0';
-            popupbackground.style.width = "100vw";
-            popupbackground.style.height = "100vh";
-            popupbackground.style.margin = "0";
-            popupbackground.style.backgroundColor = "rgba(0,0,0,0.8)";
-            popupbackground.style.zIndex = '999';
+            const popupBackground = document.createElement('div');
+            document.body.appendChild(popupBackground);
+            popupBackground.style.position = "fixed";
+            popupBackground.style.display = 'block';
+            popupBackground.style.top = "0";
+            popupBackground.style.left = '0';
+            popupBackground.style.width = "100vw";
+            popupBackground.style.height = "100vh";
+            popupBackground.style.margin = "0";
+            popupBackground.style.backgroundColor = "rgba(0,0,0,0.8)";
+            popupBackground.style.zIndex = '999';
             //Now this so we can do the nesty nest
             const mobileWarning = document.createElement('div');
-            popupbackground.appendChild(mobileWarning); 
+            popupBackground.appendChild(mobileWarning); 
             mobileWarning.innerHTML = `
             <h1>Mobile is not properly supported</h1> 
             <p>Android, iOS, and Windows Phone all lack certain webGL features that are required to make noclip work. In addition, we have not designed controls for mobile. This includes tablets.</p> 
             `;
             //Button constructed here so no need for id
-            const mobileclose = document.createElement('button');
-            mobileclose.innerHTML = "Continue anyway";
-            mobileWarning.appendChild(mobileclose);
-            mobileclose.onclick = () => {
+            const closebtn = document.createElement('button');
+            closebtn.innerHTML = "Continue anyway";
+            mobileWarning.appendChild(closebtn);
+            closebtn.onclick = () => {
                 mobileWarning.remove();
-                popupbackground.remove(); //The background
+                popupBackground.remove(); //The background
             }
             //Add CSS
             mobileWarning.style.position = 'absolute';
@@ -328,13 +327,13 @@ class Main {
             mobileWarning.style.fontFamily = "'fontello', monospace";
             mobileWarning.style.textAlign = "center";
             mobileWarning.style.zIndex = '1000';
-            mobileclose.style.display = "block";
-            mobileclose.style.marginLeft = 'auto';
-            mobileclose.style.marginRight = 'auto';
-            mobileclose.style.backgroundColor = "#186cd4";
-            mobileclose.style.border = '0';
-            mobileclose.style.padding = "1%";
-        } 
+            closebtn.style.display = "block";
+            closebtn.style.marginLeft = 'auto';
+            closebtn.style.marginRight = 'auto';
+            closebtn.style.backgroundColor = "#186cd4";
+            closebtn.style.border = '0';
+            closebtn.style.padding = "1%";
+        }
         
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
