@@ -350,7 +350,7 @@ export class DebugFloaterHolder {
         this.debugFloater = null;
     }
 
-    private _bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
+    private _bindPanelRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
         // Children are by default invisible, unless we're in a color, or some sort of number array.
         const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
 
@@ -367,18 +367,18 @@ export class DebugFloaterHolder {
             else if (typeof v === "boolean")
                 panel.bindCheckbox(`${parentName}.${keyName}`, obj, keyName);;
 
-            this._bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
+            this._bindPanelRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
         }
     }
 
-    public bindSliders(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
+    public bindPanel(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this._bindSlidersRecurse(obj, panel, '');
+        this._bindPanelRecurse(obj, panel, '');
     }
 }
 
