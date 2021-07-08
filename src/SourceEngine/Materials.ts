@@ -17,6 +17,7 @@ import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA,
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -2208,12 +2209,21 @@ void mainVS() {
 #endif
 
 #ifdef FRAG
-float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
-    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), t_ProjTexCoord).r;
+float SampleFramebufferDepth(vec2 t_ProjTexCoord) {
+    return texture(SAMPLER_2D(u_TextureFramebufferDepth), t_ProjTexCoord).r;
+}
 
+bool IsSomethingInFront(float t_DepthSample) {
+    if (t_DepthSample ${IS_DEPTH_REVERSED ? `>` : `<`} gl_FragCoord.z)
+        return true;
+
+    return false;
+}
+
+float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord, float t_DepthSample) {
     // Reconstruct world-space position for the sample.
-    vec3 t_DepthSamplePos01 = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
-    vec4 t_DepthSamplePosClip = vec4(t_DepthSamplePos01 * vec3(2.0) - vec3(1.0), 1.0);
+    vec3 t_DepthSamplePosViewport = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
+    vec4 t_DepthSamplePosClip = vec4(t_DepthSamplePosViewport * vec3(2.0) - vec3(1.0), 1.0);
     vec4 t_DepthSamplePosWorld = Mul(u_ProjectedDepthToWorld, t_DepthSamplePosClip);
     // Divide by W.
     t_DepthSamplePosWorld.xyz /= t_DepthSamplePosWorld.www;
@@ -2251,13 +2261,23 @@ void mainPS() {
 
     vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
 
-    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
+    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(t_ProjTexCoord));
     float t_RefractAmount = u_RefractAmount * t_RefractFogBendAmount;
     vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractAmount);
+
+    float t_RefractFogAmount;
+    float t_RefractDepthSample = SampleFramebufferDepth(t_RefractTexCoord);
+    if (IsSomethingInFront(t_RefractDepthSample)) {
+        // Something's in front, just use the original...
+        t_RefractTexCoord = t_ProjTexCoord;
+        t_RefractFogAmount = t_RefractFogBendAmount;
+    } else {
+        t_RefractFogAmount = CalcFogAmountFromScreenPos(t_RefractTexCoord, t_RefractDepthSample);
+    }
+
     vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract, t_RefractTexCoord));
     vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
 
-    float t_RefractFogAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord + (t_TexCoordBumpOffset.xy * -t_RefractAmount));
     t_RefractColor.rgb = mix(t_RefractColor.rgb, u_WaterFogColor.rgb, t_RefractFogAmount);
 
     vec3 t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
