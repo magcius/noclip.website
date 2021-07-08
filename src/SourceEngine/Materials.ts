@@ -41,10 +41,21 @@ export const enum LateBindingTexture {
 }
 
 export class FogParams {
-    public color = colorNewCopy(White);
+    public color: Color;
     public start: number = 0;
     public end: number = 0;
     public maxdensity: number = 0;
+
+    constructor(color: Color = White) {
+        this.color = colorNewCopy(color);
+    }
+
+    public copy(o: FogParams): void {
+        colorCopy(this.color, o.color);
+        this.start = o.start;
+        this.end = o.end;
+        this.maxdensity = o.maxdensity;
+    }
 }
 
 export class MaterialProgramBase extends DeviceProgram {
@@ -149,11 +160,11 @@ function fillFogParams(d: Float32Array, offs: number, params: Readonly<FogParams
     return offs - baseOffs;
 }
 
-function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEngineView>): number {
+function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams>): number {
     const baseOffs = offs;
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
     offs += fillVec3v(d, offs, view.cameraPos);
-    offs += fillFogParams(d, offs, view.fogParams);
+    offs += fillFogParams(d, offs, fogParams);
     for (let i = 0; i < 1; i++) {
         const clipPlaneWorld = view.clipPlaneWorld[i];
         if (clipPlaneWorld)
@@ -164,10 +175,10 @@ function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEng
     return offs - baseOffs;
 }
 
-export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>): void {
+export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams> = view.fogParams): void {
     let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
-    fillSceneParams(d, offs, view);
+    fillSceneParams(d, offs, view, fogParams);
 }
 
 interface Parameter {
@@ -500,6 +511,8 @@ function fillGammaColor(d: Float32Array, offs: number, c: Color): number {
     return fillColor(d, offs, scratchColor);
 }
 
+const blackFogParams = new FogParams(OpaqueBlack);
+
 export abstract class BaseMaterial {
     private visible = true;
     public hasVertexColorInput = true;
@@ -517,6 +530,7 @@ export abstract class BaseMaterial {
     protected proxyDriver: MaterialProxyDriver | null = null;
     protected representativeTexture: VTF | null = null;
     protected texCoord0Scale = vec2.create();
+    protected isAdditive = false;
 
     constructor(public vmt: VMT) {
     }
@@ -709,6 +723,7 @@ export abstract class BaseMaterial {
                 blendDstFactor: GfxBlendFactor.One,
             });
             megaStateFlags.depthWrite = false;
+            this.isAdditive = true;
             return true;
         } else if (alphaBlendMode === AlphaBlendMode.None) {
             setAttachmentStateSimple(megaStateFlags, {
@@ -854,6 +869,13 @@ export abstract class BaseMaterial {
 
         if (this.proxyDriver !== null)
             this.proxyDriver.update(renderContext, this.entityParams);
+    }
+
+    protected setupFogParams(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        if (this.isAdditive) {
+            // We need to swap out the fog for additive materials, so allocate a new scene params...
+            fillSceneParamsOnRenderInst(renderInst, renderContext.currentView, blackFogParams);
+        }
     }
 
     public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex?: number): void;
@@ -1916,6 +1938,8 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsLightmap)
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
 
+        this.setupFogParams(renderContext, renderInst);
+
         // TODO(jstpierre): The cost of reprocessing shaders every frame toggling between clip planes and not-clip planes is too massive right now...
         // GfxRenderCache happens *post*-preprocess, and the expensive thing appears to be preprocessGLSL.
         const useClipPlanes = true; // renderContext.currentView.clipPlaneWorld.length > 0;
@@ -2117,6 +2141,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
+
+        this.setupFogParams(renderContext, renderInst);
 
         let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
@@ -2603,6 +2629,8 @@ class Material_Water extends BaseMaterial {
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
 
+        this.setupFogParams(renderContext, renderInst);
+
         if (this.shaderType === WaterShaderType.Flow) {
             this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[1], lightmapPageIndex);
@@ -2932,6 +2960,8 @@ class Material_Refract extends BaseMaterial {
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
+
+        this.setupFogParams(renderContext, renderInst);
 
         let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 68);
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
