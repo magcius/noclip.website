@@ -337,7 +337,7 @@ export class BSPSurfaceRenderer {
         }
 
         for (let i = 0; i < this.lightmaps.length; i++)
-            this.lightmaps[i].buildLightmap(renderContext.worldLightingState);
+            this.lightmaps[i].buildLightmap(renderContext);
 
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix, this.surface.lightmapPageIndex);
@@ -935,6 +935,18 @@ export class SourceColorCorrection {
     }
 }
 
+class DebugStatistics {
+    public lightmapsBuilt = 0;
+
+    public reset(): void {
+        this.lightmapsBuilt = 0;
+    }
+
+    public addToConsole(viewerInput: ViewerRenderInput): void {
+        viewerInput.debugConsole.addInfoLine(`Lightmaps Built: ${this.lightmapsBuilt}`);
+    }
+}
+
 export class SourceRenderContext {
     public entityFactoryRegistry = new EntityFactoryRegistry();
     public lightmapManager: LightmapManager;
@@ -956,6 +968,8 @@ export class SourceRenderContext {
     public showFog = true;
     public showExpensiveWater = true;
     public showDecalMaterials = true;
+
+    public debugStatistics = new DebugStatistics();
 
     constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
         this.renderCache = new GfxRenderCache(device);
@@ -1356,6 +1370,7 @@ export class SourceRenderer implements SceneGfx {
         // globalTime is in seconds.
         renderContext.globalTime = viewerInput.time / 1000.0;
         renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
+        renderContext.debugStatistics.reset();
 
         // Update the main view early, since that's what movement/entities will use
         this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
@@ -1483,6 +1498,8 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.renderGraph.execute(builder);
         this.resetViews();
         renderInstManager.resetRenderInsts();
+
+        this.renderContext.debugStatistics.addToConsole(viewerInput);
     }
 
     public destroy(device: GfxDevice): void {

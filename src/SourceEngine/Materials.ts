@@ -12,7 +12,7 @@ import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, saturate } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -511,7 +511,7 @@ function fillGammaColor(d: Float32Array, offs: number, c: Color): number {
     return fillColor(d, offs, scratchColor);
 }
 
-const blackFogParams = new FogParams(OpaqueBlack);
+const blackFogParams = new FogParams(TransparentBlack);
 
 export abstract class BaseMaterial {
     private visible = true;
@@ -2148,7 +2148,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         this.program = new UnlitTwoTextureProgram();
 
-        const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
+        const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
         this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
@@ -3687,92 +3687,6 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
     }
 }
 
-function lightmapPackRuntimeBumpmap2(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
-    const srcSize = texelCount * 3;
-    const dstSize = texelCount * 4;
-
-    let srcOffs0 = srcOffs, srcOffs1 = srcOffs + srcSize * 1, srcOffs2 = srcOffs + srcSize * 2, srcOffs3 = srcOffs + srcSize * 3;
-    let dstOffs0 = dstOffs, dstOffs1 = dstOffs + dstSize * 1, dstOffs2 = dstOffs + dstSize * 2, dstOffs3 = dstOffs + dstSize * 3;
-    for (let i = 0; i < texelCount; i++) {
-        const sr = linearToLightmap(src[srcOffs0++]), sg = linearToLightmap(src[srcOffs0++]), sb = linearToLightmap(src[srcOffs0++]);
-
-        // Lightmap 0 is easy (unused tho).
-        dst[dstOffs0++] = Math.round(sr * 255.0);
-        dst[dstOffs0++] = Math.round(sg * 255.0);
-        dst[dstOffs0++] = Math.round(sb * 255.0);
-        dstOffs0++;
-
-        let b0r = src[srcOffs1++], b0g = src[srcOffs1++], b0b = src[srcOffs1++];
-        let b1r = src[srcOffs2++], b1g = src[srcOffs2++], b1b = src[srcOffs2++];
-        let b2r = src[srcOffs3++], b2g = src[srcOffs3++], b2b = src[srcOffs3++];
-        const avgr = sr / Math.max((b0r + b1r + b2r) / 3.0, MathConstants.EPSILON);
-        const avgg = sg / Math.max((b0g + b1g + b2g) / 3.0, MathConstants.EPSILON);
-        const avgb = sb / Math.max((b0b + b1b + b2b) / 3.0, MathConstants.EPSILON);
-
-        b0r *= avgr; b0g *= avgg; b0b *= avgb;
-        b1r *= avgr; b1g *= avgg; b1b *= avgb;
-        b2r *= avgr; b2g *= avgg; b2b *= avgb;
-
-        // Clamp & redistribute colors if necessary
-        const b0m = Math.max(b0r, b0g, b0b), b1m = Math.max(b1r, b1g, b1b), b2m = Math.max(b2r, b2g, b2b);
-        if (b0m > 1.0 || b1m > 1.0 || b2m > 1.0) {
-            // Slow path, just allocate here to save our sanity.
-            const colors = [[0, b0m, b0r, b0g, b0b], [1, b1m, b1r, b1g, b1b], [2, b2m, b2r, b2g, b2b]];
-            colors.sort((a, b) => b[1] - a[1]);
-
-            for (let j = 0; j < colors.length; j++) {
-                if (colors[j][1] > 1.0) {
-                    const max = Math.max(colors[j][2], colors[j][3], colors[j][4]);
-                    const m = (max - 1.0) / max;
-                    const mr = m * colors[j][2], mg = m * colors[j][3], mb = m * colors[j][4];
-                    colors[j][2] -= mr;
-                    colors[j][3] -= mg;
-                    colors[j][4] -= mb;
-
-                    colors[(j+1)%3][2] += mr * 0.5;
-                    colors[(j+1)%3][3] += mg * 0.5;
-                    colors[(j+1)%3][4] += mb * 0.5;
-
-                    colors[(j+2)%3][2] += mr * 0.5;
-                    colors[(j+2)%3][3] += mg * 0.5;
-                    colors[(j+2)%3][4] += mb * 0.5;
-                }
-            }
-
-            for (let j = 0; j < colors.length; j++) {
-                if (colors[j][0] === 0) {
-                    b0r = colors[j][2];
-                    b0g = colors[j][3];
-                    b0b = colors[j][4];
-                } else if (colors[j][0] === 1) {
-                    b1r = colors[j][2];
-                    b1g = colors[j][3];
-                    b1b = colors[j][4];
-                } else if (colors[j][0] === 2) {
-                    b2r = colors[j][2];
-                    b2g = colors[j][3];
-                    b2b = colors[j][4];
-                }
-            }
-        }
-
-        dst[dstOffs1++] = Math.round(b0r * 255.0);
-        dst[dstOffs1++] = Math.round(b0g * 255.0);
-        dst[dstOffs1++] = Math.round(b0b * 255.0);
-        dstOffs1++;
-
-        dst[dstOffs2++] = Math.round(b1r * 255.0);
-        dst[dstOffs2++] = Math.round(b1g * 255.0);
-        dst[dstOffs2++] = Math.round(b1b * 255.0);
-        dstOffs2++;
-
-        dst[dstOffs3++] = Math.round(b2r * 255.0);
-        dst[dstOffs3++] = Math.round(b2g * 255.0);
-        dst[dstOffs3++] = Math.round(b2b * 255.0);
-        dstOffs3++;
-    }
-}
-
 export class WorldLightingState {
     public styleIntensities = new Float32Array(64);
     public stylePatterns: string[] = [
@@ -3850,11 +3764,7 @@ export class SurfaceLightmap {
     public lightmapUploadDirty: boolean = false;
     public pixelData: Uint8ClampedArray | null;
 
-    private scratchpad: Float32Array;
-
     constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
-        this.scratchpad = lightmapManager.scratchpad;
-
         this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
 
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
@@ -3865,7 +3775,10 @@ export class SurfaceLightmap {
         }
     }
 
-    public buildLightmap(worldLightingState: WorldLightingState): void {
+    public buildLightmap(renderContext: SourceRenderContext): void {
+        const worldLightingState = renderContext.worldLightingState;
+        const scratchpad = renderContext.lightmapManager.scratchpad;
+
         // Check if our lightmap needs rebuilding.
         let dirty = false;
         for (let i = 0; i < this.lightmapData.styles.length; i++) {
@@ -3885,7 +3798,6 @@ export class SurfaceLightmap {
             const srcNumLightmaps = (this.wantsBumpmap && this.lightmapData.hasBumpmapSamples) ? 4 : 1;
             const srcSize = srcNumLightmaps * texelCount * 4;
 
-            const scratchpad = this.scratchpad;
             scratchpad.fill(0);
             assert(scratchpad.byteLength >= srcSize);
 
@@ -3917,6 +3829,7 @@ export class SurfaceLightmap {
         }
 
         this.lightmapUploadDirty = true;
+        renderContext.debugStatistics.lightmapsBuilt++;
     }
 }
 //#endregion

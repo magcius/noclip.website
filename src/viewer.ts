@@ -32,6 +32,10 @@ interface MouseLocation {
     mouseY: number;
 }
 
+export interface DebugConsole {
+    addInfoLine(line: string): void;
+}
+
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
@@ -42,6 +46,7 @@ export interface ViewerRenderInput {
     onscreenTexture: GfxTexture;
     antialiasingMode: AntialiasingMode;
     mouseLocation: MouseLocation;
+    debugConsole: DebugConsole;
 }
 
 export interface SceneGfx {
@@ -116,6 +121,7 @@ export class Viewer {
             onscreenTexture: null!,
             antialiasingMode: AntialiasingMode.None,
             mouseLocation: this.inputManager,
+            debugConsole: this.renderStatisticsTracker,
         };
 
         GlobalSaveManager.addSettingListener('AntialiasingMode', (saveManager, key) => {
@@ -164,10 +170,9 @@ export class Viewer {
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
-        this.renderStatisticsTracker.endFrame();
-
-        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
-        this.onstatistics(this.renderStatisticsTracker);
+        const renderStatistics = this.renderStatisticsTracker.endFrame();
+        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.onstatistics(renderStatistics);
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
@@ -219,10 +224,23 @@ export class Viewer {
         }
 
         this.gfxDevice.popDebugGroup();
-        this.renderStatisticsTracker.endFrame();
+        const renderStatistics = this.renderStatisticsTracker.endFrame();
+        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.onstatistics(renderStatistics);
+    }
 
-        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
-        this.onstatistics(this.renderStatisticsTracker);
+    private finishRenderStatistics(statistics: RenderStatistics, debugGroup: GfxDebugGroup): void {
+        statistics.lines.push(`Draw Calls: ${debugGroup.drawCallCount}`);
+        statistics.lines.push(`Drawn Triangles: ${debugGroup.triangleCount}`);
+        statistics.lines.push(`Texture Binds: ${debugGroup.textureBindCount}`);
+        statistics.lines.push(`Buffer Uploads: ${debugGroup.bufferUploadCount}`);
+
+        const worldMatrix = this.camera.worldMatrix;
+        const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
+        statistics.lines.push(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
+
+        const vendorInfo = this.gfxDevice.queryVendorInfo();
+        statistics.lines.push(`Platform: ${vendorInfo.platformString}`);
     }
 
     public setCameraController(cameraController: CameraController) {

@@ -209,6 +209,10 @@ export class BaseEntity {
             // BSP models are rendered by the BSP system.
             mat4.copy(this.modelBSP.modelMatrix, this.modelMatrix);
         } else if (this.modelStudio !== null) {
+            if (this.materialParams !== null) {
+                this.materialParams.blendColor.a = this.renderamt;
+            }
+    
             mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
             // idle animation pose?
             if (this.animplay)
@@ -283,10 +287,12 @@ export class BaseEntity {
             if (this.rendermode === 10)
                 visible = false;
 
-            if (this.modelBSP !== null)
+            if (this.modelBSP !== null) {
                 this.modelBSP.visible = visible;
-            else if (this.modelStudio !== null)
+            } else if (this.modelStudio !== null) {
                 this.modelStudio.visible = visible;
+                this.modelStudio.movement(renderContext);
+            }
         }
     }
 }
