@@ -1921,7 +1921,7 @@ class Material_Generic extends BaseMaterial {
         if (this.program.setDefineBool('USE_CLIP_PLANES', useClipPlanes))
             this.gfxProgram = null;
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 132);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 136);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += this.fillModelMatrix(d, offs, modelMatrix);
 
