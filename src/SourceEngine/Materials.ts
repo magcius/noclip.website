@@ -942,6 +942,9 @@ layout(std140) uniform ub_ObjectParams {
 #ifdef USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
 #endif
+#ifdef USE_BLEND_MODULATE
+    vec4 u_BlendModulateScaleBias;
+#endif
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
@@ -976,6 +979,8 @@ layout(std140) uniform ub_SkinningParams {
 varying vec4 v_TexCoord0;
 // Lightmap (0), Envmap Mask
 varying vec4 v_TexCoord1;
+// Blend Modulate
+varying vec4 v_TexCoord2;
 
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
@@ -996,7 +1001,7 @@ varying float v_LightmapOffset;
 varying vec4 v_LightAtten;
 #endif
 
-// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum, BlendModulate
 uniform sampler2D u_TextureBase;
 uniform sampler2D u_TextureDetail;
 uniform sampler2D u_TextureBumpmap;
@@ -1005,6 +1010,7 @@ uniform sampler2D u_TextureEnvmapMask;
 uniform sampler2D u_TextureBase2;
 uniform sampler2D u_TextureSpecularExponent;
 uniform sampler2D u_TextureSelfIllum;
+uniform sampler2D u_TextureBlendModulate;
 // Envmap
 uniform samplerCube u_TextureEnvmap;
 
@@ -1241,6 +1247,9 @@ void mainVS() {
 #ifdef USE_ENVMAP_MASK
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
 #endif
+#ifdef USE_BLEND_MODULATE
+    v_TexCoord2.xy = CalcScaleBias(a_TexCoord.xy, u_BlendModulateScaleBias);
+#endif
 }
 #endif
 
@@ -1398,8 +1407,17 @@ void mainPS() {
 
 #ifdef USE_BASETEXTURE2
     // Blend in BaseTexture2 using blend factor.
+    float t_BlendFactor = v_PositionWorld.w;
+
+#ifdef USE_BLEND_MODULATE
+    vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord2.xy);
+    float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
+    float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
+    t_BlendFactor = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactor);
+#endif
+
     vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
-    t_Albedo = mix(t_BaseTexture, t_BaseTexture2, v_PositionWorld.w);
+    t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactor);
 #else
     t_Albedo = t_BaseTexture;
 #endif
@@ -1642,6 +1660,7 @@ class Material_Generic extends BaseMaterial {
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
     private wantsSelfIllum = false;
+    private wantsBlendModulate = false;
     private wantsPhong = false;
     private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
@@ -1652,7 +1671,7 @@ class Material_Generic extends BaseMaterial {
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
-    private textureMapping: TextureMapping[] = nArray(9, () => new TextureMapping());
+    private textureMapping: TextureMapping[] = nArray(10, () => new TextureMapping());
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
         let wantsDynamicVertexLighting: boolean;
@@ -1727,6 +1746,8 @@ class Material_Generic extends BaseMaterial {
         // World Vertex Transition
         p['$basetexture2']                 = new ParameterTexture(true);
         p['$frame2']                       = new ParameterNumber(0.0);
+        p['$blendmodulatetexture']         = new ParameterTexture(true);
+        p['$blendmasktransform']           = new ParameterMatrix();
 
         // Phong (Skin)
         p['$phong']                        = new ParameterBoolean(false, false);
@@ -1833,6 +1854,11 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_BASETEXTURE2', true);
         }
 
+        if (this.wantsBaseTexture2 && this.paramGetVTF('$blendmodulatetexture') !== null) {
+            this.wantsBlendModulate = true;
+            this.program.setDefineBool('USE_BLEND_MODULATE', true);
+        }
+    
         // Modulation color is used differently between lightmapped and non-lightmapped.
         // In vertexlit / unlit, then the modulation color is multiplied in with the texture (and possibly blended).
         // In lightmappedgeneric, then the modulation color is used as the diffuse lightmap scale, and contains the
@@ -1919,7 +1945,8 @@ class Material_Generic extends BaseMaterial {
             this.paramGetTexture('$basetexture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
         this.paramGetTexture('$phongexponenttexture').fillTextureMapping(this.textureMapping[6], 0);
         this.paramGetTexture('$selfillummask').fillTextureMapping(this.textureMapping[7], 0);
-        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[8], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$blendmodulatetexture').fillTextureMapping(this.textureMapping[8], 0);
+        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[9], this.paramGetInt('$envmapframe'));
     }
 
     private fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
@@ -1968,6 +1995,9 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsEnvmapMask)
             offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
 
+        if (this.wantsBlendModulate)
+            offs += this.paramFillScaleBias(d, offs, '$blendmasktransform');
+
         if (this.wantsEnvmap) {
             offs += this.paramFillColor(d, offs, '$envmaptint');
             const envmapContrast = this.paramGetNumber('$envmapcontrast');
@@ -1976,9 +2006,8 @@ class Material_Generic extends BaseMaterial {
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
         }
 
-        if (this.wantsSelfIllum) {
+        if (this.wantsSelfIllum)
             offs += this.paramFillGammaColor(d, offs, '$selfillumtint');
-        }
 
         if (this.wantsPhong) {
             const fresnelRanges = this.paramGetVector('$phongfresnelranges');

@@ -974,7 +974,7 @@ export class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 9 },
+    { numUniformBuffers: 3, numSamplers: 10 },
 ];
 
 const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
