@@ -310,12 +310,13 @@ export class BSPSurfaceRenderer {
     constructor(public surface: Surface) {
     }
 
-    public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager): void {
+    public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager, startLightmapPageIndex: number): void {
         this.materialInstance = materialInstance;
 
+        const lightmapPageIndex = startLightmapPageIndex + this.surface.lightmapPageIndex;
         for (let i = 0; i < this.surface.lightmapData.length; i++) {
             const lightmapData = this.surface.lightmapData[i];
-            this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
+            this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap, lightmapPageIndex));
         }
     }
 
@@ -326,7 +327,7 @@ export class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, liveFaceSet: Set<number> | null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
@@ -336,8 +337,11 @@ export class BSPSurfaceRenderer {
                 return;
         }
 
-        for (let i = 0; i < this.lightmaps.length; i++)
-            this.lightmaps[i].buildLightmap(renderContext);
+        for (let i = 0; i < this.lightmaps.length; i++) {
+            const lightmap = this.lightmaps[i];
+            if (liveFaceSet === null || liveFaceSet.has(lightmap.lightmapData.faceIndex))
+                this.lightmaps[i].buildLightmap(renderContext);
+        }
 
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix, this.surface.lightmapPageIndex);
@@ -360,19 +364,18 @@ export class BSPModelRenderer {
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
     public surfacesByIdx: BSPSurfaceRenderer[] = [];
-    public displacementSurfaces: BSPSurfaceRenderer[] = [];
-    public liveSurfaceSet = new Set<number>();
+    private liveSurfaceSet = new Set<number>();
+    private liveFaceSet = new Set<number>();
 
-    constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
+    constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile, startLightmapPageIndex: number) {
         for (let i = 0; i < model.surfaces.length; i++) {
             const surfaceIdx = model.surfaces[i];
             const surface = new BSPSurfaceRenderer(this.bsp.surfaces[surfaceIdx]);
-            // TODO(jstpierre): This is ugly
             this.surfaces.push(surface);
             this.surfacesByIdx[surfaceIdx] = surface;
         }
 
-        this.bindMaterials(renderContext);
+        this.bindMaterials(renderContext, startLightmapPageIndex);
     }
 
     public setEntity(entity: BaseEntity): void {
@@ -392,9 +395,11 @@ export class BSPModelRenderer {
         return null;
     }
 
-    private async bindMaterials(renderContext: SourceRenderContext) {
-        await Promise.all(this.surfaces.map(async (surface) => {
-            const materialInstance = await renderContext.materialCache.createMaterialInstance(surface.surface.texName);
+    private async bindMaterials(renderContext: SourceRenderContext, startLightmapPageIndex: number) {
+        await Promise.all(this.surfaces.map(async (surfaceRenderer) => {
+            const surface = surfaceRenderer.surface;
+
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(surface.texName);
 
             const entityParams = this.entity !== null ? this.entity.materialParams : null;
             materialInstance.entityParams = entityParams;
@@ -402,10 +407,10 @@ export class BSPModelRenderer {
             // We don't have vertex colors on BSP surfaces.
             materialInstance.hasVertexColorInput = false;
 
-            materialInstance.wantsTexCoord0Scale = surface.surface.wantsTexCoord0Scale;
+            materialInstance.wantsTexCoord0Scale = surface.wantsTexCoord0Scale;
 
             await materialInstance.init(renderContext);
-            surface.bindMaterial(materialInstance, renderContext.lightmapManager);
+            surfaceRenderer.bindMaterial(materialInstance, renderContext.lightmapManager, startLightmapPageIndex);
         }));
     }
 
@@ -417,7 +422,7 @@ export class BSPModelRenderer {
             this.surfaces[i].movement(renderContext);
     }
 
-    public gatherSurfaces(liveSurfaceSet: Set<number> | null, liveLeafSet: Set<number> | null, pvs: BitMap, view: SourceEngineView, nodeid: number = this.model.headnode): void {
+    public gatherLiveSets(liveSurfaceSet: Set<number> | null, liveFaceSet: Set<number> | null, liveLeafSet: Set<number> | null, pvs: BitMap, view: SourceEngineView, nodeid: number = this.model.headnode): void {
         if (nodeid >= 0) {
             // node
             const node = this.bsp.nodelist[nodeid];
@@ -426,15 +431,10 @@ export class BSPModelRenderer {
             if (!view.frustum.contains(scratchAABB))
                 return;
 
-            this.gatherSurfaces(liveSurfaceSet, liveLeafSet, pvs, view, node.child0);
-            this.gatherSurfaces(liveSurfaceSet, liveLeafSet, pvs, view, node.child1);
+            this.gatherLiveSets(liveSurfaceSet, liveFaceSet, liveLeafSet, pvs, view, node.child0);
+            this.gatherLiveSets(liveSurfaceSet, liveFaceSet, liveLeafSet, pvs, view, node.child1);
 
-            // Node surfaces are func_detail meshes, but they appear to also be in leaves... don't know if we need them.
-            /*
-            if (liveSurfaceSet !== null)
-                for (let i = 0; i < node.surfaces.length; i++)
-                    liveSurfaceSet.add(node.surfaces[i]);
-            */
+            // Node surfaces are func_detail meshes, but they appear to also be in leaves... we probably don't need them.
         } else {
             // leaf
             const leafnum = -nodeid - 1;
@@ -447,12 +447,16 @@ export class BSPModelRenderer {
             if (!view.frustum.contains(scratchAABB))
                 return;
 
-            if (liveLeafSet !== null)
-                liveLeafSet.add(leafnum);
-
             if (liveSurfaceSet !== null)
                 for (let i = 0; i < leaf.surfaces.length; i++)
                     liveSurfaceSet.add(leaf.surfaces[i]);
+
+            if (liveFaceSet !== null)
+                for (let i = 0; i < leaf.faces.length; i++)
+                    liveFaceSet.add(leaf.faces[i]);
+
+            if (liveLeafSet !== null)
+                liveLeafSet.add(leafnum);
         }
     }
 
@@ -473,7 +477,7 @@ export class BSPModelRenderer {
 
         // Submodels don't use the BSP tree, they simply render all surfaces back to back in a batch.
         for (let i = 0; i < this.model.surfaces.length; i++)
-            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, null);
     }
 
     public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap): void {
@@ -482,10 +486,11 @@ export class BSPModelRenderer {
 
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
-        this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
+        this.liveFaceSet.clear();
+        this.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, null, pvs, view);
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
-            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, this.liveFaceSet);
     }
 }
 
@@ -673,13 +678,13 @@ export class BSPRenderer {
     public staticPropRenderers: StaticPropRenderer[] = [];
     public liveLeafSet = new Set<number>();
     private debugCube: DebugCube;
+    private startLightmapPageIndex: number = 0;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         this.entitySystem = new EntitySystem(renderContext.entityFactoryRegistry);
 
-        // TODO(jtspierre): Ugly ugly ugly
         renderContext.materialCache.setUsingHDR(this.bsp.usingHDR);
-        renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
+        this.startLightmapPageIndex = renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
 
         const device = renderContext.device, cache = renderContext.renderCache;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData);
@@ -703,7 +708,7 @@ export class BSPRenderer {
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
-            const modelRenderer = new BSPModelRenderer(renderContext, model, bsp);
+            const modelRenderer = new BSPModelRenderer(renderContext, model, bsp, this.startLightmapPageIndex);
             // Non-world-spawn models are invisible by default (they're lifted into the world by entities).
             modelRenderer.visible = (i === 0);
             this.models.push(modelRenderer);
@@ -766,7 +771,7 @@ export class BSPRenderer {
         // Detail props.
         if (!!(kinds & RenderObjectKind.DetailProps)) {
             this.liveLeafSet.clear();
-            this.models[0].gatherSurfaces(null, this.liveLeafSet, pvs, view);
+            this.models[0].gatherLiveSets(null, null, this.liveLeafSet, pvs, view);
 
             for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
                 const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
@@ -1386,9 +1391,10 @@ export class SourceRenderer implements SceneGfx {
         this.mainViewRenderer.prepareToRender(this);
 
         // Reflection is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
-        if (this.renderContext.showExpensiveWater) {
-            const bsp = this.bspRenderers[0].bsp;
-            const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos);
+        if (this.renderContext.showExpensiveWater && this.mainViewRenderer.drawWorld) {
+            const bspRenderer = this.bspRenderers[0], bsp = bspRenderer.bsp;
+            bspRenderer.models[0].gatherLiveSets(null, null, bspRenderer.liveLeafSet, this.pvsScratch, this.mainViewRenderer.mainView);
+            const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos, bspRenderer.liveLeafSet);
             if (leafwater !== null) {
                 const waterZ = leafwater.surfaceZ;
 

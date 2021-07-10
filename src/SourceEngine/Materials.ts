@@ -3493,6 +3493,7 @@ class LightmapPage {
             instance.lightmapUploadDirty = false;
         }
 
+        // TODO(jstpierre): Track sub-data resource uploads? :/
         if (anyDirty) {
             device.uploadTextureData(this.gfxTexture, 0, [data]);
         }
@@ -3528,9 +3529,11 @@ export class LightmapManager {
         m.gfxSampler = this.gfxSampler;
     }
 
-    public appendPackerManager(manager: LightmapPackerManager): void {
+    public appendPackerManager(manager: LightmapPackerManager): number {
+        const startPage = this.lightmapPages.length;
         for (let i = 0; i < manager.pages.length; i++)
             this.lightmapPages.push(new LightmapPage(this.device, manager.pages[i]));
+        return startPage;
     }
 
     public prepareToRender(device: GfxDevice): void {
@@ -3542,9 +3545,8 @@ export class LightmapManager {
         return this.lightmapPages[pageIndex].gfxTexture;
     }
 
-    public registerSurfaceLightmap(instance: SurfaceLightmap): void {
-        // TODO(jstpierre): PageIndex isn't unique / won't work with multiple BSP files.
-        this.lightmapPages[instance.lightmapData.pageIndex].registerSurfaceLightmap(instance);
+    public registerSurfaceLightmap(instance: SurfaceLightmap, pageIndex: number): void {
+        this.lightmapPages[pageIndex].registerSurfaceLightmap(instance);
     }
 
     public destroy(device: GfxDevice): void {
@@ -3764,14 +3766,14 @@ export class SurfaceLightmap {
     public lightmapUploadDirty: boolean = false;
     public pixelData: Uint8ClampedArray | null;
 
-    constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
+    constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
         this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
 
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
 
         if (this.wantsLightmap) {
             // Associate ourselves with the right page.
-            lightmapManager.registerSurfaceLightmap(this);
+            lightmapManager.registerSurfaceLightmap(this, pageIndex);
         }
     }
 

@@ -54,6 +54,7 @@ const enum LumpType {
 }
 
 export interface SurfaceLightmapData {
+    faceIndex: number;
     // Size of a single lightmap.
     mapWidth: number;
     mapHeight: number;
@@ -156,6 +157,7 @@ export interface BSPLeaf {
     area: number;
     cluster: number;
     ambientLightSamples: BSPLeafAmbientSample[];
+    faces: number[];
     surfaces: number[];
     leafwaterdata: number;
     contents: BSPLeafContents;
@@ -754,11 +756,6 @@ function ensureInList<T>(L: T[], v: T): void {
         L.push(v);
 }
 
-function mergeList<T>(dst: T[], L: T[]): void {
-    for (let i = 0; i < L.length; i++)
-        ensureInList(dst, L[i]);
-}
-
 class ResizableArrayBuffer {
     private buffer: ArrayBuffer;
     private byteSize: number;
@@ -1076,9 +1073,13 @@ export class BSPFile {
         // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
         let vertnormalIdx = 0;
 
-        const addSurfaceToLeaves = (faceleaflist: number[], surfaceIndex: number) => {
-            for (let j = 0; j < faceleaflist.length; j++)
-                ensureInList(this.leaflist[faceleaflist[j]].surfaces, surfaceIndex);
+        const addSurfaceToLeaves = (faceleaflist: number[], faceIndex: number | null, surfaceIndex: number) => {
+            for (let j = 0; j < faceleaflist.length; j++) {
+                const leaf = this.leaflist[faceleaflist[j]];
+                ensureInList(leaf.surfaces, surfaceIndex);
+                if (faceIndex !== null)
+                    ensureInList(leaf.faces, faceIndex);
+            }
         };
 
         // Do some initial surface parsing, pack lightmaps.
@@ -1116,6 +1117,7 @@ export class BSPFile {
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
 
             const lightmapData: SurfaceLightmapData = {
+                faceIndex: i,
                 mapWidth, mapHeight, width, height, styles, lightmapSize, samples, hasBumpmapSamples,
                 pageIndex: -1, pagePosX: -1, pagePosY: -1,
             };
@@ -1294,15 +1296,17 @@ export class BSPFile {
                 idx += 0x02;
             }
 
-            this.leaflist.push({ bbox, cluster, area, ambientLightSamples, surfaces: [], leafwaterdata, contents });
+            const leafFaces = leaffacelist.subarray(firstleafface, firstleafface + numleaffaces);
+            this.leaflist.push({
+                bbox, cluster, area, ambientLightSamples,
+                faces: Array.from(leafFaces), surfaces: [],
+                leafwaterdata, contents,
+            });
 
             const leafidx = this.leaflist.length - 1;
-            for (let i = firstleafface; i < firstleafface + numleaffaces; i++)
-                faceToLeafIdx[leaffacelist[i]].push(leafidx);
+            for (let i = 0; i < numleaffaces; i++)
+                faceToLeafIdx[leafFaces[i]].push(leafidx);
         }
-
-        for (let i = 0; i < faceToLeafIdx.length; i++)
-            faceToLeafIdx[i].sort((a, b) => a - b);
 
         // Sort faces by texinfo to prepare for splitting into surfaces.
         faces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
@@ -1392,9 +1396,6 @@ export class BSPFile {
                     canMerge = false;
                 else if (faceToModelIdx[prevFace.index] !== faceToModelIdx[face.index])
                     canMerge = false;
-                // TODO(jstpierre): Some way of checking the effective PVS set that doesn't kill our performance...
-                // else if (!arrayEqual(surfaceToLeafIdx[prevFace.index], surfaceToLeafIdx[face.index], (a, b) => a === b))
-                //    canMerge = false;
 
                 if (canMerge)
                     mergeSurface = this.surfaces[this.surfaces.length - 1];
@@ -1602,7 +1603,7 @@ export class BSPFile {
                 this.markLeafSet(faceleaflist, surface.bbox!);
             }
 
-            addSurfaceToLeaves(faceleaflist, surfaceIndex);
+            addSurfaceToLeaves(faceleaflist, face.index, surfaceIndex);
         }
 
         // Slice up overlays
@@ -1695,7 +1696,7 @@ export class BSPFile {
                 for (let n = 0; n < overlaySurface.originFaceList.length; n++) {
                     const surfleaflist = faceToLeafIdx[overlaySurface.originFaceList[n]];
                     assert(surfleaflist.length > 0);
-                    addSurfaceToLeaves(surfleaflist, surfaceIndex);
+                    addSurfaceToLeaves(surfleaflist, null, surfaceIndex);
                 }
             }
 
@@ -1828,12 +1829,14 @@ export class BSPFile {
         return leafidx >= 0 ? this.leaflist[leafidx] : null;
     }
 
-    public findLeafWaterForPoint(p: ReadonlyVec3, nodeid: number = 0): BSPLeafWaterData | null {
+    public findLeafWaterForPoint(p: ReadonlyVec3, liveLeafSet: Set<number>, nodeid: number = 0): BSPLeafWaterData | null {
         if (nodeid < 0) {
             const leafidx = -nodeid - 1;
-            const leaf = this.leaflist[leafidx];
-            if (leaf.leafwaterdata !== -1)
-                return this.leafwaterdata[leaf.leafwaterdata];
+            if (liveLeafSet.has(leafidx)) {
+                const leaf = this.leaflist[leafidx];
+                if (leaf.leafwaterdata !== -1)
+                    return this.leafwaterdata[leaf.leafwaterdata];
+            }
             return null;
         }
 
@@ -1843,10 +1846,10 @@ export class BSPFile {
         const check1 = dot >= 0.0 ? node.child0 : node.child1;
         const check2 = dot >= 0.0 ? node.child1 : node.child0;
 
-        const w1 = this.findLeafWaterForPoint(p, check1);
+        const w1 = this.findLeafWaterForPoint(p, liveLeafSet, check1);
         if (w1 !== null)
             return w1;
-        const w2 = this.findLeafWaterForPoint(p, check2);
+        const w2 = this.findLeafWaterForPoint(p, liveLeafSet, check2);
         if (w2 !== null)
             return w2;
 
