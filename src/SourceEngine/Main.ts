@@ -1011,7 +1011,7 @@ void main() {
 
     vec3 t_Size = vec3(textureSize(u_ColorCorrectTexture, 0));
     vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
-    t_Color.rgb = texture(u_ColorCorrectTexture, t_TexCoord).rgb;
+    t_Color.rgb = texture(SAMPLER_3D(u_ColorCorrectTexture), t_TexCoord).rgb;
 
     gl_FragColor = t_Color;
 }

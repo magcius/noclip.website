@@ -1589,7 +1589,7 @@ void mainPS() {
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
-    vec3 t_EnvmapColor = texture(u_TextureEnvmap, t_Reflection).rgb;
+    vec3 t_EnvmapColor = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgb;
     t_EnvmapColor *= t_EnvmapFactor;
 
     // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
@@ -2350,7 +2350,7 @@ void mainPS() {
     vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #else
-    vec4 t_ReflectSample = texture(u_TextureEnvmap, t_Reflection);
+    vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #endif
 
@@ -2513,7 +2513,7 @@ void mainPS() {
     t_RefractColor.rgb += t_WaterFogColor;
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld.xyz, t_PositionToEye.xyz);
-    t_ReflectColor += texture(u_TextureEnvmap, t_Reflection).rgba;
+    t_ReflectColor += texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgba;
 
     float t_RefractAmount = t_Fresnel;
 
@@ -2889,7 +2889,7 @@ void mainPS() {
     t_SpecularFactor.rgb *= t_BumpmapSample.a;
 
     vec3 t_SpecularLighting = vec3(0.0);
-    t_SpecularLighting += texture(u_TextureEnvmap, t_Reflection).rgb;
+    t_SpecularLighting += texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgb;
     t_SpecularLighting *= t_SpecularFactor;
 
     t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
