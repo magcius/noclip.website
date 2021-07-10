@@ -72,9 +72,14 @@ function resetGfxDebugGroup(group: GfxDebugGroup): void {
 }
 
 export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, devicePixelRatio: number): void {
+    const nw = width * devicePixelRatio;
+    const nh = height * devicePixelRatio;
+    if (canvas.width === nw && canvas.height === nh)
+        return;
+
     canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
-    canvas.width = width * devicePixelRatio;
-    canvas.height = height * devicePixelRatio;
+    canvas.width = nw;
+    canvas.height = nh;
 }
 
 export class Viewer {

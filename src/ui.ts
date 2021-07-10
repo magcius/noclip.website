@@ -1691,7 +1691,7 @@ class LineGraph {
         Viewer.resizeCanvas(this.canvas, width, height, window.devicePixelRatio);
 
         const ctx = this.ctx;
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.textYOffset = 24;
     }
@@ -1757,7 +1757,7 @@ class StatisticsPanel extends Panel {
         for (let i = 0; i < this.fpsPoints.length; i++)
             this.fpsPoints[i] = this.fpsHistory[i] !== undefined ? this.fpsHistory[i] : 0;
 
-        this.fpsGraph.beginDraw(this.elem.offsetWidth, 200);
+        this.fpsGraph.beginDraw(440, 200);
         this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
 
         for (const line of renderStatistics.lines)
