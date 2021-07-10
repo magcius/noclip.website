@@ -186,7 +186,7 @@ export class DetailPropLeafRenderer {
     private inputState: GfxInputState;
     private centerPoint = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number) {
+    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number, bspOffset: ReadonlyVec3) {
         const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -207,6 +207,7 @@ export class DetailPropLeafRenderer {
         const detailModels = objects.leafDetailModels.get(leaf)!;
         for (let i = 0; i < detailModels.length; i++) {
             const detailModel = detailModels[i];
+            vec3.add(detailModel.pos, detailModel.pos, bspOffset);
 
             if (detailModel.type === DetailPropType.SPRITE && detailModel.orientation === DetailPropOrientation.SCREEN_ALIGNED_VERTICAL) {
                 const desc = objects.detailSpriteDict[detailModel.detailModel];
@@ -555,8 +556,9 @@ export class StaticPropRenderer {
     private materialParams = new EntityMaterialParameters();
     private lightingOrigin = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, private bsp: BSPFile, private staticProp: StaticProp) {
+    constructor(renderContext: SourceRenderContext, private bsp: BSPFile, private staticProp: StaticProp, bspOffset: ReadonlyVec3) {
         this.createInstance(renderContext, bsp);
+        vec3.add(staticProp.pos, staticProp.pos, bspOffset);
     }
 
     private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {

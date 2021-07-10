@@ -15,7 +15,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -683,8 +683,9 @@ export class BSPRenderer {
     public liveLeafSet = new Set<number>();
     private debugCube: DebugCube;
     private startLightmapPageIndex: number = 0;
+    private visible = true;
 
-    constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
+    constructor(renderContext: SourceRenderContext, public bsp: BSPFile, public offset: ReadonlyVec3 = Vec3Zero) {
         this.entitySystem = new EntitySystem(renderContext, this);
 
         renderContext.materialCache.setUsingHDR(this.bsp.usingHDR);
@@ -713,23 +714,26 @@ export class BSPRenderer {
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
             const modelRenderer = new BSPModelRenderer(renderContext, model, bsp, this.startLightmapPageIndex);
+            mat4.translate(modelRenderer.modelMatrix, modelRenderer.modelMatrix, this.offset);
             // Non-world-spawn models are invisible by default (they're lifted into the world by entities).
             modelRenderer.visible = (i === 0);
             this.models.push(modelRenderer);
         }
 
+        /*
         // Spawn entities.
         this.entitySystem.createAndSpawnEntities(this.bsp.entities);
 
         // Spawn static objects.
         if (this.bsp.staticObjects !== null)
             for (const staticProp of this.bsp.staticObjects.staticProps)
-                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this.bsp, staticProp));
+                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this.bsp, staticProp, this.offset));
 
         // Spawn detail objects.
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
-                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf));
+                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf, this.offset));
+        */
 
         this.debugCube = new DebugCube(device, cache);
     }
@@ -751,6 +755,9 @@ export class BSPRenderer {
     }
 
     public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, kinds: RenderObjectKind): void {
+        if (!this.visible)
+            return;
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
@@ -795,13 +802,6 @@ export class BSPRenderer {
                 }
             }
         }
-
-        /*
-        for (let i = 0; i < this.bsp.worldlights.length; i++) {
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos, '' + i);
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos);
-        }
-        */
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -1031,7 +1031,7 @@ void main() {
 // It's distinct from a view, which is camera settings, which there can be multiple of in a world renderer view.
 class SourceWorldViewRenderer {
     public drawSkybox2D = true;
-    public drawSkybox3D = true;
+    public drawSkybox3D = false;
     public drawWorld = true;
     public drawIndirect = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities | RenderObjectKind.DebugCube;
@@ -1046,17 +1046,18 @@ class SourceWorldViewRenderer {
     constructor(public name: string) {
     }
 
-    private calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
+    private calcPVS(bspRenderer: BSPRenderer, pvs: BitMap, view: SourceEngineView): boolean {
         if (!this.pvsEnabled)
             return false;
 
         // Compute PVS from view.
-        const leaf = bsp.findLeafForPoint(view.cameraPos);
+        vec3.sub(scratchVec3, view.cameraPos, bspRenderer.offset);
+        const leaf = bspRenderer.bsp.findLeafForPoint(scratchVec3);
 
         if (leaf !== null && leaf.cluster !== 0xFFFF) {
             // Has valid visibility.
             pvs.fill(false);
-            pvs.or(bsp.visibility.pvs[leaf.cluster]);
+            pvs.or(bspRenderer.bsp.visibility.pvs[leaf.cluster]);
             return true;
         }
 
@@ -1096,7 +1097,7 @@ class SourceWorldViewRenderer {
                 skyCamera.fillFogParams(this.skyboxView.fogParams);
 
                 // If our skybox is not in a useful spot, then don't render it.
-                if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.skyboxView))
+                if (!this.calcPVS(bspRenderer, renderer.pvsScratch, this.skyboxView))
                     continue;
 
                 bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.skyboxView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
@@ -1109,14 +1110,14 @@ class SourceWorldViewRenderer {
             for (let i = 0; i < renderer.bspRenderers.length; i++) {
                 const bspRenderer = renderer.bspRenderers[i];
 
-                if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.mainView)) {
+                if (!this.calcPVS(bspRenderer, renderer.pvsScratch, this.mainView)) {
                     // No valid PVS, mark everything visible.
                     renderer.pvsScratch.fill(true);
                 }
 
                 // Calculate our fog parameters from the local player's fog controller.
                 const localPlayer = bspRenderer.entitySystem.getLocalPlayer();
-                if (localPlayer.currentFogController !== null && renderer.renderContext.showFog)
+                if (localPlayer && localPlayer.currentFogController !== null && renderer.renderContext.showFog)
                     localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
                 else
                     this.mainView.fogParams.maxdensity = 0.0;
