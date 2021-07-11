@@ -13,7 +13,11 @@ import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, Paramete
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
-type EntityMessageValue = string | number | Color;
+type EntityMessageValue = string;
+
+function strColor(c: Color): string {
+    return `${c.r} ${c.g} ${c.a}`;
+}
 
 interface EntityOutputAction {
     targetName: string;
@@ -877,7 +881,7 @@ class math_remap extends BaseEntity {
         this.outMax = out2;
     }
 
-    private input_invalue(entitySystem: EntitySystem, value: number): void {
+    private input_invalue(entitySystem: EntitySystem, value: string): void {
         const num = Number(value);
 
         let t = invlerp(this.inMin, this.inMax, num);
@@ -935,7 +939,7 @@ class math_colorblend extends BaseEntity {
         vmtParseColor(this.outColorMax, this.entity.colormax);
     }
 
-    private input_invalue(entitySystem: EntitySystem, value: number): void {
+    private input_invalue(entitySystem: EntitySystem, value: string): void {
         const num = Number(value);
 
         const t = invlerp(this.inMin, this.inMax, num);
@@ -947,7 +951,7 @@ class math_colorblend extends BaseEntity {
         }
 
         colorLerp(scratchColor, this.outColorMin, this.outColorMax, t);
-        this.output_outColor.fire(entitySystem, this, scratchColor);
+        this.output_outColor.fire(entitySystem, this, strColor(scratchColor));
     }
 }
 
@@ -1148,15 +1152,25 @@ class env_fog_controller extends BaseEntity {
         this.fogMaxDensity = Number(this.entity.fogmaxdensity);
 
         this.registerInput('setstartdist', this.input_setstartdist.bind(this));
+        this.registerInput('setenddist', this.input_setenddist.bind(this));
+        this.registerInput('setfarz', this.input_setfarz.bind(this));
         this.registerInput('setcolor', this.input_setcolor.bind(this));
     }
 
-    private input_setstartdist(entitySystem: EntitySystem, value: number): void {
+    private input_setstartdist(entitySystem: EntitySystem, value: string): void {
         this.fogStart = Number(value);
     }
 
-    private input_setcolor(entitySystem: EntitySystem, value: Color): void {
-        colorCopy(this.fogColor1, value);
+    private input_setenddist(entitySystem: EntitySystem, value: string): void {
+        this.fogEnd = Number(value);
+    }
+
+    private input_setfarz(entitySystem: EntitySystem, value: string): void {
+        this.farZ = Number(value);
+    }
+
+    private input_setcolor(entitySystem: EntitySystem, value: string): void {
+        vmtParseColor(this.fogColor1, value);
     }
 
     public fillFogParams(dst: FogParams): void {
