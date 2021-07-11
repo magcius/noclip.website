@@ -1545,8 +1545,7 @@ void mainPS() {
     vec3 t_SelfIllumMask;
 
 #ifdef USE_SELFILLUM_ENVMAPMASK_ALPHA
-    // TODO(jstpierre): Implement this
-    t_SelfIllumMask = vec3(0);
+    t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
 #else
 #ifdef USE_SELFILLUM_MASK
     t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllum), v_TexCoord1.xy).rgb;
