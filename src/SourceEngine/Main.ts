@@ -285,7 +285,8 @@ export class SkyboxRenderer {
             if (!materialInstance.isMaterialVisible(renderContext))
                 continue;
             const renderInst = renderInstManager.newRenderInst();
-            materialInstance.setOnRenderInst(renderContext, renderInst, this.modelMatrix);
+            materialInstance.setOnRenderInst(renderContext, renderInst);
+            materialInstance.setOnRenderInstModelMatrix(renderInst, this.modelMatrix);
             // Overwrite the filter key from the material instance.
             renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
             renderInst.drawIndexes(6, i*6);
@@ -344,7 +345,8 @@ export class BSPSurfaceRenderer {
         }
 
         const renderInst = renderInstManager.newRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix, this.surface.lightmapPageIndex);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst, this.surface.lightmapPageIndex);
+        this.materialInstance.setOnRenderInstModelMatrix(renderInst, modelMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
         renderInst.debug = this;
 

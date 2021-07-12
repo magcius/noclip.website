@@ -73,24 +73,6 @@ export class MaterialProgramBase extends DeviceProgram {
 
     public static MaxSkinningParamsBoneMatrix = 53;
 
-    public static WorldFromLocalMatrixCalc = `
-Mat4x3 WorldFromLocalMatrixCalc() {
-#if SKINNING_MODE == ${SkinningMode.Smooth}
-    // Calculate our per-vertex position.
-    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
-
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
-
-    return t_WorldFromLocalMatrix;
-#else
-    return u_ModelMatrix;
-#endif
-}
-`;
-
     public static Common = `
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
@@ -100,19 +82,13 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_ClipPlaneWorld[1];
 };
 
-#ifndef SKINNING_MODE
-#define SKINNING_MODE ${SkinningMode.None}
-#endif
-
-#if SKINNING_MODE != ${SkinningMode.None}
 layout(std140) uniform ub_SkinningParams {
-#if SKINNING_MODE == ${SkinningMode.Rigid}
-    Mat4x3 u_ModelMatrix;
-#elif SKINNING_MODE == ${SkinningMode.Smooth}
+#if SKINNING_MODE == ${SkinningMode.Smooth}
     Mat4x3 u_BoneMatrix[${MaterialProgramBase.MaxSkinningParamsBoneMatrix}];
+#else
+    Mat4x3 u_ModelMatrix;
 #endif
 };
-#endif
 
 #define u_FogStart      (u_FogParams.x)
 #define u_FogEnd        (u_FogParams.y)
@@ -176,6 +152,39 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
     t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
 #endif
 }
+
+#ifdef VERT
+layout(location = ${MaterialProgramBase.a_Position}) in vec3 a_Position;
+layout(location = ${MaterialProgramBase.a_Normal}) in vec4 a_Normal;
+layout(location = ${MaterialProgramBase.a_TangentS}) in vec4 a_TangentS;
+layout(location = ${MaterialProgramBase.a_TexCoord}) in vec4 a_TexCoord;
+#ifdef USE_VERTEX_COLOR
+layout(location = ${MaterialProgramBase.a_Color}) in vec4 a_Color;
+#endif
+#ifdef USE_STATIC_VERTEX_LIGHTING
+layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) in vec3 a_StaticVertexLighting;
+#endif
+#if SKINNING_MODE == ${SkinningMode.Smooth}
+layout(location = ${MaterialProgramBase.a_BoneWeights}) in vec4 a_BoneWeights;
+layout(location = ${MaterialProgramBase.a_BoneIDs}) in vec4 a_BoneIndices;
+#endif
+
+Mat4x3 CalcWorldFromLocalMatrix() {
+#if SKINNING_MODE == ${SkinningMode.Smooth}
+    // Calculate our per-vertex position.
+    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
+
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
+
+    return t_WorldFromLocalMatrix;
+#else
+    return u_ModelMatrix;
+#endif
+}
+#endif
 
 #ifdef FRAG
 layout(location = 0) out vec4 o_Color0;
@@ -921,23 +930,23 @@ export abstract class BaseMaterial {
         }
     }
 
-    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex?: number): void;
+    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex?: number): void;
 
-    protected fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
-        let origOffs = offs;
+    public setOnRenderInstModelMatrix(renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+        if (this.skinningMode === SkinningMode.None) {
 
-        // Rigid/smooth skinning do not use the model matrix.
-        if (this.skinningMode === SkinningMode.None)
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
             offs += fillMatrix4x3(d, offs, modelMatrix!);
-
-        return offs - origOffs;
+        }
     }
 
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
         if (this.skinningMode === SkinningMode.Smooth) {
             assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
 
             mat4.identity(scratchMatrix);
@@ -949,7 +958,7 @@ export abstract class BaseMaterial {
         } else if (this.skinningMode === SkinningMode.Rigid) {
             assert(bonePaletteTable.length === 1);
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16);
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
 
             const boneIndex = bonePaletteTable[0];
@@ -995,10 +1004,6 @@ struct WorldLight {
 };
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
-
 #ifdef USE_AMBIENT_CUBE
     // TODO(jstpierre): Pack this more efficiently?
     vec4 u_AmbientCube[6];
@@ -1176,22 +1181,6 @@ vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
 }
 #endif
 
-#ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-#ifdef USE_VERTEX_COLOR
-layout(location = ${MaterialProgramBase.a_Color}) attribute vec4 a_Color;
-#endif
-#ifdef USE_STATIC_VERTEX_LIGHTING
-layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) attribute vec3 a_StaticVertexLighting;
-#endif
-#if SKINNING_MODE == ${SkinningMode.Smooth}
-layout(location = ${MaterialProgramBase.a_BoneWeights}) attribute vec4 a_BoneWeights;
-layout(location = ${MaterialProgramBase.a_BoneIDs}) attribute vec4 a_BoneIndices;
-#endif
-
 #ifdef USE_AMBIENT_CUBE
 vec3 AmbientLight(in vec3 t_NormalWorld) {
 #ifdef DEBUG_FULLBRIGHT
@@ -1208,10 +1197,9 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 }
 #endif
 
-${MaterialProgramBase.WorldFromLocalMatrixCalc}
-
+#ifdef VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -1992,7 +1980,7 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[9], this.paramGetInt('$envmapframe'));
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(renderContext);
         if (this.wantsLightmap)
@@ -2006,9 +1994,8 @@ class Material_Generic extends BaseMaterial {
         if (this.program.setDefineBool('USE_CLIP_PLANES', useClipPlanes))
             this.gfxProgram = null;
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 136);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 124);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
-        offs += this.fillModelMatrix(d, offs, modelMatrix);
 
         if (this.wantsAmbientCube) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
@@ -2091,9 +2078,6 @@ precision mediump float;
 ${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
     Mat4x2 u_BaseTextureTransform;
 };
 
@@ -2105,13 +2089,8 @@ varying vec2 v_TexCoord0;
 uniform sampler2D u_BaseTexture;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
-${MaterialProgramBase.WorldFromLocalMatrixCalc}
-
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -2183,15 +2162,14 @@ class Material_Modulate extends BaseMaterial {
         this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
         this.setupFogParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 20);
+        let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 8);
         const d = renderInst.mapUniformBufferF32(ModulateProgram.ub_ObjectParams);
-        offs += this.fillModelMatrix(d, offs, modelMatrix);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2211,9 +2189,6 @@ precision mediump float;
 ${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
     Mat4x2 u_Texture1Transform;
     Mat4x2 u_Texture2Transform;
     vec4 u_ModulationColor;
@@ -2228,13 +2203,8 @@ uniform sampler2D u_Texture1;
 uniform sampler2D u_Texture2;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
-${MaterialProgramBase.WorldFromLocalMatrixCalc}
-
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -2299,15 +2269,14 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$frame2'));
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
         this.setupFogParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
+        let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
-        offs += this.fillModelMatrix(d, offs, modelMatrix!);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
@@ -2332,9 +2301,6 @@ precision mediump float;
 ${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
     vec4 u_BumpScaleBias;
 #ifdef USE_TEXSCROLL
     vec4 u_TexScroll;
@@ -2369,15 +2335,8 @@ uniform sampler2D u_TextureReflect;
 uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
-${MaterialProgramBase.WorldFromLocalMatrixCalc}
-
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -2513,10 +2472,6 @@ precision mediump float;
 ${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
-
     vec4 u_BaseTextureScaleBias;
     vec4 u_WaterFogColor;
     vec4 u_Misc[3];
@@ -2556,15 +2511,8 @@ uniform sampler2D u_TextureFlowNoise;
 uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
-${MaterialProgramBase.WorldFromLocalMatrixCalc}
-
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -2797,7 +2745,7 @@ class Material_Water extends BaseMaterial {
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
 
         this.setupFogParams(renderContext, renderInst);
@@ -2810,10 +2758,9 @@ class Material_Water extends BaseMaterial {
             this.paramGetTexture('$flow_noise_texture').fillTextureMapping(this.textureMapping[4], 0);
             this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$envmapframe'));
 
-            let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 64);
+            let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 20);
             const d = renderInst.mapUniformBufferF32(WaterFlowMaterialProgram.ub_ObjectParams);
-            offs += this.fillModelMatrix(d, offs, modelMatrix!);
-
+    
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
             offs += this.paramFillGammaColor(d, offs, '$fogcolor');
 
@@ -2845,9 +2792,8 @@ class Material_Water extends BaseMaterial {
             this.paramGetTexture('$reflecttexture').fillTextureMapping(this.textureMapping[3], 0);
             this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapframe'));
 
-            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
+            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 24);
             const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
-            offs += this.fillModelMatrix(d, offs, modelMatrix!);
             offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
             if (this.wantsTexScroll) {
@@ -2897,10 +2843,6 @@ precision mediump float;
 ${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
-
     vec4 u_BumpScaleBias;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
@@ -2932,15 +2874,8 @@ uniform sampler2D u_TextureRefractTint;
 uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
-${MaterialProgramBase.WorldFromLocalMatrixCalc}
-
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -3133,15 +3068,14 @@ class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[3], this.paramGetInt('$envmapframe'));
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
         this.setupFogParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 68);
+        let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
-        offs += this.fillModelMatrix(d, offs, modelMatrix!);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
         offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');

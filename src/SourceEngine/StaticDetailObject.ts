@@ -354,7 +354,8 @@ export class DetailPropLeafRenderer {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         mat4.identity(scratchMatrix);
 
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, scratchMatrix);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst);
+        this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMatrix);
 
         const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.centerPoint);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);

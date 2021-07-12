@@ -1582,7 +1582,8 @@ class StudioModelMeshInstance {
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, template, modelMatrix);
+        this.materialInstance.setOnRenderInst(renderContext, template);
+        this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
 
         // Bind color mesh if we have a per-instance version.
         if (this.inputStateWithColorMesh !== null)
