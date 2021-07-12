@@ -1236,10 +1236,10 @@ void mainVS() {
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #ifdef USE_BUMPMAP
     v_LightmapOffset = abs(a_TangentS.w);
-    v_TexCoord0.zw = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 0.0));
+    v_TexCoord0.zw = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
@@ -4190,7 +4190,6 @@ class MaterialProxy_TextureScroll {
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext): void {
-        // TODO(jstpierre): Proximity.
         const p = paramLookup(map, this.texturescrollvar);
 
         const scale = paramGetNum(map, this.texturescale);
