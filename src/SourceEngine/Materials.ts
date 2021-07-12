@@ -69,8 +69,29 @@ export class MaterialProgramBase extends DeviceProgram {
     public static a_BoneIDs = 7;
 
     public static ub_SceneParams = 0;
+    public static ub_SkinningParams = 1;
 
-    public Common = `
+    public static MaxSkinningParamsBoneMatrix = 53;
+
+    public static WorldFromLocalMatrixCalc = `
+Mat4x3 WorldFromLocalMatrixCalc() {
+#if SKINNING_MODE == ${SkinningMode.Smooth}
+    // Calculate our per-vertex position.
+    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
+
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
+
+    return t_WorldFromLocalMatrix;
+#else
+    return u_ModelMatrix;
+#endif
+}
+`;
+
+    public static Common = `
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
@@ -78,6 +99,20 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_FogParams;
     vec4 u_ClipPlaneWorld[1];
 };
+
+#ifndef SKINNING_MODE
+#define SKINNING_MODE ${SkinningMode.None}
+#endif
+
+#if SKINNING_MODE != ${SkinningMode.None}
+layout(std140) uniform ub_SkinningParams {
+#if SKINNING_MODE == ${SkinningMode.Rigid}
+    Mat4x3 u_ModelMatrix;
+#elif SKINNING_MODE == ${SkinningMode.Smooth}
+    Mat4x3 u_BoneMatrix[${MaterialProgramBase.MaxSkinningParamsBoneMatrix}];
+#endif
+};
+#endif
 
 #define u_FogStart      (u_FogParams.x)
 #define u_FogEnd        (u_FogParams.y)
@@ -692,6 +727,14 @@ export abstract class BaseMaterial {
         return texture.isTranslucent();
     }
 
+    protected setSkinningMode(p: MaterialProgramBase): void {
+        p.setDefineString('SKINNING_MODE', '' + this.skinningMode);
+    }
+
+    protected setFogMode(p: MaterialProgramBase): void {
+        p.setDefineBool('USE_FOG', !this.paramGetBoolean('$nofog'));
+    }
+
     protected setCullMode(megaStateFlags: Partial<GfxMegaStateDescriptor>): void {
         megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
@@ -880,8 +923,39 @@ export abstract class BaseMaterial {
 
     public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex?: number): void;
 
+    protected fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
+        let origOffs = offs;
+
+        // Rigid/smooth skinning do not use the model matrix.
+        if (this.skinningMode === SkinningMode.None)
+            offs += fillMatrix4x3(d, offs, modelMatrix!);
+
+        return offs - origOffs;
+    }
+
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
-        // Nothing by default.
+        if (this.skinningMode === SkinningMode.Smooth) {
+            assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
+            mat4.identity(scratchMatrix);
+            for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
+                const boneIndex = bonePaletteTable[i];
+                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
+                offs += fillMatrix4x3(d, offs, m);
+            }
+        } else if (this.skinningMode === SkinningMode.Rigid) {
+            assert(bonePaletteTable.length === 1);
+
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
+            const boneIndex = bonePaletteTable[0];
+            const m = boneMatrix[boneIndex];
+            offs += fillMatrix4x3(d, offs, m);
+        }
     }
 
     public getRenderInstListForView(view: SourceEngineView): GfxRenderInstList {
@@ -900,16 +974,14 @@ const enum ShaderWorldLightType {
 }
 
 class Material_Generic_Program extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
-    public static ub_SkinningParams = 2;
+    public static ub_ObjectParams = 2;
 
     public static MaxDynamicWorldLights = 4;
-    public static MaxSkinningParamsBoneMatrix = 53;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 struct WorldLight {
     // w = ShaderWorldLightType.
@@ -962,16 +1034,6 @@ layout(std140) uniform ub_ObjectParams {
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
 #define u_DetailScale        (u_Misc[0].z)
-
-#if SKINNING_MODE != ${SkinningMode.None}
-layout(std140) uniform ub_SkinningParams {
-#if SKINNING_MODE == ${SkinningMode.Rigid}
-    Mat4x3 u_ModelMatrix;
-#elif SKINNING_MODE == ${SkinningMode.Smooth}
-    Mat4x3 u_BoneMatrix[${Material_Generic_Program.MaxSkinningParamsBoneMatrix}];
-#endif
-};
-#endif
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1146,29 +1208,14 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 }
 #endif
 
-Mat4x3 WorldFromLocalMatrixCalc() {
-#if SKINNING_MODE == ${SkinningMode.Smooth}
-    // Calculate our per-vertex position.
-    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
-
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
-
-    return t_WorldFromLocalMatrix;
-#else
-    return u_ModelMatrix;
-#endif
-}
+${MaterialProgramBase.WorldFromLocalMatrixCalc}
 
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
-
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
 #ifdef USE_VERTEX_COLOR
@@ -1798,8 +1845,6 @@ class Material_Generic extends BaseMaterial {
 
         this.program = new Material_Generic_Program();
 
-        this.program.setDefineString('SKINNING_MODE', '' + this.skinningMode);
-
         if (this.shaderType === GenericShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
             // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
             this.shaderType = GenericShaderType.Skin;
@@ -1914,13 +1959,12 @@ class Material_Generic extends BaseMaterial {
             this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         }
 
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
+        this.setCullMode(this.megaStateFlags);
 
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
-
-        this.setCullMode(this.megaStateFlags);
 
         this.recacheProgram(cache);
     }
@@ -1946,16 +1990,6 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$selfillummask').fillTextureMapping(this.textureMapping[7], 0);
         this.paramGetTexture('$blendmodulatetexture').fillTextureMapping(this.textureMapping[8], 0);
         this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[9], this.paramGetInt('$envmapframe'));
-    }
-
-    private fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
-        let origOffs = offs;
-
-        // Rigid/smooth skinning do not use the model matrix.
-        if (this.skinningMode === SkinningMode.None)
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
-
-        return offs - origOffs;
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
@@ -2043,46 +2077,143 @@ class Material_Generic extends BaseMaterial {
         renderInst.sortKey = this.sortKeyBase;
     }
 
-    public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
-        if (this.skinningMode === SkinningMode.Smooth) {
-            assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+    public destroy(device: GfxDevice): void {
+    }
+}
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+// Modulate
+class ModulateProgram extends MaterialProgramBase {
+    public static ub_ObjectParams = 2;
 
-            mat4.identity(scratchMatrix);
-            for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
-                const boneIndex = bonePaletteTable[i];
-                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
-                offs += fillMatrix4x3(d, offs, m);
-            }
-        } else if (this.skinningMode === SkinningMode.Rigid) {
-            assert(bonePaletteTable.length === 1);
+    public both = `
+precision mediump float;
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+${MaterialProgramBase.Common}
 
-            const boneIndex = bonePaletteTable[0];
-            const m = boneMatrix[boneIndex];
-            offs += fillMatrix4x3(d, offs, m);
-        }
+layout(std140) uniform ub_ObjectParams {
+#if SKINNING_MODE == ${SkinningMode.None}
+    Mat4x3 u_ModelMatrix;
+#endif
+    Mat4x2 u_BaseTextureTransform;
+};
+
+varying vec3 v_PositionWorld;
+// BaseTexture
+varying vec2 v_TexCoord0;
+
+// BaseTexture
+uniform sampler2D u_BaseTexture;
+
+#ifdef VERT
+layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
+layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
+
+${MaterialProgramBase.WorldFromLocalMatrixCalc}
+
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_BaseTextureSample = texture(SAMPLER_2D(u_BaseTexture, v_TexCoord0.xy));
+    vec4 t_FinalColor = t_BaseTextureSample;
+    t_FinalColor.rgb = mix(vec3(0.5), t_FinalColor.rgb, t_FinalColor.a);
+
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
+    OutputLinearColor(t_FinalColor);
+}
+#endif
+`;
+}
+
+class Material_Modulate extends BaseMaterial {
+    private program: ModulateProgram;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+
+    protected initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$mod2x']                        = new ParameterBoolean(false, false);
+        p['$writez']                       = new ParameterBoolean(false, false);
     }
 
-    public destroy(device: GfxDevice): void {
+    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        super.initStatic(device, cache);
+
+        this.program = new ModulateProgram();
+
+        const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture');
+        const blendMode = this.getAlphaBlendMode(isTranslucent);
+
+        const opaque = this.paramGetBoolean('$writez') && !(blendMode === AlphaBlendMode.Blend || blendMode === AlphaBlendMode.BlendAdd);
+
+        this.megaStateFlags.depthWrite = opaque;
+        this.isTranslucent = !opaque;
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.Dst,
+            blendDstFactor: this.paramGetBoolean('$mod2x') ? GfxBlendFactor.Src : GfxBlendFactor.Zero,
+        });
+
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
+        this.setCullMode(this.megaStateFlags);
+
+        this.gfxProgram = cache.createProgram(this.program);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(): void {
+        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings();
+
+        this.setupFogParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 20);
+        const d = renderInst.mapUniformBufferF32(ModulateProgram.ub_ObjectParams);
+        offs += this.fillModelMatrix(d, offs, modelMatrix);
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
     }
 }
 
 // UnlitTwoTexture
 class UnlitTwoTextureProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
+#if SKINNING_MODE == ${SkinningMode.None}
     Mat4x3 u_ModelMatrix;
+#endif
     Mat4x2 u_Texture1Transform;
     Mat4x2 u_Texture2Transform;
     vec4 u_ModulationColor;
@@ -2100,8 +2231,11 @@ uniform sampler2D u_Texture2;
 layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
 layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
 
+${MaterialProgramBase.WorldFromLocalMatrixCalc}
+
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
@@ -2152,10 +2286,9 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
         this.setCullMode(this.megaStateFlags);
-
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -2174,7 +2307,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
-        offs += fillMatrix4x3(d, offs, modelMatrix!);
+        offs += this.fillModelMatrix(d, offs, modelMatrix!);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
@@ -2191,15 +2324,17 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 const enum WaterShaderType { Normal, Flow }
 
 class WaterMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
+#if SKINNING_MODE == ${SkinningMode.None}
     Mat4x3 u_ModelMatrix;
+#endif
     vec4 u_BumpScaleBias;
 #ifdef USE_TEXSCROLL
     vec4 u_TexScroll;
@@ -2239,11 +2374,14 @@ layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
 layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
 layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
 
+${MaterialProgramBase.WorldFromLocalMatrixCalc}
+
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     v_PositionWorld.w = gl_Position.z; // Clip-space Z
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -2367,15 +2505,18 @@ void mainPS() {
 }
 
 class WaterFlowMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
+#if SKINNING_MODE == ${SkinningMode.None}
     Mat4x3 u_ModelMatrix;
+#endif
+
     vec4 u_BaseTextureScaleBias;
     vec4 u_WaterFogColor;
     vec4 u_Misc[3];
@@ -2420,11 +2561,14 @@ layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
 layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
 layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
 
+${MaterialProgramBase.WorldFromLocalMatrixCalc}
+
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
@@ -2645,10 +2789,9 @@ class Material_Water extends BaseMaterial {
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
         this.setCullMode(this.megaStateFlags);
-
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -2669,7 +2812,7 @@ class Material_Water extends BaseMaterial {
 
             let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 64);
             const d = renderInst.mapUniformBufferF32(WaterFlowMaterialProgram.ub_ObjectParams);
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
+            offs += this.fillModelMatrix(d, offs, modelMatrix!);
 
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
             offs += this.paramFillGammaColor(d, offs, '$fogcolor');
@@ -2704,7 +2847,7 @@ class Material_Water extends BaseMaterial {
 
             let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
             const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
+            offs += this.fillModelMatrix(d, offs, modelMatrix!);
             offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
             if (this.wantsTexScroll) {
@@ -2746,15 +2889,18 @@ class Material_Water extends BaseMaterial {
 
 //#region Refract
 class RefractMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
+#if SKINNING_MODE == ${SkinningMode.None}
     Mat4x3 u_ModelMatrix;
+#endif
+
     vec4 u_BumpScaleBias;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
@@ -2791,11 +2937,14 @@ layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
 layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
 layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
 
+${MaterialProgramBase.WorldFromLocalMatrixCalc}
+
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
@@ -2969,10 +3118,9 @@ class Material_Refract extends BaseMaterial {
         this.sortKeyBase = makeSortKey(sortLayer);
         this.isIndirect = this.textureIsIndirect('$basetexture');
 
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
         this.setCullMode(this.megaStateFlags);
-
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -2993,7 +3141,7 @@ class Material_Refract extends BaseMaterial {
 
         let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 68);
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
-        offs += fillMatrix4x3(d, offs, modelMatrix!);
+        offs += this.fillModelMatrix(d, offs, modelMatrix!);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
         offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
@@ -3099,6 +3247,8 @@ export class MaterialCache {
         const shaderType = vmt._Root.toLowerCase();
         if (shaderType === 'water')
             return new Material_Water(vmt);
+        else if (shaderType === 'modulate')
+            return new Material_Modulate(vmt);
         else if (shaderType === 'unlittwotexture' || shaderType === 'monitorscreen')
             return new Material_UnlitTwoTexture(vmt);
         else if (shaderType === 'refract')
