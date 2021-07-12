@@ -1,16 +1,16 @@
 
-import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
-import { assert, assertExists, fallbackUndefined, nullify } from '../util';
+import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
+import { assert, assertExists, fallbackUndefined, leftPad, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
-import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
+import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
 type EntityMessageValue = string;
@@ -60,6 +60,7 @@ class EntityOutput {
 type EntityInputFunc = (entitySystem: EntitySystem, value: EntityMessageValue) => void;
 
 const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 
 // Some part of this is definitely BaseAnimating, maybe split at some point?
 export class BaseEntity {
@@ -67,7 +68,7 @@ export class BaseEntity {
     public modelStudio: StudioModelInstance | null = null;
 
     public localOrigin = vec3.create();
-    public angles = vec3.create();
+    public localAngles = vec3.create();
     public renderamt: number = 1.0;
     public rendermode: number = 0;
     public visible = true;
@@ -95,7 +96,7 @@ export class BaseEntity {
 
         if (entity.angles) {
             const angles = vmtParseVector(entity.angles);
-            vec3.set(this.angles, angles[0], angles[1], angles[2]);
+            vec3.set(this.localAngles, angles[0], angles[1], angles[2]);
         }
 
         this.renderamt = vmtParseNumber(entity.renderamt, 255.0) / 255.0;
@@ -230,29 +231,36 @@ export class BaseEntity {
         }
     }
 
-    public setAbsOrigin(v: ReadonlyVec3): void {
+    public setAbsOrigin(origin: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null) {
-                mat4.invert(scratchMat4a, parentModelMatrix);
-                transformVec3Mat4w1(this.localOrigin, scratchMat4a, v);
-                return;
-            }
+            mat4.invert(scratchMat4a, parentModelMatrix);
+            transformVec3Mat4w1(this.localOrigin, scratchMat4a, origin);
+        } else {
+            vec3.copy(this.localOrigin, origin);
         }
+    }
 
-        vec3.copy(this.localOrigin, v);
+    public setAbsOriginAndAngles(origin: ReadonlyVec3, angles: ReadonlyVec3): void {
+        if (this.parentEntity !== null) {
+            const parentModelMatrix = this.parentEntity.updateModelMatrix();
+            mat4.invert(scratchMat4a, parentModelMatrix);
+            computeModelMatrixPosQAngle(scratchMat4b, origin, angles);
+            mat4.mul(scratchMat4b, scratchMat4a, scratchMat4b);
+            computePosQAngleModelMatrix(this.localOrigin, this.localAngles, scratchMat4b);
+        } else {
+            vec3.copy(this.localOrigin, origin);
+            vec3.copy(this.localAngles, angles);
+        }
     }
 
     public getAbsOrigin(dst: vec3): void {
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null) {
-                transformVec3Mat4w1(dst, parentModelMatrix, this.localOrigin);
-                return;
-            }
+            transformVec3Mat4w1(dst, parentModelMatrix, this.localOrigin);
+        } else {
+            vec3.copy(dst, this.localOrigin);
         }
-
-        vec3.copy(dst, this.localOrigin);
     }
 
     public setParentEntity(parentEntity: BaseEntity | null): void {
@@ -268,8 +276,8 @@ export class BaseEntity {
         this.setAbsOrigin(this.localOrigin);
     }
 
-    protected updateModelMatrix(): mat4 {
-        computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.angles);
+    public updateModelMatrix(): mat4 {
+        computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.localAngles);
 
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
@@ -298,6 +306,10 @@ export class BaseEntity {
                 this.modelStudio.movement(renderContext);
             }
         }
+    }
+
+    public cloneMapData(): BSPEntity {
+        return { ... this.entity };
     }
 }
 
@@ -425,7 +437,7 @@ abstract class BaseToggle extends BaseEntity {
     public startPosition: number;
     public moveDistance: number;
     public speed: number;
-    
+
     protected positionOpened = vec3.create();
     protected positionClosed = vec3.create();
 
@@ -1401,7 +1413,6 @@ abstract class BaseLight extends BaseEntity {
     private defaultstyle: number;
     private pattern: string | null = null;
     private isOn: boolean = false;
-    private queuedIsOn: boolean | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -1412,7 +1423,7 @@ abstract class BaseLight extends BaseEntity {
 
         if (this.entity.pitch !== undefined) {
             const pitch = Number(this.entity.pitch);
-            this.angles[0] = pitch;
+            this.localAngles[0] = pitch;
         }
 
         const enum SpawnFlags {
@@ -1475,6 +1486,112 @@ class light_spot extends BaseLight { public static classname = 'light_spot'; }
 class light_glspot extends BaseLight { public static classname = 'light_glspot'; }
 class light_environment extends BaseLight { public static classname = 'light_environment'; }
 
+class point_template extends BaseEntity {
+    public static classname = 'point_template';
+
+    public templateEntities: BaseEntity[] = [];
+
+    public spawn(entitySystem: EntitySystem): void {
+        for (let i = 1; i <= 16; i++) {
+            const templateKeyName = `template${leftPad('' + i, 2)}`;
+            const templateEntityName = this.entity[templateKeyName];
+            if (templateEntityName === undefined)
+                continue;
+
+            const entity = entitySystem.findEntityByTargetName(templateEntityName);
+            if (entity === null)
+                continue;
+
+            this.templateEntities.push(entity);
+        }
+    }
+}
+
+class env_entity_maker extends BaseEntity {
+    public static classname = 'env_entity_maker';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('forcespawn', this.input_forcespawn.bind(this));
+    }
+
+    private spawnEntities(entitySystem: EntitySystem): void {
+        const template = entitySystem.findEntityByTargetName(this.entity.entitytemplate) as point_template;
+        if (template === null)
+            return;
+
+        const mapDatas = template.templateEntities.map((entity) => entity.cloneMapData());
+        const targetMapDatas: BSPEntity[] = [];
+
+        // Pick new target names.
+        for (let i = 0; i < mapDatas.length; i++) {
+            const mapData = mapDatas[i];
+            if (mapData.targetname === undefined)
+                continue;
+
+            const index = entitySystem.nextDynamicTemplateSpawnIndex++;
+            mapData.targetname = `${mapData.targetname}&${leftPad('' + index, 4)}`;
+            targetMapDatas.push(mapData);
+        }
+
+        for (let i = 0; i < mapDatas.length; i++) {
+            const mapData = mapDatas[i];
+
+            for (let j = 0; j < targetMapDatas.length; j++) {
+                if (mapData === targetMapDatas[j])
+                    continue;
+
+                const newTargetName = targetMapDatas[j].targetname;
+                assert(newTargetName.includes('&'));
+                const oldTargetName = newTargetName.slice(0, -5);
+
+                for (const k in mapData) {
+                    if (k === 'targetname')
+                        continue;
+
+                    let v: string[] | string = mapData[k];
+                    if (Array.isArray(v)) {
+                        v = v.map((s) => {
+                            return s.replace(oldTargetName, newTargetName);
+                        });
+                    } else {
+                        v = v.replace(oldTargetName, newTargetName);
+                    }
+
+                    mapData[k] = v as string;
+                }
+            }
+        }
+
+        // Have our new map datas. Spawn them, and then move them relative to our matrix.
+
+        let startIndex = entitySystem.entities.length;
+        for (let i = 0; i < mapDatas.length; i++)
+            entitySystem.createEntity(mapDatas[i]);
+
+        const worldFromThis = this.updateModelMatrix();
+        const worldFromTemplate = template.updateModelMatrix();
+
+        for (let i = startIndex; i < entitySystem.entities.length; i++) {
+            const entity = entitySystem.entities[i];
+
+            // Position entity in world.
+            const worldFromEntity = entity.updateModelMatrix();
+            mat4.invert(scratchMat4a, worldFromTemplate); // templateFromWorld
+            mat4.mul(scratchMat4a, scratchMat4a, worldFromEntity); // templateFromEntity
+            mat4.mul(scratchMat4a, worldFromThis, scratchMat4a); // worldFromEntity
+            computePosQAngleModelMatrix(scratchVec3a, scratchVec3b, scratchMat4a);
+            entity.setAbsOriginAndAngles(scratchVec3a, scratchVec3b);
+
+            entity.spawn(entitySystem);
+        }
+    }
+
+    private input_forcespawn(entitySystem: EntitySystem): void {
+        this.spawnEntities(entitySystem);
+    }
+}
 
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
@@ -1520,6 +1637,8 @@ export class EntityFactoryRegistry {
         this.registerFactory(light_spot);
         this.registerFactory(light_glspot);
         this.registerFactory(light_environment);
+        this.registerFactory(point_template);
+        this.registerFactory(env_entity_maker);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -1541,10 +1660,13 @@ export class EntityFactoryRegistry {
 export class EntitySystem {
     public entities: BaseEntity[] = [];
     public currentTime = 0;
+    public nextDynamicTemplateSpawnIndex = 0;
     public debugger = new EntityMessageDebugger();
     private outputQueue: QueuedOutputEvent[] = [];
 
-    constructor(private registry: EntityFactoryRegistry) {
+    constructor(public renderContext: SourceRenderContext, public renderer: BSPRenderer) {
+        // Create our hardcoded entities first.
+        this.entities.push(new player(this, this.renderContext, this.renderer));
     }
 
     public entityMatchesTargetName(entity: BaseEntity, targetName: string): boolean {
@@ -1608,30 +1730,25 @@ export class EntitySystem {
         this.processOutputQueue();
         this.debugger.movement(renderContext);
 
+        this.currentTime = renderContext.globalTime;
+
         for (let i = 0; i < this.entities.length; i++)
             if (this.entities[i].alive)
                 this.entities[i].movement(this, renderContext);
-
-        this.currentTime = renderContext.globalTime;
     }
 
-    private spawn(): void {
-        for (let i = 0; i < this.entities.length; i++)
-            this.entities[i].spawn(this);
-    }
-
-    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, bspEntity: BSPEntity): void {
-        const entity = this.registry.createEntity(this, renderContext, renderer, bspEntity);
+    public createEntity(bspEntity: BSPEntity): void {
+        const registry = this.renderContext.entityFactoryRegistry;
+        const entity = registry.createEntity(this, this.renderContext, this.renderer, bspEntity);
         this.entities.push(entity);
     }
 
-    public createEntities(renderContext: SourceRenderContext, renderer: BSPRenderer, entities: BSPEntity[]): void {
-        // Create our hardcoded entities like the player entity.
-        this.entities.push(new player(this, renderContext, renderer));
-
+    public createAndSpawnEntities(entities: BSPEntity[]): void {
+        let startIndex = this.entities.length;
         for (let i = 0; i < entities.length; i++)
-            this.createEntity(renderContext, renderer, entities[i]);
-        this.spawn();
+            this.createEntity(entities[i]);
+        for (let i = startIndex; i < this.entities.length; i++)
+            this.entities[i].spawn(this);
     }
 
     public getLocalPlayer(): player {

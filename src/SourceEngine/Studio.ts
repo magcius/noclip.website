@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { bitsAsFloat32, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
+import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 // Encompasses the MDL, VVD & VTX formats.
@@ -70,6 +70,27 @@ export function computeModelMatrixPosQAngle(dst: mat4, pos: ReadonlyVec3, qangle
     const yaw =   qangle[1] * MathConstants.DEG_TO_RAD;
     const roll =  qangle[2] * MathConstants.DEG_TO_RAD;
     computeModelMatrixPosRotInternal(dst, pitch, yaw, roll, pos);
+}
+
+export function computePosQAngleModelMatrix(pos: vec3 | null, qangle: vec3 | null, m: ReadonlyMat4): void {
+    if (pos !== null)
+        getMatrixTranslation(pos, m);
+
+    if (qangle !== null) {
+        const xyDist = Math.hypot(m[0], m[1]);
+        qangle[0] = Math.atan2(-m[2], xyDist);
+
+        if (xyDist > 0.001) {
+            qangle[1] = Math.atan2(m[1], m[0]);
+            qangle[2] = Math.atan2(m[6], m[10]);
+        } else {
+            qangle[1] = Math.atan2(-m[4], m[5]);
+            qangle[2] = 0;
+        }
+
+        // QAngle is in degrees.
+        vec3.scale(qangle, qangle, MathConstants.RAD_TO_DEG);
+    }
 }
 
 function computeModelMatrixPosRadianEuler(dst: mat4, pos: ReadonlyVec3, radianEuler: ReadonlyVec3): void {

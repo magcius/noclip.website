@@ -681,7 +681,7 @@ export class BSPRenderer {
     private startLightmapPageIndex: number = 0;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
-        this.entitySystem = new EntitySystem(renderContext.entityFactoryRegistry);
+        this.entitySystem = new EntitySystem(renderContext, this);
 
         renderContext.materialCache.setUsingHDR(this.bsp.usingHDR);
         this.startLightmapPageIndex = renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
@@ -715,7 +715,7 @@ export class BSPRenderer {
         }
 
         // Spawn entities.
-        this.entitySystem.createEntities(renderContext, this, this.bsp.entities);
+        this.entitySystem.createAndSpawnEntities(this.bsp.entities);
 
         // Spawn static objects.
         if (this.bsp.staticObjects !== null)
