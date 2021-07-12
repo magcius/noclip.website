@@ -24,6 +24,8 @@ export class FloatingPanel implements Widget {
     protected header: HTMLElement;
     protected headerContainer: HTMLElement;
     protected svgIcon: SVGSVGElement;
+    protected minimizeButton: HTMLElement;
+    protected minimized = false;
     protected closeButton: HTMLElement;
 
     private toplevel: HTMLElement;
@@ -74,16 +76,33 @@ export class FloatingPanel implements Widget {
             this.close();
         }
 
+        this.minimizeButton = document.createElement('div');
+        this.minimizeButton.textContent = '_';
+        this.minimizeButton.title = 'Minimize';
+        this.minimizeButton.style.gridColumn = '3';
+        this.minimizeButton.style.lineHeight = '28px';
+        this.minimizeButton.style.margin = '0';
+        this.minimizeButton.style.padding = '0 4px';
+        this.minimizeButton.style.fontSize = '100%';
+        this.minimizeButton.style.cursor = 'pointer';
+        this.minimizeButton.style.userSelect = 'none';
+        this.minimizeButton.onclick = (e: MouseEvent) => {
+            this.setMinimized(!this.minimized);
+        };
+        this.minimizeButton.ondblclick = (e: MouseEvent) => {
+            e.stopPropagation();
+        };
+
         this.closeButton = document.createElement('div');
-        this.closeButton.textContent = '❌';
+        this.closeButton.textContent = 'X';
         this.closeButton.title = 'Close';
-        this.closeButton.style.gridColumn = '3';
+        this.closeButton.style.gridColumn = '4';
         this.closeButton.style.lineHeight = '28px';
         this.closeButton.style.margin = '0';
+        this.closeButton.style.padding = '0 4px';
         this.closeButton.style.fontSize = '100%';
         this.closeButton.style.cursor = 'pointer';
         this.closeButton.style.userSelect = 'none';
-        this.closeButton.style.gridColumn = '3';
         this.closeButton.onclick = () => {
             this.close();
         };
@@ -99,6 +118,7 @@ export class FloatingPanel implements Widget {
 
         this.elem = this.toplevel;
 
+        /*
         this.elem.onmouseover = () => {
             this.elem.style.opacity = '1';
         };
@@ -106,6 +126,7 @@ export class FloatingPanel implements Widget {
             this.elem.style.opacity = '0.2';
         };
         this.elem.style.opacity = '0.2';
+        */
     }
 
     public setWidth(v: number): void {
@@ -132,11 +153,19 @@ export class FloatingPanel implements Widget {
         this.toplevel.style.display = v ? 'grid' : 'none';
     }
 
+    public setMinimized(v: boolean) {
+        if (this.minimized === v)
+            return;
+        this.minimized = v;
+        this.contents.style.height = this.minimized ? '0px' : '';
+    }
+
     public setTitle(icon: string, title: string) {
         this.svgIcon = createDOMFromString(icon).querySelector('svg')!;
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
+        this.header.appendChild(this.minimizeButton);
         this.header.appendChild(this.closeButton);
         this.toplevel.dataset.title = title;
         this.syncHeaderStyle();
