@@ -3204,14 +3204,15 @@ export class JPABaseParticle {
         const materialParams = workData.materialParams;
         const packetParams = workData.packetParams;
 
+        const scaleX = workData.globalScale2D[0] * this.particleScale[0];
+        const scaleY = workData.globalScale2D[1] * this.particleScale[1];
+
         if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
 
             transformVec3Mat4w1(scratchVec3a, workData.posCamMtx, this.position);
             computeModelMatrixSRT(packetParams.u_PosMtx[0],
-                this.particleScale[0] * workData.globalScale2D[0],
-                this.particleScale[1] * workData.globalScale2D[1],
-                1,
+                scaleX, scaleY, 1,
                 0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
             this.applyPivot(packetParams.u_PosMtx[0], workData);
@@ -3247,8 +3248,6 @@ export class JPABaseParticle {
             // We want:
             //   View x Particle x Rot x Scale x PlaneSwizzle x Pivot
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
             if (isRot) {
                 this.applyRot(scratchMatrix, this.rotateAngle, sp1.rotType);
                 this.applyPlane(scratchMatrix, sp1.planeType, scaleX, scaleY);
@@ -3270,8 +3269,6 @@ export class JPABaseParticle {
             const dst = packetParams.u_PosMtx[0];
             this.applyRot(dst, this.rotateAngle, sp1.rotType);
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
             this.applyPlane(dst, sp1.planeType, scaleX, scaleY);
             dst[12] = this.position[0];
             dst[13] = this.position[1];
@@ -3294,9 +3291,6 @@ export class JPABaseParticle {
 
             transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3a);
             transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
-
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
 
             const dst = packetParams.u_PosMtx[0];
             dst[0] = scratchVec3a[0] * scaleX;
@@ -3325,8 +3319,6 @@ export class JPABaseParticle {
             transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
             const dst = packetParams.u_PosMtx[0];
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
             if (isRot) {
                 const sin = Math.sin(this.rotateAngle), cos = Math.cos(this.rotateAngle);
                 dst[0] = cos * scaleX;
