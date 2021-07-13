@@ -333,6 +333,7 @@ const enum FieldAddType {
 
 const enum FieldStatusFlag {
     NoInheritRotate = 0x02,
+    AirDrag         = 0x04,
 
     FadeUseEnTime  = 0x08,
     FadeUseDisTime = 0x10,
@@ -363,8 +364,8 @@ interface JPAFieldBlock {
     mag: number;
     // Used by Drag
     magRndm: number;
-    // Used by Newton and Convection
-    refDistanceSq: number;
+    // Used by Newton, Air and Convection
+    refDistance: number;
     // Used by Vortex and Spin
     innerSpeed: number;
     // Used by Vortex
@@ -2569,12 +2570,9 @@ export class JPABaseParticle {
 
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
-        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate)) {
-            vec3.scale(scratchVec3a, field.dir, field.mag);
-        } else {
-            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, field.dir);
-            vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-        }
+        vec3.scale(scratchVec3a, field.dir, field.mag);
+        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
+            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
         this.calcFieldAffect(scratchVec3a, field, workData);
@@ -2583,15 +2581,16 @@ export class JPABaseParticle {
     private calcFieldAir(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
         vec3.normalize(scratchVec3a, field.dir);
-        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate)) {
-            vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-        } else {
+        vec3.scale(scratchVec3a, field.dir, field.mag);
+        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
-            vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-        }
 
         // Calc
         this.calcFieldAffect(scratchVec3a, field, workData);
+        if (!!(field.sttFlag & FieldStatusFlag.AirDrag)) {
+            if (vec3.squaredLength(this.baseVel) > field.refDistance ** 2.0)
+                normToLength(this.baseVel, field.refDistance);
+        }
     }
 
     private calcFieldMagnet(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2615,7 +2614,7 @@ export class JPABaseParticle {
         transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         const power = 10 * field.mag;
-        const refDistanceSq = field.refDistanceSq;
+        const refDistanceSq = field.refDistance;
 
         // Calc
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
@@ -2639,7 +2638,7 @@ export class JPABaseParticle {
         vec3.normalize(forceDir, forceDir);
 
         const distance = field.pos[2];
-        const sqVortexDist = distance * distance;
+        const sqVortexDist = distance ** 2.0;
         const innerSpeed = field.innerSpeed;
         const outerSpeed = field.outerSpeed;
 
@@ -2726,7 +2725,7 @@ export class JPABaseParticle {
         if (dist === 0) {
             vec3.zero(scratchVec3a);
         } else {
-            const scale = field.refDistanceSq / dist;
+            const scale = field.refDistance / dist;
             vec3.scale(scratchVec3a, scratchVec3a, scale);
         }
 
@@ -3866,7 +3865,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const mag = view.getFloat32(tableIdx + 0x14);
             const magRndm = view.getFloat32(tableIdx + 0x18);
             const maxDist = view.getFloat32(tableIdx + 0x1C);
-            const maxDistSq = maxDist * maxDist;
+            const maxDistSq = maxDist ** 2.0;
 
             const posX = view.getFloat32(tableIdx + 0x20);
             const posY = view.getFloat32(tableIdx + 0x24);
@@ -3895,12 +3894,12 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
-            let refDistanceSq = -1;
+            let refDistance = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
             if (type === FieldType.Newton) {
-                refDistanceSq = param1 * param1;
+                refDistance = param1 ** 2.0;
             }
 
             if (type === FieldType.Vortex) {
@@ -3909,14 +3908,14 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             }
     
             if (type === FieldType.Convection) {
-                refDistanceSq = param2;
+                refDistance = param2;
             }
 
             if (type === FieldType.Spin) {
                 innerSpeed = mag;
             }
     
-            fld1.push({ sttFlag, type, addType: velType, pos, dir, maxDistSq, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ sttFlag, type, addType: velType, pos, dir, maxDistSq, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TEX1') {
             // Textures were parsed beforehand; skip.
         } else {
@@ -4308,7 +4307,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const mag = view.getFloat32(dataBegin + 0x04);
             const magRndm = view.getFloat32(dataBegin + 0x08);
             const maxDist = view.getFloat32(dataBegin + 0x0C);
-            const maxDistSq = maxDist * maxDist;
+            const maxDistSq = maxDist ** 2.0;
 
             const posX = view.getFloat32(dataBegin + 0x10);
             const posY = view.getFloat32(dataBegin + 0x14);
@@ -4337,12 +4336,12 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
-            let refDistanceSq = -1;
+            let refDistance = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
             if (type === FieldType.Newton) {
-                refDistanceSq = param1 * param1;
+                refDistance = param1 ** 2.0;
             }
 
             if (type === FieldType.Vortex) {
@@ -4350,15 +4349,19 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 outerSpeed = magRndm;
             }
     
+            if (type === FieldType.Air) {
+                refDistance = magRndm;
+            }
+
             if (type === FieldType.Convection) {
-                refDistanceSq = param2;
+                refDistance = param2;
             }
 
             if (type === FieldType.Spin) {
                 innerSpeed = mag;
             }
 
-            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".
@@ -4764,7 +4767,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             // maxDist does not exist in JPA2
             const maxDist = 0;
-            const maxDistSq = maxDist * maxDist;
+            const maxDistSq = maxDist ** 2.0;
 
             const posX = view.getFloat32(tableIdx + 0x0C);
             const posY = view.getFloat32(tableIdx + 0x10);
@@ -4796,7 +4799,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // All of our parameters.
             let mag = 0;
             let magRndm = 0;
-            let refDistanceSq = -1;
+            let refDistance = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
@@ -4808,7 +4811,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             magRndm = 0;
 
             if (type === FieldType.Newton) {
-                refDistanceSq = param3 * param3;
+                refDistance = param3 ** 2.0;
             }
 
             if (type === FieldType.Vortex) {
@@ -4816,15 +4819,19 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 outerSpeed = param2;
             }
 
+            if (type === FieldType.Air) {
+                refDistance = param2;
+            }
+
             if (type === FieldType.Convection) {
-                refDistanceSq = param3;
+                refDistance = param3;
             }
 
             if (type === FieldType.Spin) {
                 innerSpeed = param1;
             }
 
-            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".
