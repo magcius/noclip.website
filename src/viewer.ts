@@ -235,10 +235,14 @@ export class Viewer {
     }
 
     private finishRenderStatistics(statistics: RenderStatistics, debugGroup: GfxDebugGroup): void {
-        statistics.lines.push(`Draw Calls: ${debugGroup.drawCallCount}`);
-        statistics.lines.push(`Drawn Triangles: ${debugGroup.triangleCount}`);
-        statistics.lines.push(`Texture Binds: ${debugGroup.textureBindCount}`);
-        statistics.lines.push(`Buffer Uploads: ${debugGroup.bufferUploadCount}`);
+        if (debugGroup.drawCallCount)
+            statistics.lines.push(`Draw Calls: ${debugGroup.drawCallCount}`);
+        if (debugGroup.triangleCount)
+            statistics.lines.push(`Drawn Triangles: ${debugGroup.triangleCount}`);
+        if (debugGroup.textureBindCount)
+            statistics.lines.push(`Texture Binds: ${debugGroup.textureBindCount}`);
+        if (debugGroup.bufferUploadCount)
+            statistics.lines.push(`Buffer Uploads: ${debugGroup.bufferUploadCount}`);
 
         const worldMatrix = this.camera.worldMatrix;
         const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
