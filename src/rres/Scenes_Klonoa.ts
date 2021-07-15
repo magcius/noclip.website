@@ -45,20 +45,16 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(6/60);
     }
 
-    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -104,7 +100,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.prepareToRender(device, viewerInput);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
