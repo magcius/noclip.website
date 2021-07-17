@@ -10,7 +10,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { fillColor, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
@@ -30,6 +30,8 @@ import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import * as UI from "../ui";
+import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
+import { reverseDepthForProjectionMatrix } from "../gfx/helpers/ReversedDepthHelpers";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -517,7 +519,6 @@ export class SourceEngineView {
     public indirectList = new GfxRenderInstList(null);
 
     public fogParams = new FogParams();
-    public clipPlaneWorld: vec4 | null = null;
     public useExpensiveWater = false;
 
     public finishSetup(): void {
@@ -1211,10 +1212,14 @@ const scratchPlane = new Plane();
 
 // http://www.terathon.com/code/oblique.html
 // Plane here needs to be in view-space.
-function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane): void {
+function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpaceNearZ: GfxClipSpaceNearZ): void {
+    // Convert back to "standard OpenGL" clip space.
+    projectionMatrixConvertClipSpaceNearZ(m, GfxClipSpaceNearZ.NegativeOne, clipSpaceNearZ);
+    reverseDepthForProjectionMatrix(m);
+
     vec4.set(scratchVec4a, Math.sign(plane.n[0]), Math.sign(plane.n[1]), 1.0, 1.0);
     mat4.invert(scratchMatrix, m);
-    vec4.transformMat4(scratchVec4a, scratchVec4a, m);
+    vec4.transformMat4(scratchVec4a, scratchVec4a, scratchMatrix);
 
     plane.getVec4v(scratchVec4b);
     vec4.scale(scratchVec4b, scratchVec4b, 2.0 / vec4.dot(scratchVec4b, scratchVec4a));
@@ -1222,6 +1227,10 @@ function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane): void {
     m[6]  = scratchVec4b[1] - m[7];
     m[10] = scratchVec4b[2] - m[11];
     m[14] = scratchVec4b[3] - m[15];
+
+    // Convert back to "device space"
+    reverseDepthForProjectionMatrix(m);
+    projectionMatrixConvertClipSpaceNearZ(m, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 }
 
 export class SourceRenderer implements SceneGfx {
@@ -1245,7 +1254,6 @@ export class SourceRenderer implements SceneGfx {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.drawIndirect = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
-        this.reflectViewRenderer.mainView.clipPlaneWorld = vec4.create();
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
@@ -1400,33 +1408,30 @@ export class SourceRenderer implements SceneGfx {
                 // Reflect around waterZ
                 const cameraZ = this.mainViewRenderer.mainView.cameraPos[2];
                 if (cameraZ > waterZ) {
-                    // Reflection plane
-                    scratchPlane.set(Vec3UnitZ, -waterZ);
-                    scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld!);
-
-                    const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);
-
                     // There's probably a much cleaner way to do this, tbh.
                     const reflectView = this.reflectViewRenderer.mainView;
                     reflectView.copy(this.mainViewRenderer.mainView);
+
+                    // Flip the camera around the reflection plane.
+
+                    // This is in Source space
+                    computeModelMatrixS(scratchMatrix, 1, 1, -1);
+                    mat4.mul(reflectView.worldFromViewMatrix, scratchMatrix, this.mainViewRenderer.mainView.worldFromViewMatrix);
 
                     // Flip the view upside-down so that when we invert later, the winding order comes out correct.
                     // This will mean we'll have to flip the texture in the shader though. Intentionally adding a Y-flip for once!
 
                     // This is in noclip space
                     computeModelMatrixS(scratchMatrix, 1, -1, 1);
-                    mat4.mul(reflectView.worldFromViewMatrix, this.mainViewRenderer.mainView.worldFromViewMatrix, scratchMatrix);
+                    mat4.mul(reflectView.worldFromViewMatrix, reflectView.worldFromViewMatrix, scratchMatrix);
 
-                    // Now flip it over the reflection plane.
-
-                    // This is in Source space
-                    computeModelMatrixS(scratchMatrix, 1, 1, -1);
-                    mat4.mul(reflectView.worldFromViewMatrix, scratchMatrix, reflectView.worldFromViewMatrix);
+                    const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);
                     reflectView.worldFromViewMatrix[14] = reflectionCameraZ;
                     mat4.invert(reflectView.viewFromWorldMatrix, reflectView.worldFromViewMatrix);
 
+                    scratchPlane.set(Vec3UnitZ, -waterZ);
                     scratchPlane.transform(reflectView.viewFromWorldMatrix);
-                    modifyProjectionMatrixForObliqueClipping(reflectView.clipFromViewMatrix, scratchPlane);
+                    modifyProjectionMatrixForObliqueClipping(reflectView.clipFromViewMatrix, scratchPlane, viewerInput.camera.clipSpaceNearZ);
 
                     this.reflectViewRenderer.mainView.finishSetup();
                     this.reflectViewRenderer.prepareToRender(this);
