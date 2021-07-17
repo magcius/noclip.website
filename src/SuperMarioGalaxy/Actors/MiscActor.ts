@@ -7,6 +7,7 @@ import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
+import { dfRange, dfShow } from '../../DebugFloaters';
 import { drawWorldSpaceBasis, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
@@ -6311,11 +6312,14 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     private segmentCount: number;
     private speed: number;
     private height: number;
+    @dfShow()
+    @dfRange(0, 2000, 1)
     private visibleSegmentLength: number;
     private separators: vec3[] = [];
     private points: ElectricRailMovingPoint[] = [];
     private size = 30.0;
     private ddraw = new TSDraw();
+    @dfShow()
     private coordPhaseAnim: number = 0.0;
     private alpha: number = 1.0;
 
@@ -6468,7 +6472,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         const segmentLength = getRailTotalLength(this) / this.segmentCount;
 
         const visibleSegmentRatio = this.visibleSegmentLength / segmentLength;
-        this.alpha = saturate(visibleSegmentRatio + 15.0/255.0 * Math.sin(MathConstants.TAU * visibleSegmentRatio));
+        this.alpha = saturate(visibleSegmentRatio + 15.0/255.0 * Math.sin(MathConstants.TAU * visibleSegmentRatio - Math.PI));
 
         this.updatePointPosAndModel(sceneObjHolder);
     }

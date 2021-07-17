@@ -2760,7 +2760,7 @@ class Material_Water extends BaseMaterial {
 
             let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 20);
             const d = renderInst.mapUniformBufferF32(WaterFlowMaterialProgram.ub_ObjectParams);
-    
+
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
             offs += this.paramFillGammaColor(d, offs, '$fogcolor');
 
@@ -2792,7 +2792,7 @@ class Material_Water extends BaseMaterial {
             this.paramGetTexture('$reflecttexture').fillTextureMapping(this.textureMapping[3], 0);
             this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapframe'));
 
-            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 24);
+            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 36);
             const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
             offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
