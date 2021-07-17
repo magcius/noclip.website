@@ -79,7 +79,6 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_CameraPosWorld;
     vec4 u_FogColor;
     vec4 u_FogParams;
-    vec4 u_ClipPlaneWorld[1];
 };
 
 layout(std140) uniform ub_SkinningParams {
@@ -209,18 +208,11 @@ function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEng
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
     offs += fillVec3v(d, offs, view.cameraPos);
     offs += fillFogParams(d, offs, fogParams);
-    for (let i = 0; i < 1; i++) {
-        const clipPlaneWorld = view.clipPlaneWorld[i];
-        if (clipPlaneWorld)
-            offs += fillVec4v(d, offs, view.clipPlaneWorld[i]);
-        else
-            offs += fillVec4(d, offs, 0, 0, 0, 0);
-    }
     return offs - baseOffs;
 }
 
 export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams> = view.fogParams): void {
-    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
+    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
     fillSceneParams(d, offs, view, fogParams);
 }
@@ -1418,24 +1410,7 @@ vec4 DebugLightmapTexture(vec4 t_TextureSample) {
     return t_TextureSample;
 }
 
-bool CheckClipPlanes(vec3 t_PositionWorld) {
-#ifdef USE_CLIP_PLANES
-    // TODO(jstpierre): Optimize this if we have hardware clip plane in vertex shader (GL extension?)
-    for (int i = 0; i < 1; i++) {
-        if (dot(u_ClipPlaneWorld[i].xyz, t_PositionWorld.xyz) + u_ClipPlaneWorld[i].w < 0.0)
-            return false;
-    }
-#endif
-
-    return true;
-}
-
 void mainPS() {
-    if (!CheckClipPlanes(v_PositionWorld.xyz)) {
-        discard;
-        return;
-    }
-
     vec4 t_Albedo, t_BlendedAlpha;
 
     vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
@@ -1987,12 +1962,6 @@ class Material_Generic extends BaseMaterial {
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
 
         this.setupFogParams(renderContext, renderInst);
-
-        // TODO(jstpierre): The cost of reprocessing shaders every frame toggling between clip planes and not-clip planes is too massive right now...
-        // GfxRenderCache happens *post*-preprocess, and the expensive thing appears to be preprocessGLSL.
-        const useClipPlanes = true; // renderContext.currentView.clipPlaneWorld.length > 0;
-        if (this.program.setDefineBool('USE_CLIP_PLANES', useClipPlanes))
-            this.gfxProgram = null;
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 124);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);

@@ -517,7 +517,7 @@ export class SourceEngineView {
     public indirectList = new GfxRenderInstList(null);
 
     public fogParams = new FogParams();
-    public clipPlaneWorld: vec4[] = [];
+    public clipPlaneWorld: vec4 | null = null;
     public useExpensiveWater = false;
 
     public finishSetup(): void {
@@ -1212,19 +1212,16 @@ const scratchPlane = new Plane();
 // http://www.terathon.com/code/oblique.html
 // Plane here needs to be in view-space.
 function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane): void {
-    const x = (Math.sign(plane.n[0]) + m[8]) / m[0];
-    const y = (Math.sign(plane.n[1]) + m[9]) / m[5];
-    const z = -1;
-    const w = (1 + m[10]) / m[14];
+    vec4.set(scratchVec4a, Math.sign(plane.n[0]), Math.sign(plane.n[1]), 1.0, 1.0);
+    mat4.invert(scratchMatrix, m);
+    vec4.transformMat4(scratchVec4a, scratchVec4a, m);
 
-    vec4.set(scratchVec4a, x, y, z, w);
     plane.getVec4v(scratchVec4b);
-
     vec4.scale(scratchVec4b, scratchVec4b, 2.0 / vec4.dot(scratchVec4b, scratchVec4a));
-    m[2] = scratchVec4a[0];
-    m[6] = scratchVec4a[1];
-    m[10] = scratchVec4a[2] + 1;
-    m[14] = scratchVec4a[3];
+    m[2]  = scratchVec4b[0] - m[3];
+    m[6]  = scratchVec4b[1] - m[7];
+    m[10] = scratchVec4b[2] - m[11];
+    m[14] = scratchVec4b[3] - m[15];
 }
 
 export class SourceRenderer implements SceneGfx {
@@ -1248,7 +1245,7 @@ export class SourceRenderer implements SceneGfx {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.drawIndirect = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
-        this.reflectViewRenderer.mainView.clipPlaneWorld.push(vec4.create());
+        this.reflectViewRenderer.mainView.clipPlaneWorld = vec4.create();
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
@@ -1405,7 +1402,7 @@ export class SourceRenderer implements SceneGfx {
                 if (cameraZ > waterZ) {
                     // Reflection plane
                     scratchPlane.set(Vec3UnitZ, -waterZ);
-                    scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld[0]);
+                    scratchPlane.getVec4v(this.reflectViewRenderer.mainView.clipPlaneWorld!);
 
                     const reflectionCameraZ = cameraZ - 2 * (cameraZ - waterZ);
 
@@ -1428,11 +1425,8 @@ export class SourceRenderer implements SceneGfx {
                     reflectView.worldFromViewMatrix[14] = reflectionCameraZ;
                     mat4.invert(reflectView.viewFromWorldMatrix, reflectView.worldFromViewMatrix);
 
-                    // TODO(jstpierre): This isn't quite working yet.
-                    /*
                     scratchPlane.transform(reflectView.viewFromWorldMatrix);
                     modifyProjectionMatrixForObliqueClipping(reflectView.clipFromViewMatrix, scratchPlane);
-                    */
 
                     this.reflectViewRenderer.mainView.finishSetup();
                     this.reflectViewRenderer.prepareToRender(this);
