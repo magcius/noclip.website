@@ -7,10 +7,10 @@
 //  * JPAC2_10, as seen in Super Mario Galaxy 1 & 2
 //
 // Known gaps in JPA2 support:
-//  * Line and Point shape types
+//  * Point shape types
 //
 // Known gaps in JPA1 support:
-//  * Line and Point shape types
+//  * Point shape types
 //  * ETX1 SubTexture
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
@@ -423,7 +423,6 @@ const st_aa: GX.CA[] = [
 function shapeTypeSupported(shapeType: ShapeType): boolean {
     switch (shapeType) {
     case ShapeType.Point:
-    case ShapeType.Line:
         return false;
     default:
         return true;
@@ -3178,7 +3177,7 @@ export class JPABaseParticle {
             return;
 
         // We model all particles below as spheres with radius 25, which should cover all bases.
-        // Stripes (and lines) are an exception, but they are handled separately.
+        // Stripes are an exception, but they are handled separately.
         if (workData.frustum !== null) {
             const scaleX = Math.abs(this.particleScale[0] * workData.globalScale2D[0]);
             const scaleY = Math.abs(this.particleScale[1] * workData.globalScale2D[1]);
@@ -3207,7 +3206,49 @@ export class JPABaseParticle {
         const scaleX = workData.globalScale2D[0] * this.particleScale[0];
         const scaleY = workData.globalScale2D[1] * this.particleScale[1];
 
-        if (shapeType === ShapeType.Billboard) {
+        if (shapeType === ShapeType.Line) {
+            // Draw a line from (this.position) to (this.position - this.velocity.norm() * scaleY).
+
+            // Our quad is set up in the middle, so the center point is the midpoint of those two,
+            // aka (this.position - this.velocity.norm * scaleY * 0.5).
+            vec3.normalize(scratchVec3c, this.velocity);
+            vec3.scaleAndAdd(scratchVec3b, this.position, scratchVec3c, -scaleY * 0.5);
+            transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, scratchVec3b);
+
+            // To go from the center to reach either edge is just the half-extents of the velocity direction.
+            transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3c);
+            vec3.scale(scratchVec3a, scratchVec3a, -0.5);
+
+            const dst = packetParams.u_PosMtx[0];
+
+            dst[0] = -scratchVec3a[1] * scaleX;
+            dst[1] = scratchVec3a[0] * scaleX;
+            dst[2] = 0;
+
+            dst[4] = scratchVec3a[0] * scaleY;
+            dst[5] = scratchVec3a[1] * scaleY;
+            dst[6] = 0;
+
+            // The Z+ axis should face the camera.
+            dst[8] = 0;
+            dst[9] = 0;
+            dst[10] = 1;
+
+            dst[12] = scratchVec3b[0];
+            dst[13] = scratchVec3b[1];
+            dst[14] = scratchVec3b[2];
+
+            // No pivot on lines.
+            this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
+
+            // The UV on the line should stretch from (0.0, 0.0) to (0.0, 1.0), so zero out the scale of the
+            // texture matrix while keeping the rest the same.
+            // TODO(jstpierre): This breaks on Line10 / Line20? Have to check how the original game works...
+            // materialParams.u_TexMtx[0][0] = 0.0;
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.drawIndexes(6, 0);
+        } else if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
 
             transformVec3Mat4w1(scratchVec3a, workData.posCamMtx, this.position);
@@ -3294,18 +3335,19 @@ export class JPABaseParticle {
 
             const dst = packetParams.u_PosMtx[0];
             dst[0] = scratchVec3a[0] * scaleX;
-            dst[4] = -scratchVec3a[1] * scaleY;
-            dst[8] = 0;
-            dst[12] = scratchVec3b[0];
-
             dst[1] = scratchVec3a[1] * scaleX;
-            dst[5] = scratchVec3a[0] * scaleY;
-            dst[9] = 0;
-            dst[13] = scratchVec3b[1];
-
             dst[2] = 0;
+
+            dst[4] = -scratchVec3a[1] * scaleY;
+            dst[5] = scratchVec3a[0] * scaleY;
             dst[6] = 0;
+
+            dst[8] = 0;
+            dst[9] = 0;
             dst[10] = 1;
+
+            dst[12] = scratchVec3b[0];
+            dst[13] = scratchVec3b[1];
             dst[14] = scratchVec3b[2];
             this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
