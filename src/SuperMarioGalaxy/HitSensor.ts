@@ -539,6 +539,10 @@ export function addHitSensorCallbackMapObj(sceneObjHolder: SceneObjHolder, actor
     return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor);
 }
 
+export function addHitSensorCallbackMapObjSimple(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number) {
+    return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObjSimple, pairwiseCapacity, radius, actor);
+}
+
 export function addHitSensorPosMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, pos: ReadonlyVec3, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.addPos(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, pos, offset);
 }

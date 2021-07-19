@@ -8,7 +8,7 @@ import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection } from './ActorUtil';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection, getRailPointNum } from './ActorUtil';
 import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow';
 import { getRailArg } from './RailRider';
 
@@ -36,7 +36,7 @@ export function hasMapPartsShadow(shadowType: MapPartsShadowType): boolean {
     return shadowType !== MapPartsShadowType.None;
 }
 
-const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
+const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish, }
 function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
     return fallback(getRailArg(actor.railRider!, 'path_arg1'), MoveStopType.Mirror);
 }
@@ -342,7 +342,7 @@ export class MapPartsRailPosture extends MapPartsFunction<MapPartsRailPostureNrv
 }
 
 export class MapPartsRailPointPassChecker {
-    public currentRailPointId: number = -1;
+    public lastRailPointId: number = -1;
 
     constructor(private actor: LiveActor) {
     }
@@ -352,14 +352,28 @@ export class MapPartsRailPointPassChecker {
     }
 
     public start(): void {
-        this.currentRailPointId = this.getCurrentPointId();
+        this.lastRailPointId = this.getCurrentPointId();
     }
 
     public end(): void {
     }
 
     public isPassed(): boolean {
-        return this.currentRailPointId !== this.getCurrentPointId();
+        return this.lastRailPointId !== this.getCurrentPointId();
+    }
+
+    public isPassedStartPoint(): boolean {
+        if (this.getCurrentPointId() === 0)
+            return this.isPassed();
+        else
+            return false;
+    }
+
+    public isPassedEndPoint(): boolean {
+        if (this.getCurrentPointId() === getRailPointNum(this.actor) - 1)
+            return this.isPassed();
+        else
+            return false;
     }
 
     public isReachedEnd(): boolean {
@@ -367,7 +381,7 @@ export class MapPartsRailPointPassChecker {
     }
 
     public movement(): void {
-        this.currentRailPointId = this.getCurrentPointId();
+        this.lastRailPointId = this.getCurrentPointId();
     }
 }
 
@@ -442,11 +456,25 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
             return false;
     }
 
-    public isDone(): boolean {
-        if (this.moveStopType !== 0 && this.moveStopType !== 3)
+    public isPassedStartPointRepeat(): boolean {
+        if (this.moveStopType === MoveStopType.Loop)
+            return this.passChecker.isPassedStartPoint();
+        else
             return false;
+    }
 
-        return this.isReachedEnd();
+    public isPassedEndPointRepeat(): boolean {
+        if (this.moveStopType === MoveStopType.Loop)
+            return this.passChecker.isPassedEndPoint();
+        else
+            return false;
+    }
+
+    public isDone(): boolean {
+        if (this.moveStopType === MoveStopType.OnceAndWait || this.moveStopType === MoveStopType.OnceAndVanish)
+            return this.isReachedEnd();
+        else
+            return false;
     }
 
     public start(): void {
@@ -540,7 +568,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
             if (isGreaterEqualStep(this, getMoveStartSignalTime())) {
                 setRailCoord(this.actor, this.startMoveCoord);
-                getRailPos(this.actor.translation, this.actor);
+                getRailPos(this.translation, this.actor);
                 this.spine.setNerve(MapPartsRailMoverNrv.Move);
             } else {
                 const step = getStep(this);
