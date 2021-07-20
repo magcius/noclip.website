@@ -720,7 +720,9 @@ export class BSPRenderer {
             this.models.push(modelRenderer);
         }
 
-        /*
+        for (let i = 0; i < this.bsp.worldlights.length; i++)
+            vec3.add(this.bsp.worldlights[i].pos, this.bsp.worldlights[i].pos, offset);
+
         // Spawn entities.
         this.entitySystem.createAndSpawnEntities(this.bsp.entities);
 
@@ -733,7 +735,6 @@ export class BSPRenderer {
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
                 this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf, this.offset));
-        */
 
         this.debugCube = new DebugCube(device, cache);
     }

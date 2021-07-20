@@ -92,6 +92,7 @@ export class BaseEntity {
         if (entity.origin) {
             const origin = vmtParseVector(entity.origin);
             vec3.set(this.localOrigin, origin[0], origin[1], origin[2]);
+            vec3.add(this.localOrigin, this.localOrigin, this.bspRenderer.offset);
         }
 
         if (entity.angles) {
