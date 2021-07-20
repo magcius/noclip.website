@@ -171,7 +171,7 @@ const sceneDescs = [
     new Portal2SceneDesc("mp_coop_wall_5"),
     new Portal2SceneDesc("mp_coop_wall_block"),
     new Portal2SceneDesc("mp_coop_wall_intro"),
-    "???",
+    "Super 8 Teaser",
     new Portal2SceneDesc("e1912"),
 ];
 
