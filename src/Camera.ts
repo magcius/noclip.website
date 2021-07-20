@@ -722,7 +722,7 @@ export class OrbitCameraController implements CameraController {
     public txVel: number = 0;
     public tyVel: number = 0;
 
-    private sceneMoveSpeedMult = 1;
+    public sceneMoveSpeedMult = 1;
 
     constructor(public shouldOrbit: boolean = false) {
     }
