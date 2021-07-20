@@ -309,6 +309,7 @@ export class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
     public lightmaps: SurfaceLightmap[] = [];
+    private lightmapPageIndex: number;
 
     constructor(public surface: Surface) {
     }
@@ -316,10 +317,10 @@ export class BSPSurfaceRenderer {
     public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager, startLightmapPageIndex: number): void {
         this.materialInstance = materialInstance;
 
-        const lightmapPageIndex = startLightmapPageIndex + this.surface.lightmapPageIndex;
+        this.lightmapPageIndex = startLightmapPageIndex + this.surface.lightmapPageIndex;
         for (let i = 0; i < this.surface.lightmapData.length; i++) {
             const lightmapData = this.surface.lightmapData[i];
-            this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap, lightmapPageIndex));
+            this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap, this.lightmapPageIndex));
         }
     }
 
@@ -347,7 +348,7 @@ export class BSPSurfaceRenderer {
         }
 
         const renderInst = renderInstManager.newRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, this.surface.lightmapPageIndex);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst, this.lightmapPageIndex);
         this.materialInstance.setOnRenderInstModelMatrix(renderInst, modelMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
         renderInst.debug = this;
