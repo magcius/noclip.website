@@ -3759,6 +3759,7 @@ export class WorldLightingState {
         'mmnnmmnnnmmnn',
     ];
     private smoothAnim = false;
+    private doUpdates = true;
 
     constructor() {
         this.styleIntensities.fill(1.0);
@@ -3787,7 +3788,10 @@ export class WorldLightingState {
     }
 
     public update(timeInSeconds: number): void {
-        const time = (timeInSeconds * 10);
+        if (!this.doUpdates)
+            return;
+
+       const time = (timeInSeconds * 10);
         for (let i = 0; i < this.styleIntensities.length; i++) {
             const pattern = this.stylePatterns[i];
             if (pattern === undefined)
