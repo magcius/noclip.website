@@ -74,6 +74,7 @@ import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
+import * as Scenes_SpongeBobROTFD from "./SpongeBobROTFD/scenes";
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -118,6 +119,7 @@ const sceneGroups = [
     Scenes_MetroidPrime.sceneGroupMP2,
     Scenes_PaperMario_TheThousandYearDoor.sceneGroup,
     Scenes_Pikmin2.sceneGroup,
+    Scenes_SpongeBobROTFD.sceneGroup,
     Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioSunshine.sceneGroup,
     Scenes_Zelda_TwilightPrincess.sceneGroup,
