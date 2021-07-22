@@ -3,6 +3,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
+import { loadArchive } from "./archive";
 
 export class ROTFDRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
@@ -29,10 +30,9 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dgcPath = `${this.id}.DGC`;
-        const ngcPath = `${this.id}.NGC`;
-
         const renderer = new ROTFDRenderer(gfxDevice);
+
+        const archive = await loadArchive(context.dataFetcher, this.id);
 
         return renderer;
     }
