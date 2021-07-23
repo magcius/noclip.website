@@ -36,6 +36,28 @@ export const FileType = {
     WORLD: CRC32.bstr("WORLD"),
 }
 
+/******************\
+|* READ UTILITIES *|
+\******************/
+
+export type THeader = {
+    floats_unk: number[];
+    transform: mat4;
+    junk: void;
+    type: number;
+    flags: number;
+}
+
+export function readTHeader(data: DataStream): THeader {
+    return {
+        floats_unk: data.readArrayStatic(data.readFloat32, 4),
+        transform: data.readMat4(),
+        junk: data.readJunk(16),
+        type: data.readUint16(),
+        flags: data.readUint16(),
+    }
+}
+
 /*****************\
 |* READ MATERIAL *|
 \*****************/
@@ -234,6 +256,58 @@ function readNodeSkinUnk2ExtraDataUnion(data: DataStream) {
     }
 }
 
+/*************\
+|* READ MESH *|
+\*************/
+
+function readStrip(data: DataStream) {
+    return {
+        vertex_ids: data.readArrayDynamic(data.readUint32, data.readUint16),
+        material_index: data.readUint32(),
+        tri_order: data.readUint32(),
+    }
+}
+
+export function readMesh(data: DataStream) {
+    const header = readTHeader(data);
+    let coords = {
+        vertices: data.readArrayDynamic(data.readUint32, data.readVec3),
+        texcoords: data.readArrayDynamic(data.readUint32, data.readVec2),
+        normals: data.readArrayDynamic(data.readUint32, data.readVec3),
+    };
+    const numStrips = data.readUint32();
+    const strips = data.readArrayStatic(readStrip, numStrips);
+    if ((header.flags & 4) !== 0) {
+        data.skip(4 * numStrips); // skip vertex groups (I think?)
+    }
+    assert(numStrips === data.readUint32(), "Strip has incorrect number of stripext");
+    const stripsFull = strips.map((strip) => ({
+        elements: (() => {
+            const numElements = data.readUint32();
+            assert(numElements === strip.vertex_ids.length, "Bad elements >:(");
+            return strip.vertex_ids.map((vertex_id) => ({
+                vertex_id,
+                texcoord_id: data.readUint16(),
+                normal_id: data.readUint16(),
+            }));
+        })(),
+        material_index: strip.material_index,
+        tri_order: strip.tri_order,
+    }));
+    return {
+        header,
+        ...coords,
+        strips: stripsFull,
+        materials: data.readArrayDynamic(data.readUint32, data.readInt32),
+        // Rest doesn't matter
+        // sphere_shapes:
+        // cuboid_shapes:
+        // cylinder_shapes:
+        // unk_shapes:
+        // strip_order:
+    };
+}
+
 /****************\
 |* READ ARCHIVE *|
 \****************/
@@ -241,7 +315,12 @@ function readNodeSkinUnk2ExtraDataUnion(data: DataStream) {
 const dataBasePath = "rotfd";
 
 export class TotemFile {
-    constructor(public readonly data: ArrayBufferSlice, public readonly typeHash: number, public readonly flags: number) { }
+    constructor(
+        public readonly data: ArrayBufferSlice,
+        public readonly nameHash: number,
+        public readonly typeHash: number,
+        public readonly flags: number,
+    ) { }
 }
 
 export class TotemArchive {
@@ -255,7 +334,7 @@ export class TotemArchive {
         return this.data.get(fileNameHash);
     }
     
-    *iterFilesOfType(typeHash: typeof FileType[keyof typeof FileType]) {
+    *iterFilesOfType(typeHash: number) {
         for (const [key, file] of this.data.entries()) {
             if (file.typeHash === typeHash) {
                 yield file;
@@ -267,7 +346,7 @@ export class TotemArchive {
 export async function loadArchive(dataFetcher: DataFetcher, path: string): Promise<TotemArchive> {
     const dgc = await dataFetcher.fetchData(`${dataBasePath}/${path}.DGC`);
     // const ngc = await dataFetcher.fetchData(`${path}.NGC`);
-    const dstream = new DataStream(dgc, dgc.createDataView(), 256, false);
+    const dstream = new DataStream(dgc, 256, false);
     const chunkSize = dstream.readUint32();
     dstream.offs = 2048;
     let archive = new TotemArchive();
@@ -280,7 +359,7 @@ export async function loadArchive(dataFetcher: DataFetcher, path: string): Promi
             const fileNameHash = dstream.readInt32();
             const fileFlags = dstream.readUint32();
             const data = dstream.readSlice(fileSize - 16);
-            archive.addFile(fileNameHash, new TotemFile(data, fileTypeHash, fileFlags));
+            archive.addFile(fileNameHash, new TotemFile(data, fileNameHash, fileTypeHash, fileFlags));
         }
         dstream.offs = nextpos;
     }

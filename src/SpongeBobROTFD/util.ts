@@ -3,12 +3,15 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color } from "../Color";
 
 export class DataStream {
+    public view: DataView;
+
     constructor(
         public buffer: ArrayBufferSlice,
-        public view: DataView = buffer.createDataView(),
         public offs: number = 0,
         public littleEndian: boolean = false,
-    ) { }
+    ) { 
+        this.view = buffer.createDataView();
+    }
 
     public readInt8(): number {
         return this.view.getInt8(this.offs++);
@@ -110,6 +113,10 @@ export class DataStream {
     }
 
     public readJunk(size: number): void {
+        this.offs += size;
+    }
+
+    public skip(size: number) {
         this.offs += size;
     }
 

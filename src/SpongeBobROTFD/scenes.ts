@@ -3,7 +3,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
-import { FileType, loadArchive, readNode } from "./archive";
+import { FileType, loadArchive, readMesh, readNode } from "./archive";
 import { DataStream } from './util';
 
 export class ROTFDRenderer implements Viewer.SceneGfx {
@@ -35,8 +35,13 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
 
         const archive = await loadArchive(context.dataFetcher, this.id);
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
-            const reader = new DataStream(nodeFile.data, nodeFile.data.createDataView(), 0, false);
+            const reader = new DataStream(nodeFile.data, 0, false);
             const nodeData = readNode(reader);
+        }
+
+        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
+            const reader = new DataStream(meshFile.data, 0, false);
+            const meshData = readMesh(reader);
         }
 
         return renderer;
