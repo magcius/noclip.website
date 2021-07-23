@@ -250,6 +250,12 @@ export class Viewer {
 
         const vendorInfo = this.gfxDevice.queryVendorInfo();
         statistics.lines.push(`Platform: ${vendorInfo.platformString}`);
+
+        if (vendorInfo.platformString === 'WebGL2') {
+            const impl = gfxDeviceGetImpl_GL(this.gfxDevice);
+            const w = impl.gl.drawingBufferWidth, h = impl.gl.drawingBufferHeight;
+            statistics.lines.push(`Drawing Buffer Size: ${w}x${h}`);
+        }
     }
 
     public setCameraController(cameraController: CameraController) {
