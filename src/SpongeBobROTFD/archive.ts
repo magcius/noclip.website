@@ -309,6 +309,45 @@ export function readMesh(data: DataStream) {
 }
 
 /****************\
+|* READ SURFACE *|
+\****************/
+
+function readSurfaceSingle(data: DataStream) {
+    return {
+        texcoords: data.readArrayStatic(data.readVec2, 4),
+        unk2: data.readArrayStatic(data.readFloat32, 12),
+        normal_indices: data.readArrayStatic(data.readUint16, 4),
+        curve_indices: data.readArrayStatic(data.readUint16, 4),
+        curve_order: data.readUint32(),
+        unk3: data.readJunk(32),
+        index_n6: data.readUint32(),
+        materialanim_id: data.readInt32(),
+    }
+}
+
+function readCurve(data: DataStream) {
+    return {
+        p1: data.readUint16(),
+        p2: data.readUint16(),
+        p1_t: data.readUint16(),
+        p2_t: data.readUint16(),
+    }
+}
+
+export function readSurface(data: DataStream) {
+    return {
+        header: readTHeader(data),
+        vertices: data.readArrayDynamic(data.readUint32, data.readVec3),
+        unk0: data.readArrayDynamic(data.readUint32, (data) => data.readJunk(24)),
+        unk1: data.readArrayDynamic(data.readUint32, (data) => data.readJunk(24)),
+        surfaces: data.readArrayDynamic(data.readUint32, readSurfaceSingle),
+        curves: data.readArrayDynamic(data.readUint32, readCurve),
+        normals: data.readArrayDynamic(data.readUint32, data.readVec3),
+        // rest doesn't matter (for now?)
+    }
+}
+
+/****************\
 |* READ ARCHIVE *|
 \****************/
 
