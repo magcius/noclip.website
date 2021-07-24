@@ -41,6 +41,7 @@ import { lerp } from "../MathHelpers";
 import { colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, SurfaceObject } from "./surface";
 import { nArray } from "../util";
+import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -101,21 +102,85 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1, },
 ];
 
-export class VertexData {
-    public vertexBuffer: GfxBuffer;
-    // public uvBuffer: GfxBuffer;
-    // public normalBuffer: GfxBuffer;
-    public indexBuffer: GfxBuffer;
-    public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
-    public indexCount: number;
+type Vertex = [number, number, number, number, number, number, number, number];
+function vertexEq(a: Vertex, b: Vertex): boolean {
+    for (let i = 0; i < 8; i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+function vertexHash(a: Vertex): number {
+    let hash = 0;
+    for (const value of a) {
+        hash = hashCodeNumberUpdate(hash, value);
+    }
+    return hashCodeNumberFinish(hash);
+}
 
-    static fromSurface(device: GfxDevice, surf: SurfaceObject, index: number): VertexData {
+export class VertexDataBuilder {
+    private indices: number[] = [];
+    private vertices: number[] = [];
+    private bbox = new AABB();
+    private hashmap = new HashMap<Vertex, number>(vertexEq, vertexHash);
+
+    constructor() { }
+
+    addVertex(vertex: Vertex): number {
+        const existing = this.hashmap.get(vertex);
+        if (existing !== null) {
+            return existing;
+        }
+        if (this.vertices.length === 0) {
+            this.bbox.setFromPoints([[vertex[0], vertex[1], vertex[2]]]);
+        }
+        else {
+            this.bbox.unionPoint([vertex[0], vertex[1], vertex[2]]);
+        }
+        for (const value of vertex) {
+            this.vertices.push(value);
+        }
+        this.hashmap.add(vertex, this.vertices.length / 8 - 1);
+        return this.vertices.length / 8 - 1;
+    }
+
+    addTri(a: number, b: number, c: number) {
+        this.indices.push(a);
+        this.indices.push(b);
+        this.indices.push(c);
+    }
+
+    addMeshMaterial(mesh: MeshObject, material_index: number) {
+        for (const strip of mesh.strips) {
+            // only consider materials for corresponding material_index
+            if (strip.material_index % mesh.materials.length !== material_index) {
+                continue;
+            }
+            for (let i = 0; i < strip.elements.length-2; i++) {
+                let index0 = i;
+                let index1, index2;
+                if (i % 2 !== 0) {
+                    index1 = 3 - strip.tri_order + i;
+                    index2 = strip.tri_order + i;
+                }
+                else {
+                    index1 = strip.tri_order + i;
+                    index2 = 3 - strip.tri_order + i;
+                }
+                for (const j of [index0, index1, index2]) {
+                    const p = mesh.vertices[strip.elements[j][0]];
+                    const t = mesh.texcoords[strip.elements[j][1]];
+                    const n = mesh.normals[strip.elements[j][2]];
+                    const index = this.addVertex([p[0], p[1], p[2], t[0], t[1], n[0], n[1], n[2]]);
+                    this.indices.push(index);
+                }
+            }
+        }
+    }
+
+    addSurfaceIndex(surf: SurfaceObject, index: number) {
         const patch = surf.surfaces[index];
-        let indices: number[] = [];
-        let vertices: number[] = [];
-        let bbox = new AABB();
-
         const normals = patch.normal_indices.map(i => surf.normals[i]);
         let curves = nArray(4, () => nArray(4, () => vec3.create()));
         for (let i = 0; i < 4; i++) {
@@ -150,23 +215,19 @@ export class VertexData {
             [curves[3][1], pts_bl, pts_br, curves[1][2]],
             [curves[2][3], curves[2][2], curves[2][1], curves[1][3]],
         ];
-
-        const usteps = 16;
-        const vsteps = 16;
-        const interpVertices = precompute_surface_vec3(points, 16, 16);
+        const usteps = 4;
+        const vsteps = 4;
+        const interpVertices = precompute_surface_vec3(points, usteps, vsteps);
         const interpUV = precompute_lerp_vec2(patch.texcoords, usteps, vsteps);
         const interpNormals = precompute_lerp_vec3(normals, usteps, vsteps);
-        for (let i = 0; i <= usteps; i++) {
-            for (let j = 0; j <= vsteps; j++) {
-                for (const value of interpVertices[i][j]) {
-                    vertices.push(value);
-                }
-                for (const value of interpUV[i][j]) {
-                    vertices.push(value);
-                }
-                for (const value of interpNormals[i][j]) {
-                    vertices.push(value);
-                }
+        const indexMap = [];
+        for (let ix = 0; ix <= usteps; ix++) {
+            for (let iy = 0; iy <= vsteps; iy++) {
+                const p = interpVertices[ix][iy];
+                const t = interpUV[ix][iy];
+                const n = interpNormals[ix][iy];
+                const indexValue = this.addVertex([p[0], p[1], p[2], t[0], t[1], n[0], n[1], n[2]]);
+                indexMap.push(indexValue);
             }
         }
         for (let ix = 0; ix < usteps; ix++) {
@@ -175,62 +236,26 @@ export class VertexData {
                 const iTR = (ix + 1) + ( iy      * (usteps + 1));
                 const iBL =  ix      + ((iy + 1) * (usteps + 1));
                 const iBR = (ix + 1) + ((iy + 1) * (usteps + 1));
-                indices.push(iTL);
-                indices.push(iBL);
-                indices.push(iTR);
-                indices.push(iTR);
-                indices.push(iBL);
-                indices.push(iBR);
+                this.indices.push(indexMap[iTL]);
+                this.indices.push(indexMap[iBL]);
+                this.indices.push(indexMap[iTR]);
+                this.indices.push(indexMap[iTR]);
+                this.indices.push(indexMap[iBL]);
+                this.indices.push(indexMap[iBR]);
             }
         }
-
-        // this can be optimized
-        bbox.setFromPoints(interpVertices.flat());
-        return new VertexData(device, indices, vertices, bbox, patch.materialanim_id);
     }
-
-    static fromMesh(device: GfxDevice, mesh: MeshObject, material_index: number): VertexData {
-        const material_id = mesh.materials[material_index];
-        // convert strips to single index buffer, and convert indices to single index
-        // TODO: maybe make more efficient by storing some kind of (vert, uv, norm) => index map?
-        let indices: number[] = [];
-        let vertices: number[] = [];
-        let cidx = 0;
-        for (const strip of mesh.strips) {
-            // only consider materials for corresponding material_index
-            if (strip.material_index % mesh.materials.length !== material_index) {
-                continue;
-            }
-            for (let i = 0; i < strip.elements.length-2; i++) {
-                let index0 = i;
-                let index1, index2;
-                if (i % 2 !== 0) {
-                    index1 = 3 - strip.tri_order + i;
-                    index2 = strip.tri_order + i;
-                }
-                else {
-                    index1 = strip.tri_order + i;
-                    index2 = 3 - strip.tri_order + i;
-                }
-                for (const j of [index0, index1, index2]) {
-                    for (const value of mesh.vertices[strip.elements[j][0]]) {
-                        vertices.push(value);
-                    }
-                    for (const value of mesh.texcoords[strip.elements[j][1]]) {
-                        vertices.push(value);
-                    }
-                    for (const value of mesh.normals[strip.elements[j][2]]) {
-                        vertices.push(value);
-                    }
-                    indices.push(cidx);
-                    cidx += 1;
-                }
-            }
-        }
-        let bbox = new AABB();
-        bbox.setFromPoints(mesh.vertices);
-        return new VertexData(device, indices, vertices, bbox, material_id);
+    build(device: GfxDevice, material: number): VertexData {
+        return new VertexData(device, this.indices, this.vertices, this.bbox, material);
     }
+}
+
+export class VertexData {
+    public vertexBuffer: GfxBuffer;
+    public indexBuffer: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
+    public indexCount: number;
 
     constructor(
         device: GfxDevice,
@@ -462,7 +487,9 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     addMesh(id: number, mesh: MeshObject) {
         let meshes: VertexData[] = [];
         for (let i = 0; i < mesh.materials.length; i++) {
-            meshes.push(VertexData.fromMesh(this.device, mesh, i));
+            let builder = new VertexDataBuilder();
+            builder.addMeshMaterial(mesh, i);
+            meshes.push(builder.build(this.device, mesh.materials[i]));
         }
         this.meshes.set(id, {
             meshes
@@ -470,13 +497,24 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     }
 
     addSurface(id: number, surf: SurfaceObject) {
-        let meshes: VertexData[] = [];
+        let builders = new Map<number, VertexDataBuilder>();
+
         for (let i = 0; i < surf.surfaces.length; i++) {
-            meshes.push(VertexData.fromSurface(this.device, surf, i));
+            let material = surf.surfaces[i].materialanim_id;
+            let builder = builders.get(material);
+            if (builder === undefined) {
+                builder = new VertexDataBuilder();
+                builders.set(material, builder);
+            }
+            builder.addSurfaceIndex(surf, i);
+        }
+        let meshes: VertexData[] = [];
+        for (const [material, builder] of builders) {
+            meshes.push(builder.build(this.device, material));
         }
         this.meshes.set(id, {
             meshes
-        });
+        })
     }
 
     addBitmap(id: number, bitmap: TotemBitmap) {

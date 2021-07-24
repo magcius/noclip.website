@@ -16,10 +16,10 @@ TODO:
  * lighting (LIGHT/OMNI)
  * extranous meshes (SKIN, LOD)
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
- * fog (HFOG)
+ * fog (HFOG) - needs research
  * skybox (WARP)
  * billboards (ROTSHAPE)
- * PARTICLES
+ * PARTICLES - needs research
  * reflection textures
 */
 
@@ -29,7 +29,6 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         
         const archive = await loadArchive(context.dataFetcher, this.id);
-
         const renderer = new ROTFDRenderer(gfxDevice);
 
         for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
