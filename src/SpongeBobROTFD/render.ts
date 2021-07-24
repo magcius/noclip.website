@@ -79,7 +79,7 @@ in vec2 v_TexCoord;
 
 void main() {
     gl_FragColor.rgba = u_Color;
-    
+    gl_FragColor *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor += u_Emit;
 }
 `;
@@ -98,14 +98,20 @@ export class VertexData {
     public inputState: GfxInputState;
     public bbox = new AABB();
     public indexCount: number;
+    public material_id: number;
 
-    constructor(device: GfxDevice, public mesh: MeshObject) {
+    constructor(device: GfxDevice, public mesh: MeshObject, material_index: number) {
+        this.material_id = mesh.materials[material_index];
         // convert strips to single index buffer, and convert indices to single index
         // TODO: maybe make more efficient by storing some kind of (vert, uv, norm) => index map?
         let indices: number[] = [];
         let vertices: number[] = [];
         let cidx = 0;
         for (const strip of this.mesh.strips) {
+            // only consider materials for corresponding material_index
+            if (strip.material_index % mesh.materials.length !== material_index) {
+                continue;
+            }
             for (let i = 0; i < strip.elements.length-2; i++) {
                 let index0 = i;
                 let index1, index2;
@@ -200,10 +206,14 @@ export class MeshRenderer {
     }
 }
 
+type MeshInfo = {
+    meshes: VertexData[]
+}
+
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     public renderHelper: GfxRenderHelper;
-    private meshes = new Map<number, VertexData>();
+    private meshes = new Map<number, MeshInfo>();
     private materials = new Map<number, Material>();
     private meshRenderers: MeshRenderer[] = [];
 
@@ -269,28 +279,44 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     }
 
     addMesh(id: number, mesh: MeshObject) {
-        this.meshes.set(id, new VertexData(this.device, mesh));
+        let meshes: VertexData[] = [];
+        for (let i = 0; i < mesh.materials.length; i++) {
+            meshes.push(new VertexData(this.device, mesh, i));
+        }
+        this.meshes.set(id, {
+            meshes
+        });
+    }
+
+    addMaterial(id: number, material: Material) {
+        this.materials.set(id, material);
     }
 
     addMeshNode(node: TotemNode) {
-        const mesh = this.meshes.get(node.resource_id);
-        if (mesh === undefined) {
+        const meshInfo = this.meshes.get(node.resource_id);
+        if (meshInfo === undefined) {
             return;
         }
         const transform = node.global_transform;
         // use a default material for now
-        const renderer = new MeshRenderer(mesh, {
-            color: {r: 1, g: 1, b: 1, a: 1},
-            emission: {r: 0, g: 0, b: 0, a: 0},
-            offset: [0, 0],
-            reflection_id: 0,
-            texture_id: 0,
-            rotation: 0,
-            scale: [0, 0],
-            transform: mat3.create(),
-            unk2: 0,
-            unk4: undefined,
-        }, transform);
-        this.meshRenderers.push(renderer);
+        for (const mesh of meshInfo.meshes) {
+            let material = this.materials.get(mesh.material_id);
+            if (material === undefined) {
+                material = {
+                    color: {r: 1, g: 1, b: 1, a: 1},
+                    emission: {r: 0, g: 0, b: 0, a: 0},
+                    offset: [0, 0],
+                    reflection_id: 0,
+                    texture_id: 0,
+                    rotation: 0,
+                    scale: [0, 0],
+                    transform: mat3.create(),
+                    unk2: 0,
+                    unk4: undefined,
+                };
+            }
+            const renderer = new MeshRenderer(mesh, material, transform);
+            this.meshRenderers.push(renderer);
+        }
     }
 }

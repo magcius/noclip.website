@@ -1,7 +1,7 @@
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
-import { FileType, loadArchive, readMesh, readNode, readSurface } from "./archive";
+import { FileType, loadArchive, readMaterial, readMesh, readNode, readSurface } from "./archive";
 import { ROTFDRenderer } from './render';
 import { DataStream } from './util';
 
@@ -25,6 +25,12 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
             const reader = new DataStream(meshFile.data, 0, false);
             const meshdata = readMesh(reader);
             renderer.addMesh(meshFile.nameHash, meshdata);
+        }
+
+        for (const materialFile of archive.iterFilesOfType(FileType.MATERIAL)) {
+            const reader = new DataStream(materialFile.data, 0, false);
+            const meshdata = readMaterial(reader);
+            renderer.addMaterial(materialFile.nameHash, meshdata);
         }
 
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
