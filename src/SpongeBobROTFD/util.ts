@@ -1,6 +1,10 @@
-import { mat4, quat, vec2, vec3 } from "gl-matrix";
+import { mat3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color } from "../Color";
+
+export const SIZE_F32 = 4;
+export const SIZE_VEC3 = 12;
+export const SIZE_VEC2 = 8;
 
 export class DataStream {
     public view: DataView;
@@ -55,7 +59,7 @@ export class DataStream {
         return new Float32Array(this.readArrayStatic(this.readFloat32, 16));
     }
 
-    public readMat3(): mat4 {
+    public readMat3(): mat3 {
         return new Float32Array(this.readArrayStatic(this.readFloat32, 9));
     }
 
@@ -110,6 +114,18 @@ export class DataStream {
             ret.push(realReadData());
         }
         return ret;
+    }
+
+    public readBuffer(size: number, elementSize: number) {
+        return this.readSlice(size * elementSize);
+    }
+
+    public readFloat32Array(size: number) {
+        const buffer = new Float32Array(size);
+        for (let i = 0; i < size; i++) {
+            buffer[i] = this.readFloat32();
+        }
+        return buffer;
     }
 
     public readJunk(size: number): void {

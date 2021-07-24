@@ -6,6 +6,23 @@ import { assert } from "../util";
 import { mat3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import { Color } from "../Color";
 
+export const ResourceType = {
+    SURFACE: 1,
+    SPLINE: 2,
+    SKIN: 3,
+    ROTSHAPE: 4,
+    LOD: 5,
+    MESH: 6,
+    CAMERA: 7,
+    OCCLUDER: 10,
+    CAMERAZONE: 11,
+    LIGHT: 12,
+    HFOG: 13,
+    COLLISIONVOL: 14,
+    OMNI: 16,
+    PARTICLES: 18
+}
+
 export const FileType = {
     ANIMATION: CRC32.bstr("ANIMATION"),
     BITMAP: CRC32.bstr("BITMAP"),
@@ -285,11 +302,11 @@ export function readMesh(data: DataStream) {
         elements: (() => {
             const numElements = data.readUint32();
             assert(numElements === strip.vertex_ids.length, "Bad elements >:(");
-            return strip.vertex_ids.map((vertex_id) => ({
-                vertex_id,
-                texcoord_id: data.readUint16(),
-                normal_id: data.readUint16(),
-            }));
+            return strip.vertex_ids.map((vertex_id) => ([
+                vertex_id,// POSITION
+                data.readUint16(),// UV
+                data.readUint16(),// NORMAL
+            ]));
         })(),
         material_index: strip.material_index,
         tri_order: strip.tri_order,

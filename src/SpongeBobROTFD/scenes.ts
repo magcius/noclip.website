@@ -1,53 +1,45 @@
-import { CameraController } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
 import { FileType, loadArchive, readMesh, readNode, readSurface } from "./archive";
+import { ROTFDRenderer } from './render';
 import { DataStream } from './util';
-
-export class ROTFDRenderer implements Viewer.SceneGfx {
-    public renderHelper: GfxRenderHelper;
-
-    constructor(device: GfxDevice) {
-        this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    adjustCameraController?(c: CameraController) {
-
-    }
-    onstatechanged() {
-
-    }
-    render(device: GfxDevice, renderInput: Viewer.ViewerRenderInput) {
-
-    }
-    destroy(device: GfxDevice) {
-
-    }
-}
 
 class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const renderer = new ROTFDRenderer(gfxDevice);
-
+        
         const archive = await loadArchive(context.dataFetcher, this.id);
-        for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
-            const reader = new DataStream(nodeFile.data, 0, false);
-            const nodeData = readNode(reader);
-        }
 
-        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
-            const reader = new DataStream(meshFile.data, 0, false);
-            const meshData = readMesh(reader);
-        }
-
+        /*
         for (const surfFile of archive.iterFilesOfType(FileType.SURFACE)) {
             const reader = new DataStream(surfFile.data, 0, false);
             const surfData = readSurface(reader);
             console.log(surfData)
+        }
+        */
+
+        const renderer = new ROTFDRenderer(gfxDevice);
+        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
+            const reader = new DataStream(meshFile.data, 0, false);
+            const meshdata = readMesh(reader);
+            renderer.addMesh(meshFile.nameHash, meshdata);
+        }
+
+        for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
+            const reader = new DataStream(nodeFile.data, 0, false);
+            const nodeData = readNode(reader);
+            if (nodeData.resource_id !== 0) {
+                const resourceFile = archive.getFile(nodeData.resource_id);
+                if (resourceFile === undefined) {
+                    console.log("ERROR!");
+                    continue;
+                }
+                if (resourceFile.typeHash === FileType.MESH) {
+                    renderer.addMeshNode(nodeData);
+                }
+            }
         }
 
         return renderer;
