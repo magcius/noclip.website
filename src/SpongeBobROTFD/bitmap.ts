@@ -109,9 +109,41 @@ export class Texture {
                     device.uploadTextureData(this.texture, 0, [ data.pixels ]);
                 });
                 break;
-            // IGNORE for now
-            // case FORMAT_RGB8:
-            //     device.uploadTextureData(this.texture, 0, [ data.pixels ]);
+            case FORMAT_RGB8:
+                if (bitmap.filter === 5) {
+                    // special case. Do not ask me why it is like this, I do not know.
+                    let newData = new Uint8Array(bitmap.width * bitmap.height * 4);
+                    // copy existing bytes
+                    const view = bitmap.pixel_data.createDataView();
+                    for (let i = 0; i < bitmap.pixel_data.byteLength; i++) {
+                        newData[i] = view.getUint8(i);
+                    }
+                    // replace rest with garbage for the authentic crust experience
+                    for (let i = bitmap.pixel_data.byteLength; i < bitmap.width * bitmap.height * 4; i++) {
+                        newData[i] = Math.floor(Math.random() * 256);
+                    }
+                    decodeTexture({
+                        format: TexFormat.RGBA8,
+                        ...rest
+                    }).then(data => {
+                        device.uploadTextureData(this.texture, 0, [ newData ]);
+                    });
+                }
+                else {
+                    let newData = new Uint8Array(bitmap.width * bitmap.height * 4);
+                    const view = bitmap.pixel_data.createDataView();
+                    for (let i = 0; i < bitmap.width * bitmap.height; i++) {
+                        const r = view.getUint8(i*3);
+                        const g = view.getUint8(i*3+1);
+                        const b = view.getUint8(i*3+2);
+                        newData[i*4] = r;
+                        newData[i*4+1] = g;
+                        newData[i*4+2] = b;
+                        newData[i*4+3] = 255;
+                    }
+                    device.uploadTextureData(this.texture, 0, [ newData ]);
+                }
+                break;
             case FORMAT_C4:
                 decodeTexture({
                     format: TexFormat.C4,

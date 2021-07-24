@@ -1,4 +1,4 @@
-import { mat3, mat4 } from "gl-matrix";
+import { mat3, mat4, vec2, vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
@@ -35,8 +35,12 @@ import {
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { Texture, TotemBitmap } from "./bitmap";
-import { nArray } from "../util";
 import { TextureMapping } from "../TextureHolder";
+import { interpTrack, interpTrackInPlace, MaterialAnim } from "./materialanim";
+import { lerp } from "../MathHelpers";
+import { colorCopy, colorLerp, colorNewCopy } from "../Color";
+import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, SurfaceObject } from "./surface";
+import { nArray } from "../util";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -104,18 +108,95 @@ export class VertexData {
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
-    public bbox = new AABB();
     public indexCount: number;
-    public material_id: number;
 
-    constructor(device: GfxDevice, public mesh: MeshObject, material_index: number) {
-        this.material_id = mesh.materials[material_index];
+    static fromSurface(device: GfxDevice, surf: SurfaceObject, index: number): VertexData {
+        const patch = surf.surfaces[index];
+        let indices: number[] = [];
+        let vertices: number[] = [];
+        let bbox = new AABB();
+
+        const normals = patch.normal_indices.map(i => surf.normals[i]);
+        let curves = nArray(4, () => nArray(4, () => vec3.create()));
+        for (let i = 0; i < 4; i++) {
+            let curve = surf.curves[patch.curve_indices[i]];
+            if ((patch.curve_order & (2 << i)) === 0) {
+                curves[i][0] = surf.vertices[curve.p1];
+                curves[i][1] = surf.vertices[curve.p1_t];
+                curves[i][2] = surf.vertices[curve.p2_t];
+                curves[i][3] = surf.vertices[curve.p2];
+            } else {
+                curves[i][3] = surf.vertices[curve.p1];
+                curves[i][2] = surf.vertices[curve.p1_t];
+                curves[i][1] = surf.vertices[curve.p2_t];
+                curves[i][0] = surf.vertices[curve.p2];
+            }
+        }
+        let pts_tl = vec3.clone(curves[0][1]);
+        vec3.sub(pts_tl, pts_tl, curves[0][0]);
+        vec3.add(pts_tl, pts_tl, curves[3][2]);
+        let pts_tr = vec3.clone(curves[0][2]);
+        vec3.sub(pts_tr, pts_tr, curves[0][3]);
+        vec3.add(pts_tr, pts_tr, curves[1][1]);
+        let pts_bl = vec3.clone(curves[2][2]);
+        vec3.sub(pts_bl, pts_bl, curves[2][3]);
+        vec3.add(pts_bl, pts_bl, curves[3][1]);
+        let pts_br = vec3.clone(curves[2][1]);
+        vec3.sub(pts_br, pts_br, curves[1][3]);
+        vec3.add(pts_br, pts_br, curves[1][2]);
+        let points = [
+            [curves[0][0], curves[0][1], curves[0][2], curves[0][3]],
+            [curves[3][2], pts_tl, pts_tr, curves[1][1]],
+            [curves[3][1], pts_bl, pts_br, curves[1][2]],
+            [curves[2][3], curves[2][2], curves[2][1], curves[1][3]],
+        ];
+
+        const usteps = 16;
+        const vsteps = 16;
+        const interpVertices = precompute_surface_vec3(points, 16, 16);
+        const interpUV = precompute_lerp_vec2(patch.texcoords, usteps, vsteps);
+        const interpNormals = precompute_lerp_vec3(normals, usteps, vsteps);
+        for (let i = 0; i <= usteps; i++) {
+            for (let j = 0; j <= vsteps; j++) {
+                for (const value of interpVertices[i][j]) {
+                    vertices.push(value);
+                }
+                for (const value of interpUV[i][j]) {
+                    vertices.push(value);
+                }
+                for (const value of interpNormals[i][j]) {
+                    vertices.push(value);
+                }
+            }
+        }
+        for (let ix = 0; ix < usteps; ix++) {
+            for (let iy = 0; iy < vsteps; iy++) {
+                const iTL =  ix      + ( iy      * (usteps + 1));
+                const iTR = (ix + 1) + ( iy      * (usteps + 1));
+                const iBL =  ix      + ((iy + 1) * (usteps + 1));
+                const iBR = (ix + 1) + ((iy + 1) * (usteps + 1));
+                indices.push(iTL);
+                indices.push(iBL);
+                indices.push(iTR);
+                indices.push(iTR);
+                indices.push(iBL);
+                indices.push(iBR);
+            }
+        }
+
+        // this can be optimized
+        bbox.setFromPoints(interpVertices.flat());
+        return new VertexData(device, indices, vertices, bbox, patch.materialanim_id);
+    }
+
+    static fromMesh(device: GfxDevice, mesh: MeshObject, material_index: number): VertexData {
+        const material_id = mesh.materials[material_index];
         // convert strips to single index buffer, and convert indices to single index
         // TODO: maybe make more efficient by storing some kind of (vert, uv, norm) => index map?
         let indices: number[] = [];
         let vertices: number[] = [];
         let cidx = 0;
-        for (const strip of this.mesh.strips) {
+        for (const strip of mesh.strips) {
             // only consider materials for corresponding material_index
             if (strip.material_index % mesh.materials.length !== material_index) {
                 continue;
@@ -146,10 +227,21 @@ export class VertexData {
                 }
             }
         }
-        this.indexCount = indices.length;
+        let bbox = new AABB();
+        bbox.setFromPoints(mesh.vertices);
+        return new VertexData(device, indices, vertices, bbox, material_id);
+    }
+
+    constructor(
+        device: GfxDevice,
+        indices: number[],
+        vertices: number[],
+        public bbox: AABB,
+        public material_id: number,
+    ) {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array(indices).buffer);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(vertices).buffer);
-        this.bbox.setFromPoints(this.mesh.vertices);
+        this.indexCount = indices.length;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
@@ -228,6 +320,12 @@ type MeshInfo = {
     meshes: VertexData[]
 }
 
+type MaterialAnimInfo = {
+    id: number;
+    anim: MaterialAnim;
+    // TODO: actually animate it
+}
+
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     public renderHelper: GfxRenderHelper;
@@ -235,6 +333,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private materials = new Map<number, Material>();
     private meshRenderers: MeshRenderer[] = [];
     private bitmaps = new Map<number, Texture>();
+    private materialAnims: MaterialAnimInfo[] = [];
     public sampler: GfxSampler;
 
     constructor(private device: GfxDevice) {
@@ -252,14 +351,59 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(1/24);
+        c.setSceneMoveSpeedMult(1/60);
     }
 
     onstatechanged() {
+        
+    }
 
+    updateMaterialAnims(frame: number) {
+        for (const animInfo of this.materialAnims) {
+            const anim = animInfo.anim;
+            let material = this.materials.get(animInfo.id);
+            if (material === undefined) {
+                continue;
+            }
+            const animFrame = Math.floor(frame % (anim.length * 60));
+            let shouldUpdateTransform = false;
+            const texture = interpTrack(anim.texture, animFrame, (a, b, t) => a);
+            if (texture !== undefined) {
+                material.texture_id = texture;
+            }
+            if (interpTrackInPlace(material.offset, anim.scroll, animFrame, vec2.lerp, vec2.copy)) {
+                shouldUpdateTransform = true;
+            }
+            if (interpTrackInPlace(material.scale, anim.stretch, animFrame, vec2.lerp, vec2.copy)) {
+                shouldUpdateTransform = true;
+            }
+            const rotation = interpTrack(anim.rotation, animFrame, lerp);
+            if (rotation !== undefined) {
+                shouldUpdateTransform = true;
+                material.rotation = rotation;
+            }
+            interpTrackInPlace(material.color, anim.color, animFrame, colorLerp, (out, a) => colorCopy(out, a, out.a));
+            interpTrackInPlace(material.emission, anim.emission, animFrame, colorLerp, colorCopy);
+            const alpha = interpTrack(anim.alpha, animFrame, lerp);
+            if (alpha !== undefined) {
+                material.color.a = alpha;
+            }
+            if (shouldUpdateTransform) {
+                let tx = material.transform;
+                mat3.identity(tx);
+                mat3.translate(tx, tx, [-0.5, -0.5]);
+                mat3.translate(tx, tx, material.offset);
+                mat3.scale(tx, tx, material.scale);
+                mat3.rotate(tx, tx, material.rotation);
+                mat3.translate(tx, tx, [0.5, 0.5]);
+            }
+        }
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+        // console.log(viewerInput.time * 60 * 1000);
+        this.updateMaterialAnims(Math.floor(viewerInput.time * 60 / 1000));
+
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
@@ -305,12 +449,30 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
 
     destroy(device: GfxDevice) {
         this.renderHelper.destroy();
+        for (const meshinfo of this.meshes.values()) {
+            for (const mesh of meshinfo.meshes) {
+                mesh.destroy(device);
+            }
+        }
+        for (const texture of this.bitmaps.values()) {
+            texture.destroy();
+        }
     }
 
     addMesh(id: number, mesh: MeshObject) {
         let meshes: VertexData[] = [];
         for (let i = 0; i < mesh.materials.length; i++) {
-            meshes.push(new VertexData(this.device, mesh, i));
+            meshes.push(VertexData.fromMesh(this.device, mesh, i));
+        }
+        this.meshes.set(id, {
+            meshes
+        });
+    }
+
+    addSurface(id: number, surf: SurfaceObject) {
+        let meshes: VertexData[] = [];
+        for (let i = 0; i < surf.surfaces.length; i++) {
+            meshes.push(VertexData.fromSurface(this.device, surf, i));
         }
         this.meshes.set(id, {
             meshes
@@ -325,6 +487,46 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.materials.set(id, material);
     }
 
+    addMaterialAnim(id: number, anim: MaterialAnim) {
+        let material = this.materials.get(anim.material_id);
+        if (material === undefined) {
+            console.log(id);
+            material = {
+                color: {r: 1, g: 1, b: 1, a: 1},
+                emission: {r: 0, g: 0, b: 0, a: 0},
+                offset: [0, 0],
+                reflection_id: 0,
+                texture_id: 0,
+                rotation: 0,
+                scale: [0, 0],
+                transform: mat3.create(),
+                unk2: 0,
+                unk4: undefined,
+            };
+        }
+        else {
+            material = {
+                color: colorNewCopy(material.color),
+                emission: colorNewCopy(material.emission),
+                unk2: material.unk2,
+                transform: mat3.clone(material.transform),
+                rotation: material.rotation,
+                offset: vec2.clone(material.offset),
+                scale: vec2.clone(material.scale),
+                unk4: undefined,
+                texture_id: material.texture_id,
+                reflection_id: material.reflection_id,
+            };
+        }
+        // just use the same map for both MATERIAL and MATERIALANIM,
+        // it doesn't really matter. There shouldn't be any overlap anyways.
+        this.materials.set(id, material);
+        this.materialAnims.push({
+            id,
+            anim,
+        })
+    }
+
     addMeshNode(node: TotemNode) {
         const meshInfo = this.meshes.get(node.resource_id);
         if (meshInfo === undefined) {
@@ -335,6 +537,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         for (const mesh of meshInfo.meshes) {
             let material = this.materials.get(mesh.material_id);
             if (material === undefined) {
+                console.log(mesh.material_id, node.resource_id);
                 material = {
                     color: {r: 1, g: 1, b: 1, a: 1},
                     emission: {r: 0, g: 0, b: 0, a: 0},
