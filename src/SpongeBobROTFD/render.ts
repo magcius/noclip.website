@@ -1,4 +1,4 @@
-import { mat3, mat4, vec2, vec3 } from "gl-matrix";
+import { mat3, mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
@@ -10,11 +10,14 @@ import {
     GfxFrontFaceMode,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
+    GfxMipFilterMode,
     GfxProgramDescriptorSimple,
+    GfxTexFilterMode,
     GfxVertexAttributeDescriptor,
-    GfxVertexBufferFrequency
+    GfxVertexBufferFrequency,
+    GfxWrapMode
 } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxInputState, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { MeshObject } from "./mesh";
 import { Material } from "./material";
@@ -25,10 +28,15 @@ import { CameraController, computeViewMatrix } from "../Camera";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import { Color } from "../Color";
-import { MathConstants } from "../MathHelpers";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import {
+    makeBackbufferDescSimple,
+    pushAntialiasingPostProcessPass,
+    standardFullClearRenderPassDescriptor
+} from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { Texture, TotemBitmap } from "./bitmap";
+import { nArray } from "../util";
+import { TextureMapping } from "../TextureHolder";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -55,8 +63,8 @@ uniform sampler2D u_Texture;
 
     public vert: string = `
 layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec3 a_Normal;
-layout(location = 2) in vec2 a_TexCoord;
+layout(location = 1) in vec2 a_TexCoord;
+layout(location = 2) in vec3 a_Normal;
 
 out vec3 v_Normal;
 out vec2 v_TexCoord;
@@ -171,18 +179,28 @@ let modelViewScratch = mat4.create();
 export class MeshRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
-    constructor(private geometryData: VertexData, private material: Material, public modelMatrix: mat4) {
+    constructor(
+        private geometryData: VertexData,
+        private material: Material,
+        public modelMatrix: mat4,
+        private textureMap: Map<number, Texture>,
+    ) {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
         this.megaStateFlags.cullMode = GfxCullMode.Back;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sampler: GfxSampler) {
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        const textureMapping = new TextureMapping();
+        const texture = this.textureMap.get(this.material.texture_id);
+        textureMapping.gfxTexture = texture ? texture.texture : null;
+        textureMapping.gfxSampler = sampler;
+        renderInst.setSamplerBindingsFromTextureMappings([ textureMapping ]);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
@@ -216,10 +234,21 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private meshes = new Map<number, MeshInfo>();
     private materials = new Map<number, Material>();
     private meshRenderers: MeshRenderer[] = [];
+    private bitmaps = new Map<number, Texture>();
+    public sampler: GfxSampler;
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new RotfdProgram());
+
+        this.sampler = device.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0, maxLOD: 0,
+        });
     }
 
     public adjustCameraController(c: CameraController) {
@@ -241,7 +270,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
         for (const instance of this.meshRenderers) {
-            instance.prepareToRender(renderInstManager, viewerInput);
+            instance.prepareToRender(renderInstManager, viewerInput, this.sampler);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -288,6 +317,10 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         });
     }
 
+    addBitmap(id: number, bitmap: TotemBitmap) {
+        this.bitmaps.set(id, new Texture(id, bitmap, this.device));
+    }
+
     addMaterial(id: number, material: Material) {
         this.materials.set(id, material);
     }
@@ -315,7 +348,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
                     unk4: undefined,
                 };
             }
-            const renderer = new MeshRenderer(mesh, material, transform);
+            const renderer = new MeshRenderer(mesh, material, transform, this.bitmaps);
             this.meshRenderers.push(renderer);
         }
     }

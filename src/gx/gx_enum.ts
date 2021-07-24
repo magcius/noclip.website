@@ -19,6 +19,7 @@ export const enum TexPalette {
     IA8 = 0x00,
     RGB565 = 0x01,
     RGB5A3 = 0x02,
+    RGBA8 = 0x03,
 }
 
 export const enum TexFilter {

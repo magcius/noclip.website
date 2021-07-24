@@ -292,6 +292,7 @@ pub enum PaletteFormat {
     IA8,
     RGB565,
     RGB5A3,
+    RGBA8,
 }
 
 #[wasm_bindgen]
@@ -338,6 +339,15 @@ fn decode_palette(palette_fmt: PaletteFormat, palette_src: &[u8]) -> Vec<u8> {
                 decode_rgb5a3_to_rgba8(&mut dst[i*4+0 .. i*4+4], p);
             }
         },
+
+        PaletteFormat::RGBA8 => {
+            for i in 0..palette_count {
+                dst[i * 4 + 0] = palette_src[i * 4 + 0];
+                dst[i * 4 + 1] = palette_src[i * 4 + 1];
+                dst[i * 4 + 2] = palette_src[i * 4 + 2];
+                dst[i * 4 + 3] = palette_src[i * 4 + 3];
+            }
+        }
     }
 
     dst

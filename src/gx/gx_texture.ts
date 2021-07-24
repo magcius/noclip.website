@@ -173,6 +173,7 @@ async function decodeRust(texture: TextureInputGX): Promise<DecodedTexture> {
         texture.paletteFormat === GX.TexPalette.IA8 ? PaletteFormat.IA8 :
         texture.paletteFormat === GX.TexPalette.RGB565 ? PaletteFormat.RGB565 :
         texture.paletteFormat === GX.TexPalette.RGB5A3 ? PaletteFormat.RGB5A3 :
+        texture.paletteFormat === GX.TexPalette.RGBA8 ? PaletteFormat.RGBA8 :
         undefined;
     const src = texture.data!.createTypedArray(Uint8Array, 0, calcTextureSize(texture.format, texture.width, texture.height));
     const palette_src = texture.paletteData ? texture.paletteData.createTypedArray(Uint8Array) : undefined;

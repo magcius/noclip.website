@@ -4,6 +4,7 @@ import * as Viewer from '../viewer';
 import { FileType, loadArchive, readMaterial, readMesh, readNode, readSurface } from "./archive";
 import { ROTFDRenderer } from './render';
 import { DataStream } from './util';
+import { readBitmap } from "./bitmap";
 
 class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
@@ -27,10 +28,16 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
             renderer.addMesh(meshFile.nameHash, meshdata);
         }
 
+        for (const bitmapFile of archive.iterFilesOfType(FileType.BITMAP)) {
+            const reader = new DataStream(bitmapFile.data, 0, false);
+            const bitmapData = readBitmap(reader);
+            renderer.addBitmap(bitmapFile.nameHash, bitmapData);
+        }
+
         for (const materialFile of archive.iterFilesOfType(FileType.MATERIAL)) {
             const reader = new DataStream(materialFile.data, 0, false);
-            const meshdata = readMaterial(reader);
-            renderer.addMaterial(materialFile.nameHash, meshdata);
+            const materialData = readMaterial(reader);
+            renderer.addMaterial(materialFile.nameHash, materialData);
         }
 
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
