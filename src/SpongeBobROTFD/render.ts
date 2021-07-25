@@ -20,10 +20,10 @@ import {
 } from "../gfx/platform/GfxPlatform";
 import { GfxBuffer, GfxInputLayout, GfxInputState, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { SIZE_VEC2, SIZE_VEC3 } from "./util";
+import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as Viewer from '../viewer';
 import { CameraController, computeViewMatrix } from "../Camera";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import {
@@ -34,24 +34,28 @@ import {
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { TextureMapping } from "../TextureHolder";
 import { lerp } from "../MathHelpers";
-import { colorCopy, colorLerp, colorNewCopy } from "../Color";
+import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { nArray } from "../util";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
-import { Texture, TotemBitmap } from "./bitmap";
-import { TotemLod } from "./lod";
-import { Material } from "./material";
-import { interpTrack, interpTrackInPlace, MaterialAnim } from "./materialanim";
-import { MeshObject } from "./mesh";
-import { TotemNode } from "./node";
-import { TotemSkin } from "./skin";
-import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, SurfaceObject } from "./surface";
-import { iterWarpSkybox, TotemWarp } from "./warp";
+import { readBitmap, Texture, TotemBitmap } from "./bitmap";
+import { readLight, TotemLight } from "./light";
+import { readLod, TotemLod } from "./lod";
+import { Material, readMaterial } from "./material";
+import { interpTrack, interpTrackInPlace, MaterialAnim, readMaterialAnim } from "./materialanim";
+import { MeshObject, readMesh } from "./mesh";
+import { readNode, TotemNode } from "./node";
+import { readSkin, TotemSkin } from "./skin";
+import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, readSurface, SurfaceObject } from "./surface";
+import { iterWarpSkybox, readWarp, TotemWarp } from "./warp";
+import { FileType, TotemArchive } from "./archive";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
+    public static ub_LightParams = 2;
     public static SCENEPARAM_SIZE = 4*4;
     public static MATERIALPARAM_SIZE = 4*4 + 4 + 4 + 4*4;
+    public static LIGHTPARAM_SIZE = 4 + 4 + 4;
 
     public both = `
 layout(std140) uniform ub_SceneParams {
@@ -65,7 +69,14 @@ layout(std140) uniform ub_MaterialParams {
     Mat4x4 u_TexTransform;
 };
 
+layout(std140) uniform ub_LightParams {
+    vec3 u_LightDirection;
+    vec3 u_LightColor;
+    vec3 u_LightAmbient;
+};
+
 uniform sampler2D u_Texture;
+uniform sampler2D u_TextureReflection;
 `;
 
 // TODO: lighting, reflection
@@ -77,6 +88,7 @@ layout(location = 2) in vec3 a_Normal;
 
 out vec3 v_Normal;
 out vec2 v_TexCoord;
+out vec4 v_Position;
 
 void main() {
     mat3 realmat = mat3(
@@ -84,8 +96,9 @@ void main() {
         u_TexTransform.my.xyz,
         u_TexTransform.mz.xyz
     );
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position, 1.0)));
-    v_Normal = normalize(a_Normal);
+    v_Position = Mul(u_ModelView, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_Projection, v_Position);
+    v_Normal = normalize(Mul(u_Projection, Mul(u_ModelView, vec4(a_Normal, 0.0))).xyz);
     v_TexCoord = (vec3(a_TexCoord.xy, 1.0) * realmat).xy;
 }
 `;
@@ -93,17 +106,28 @@ void main() {
     public frag: string = `
 in vec3 v_Normal;
 in vec2 v_TexCoord;
+in vec4 v_Position;
 
 void main() {
+    // AMBIENT
+    vec3 lightColor = u_LightAmbient + u_Emit.rgb;
+    // DIFFUSE
+    float lightDot = max(0.0, dot(v_Normal, u_LightDirection));
+    lightColor += lightDot * u_LightColor;
+    // SPECULAR
+    vec3 reflectLight = normalize(reflect(u_LightDirection, v_Normal));
+    vec4 reflectionColor = texture(SAMPLER_2D(u_TextureReflection), reflectLight.xy);
+    lightColor += reflectionColor.rgb;
+    // COLOR
     vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor = texcol * u_Color;
-    gl_FragColor.rgb += u_Emit.rgb * texcol.rgb;
+    vec4 surfacecol = texcol * u_Color;
+    gl_FragColor += surfacecol * vec4(lightColor, 1.0);
 }
 `;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 1, },
+    { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
 type Vertex = [number, number, number, number, number, number, number, number];
@@ -219,8 +243,8 @@ export class VertexDataBuilder {
             [curves[3][1], pts_bl, pts_br, curves[1][2]],
             [curves[2][3], curves[2][2], curves[2][1], curves[1][3]],
         ];
-        const usteps = 4;
-        const vsteps = 4;
+        const usteps = 3;
+        const vsteps = 3;
         const interpVertices = precompute_surface_vec3(points, usteps, vsteps);
         const interpUV = precompute_lerp_vec2(patch.texcoords, usteps, vsteps);
         const interpNormals = precompute_lerp_vec3(normals, usteps, vsteps);
@@ -295,8 +319,22 @@ export class VertexData {
     }
 }
 
+function colorToRGB(out: vec3, col: Color) {
+    out[0] = col.r;
+    out[1] = col.g;
+    out[2] = col.b;
+}
+
+function colorToRGBA(out: vec3, col: Color) {
+    out[0] = col.r;
+    out[1] = col.g;
+    out[2] = col.b;
+    out[3] = col.a;
+}
+
 let bboxScratch = new AABB();
 let modelViewScratch = mat4.create();
+let vec3Scratch = vec3.create();
 export class MeshRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
@@ -306,6 +344,7 @@ export class MeshRenderer {
         public modelMatrix: mat4,
         private textureMap: Map<number, Texture>,
         private isSkybox: boolean,
+        private directionalLight: TotemLight | undefined,
     ) {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
         this.megaStateFlags.cullMode = GfxCullMode.Back;
@@ -326,8 +365,12 @@ export class MeshRenderer {
         const texture = this.textureMap.get(this.material.texture_id);
         textureMapping.gfxTexture = texture ? texture.texture : null;
         textureMapping.gfxSampler = sampler;
-        renderInst.setSamplerBindingsFromTextureMappings([ textureMapping ]);
-        
+        const reflectionMapping = new TextureMapping();
+        const reflectionTexture = this.textureMap.get(this.material.reflection_id);
+        reflectionMapping.gfxTexture = reflectionTexture ? reflectionTexture.texture : null;
+        reflectionMapping.gfxSampler = sampler;
+        renderInst.setSamplerBindingsFromTextureMappings([ textureMapping, reflectionMapping ]);
+
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
         const d = renderInst.mapUniformBufferF32(RotfdProgram.ub_MaterialParams);
         if (this.isSkybox) {
@@ -358,6 +401,21 @@ export class MeshRenderer {
             tx[6], tx[7], tx[8], 0,
             0, 0, 0, 1
         ]);
+        let offs2 = renderInst.allocateUniformBuffer(RotfdProgram.ub_LightParams, RotfdProgram.LIGHTPARAM_SIZE);
+        const d2 = renderInst.mapUniformBufferF32(RotfdProgram.ub_LightParams);
+        if (this.directionalLight !== undefined) {
+            offs2 += fillVec3v(d2, offs2, this.directionalLight.direction);
+            colorToRGB(vec3Scratch, this.directionalLight.color1);
+            offs2 += fillVec3v(d2, offs2, vec3Scratch);
+            colorToRGB(vec3Scratch, this.directionalLight.color2);
+            offs2 += fillVec3v(d2, offs2, vec3Scratch);
+        }
+        else {
+            offs2 += fillVec3v(d2, offs2, [0, 1, 0]);
+            offs2 += fillVec3v(d2, offs2, [0, 0, 0]);
+            offs2 += fillVec3v(d2, offs2, [1, 1, 1]);
+        }
+
         renderInst.drawIndexes(this.geometryData.indexCount);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -392,6 +450,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private lods = new Map<number, LodInfo>();
     private skins = new Map<number, SkinInfo>();
     private otherMeshes: VertexData[] = [];
+    private directionalLights = new Map<number, TotemLight>();
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -459,21 +518,21 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         // console.log(viewerInput.time * 60 * 1000);
+        viewerInput.camera.setClipPlanes(0.5);
+
         this.updateMaterialAnims(Math.floor(viewerInput.time * 60 / 1000));
         const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
 
-        {
-            const template = this.renderHelper.pushTemplateRenderInst();
-            template.setBindingLayouts(bindingLayouts);
-            template.setGfxProgram(gfxProgram);
-            let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, 16);
-            const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
-            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-            for (const instance of this.meshRenderers) {
-                instance.prepareToRender(renderInstManager, viewerInput, this.sampler);
-            }
-            renderInstManager.popTemplateRenderInst();
+        const template = this.renderHelper.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setGfxProgram(gfxProgram);
+        let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, RotfdProgram.SCENEPARAM_SIZE);
+        const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+        for (const instance of this.meshRenderers) {
+            instance.prepareToRender(renderInstManager, viewerInput, this.sampler);
         }
+        renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender();
     }
@@ -496,6 +555,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput, renderInstManager);
@@ -624,11 +684,11 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             builder.addTri(1, 3, 2);
             const vertexdata = builder.build(this.device, face.material);
             this.otherMeshes.push(vertexdata);
-            this.addMeshRenderer(mat4.create(), vertexdata, true);
+            this.addMeshRenderer(mat4.create(), vertexdata, true, 0);
         }
     }
 
-    private addMeshRenderer(tx: mat4, mesh: VertexData, isSkybox: boolean) {
+    private addMeshRenderer(tx: mat4, mesh: VertexData, isSkybox: boolean, lightid: number) {
         let material = this.materials.get(mesh.material_id);
         if (material === undefined) {
             // use a default material for now, might search node data?
@@ -645,18 +705,19 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
                 unk4: undefined,
             };
         }
-        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox);
+        let light = this.directionalLights.get(lightid);
+        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox, light);
         this.meshRenderers.push(renderer);
     }
 
-    private addMeshInfo(tx: mat4, meshInfo: MeshInfo) {
+    private addMeshInfo(tx: mat4, meshInfo: MeshInfo, lightid: number) {
         for (const mesh of meshInfo.meshes) {
-            this.addMeshRenderer(tx, mesh, false);
+            this.addMeshRenderer(tx, mesh, false, lightid);
         }
     }
 
     private addMeshInfoFromNode(node: TotemNode, meshinfo: MeshInfo) {
-        this.addMeshInfo(node.global_transform, meshinfo);
+        this.addMeshInfo(node.global_transform, meshinfo, node.light_id);
     }
 
     addMeshNode(node: TotemNode, resid: number = node.resource_id) {
@@ -695,6 +756,87 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             }
             else {
                 console.log("UNRECOGNIZED NODE LOD", node, resid);
+            }
+        }
+    }
+
+    addLight(id: number, light: TotemLight) {
+        this.directionalLights.set(id, light);
+    }
+
+    public addArchive(archive: TotemArchive) {
+        for (const file of archive.iterFilesOfType(FileType.LIGHT)) {
+            const reader = new DataStream(file.data, 0, false);
+            const data = readLight(reader);
+            this.addLight(file.nameHash, data);
+        }
+
+        for (const bitmapFile of archive.iterFilesOfType(FileType.BITMAP)) {
+            const reader = new DataStream(bitmapFile.data, 0, false);
+            const bitmapData = readBitmap(reader);
+            this.addBitmap(bitmapFile.nameHash, bitmapData);
+        }
+
+        for (const materialFile of archive.iterFilesOfType(FileType.MATERIAL)) {
+            const reader = new DataStream(materialFile.data, 0, false);
+            const materialData = readMaterial(reader);
+            this.addMaterial(materialFile.nameHash, materialData);
+        }
+
+        for (const materialAnimFile of archive.iterFilesOfType(FileType.MATERIALANIM)) {
+            const reader = new DataStream(materialAnimFile.data, 0, false);
+            const manimData = readMaterialAnim(reader);
+            this.addMaterialAnim(materialAnimFile.nameHash, manimData);
+        }
+
+        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
+            const reader = new DataStream(meshFile.data, 0, false);
+            const meshdata = readMesh(reader);
+            this.addMesh(meshFile.nameHash, meshdata);
+        }
+
+        for (const surfFile of archive.iterFilesOfType(FileType.SURFACE)) {
+            const reader = new DataStream(surfFile.data, 0, false);
+            const surfData = readSurface(reader);
+            this.addSurface(surfFile.nameHash, surfData);
+        }
+
+        for (const skinFile of archive.iterFilesOfType(FileType.SKIN)) {
+            const reader = new DataStream(skinFile.data, 0, false);
+            const skinData = readSkin(reader);
+            this.addSkin(skinFile.nameHash, skinData);
+        }
+
+        for (const lodFile of archive.iterFilesOfType(FileType.LOD)) {
+            const reader = new DataStream(lodFile.data, 0, false);
+            const lodData = readLod(reader);
+            this.addLod(lodFile.nameHash, lodData);
+        }
+
+        for (const warpFile of archive.iterFilesOfType(FileType.WARP)) {
+            const reader = new DataStream(warpFile.data, 0, false);
+            const warpData = readWarp(reader);
+            this.addWarp(warpFile.nameHash, warpData);
+        }
+
+        for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
+            const reader = new DataStream(nodeFile.data, 0, false);
+            const nodeData = readNode(reader);
+            if (nodeData.resource_id !== 0) {
+                const resourceFile = archive.getFile(nodeData.resource_id);
+                if (resourceFile === undefined) {
+                    console.log("ERROR!");
+                    continue;
+                }
+                if (resourceFile.typeHash === FileType.MESH || resourceFile.typeHash === FileType.SURFACE) {
+                    this.addMeshNode(nodeData);
+                }
+                else if (resourceFile.typeHash === FileType.LOD) {
+                    this.addLodNode(nodeData);
+                }
+                else if (resourceFile.typeHash === FileType.SKIN) {
+                    this.addSkinNode(nodeData);
+                }
             }
         }
     }

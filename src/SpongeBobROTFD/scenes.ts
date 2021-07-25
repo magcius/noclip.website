@@ -19,7 +19,6 @@ TODO:
  * lighting (LIGHT/OMNI) - needs a bit more research
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
  * fog (HFOG) - needs research
- * skybox (WARP)
  * billboards (ROTSHAPE)
  * PARTICLES - needs research
  * reflection textures
@@ -32,75 +31,7 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const archive = await loadArchive(context.dataFetcher, this.id);
         const renderer = new ROTFDRenderer(gfxDevice);
-
-        for (const bitmapFile of archive.iterFilesOfType(FileType.BITMAP)) {
-            const reader = new DataStream(bitmapFile.data, 0, false);
-            const bitmapData = readBitmap(reader);
-            renderer.addBitmap(bitmapFile.nameHash, bitmapData);
-        }
-
-        for (const materialFile of archive.iterFilesOfType(FileType.MATERIAL)) {
-            const reader = new DataStream(materialFile.data, 0, false);
-            const materialData = readMaterial(reader);
-            renderer.addMaterial(materialFile.nameHash, materialData);
-        }
-
-        for (const materialAnimFile of archive.iterFilesOfType(FileType.MATERIALANIM)) {
-            const reader = new DataStream(materialAnimFile.data, 0, false);
-            const manimData = readMaterialAnim(reader);
-            renderer.addMaterialAnim(materialAnimFile.nameHash, manimData);
-        }
-
-        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
-            const reader = new DataStream(meshFile.data, 0, false);
-            const meshdata = readMesh(reader);
-            renderer.addMesh(meshFile.nameHash, meshdata);
-        }
-
-        for (const surfFile of archive.iterFilesOfType(FileType.SURFACE)) {
-            const reader = new DataStream(surfFile.data, 0, false);
-            const surfData = readSurface(reader);
-            renderer.addSurface(surfFile.nameHash, surfData);
-        }
-
-        for (const skinFile of archive.iterFilesOfType(FileType.SKIN)) {
-            const reader = new DataStream(skinFile.data, 0, false);
-            const skinData = readSkin(reader);
-            renderer.addSkin(skinFile.nameHash, skinData);
-        }
-
-        for (const lodFile of archive.iterFilesOfType(FileType.LOD)) {
-            const reader = new DataStream(lodFile.data, 0, false);
-            const lodData = readLod(reader);
-            renderer.addLod(lodFile.nameHash, lodData);
-        }
-
-        for (const warpFile of archive.iterFilesOfType(FileType.WARP)) {
-            const reader = new DataStream(warpFile.data, 0, false);
-            const warpData = readWarp(reader);
-            renderer.addWarp(warpFile.nameHash, warpData);
-        }
-
-        for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
-            const reader = new DataStream(nodeFile.data, 0, false);
-            const nodeData = readNode(reader);
-            if (nodeData.resource_id !== 0) {
-                const resourceFile = archive.getFile(nodeData.resource_id);
-                if (resourceFile === undefined) {
-                    console.log("ERROR!");
-                    continue;
-                }
-                if (resourceFile.typeHash === FileType.MESH || resourceFile.typeHash === FileType.SURFACE) {
-                    renderer.addMeshNode(nodeData);
-                }
-                else if (resourceFile.typeHash === FileType.LOD) {
-                    renderer.addLodNode(nodeData);
-                }
-                else if (resourceFile.typeHash === FileType.SKIN) {
-                    renderer.addSkinNode(nodeData);
-                }
-            }
-        }
+        renderer.addArchive(archive);
 
         return renderer;
     }
