@@ -12,6 +12,7 @@ import { readNode } from './node';
 import { readSurface } from './surface';
 import { readSkin } from './skin';
 import { readLod } from './lod';
+import { readWarp } from './warp';
 
 /*
 TODO:
@@ -29,7 +30,6 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        
         const archive = await loadArchive(context.dataFetcher, this.id);
         const renderer = new ROTFDRenderer(gfxDevice);
 
@@ -73,6 +73,12 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
             const reader = new DataStream(lodFile.data, 0, false);
             const lodData = readLod(reader);
             renderer.addLod(lodFile.nameHash, lodData);
+        }
+
+        for (const warpFile of archive.iterFilesOfType(FileType.WARP)) {
+            const reader = new DataStream(warpFile.data, 0, false);
+            const warpData = readWarp(reader);
+            renderer.addWarp(warpFile.nameHash, warpData);
         }
 
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {

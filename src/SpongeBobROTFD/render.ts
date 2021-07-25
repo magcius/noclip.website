@@ -18,10 +18,7 @@ import {
     GfxWrapMode
 } from "../gfx/platform/GfxPlatform";
 import { GfxBuffer, GfxInputLayout, GfxInputState, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { MeshObject } from "./mesh";
-import { Material } from "./material";
-import { TotemNode } from "./node";
+import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as Viewer from '../viewer';
 import { CameraController, computeViewMatrix } from "../Camera";
@@ -34,16 +31,20 @@ import {
     standardFullClearRenderPassDescriptor
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { Texture, TotemBitmap } from "./bitmap";
 import { TextureMapping } from "../TextureHolder";
-import { interpTrack, interpTrackInPlace, MaterialAnim } from "./materialanim";
 import { lerp } from "../MathHelpers";
 import { colorCopy, colorLerp, colorNewCopy } from "../Color";
-import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, SurfaceObject } from "./surface";
 import { nArray } from "../util";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
-import { TotemSkin } from "./skin";
+import { Texture, TotemBitmap } from "./bitmap";
 import { TotemLod } from "./lod";
+import { Material } from "./material";
+import { interpTrack, interpTrackInPlace, MaterialAnim } from "./materialanim";
+import { MeshObject } from "./mesh";
+import { TotemNode } from "./node";
+import { TotemSkin } from "./skin";
+import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, SurfaceObject } from "./surface";
+import { iterWarpSkybox, TotemWarp } from "./warp";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -93,9 +94,9 @@ in vec3 v_Normal;
 in vec2 v_TexCoord;
 
 void main() {
-    gl_FragColor.rgba = u_Color;
-    gl_FragColor *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor.rgb += u_Emit.rgb;
+    vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    gl_FragColor = texcol * u_Color;
+    gl_FragColor.rgb += u_Emit.rgb * texcol.rgb;
 }
 `;
 }
@@ -265,6 +266,7 @@ export class VertexData {
         vertices: number[],
         public bbox: AABB,
         public material_id: number,
+        public sortKey = GfxRendererLayer.OPAQUE,
     ) {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array(indices).buffer);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(vertices).buffer);
@@ -314,6 +316,7 @@ export class MeshRenderer {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
+        renderInst.sortKey = this.geometryData.sortKey;
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         const textureMapping = new TextureMapping();
         const texture = this.textureMap.get(this.material.texture_id);
@@ -371,6 +374,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     public sampler: GfxSampler;
     private lods = new Map<number, LodInfo>();
     private skins = new Map<number, SkinInfo>();
+    private otherMeshes: VertexData[] = [];
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -427,11 +431,11 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             if (shouldUpdateTransform) {
                 let tx = material.transform;
                 mat3.identity(tx);
-                mat3.translate(tx, tx, [-0.5, -0.5]);
+                mat3.translate(tx, tx, [0.5, 0.5]);
                 mat3.translate(tx, tx, material.offset);
                 mat3.scale(tx, tx, material.scale);
                 mat3.rotate(tx, tx, material.rotation);
-                mat3.translate(tx, tx, [0.5, 0.5]);
+                mat3.translate(tx, tx, [-0.5, -0.5]);
             }
         }
     }
@@ -489,6 +493,9 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             for (const mesh of meshinfo.meshes) {
                 mesh.destroy(device);
             }
+        }
+        for (const mesh of this.otherMeshes) {
+            mesh.destroy(device);
         }
         for (const texture of this.bitmaps.values()) {
             texture.destroy();
@@ -588,28 +595,52 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         })
     }
 
-    private addMeshInfo(node: TotemNode, meshInfo: MeshInfo) {
-        const transform = node.global_transform;
-        for (const mesh of meshInfo.meshes) {
-            let material = this.materials.get(mesh.material_id);
-            if (material === undefined) {
-                // use a default material for now, might search node data?
-                material = {
-                    color: {r: 1, g: 1, b: 1, a: 1},
-                    emission: {r: 0, g: 0, b: 0, a: 0},
-                    offset: [0, 0],
-                    reflection_id: 0,
-                    texture_id: 0,
-                    rotation: 0,
-                    scale: [0, 0],
-                    transform: mat3.create(),
-                    unk2: 0,
-                    unk4: undefined,
-                };
+    addWarp(id: number, warp: TotemWarp) {
+        for (const face of iterWarpSkybox(warp)) {
+            let builder = new VertexDataBuilder();
+            let n = face.normal;
+            for (let i = 0; i < 4; i++) {
+                let v = face.positions[i];
+                let t = face.texcoords[i];
+                builder.addVertex([v[0], v[1], v[2], t[0], t[1], n[0], n[1], n[2]]);
             }
-            const renderer = new MeshRenderer(mesh, material, transform, this.bitmaps);
-            this.meshRenderers.push(renderer);
+            builder.addTri(0, 1, 2);
+            builder.addTri(1, 3, 2);
+            const vertexdata = builder.build(this.device, face.material);
+            this.otherMeshes.push(vertexdata);
+            this.addMeshRenderer(mat4.create(), vertexdata);
         }
+    }
+
+    private addMeshRenderer(tx: mat4, mesh: VertexData) {
+        let material = this.materials.get(mesh.material_id);
+        if (material === undefined) {
+            // use a default material for now, might search node data?
+            material = {
+                color: {r: 1, g: 1, b: 1, a: 1},
+                emission: {r: 0, g: 0, b: 0, a: 0},
+                offset: [0, 0],
+                reflection_id: 0,
+                texture_id: 0,
+                rotation: 0,
+                scale: [0, 0],
+                transform: mat3.create(),
+                unk2: 0,
+                unk4: undefined,
+            };
+        }
+        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps);
+        this.meshRenderers.push(renderer);
+    }
+
+    private addMeshInfo(tx: mat4, meshInfo: MeshInfo) {
+        for (const mesh of meshInfo.meshes) {
+            this.addMeshRenderer(tx, mesh);
+        }
+    }
+
+    private addMeshInfoFromNode(node: TotemNode, meshinfo: MeshInfo) {
+        this.addMeshInfo(node.global_transform, meshinfo);
     }
 
     addMeshNode(node: TotemNode, resid: number = node.resource_id) {
@@ -618,7 +649,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             console.log(`NO MESH ${resid}`);
             return;
         }
-        this.addMeshInfo(node, meshInfo);
+        this.addMeshInfoFromNode(node, meshInfo);
     }
 
     addSkinNode(node: TotemNode, resid: number = node.resource_id) {
@@ -641,7 +672,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         for (const index of lodInfo.resources) {
             const meshInfo = this.meshes.get(index);
             if (meshInfo !== undefined) {
-                this.addMeshInfo(node, meshInfo);
+                this.addMeshInfoFromNode(node, meshInfo);
             }
             else if (this.skins.has(index)) {
                 this.addSkinNode(node, index);
