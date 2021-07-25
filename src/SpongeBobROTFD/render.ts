@@ -42,6 +42,8 @@ import { colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, SurfaceObject } from "./surface";
 import { nArray } from "../util";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
+import { TotemSkin } from "./skin";
+import { TotemLod } from "./lod";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -93,7 +95,7 @@ in vec2 v_TexCoord;
 void main() {
     gl_FragColor.rgba = u_Color;
     gl_FragColor *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor += u_Emit;
+    gl_FragColor.rgb += u_Emit.rgb;
 }
 `;
 }
@@ -348,7 +350,14 @@ type MeshInfo = {
 type MaterialAnimInfo = {
     id: number;
     anim: MaterialAnim;
-    // TODO: actually animate it
+}
+
+type SkinInfo = {
+    meshes: number[] // can be MESH or SURFACE
+}
+
+type LodInfo = {
+    resources: number[] // can be SKIN or MESH
 }
 
 export class ROTFDRenderer implements Viewer.SceneGfx {
@@ -360,6 +369,8 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private bitmaps = new Map<number, Texture>();
     private materialAnims: MaterialAnimInfo[] = [];
     public sampler: GfxSampler;
+    private lods = new Map<number, LodInfo>();
+    private skins = new Map<number, SkinInfo>();
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -565,17 +576,24 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         })
     }
 
-    addMeshNode(node: TotemNode) {
-        const meshInfo = this.meshes.get(node.resource_id);
-        if (meshInfo === undefined) {
-            return;
-        }
+    addSkin(id: number, skin: TotemSkin) {
+        this.skins.set(id, {
+            meshes: skin.meshes
+        })
+    }
+
+    addLod(id: number, lod: TotemLod) {
+        this.lods.set(id, {
+            resources: lod.meshes,
+        })
+    }
+
+    private addMeshInfo(node: TotemNode, meshInfo: MeshInfo) {
         const transform = node.global_transform;
-        // use a default material for now
         for (const mesh of meshInfo.meshes) {
             let material = this.materials.get(mesh.material_id);
             if (material === undefined) {
-                console.log(mesh.material_id, node.resource_id);
+                // use a default material for now, might search node data?
                 material = {
                     color: {r: 1, g: 1, b: 1, a: 1},
                     emission: {r: 0, g: 0, b: 0, a: 0},
@@ -591,6 +609,46 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             }
             const renderer = new MeshRenderer(mesh, material, transform, this.bitmaps);
             this.meshRenderers.push(renderer);
+        }
+    }
+
+    addMeshNode(node: TotemNode, resid: number = node.resource_id) {
+        const meshInfo = this.meshes.get(resid);
+        if (meshInfo === undefined) {
+            console.log(`NO MESH ${resid}`);
+            return;
+        }
+        this.addMeshInfo(node, meshInfo);
+    }
+
+    addSkinNode(node: TotemNode, resid: number = node.resource_id) {
+        const skinInfo = this.skins.get(resid);
+        if (skinInfo === undefined) {
+            console.log(`NO SKIN ${resid}`);
+            return;
+        }
+        for (const subskin of skinInfo.meshes) {
+            this.addMeshNode(node, subskin);
+        }
+    }
+
+    addLodNode(node: TotemNode, resid: number = node.resource_id) {
+        const lodInfo = this.lods.get(resid);
+        if (lodInfo === undefined) {
+            console.log(`NO LOD ${resid}`);
+            return;
+        }
+        for (const index of lodInfo.resources) {
+            const meshInfo = this.meshes.get(index);
+            if (meshInfo !== undefined) {
+                this.addMeshInfo(node, meshInfo);
+            }
+            else if (this.skins.has(index)) {
+                this.addSkinNode(node, index);
+            }
+            else {
+                console.log("UNRECOGNIZED NODE LOD", node, resid);
+            }
         }
     }
 }

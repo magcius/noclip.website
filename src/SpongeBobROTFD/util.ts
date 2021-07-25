@@ -151,4 +151,17 @@ export class DataStream {
         this.offs += size;
         return v;
     }
+
+    public readOptional<T>(
+        read: ((this: this) => T) | ((arg: DataStream) => T)
+    ): T | undefined {
+        const value = this.readUint8();
+        if (value !== 0) {
+            const realRead = read.bind(this, this);
+            return realRead();
+        }
+        else {
+            return undefined;
+        }
+    }
 }

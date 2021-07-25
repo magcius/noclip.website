@@ -71,13 +71,7 @@ export function binarySearch<T, U>(ls: T[], value: U, cmp: (a: T, b: U) => numbe
 }
 
 export function getTrackFrameIndex<T>(track: Track<T>, frame: number): number | undefined {
-    for (let i = 0; i < track.frames.length; i++) {
-        if (frame >= track.frames[i].framestart) {
-            return i;
-        }
-    }
-    return undefined;
-    // return binarySearch(track.frames, frame, (a, b) => a.framestart - b);
+    return binarySearch(track.frames, frame, (a, b) => a.framestart - b);
 }
 
 export function interpTrack<T>(track: Track<T>, frame: number, interp: (a: T, b: T, t: number) => T): T | undefined {

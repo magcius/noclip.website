@@ -10,17 +10,19 @@ import { readMaterial } from './material';
 import { readMaterialAnim } from "./materialanim";
 import { readNode } from './node';
 import { readSurface } from './surface';
+import { readSkin } from './skin';
+import { readLod } from './lod';
 
 /*
 TODO:
- * lighting (LIGHT/OMNI)
- * extranous meshes (SKIN, LOD)
+ * lighting (LIGHT/OMNI) - needs a bit more research
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
  * fog (HFOG) - needs research
  * skybox (WARP)
  * billboards (ROTSHAPE)
  * PARTICLES - needs research
  * reflection textures
+ * material transparency, blend modes (needs research)
 */
 
 class RotfdSceneDesc implements Viewer.SceneDesc {
@@ -30,18 +32,6 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
         
         const archive = await loadArchive(context.dataFetcher, this.id);
         const renderer = new ROTFDRenderer(gfxDevice);
-
-        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
-            const reader = new DataStream(meshFile.data, 0, false);
-            const meshdata = readMesh(reader);
-            renderer.addMesh(meshFile.nameHash, meshdata);
-        }
-
-        for (const surfFile of archive.iterFilesOfType(FileType.SURFACE)) {
-            const reader = new DataStream(surfFile.data, 0, false);
-            const surfData = readSurface(reader);
-            renderer.addSurface(surfFile.nameHash, surfData);
-        }
 
         for (const bitmapFile of archive.iterFilesOfType(FileType.BITMAP)) {
             const reader = new DataStream(bitmapFile.data, 0, false);
@@ -61,6 +51,30 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
             renderer.addMaterialAnim(materialAnimFile.nameHash, manimData);
         }
 
+        for (const meshFile of archive.iterFilesOfType(FileType.MESH)) {
+            const reader = new DataStream(meshFile.data, 0, false);
+            const meshdata = readMesh(reader);
+            renderer.addMesh(meshFile.nameHash, meshdata);
+        }
+
+        for (const surfFile of archive.iterFilesOfType(FileType.SURFACE)) {
+            const reader = new DataStream(surfFile.data, 0, false);
+            const surfData = readSurface(reader);
+            renderer.addSurface(surfFile.nameHash, surfData);
+        }
+
+        for (const skinFile of archive.iterFilesOfType(FileType.SKIN)) {
+            const reader = new DataStream(skinFile.data, 0, false);
+            const skinData = readSkin(reader);
+            renderer.addSkin(skinFile.nameHash, skinData);
+        }
+
+        for (const lodFile of archive.iterFilesOfType(FileType.LOD)) {
+            const reader = new DataStream(lodFile.data, 0, false);
+            const lodData = readLod(reader);
+            renderer.addLod(lodFile.nameHash, lodData);
+        }
+
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
             const reader = new DataStream(nodeFile.data, 0, false);
             const nodeData = readNode(reader);
@@ -72,6 +86,12 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
                 }
                 if (resourceFile.typeHash === FileType.MESH || resourceFile.typeHash === FileType.SURFACE) {
                     renderer.addMeshNode(nodeData);
+                }
+                else if (resourceFile.typeHash === FileType.LOD) {
+                    renderer.addLodNode(nodeData);
+                }
+                else if (resourceFile.typeHash === FileType.SKIN) {
+                    renderer.addSkinNode(nodeData);
                 }
             }
         }
