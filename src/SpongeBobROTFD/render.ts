@@ -4,6 +4,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
     GfxBindingLayoutDescriptor,
     GfxBufferUsage,
+    GfxCompareMode,
     GfxCullMode,
     GfxDevice,
     GfxFormat,
@@ -266,7 +267,6 @@ export class VertexData {
         vertices: number[],
         public bbox: AABB,
         public material_id: number,
-        public sortKey = GfxRendererLayer.OPAQUE,
     ) {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array(indices).buffer);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(vertices).buffer);
@@ -305,29 +305,46 @@ export class MeshRenderer {
         private material: Material,
         public modelMatrix: mat4,
         private textureMap: Map<number, Texture>,
+        private isSkybox: boolean,
     ) {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
         this.megaStateFlags.cullMode = GfxCullMode.Back;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sampler: GfxSampler) {
+    public prepareToRender(
+        renderInstManager: GfxRenderInstManager,
+        viewerInput: Viewer.ViewerRenderInput,
+        sampler: GfxSampler,
+    ) {
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
-        if (!viewerInput.camera.frustum.contains(bboxScratch))
+        if (!viewerInput.camera.frustum.contains(bboxScratch) &&!this.isSkybox)
             return;
-
+        
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.sortKey = this.geometryData.sortKey;
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         const textureMapping = new TextureMapping();
         const texture = this.textureMap.get(this.material.texture_id);
         textureMapping.gfxTexture = texture ? texture.texture : null;
         textureMapping.gfxSampler = sampler;
         renderInst.setSamplerBindingsFromTextureMappings([ textureMapping ]);
-        renderInst.setMegaStateFlags(this.megaStateFlags);
-
+        
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
         const d = renderInst.mapUniformBufferF32(RotfdProgram.ub_MaterialParams);
-        computeViewMatrix(modelViewScratch, viewerInput.camera);
+        if (this.isSkybox) {
+            renderInst.sortKey = GfxRendererLayer.BACKGROUND;
+            this.megaStateFlags.depthWrite = false;
+            computeViewMatrix(modelViewScratch, viewerInput.camera);
+            modelViewScratch
+            modelViewScratch[12] = 0.0;
+            modelViewScratch[13] = 0.0;
+            modelViewScratch[14] = 0.0;
+        }
+        else {
+            renderInst.sortKey = GfxRendererLayer.OPAQUE;
+            this.megaStateFlags.depthWrite = true;
+            computeViewMatrix(modelViewScratch, viewerInput.camera);
+        }
+        renderInst.setMegaStateFlags(this.megaStateFlags);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x4(d, offs, modelViewScratch);
         const col = this.material.color;
@@ -443,21 +460,20 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         // console.log(viewerInput.time * 60 * 1000);
         this.updateMaterialAnims(Math.floor(viewerInput.time * 60 / 1000));
-
-        const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
         const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
-        template.setGfxProgram(gfxProgram);
 
-        let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, 16);
-        const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-
-        for (const instance of this.meshRenderers) {
-            instance.prepareToRender(renderInstManager, viewerInput, this.sampler);
+        {
+            const template = this.renderHelper.pushTemplateRenderInst();
+            template.setBindingLayouts(bindingLayouts);
+            template.setGfxProgram(gfxProgram);
+            let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, 16);
+            const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+            for (const instance of this.meshRenderers) {
+                instance.prepareToRender(renderInstManager, viewerInput, this.sampler);
+            }
+            renderInstManager.popTemplateRenderInst();
         }
-
-        renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender();
     }
@@ -608,11 +624,11 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             builder.addTri(1, 3, 2);
             const vertexdata = builder.build(this.device, face.material);
             this.otherMeshes.push(vertexdata);
-            this.addMeshRenderer(mat4.create(), vertexdata);
+            this.addMeshRenderer(mat4.create(), vertexdata, true);
         }
     }
 
-    private addMeshRenderer(tx: mat4, mesh: VertexData) {
+    private addMeshRenderer(tx: mat4, mesh: VertexData, isSkybox: boolean) {
         let material = this.materials.get(mesh.material_id);
         if (material === undefined) {
             // use a default material for now, might search node data?
@@ -629,13 +645,13 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
                 unk4: undefined,
             };
         }
-        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps);
+        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox);
         this.meshRenderers.push(renderer);
     }
 
     private addMeshInfo(tx: mat4, meshInfo: MeshInfo) {
         for (const mesh of meshInfo.meshes) {
-            this.addMeshRenderer(tx, mesh);
+            this.addMeshRenderer(tx, mesh, false);
         }
     }
 
