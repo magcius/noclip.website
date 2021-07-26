@@ -2,8 +2,12 @@ import { mat3, mat4, vec2, vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
+    GfxAttachmentState,
     GfxBindingLayoutDescriptor,
+    GfxBlendFactor,
+    GfxBlendMode,
     GfxBufferUsage,
+    GfxChannelWriteMask,
     GfxCompareMode,
     GfxCullMode,
     GfxDevice,
@@ -40,7 +44,7 @@ import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap"
 import { readBitmap, Texture, TotemBitmap } from "./bitmap";
 import { readLight, TotemLight } from "./light";
 import { readLod, TotemLod } from "./lod";
-import { Material, readMaterial } from "./material";
+import { getMaterialFlag, Material, MaterialFlags, readMaterial } from "./material";
 import { interpTrack, interpTrackInPlace, MaterialAnim, readMaterialAnim } from "./materialanim";
 import { MeshObject, readMesh } from "./mesh";
 import { readNode, TotemNode } from "./node";
@@ -110,7 +114,7 @@ in vec4 v_Position;
 
 void main() {
     // AMBIENT
-    vec3 lightColor = u_LightAmbient + u_Emit.rgb;
+    vec3 lightColor = u_LightAmbient;
     // DIFFUSE
     float lightDot = max(0.0, dot(v_Normal, u_LightDirection));
     lightColor += lightDot * u_LightColor;
@@ -121,7 +125,7 @@ void main() {
     // COLOR
     vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     vec4 surfacecol = texcol * u_Color;
-    gl_FragColor += surfacecol * vec4(lightColor, 1.0);
+    gl_FragColor += surfacecol * vec4(lightColor, 1.0) + vec4(u_Emit.rgb * texcol.rgb, 0);
 }
 `;
 }
@@ -332,6 +336,38 @@ function colorToRGBA(out: vec3, col: Color) {
     out[3] = col.a;
 }
 
+const AttachmentsStateBlendColor = [
+    {
+        channelWriteMask: GfxChannelWriteMask.RGB,
+        rgbBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.OneMinusSrc,
+        },
+        alphaBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.OneMinusDst,
+            blendDstFactor: GfxBlendFactor.OneMinusSrc,
+        },
+    }
+];
+
+const AttachmentsStateBlendAlpha = [
+    {
+        channelWriteMask: GfxChannelWriteMask.AllChannels,
+        rgbBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        },
+        alphaBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        },
+    }
+];
+
 let bboxScratch = new AABB();
 let modelViewScratch = mat4.create();
 let vec3Scratch = vec3.create();
@@ -355,9 +391,13 @@ export class MeshRenderer {
         viewerInput: Viewer.ViewerRenderInput,
         sampler: GfxSampler,
     ) {
-        bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
-        if (!viewerInput.camera.frustum.contains(bboxScratch) &&!this.isSkybox)
+        if (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN)) {
             return;
+        }
+        bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
+        if (!viewerInput.camera.frustum.contains(bboxScratch) && !this.isSkybox) {
+            return;
+        }
         
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
@@ -373,19 +413,30 @@ export class MeshRenderer {
 
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
         const d = renderInst.mapUniformBufferF32(RotfdProgram.ub_MaterialParams);
+        computeViewMatrix(modelViewScratch, viewerInput.camera);
         if (this.isSkybox) {
-            renderInst.sortKey = GfxRendererLayer.BACKGROUND;
-            this.megaStateFlags.depthWrite = false;
-            computeViewMatrix(modelViewScratch, viewerInput.camera);
-            modelViewScratch
             modelViewScratch[12] = 0.0;
             modelViewScratch[13] = 0.0;
             modelViewScratch[14] = 0.0;
+            renderInst.sortKey = GfxRendererLayer.BACKGROUND;
+            this.megaStateFlags.depthWrite = false;
+        }
+        else {
+            this.megaStateFlags.depthWrite = true;
+        }
+        if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDCOLOR)) {
+            renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
+            this.megaStateFlags.attachmentsState = AttachmentsStateBlendColor;
+            this.megaStateFlags.depthWrite = false;
+        }
+        else if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDALPHA)) {
+            renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
+            this.megaStateFlags.attachmentsState = AttachmentsStateBlendAlpha;
+            this.megaStateFlags.depthWrite = false;
         }
         else {
             renderInst.sortKey = GfxRendererLayer.OPAQUE;
-            this.megaStateFlags.depthWrite = true;
-            computeViewMatrix(modelViewScratch, viewerInput.camera);
+            this.megaStateFlags.attachmentsState = undefined;
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
@@ -626,28 +677,34 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             material = {
                 color: {r: 1, g: 1, b: 1, a: 1},
                 emission: {r: 0, g: 0, b: 0, a: 0},
+                unk1: 0,
                 offset: [0, 0],
                 reflection_id: 0,
                 texture_id: 0,
                 rotation: 0,
                 scale: [0, 0],
                 transform: mat3.create(),
+                flags_a: 7,
+                flags_b: 6,
                 unk2: 0,
-                unk4: undefined,
+                unk3: 0,
             };
         }
         else {
             material = {
                 color: colorNewCopy(material.color),
                 emission: colorNewCopy(material.emission),
-                unk2: material.unk2,
+                unk1: material.unk1,
                 transform: mat3.clone(material.transform),
                 rotation: material.rotation,
                 offset: vec2.clone(material.offset),
                 scale: vec2.clone(material.scale),
-                unk4: undefined,
                 texture_id: material.texture_id,
                 reflection_id: material.reflection_id,
+                flags_a: material.flags_a,
+                flags_b: material.flags_b,
+                unk2: material.unk2,
+                unk3: material.unk3,
             };
         }
         // just use the same map for both MATERIAL and MATERIALANIM,
@@ -695,14 +752,17 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             material = {
                 color: {r: 1, g: 1, b: 1, a: 1},
                 emission: {r: 0, g: 0, b: 0, a: 0},
+                unk1: 0,
                 offset: [0, 0],
                 reflection_id: 0,
                 texture_id: 0,
                 rotation: 0,
                 scale: [0, 0],
                 transform: mat3.create(),
+                flags_a: 7,
+                flags_b: 6,
                 unk2: 0,
-                unk4: undefined,
+                unk3: 0,
             };
         }
         let light = this.directionalLights.get(lightid);

@@ -1,28 +1,17 @@
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
-import { FileType, loadArchive } from "./archive";
+import { loadArchive } from "./archive";
 import { ROTFDRenderer } from './render';
-import { DataStream } from './util';
-import { readBitmap } from "./bitmap";
-import { readMesh } from './mesh';
-import { readMaterial } from './material';
-import { readMaterialAnim } from "./materialanim";
-import { readNode } from './node';
-import { readSurface } from './surface';
-import { readSkin } from './skin';
-import { readLod } from './lod';
-import { readWarp } from './warp';
 
 /*
 TODO:
- * lighting (LIGHT/OMNI) - needs a bit more research
+ * lighting (OMNI) - needs a bit more research
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
  * fog (HFOG) - needs research
  * billboards (ROTSHAPE)
  * PARTICLES - needs research
- * reflection textures
- * material transparency, blend modes (needs research)
+ * additional material flags (needs research)
 */
 
 class RotfdSceneDesc implements Viewer.SceneDesc {
