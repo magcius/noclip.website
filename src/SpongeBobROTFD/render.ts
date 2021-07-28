@@ -26,7 +26,7 @@ import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderI
 import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as Viewer from '../viewer';
 import { CameraController, computeViewMatrix } from "../Camera";
-import { fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import {
@@ -36,7 +36,7 @@ import {
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { TextureMapping } from "../TextureHolder";
-import { getMatrixTranslation, lerp } from "../MathHelpers";
+import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers";
 import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { nArray } from "../util";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
@@ -49,6 +49,7 @@ import { interpTrack, interpTrackInPlace, MaterialAnim, readMaterialAnim } from 
 import { MeshObject, readMesh } from "./mesh";
 import { readNode, TotemNode } from "./node";
 import { readOmni, TotemOmni } from "./omni";
+import { readRotshape, TotemRotshape, BillboardMode } from "./rotshape";
 import { readSkin, TotemSkin } from "./skin";
 import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, readSurface, SurfaceObject } from "./surface";
 import { iterWarpSkybox, readWarp, TotemWarp } from "./warp";
@@ -68,8 +69,8 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_MaterialParams {
-    Mat4x4 u_ModelView;
-    Mat4x4 u_View;
+    Mat4x3 u_ModelView;
+    Mat4x3 u_View;
     vec4 u_Color;
     vec4 u_Emit;
     Mat4x4 u_TexTransform;
@@ -109,11 +110,11 @@ void main() {
         u_TexTransform.my.xyz,
         u_TexTransform.mz.xyz
     );
-    v_WorldPosition = Mul(u_ModelView, vec4(a_Position, 1.0));
-    v_ClipPosition = Mul(u_View, v_WorldPosition);
+    v_WorldPosition = Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0));
+    v_ClipPosition = Mul(_Mat4x4(u_View), vec4(a_Position, 1.0));
     gl_Position = Mul(u_Projection, v_ClipPosition);
-    v_WorldNormal = normalize(Mul(u_ModelView, vec4(a_Normal, 0.0)).xyz);
-    v_ClipNormal = normalize(Mul(u_Projection, Mul(u_View, Mul(u_ModelView, vec4(a_Normal, 0.0)))).xyz);
+    v_WorldNormal = normalize(Mul(_Mat4x4(u_ModelView), vec4(a_Normal, 0.0)).xyz);
+    v_ClipNormal = normalize(Mul(_Mat4x4(u_View), vec4(a_Normal, 0.0)).xyz);
     v_TexCoord = (vec3(a_TexCoord.xy, 1.0) * realmat).xy;
 }
 `;
@@ -407,6 +408,7 @@ const AttachmentsStateBlendAlpha = [
 
 let bboxScratch = new AABB();
 let modelViewScratch = mat4.create();
+let modelViewScratch2 = mat4.create();
 let vec3Scratch = vec3.create();
 let vec4Scratch = vec4.create();
 export class MeshRenderer {
@@ -421,9 +423,10 @@ export class MeshRenderer {
         public isSkybox: boolean,
         private directionalLight: TotemLight | undefined,
         private hFog: TotemHFog | undefined,
+        private rotshape: TotemRotshape | undefined,
     ) {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
-        this.megaStateFlags.cullMode = GfxCullMode.Back;
+        this.megaStateFlags.cullMode = GfxCullMode.None;
     }
 
     public prepareToRender(
@@ -468,22 +471,39 @@ export class MeshRenderer {
         if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDCOLOR)) {
             renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendColor;
-            this.megaStateFlags.depthWrite = false;
+            // this.megaStateFlags.depthWrite = false;
         }
         else if (this.material.color.a < 1.0 || textureAlpha >= 1) {
             // other material flags seem to be unreliable and erratic
             // i.e. there are materials with no flags set who are still transparent?
             renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendAlpha;
-            this.megaStateFlags.depthWrite = false;
+            // this.megaStateFlags.depthWrite = false;
         }
         else {
             renderInst.sortKey = GfxRendererLayer.OPAQUE;
             this.megaStateFlags.attachmentsState = undefined;
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        offs += fillMatrix4x4(d, offs, this.modelMatrix);
-        offs += fillMatrix4x4(d, offs, modelViewScratch);
+        offs += fillMatrix4x3(d, offs, this.modelMatrix);
+        mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
+        if (this.rotshape === undefined) {
+            offs += fillMatrix4x3(d, offs, modelViewScratch);
+        }
+        else if (this.rotshape.billboard_mode === BillboardMode.Y) {
+            calcBillboardMatrix(
+                modelViewScratch2,
+                modelViewScratch,
+                CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.UseZPlane);
+            offs += fillMatrix4x3(d, offs, modelViewScratch2);
+        }
+        else {
+            calcBillboardMatrix(
+                modelViewScratch2,
+                modelViewScratch,
+                CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.UseZPlane);
+            offs += fillMatrix4x3(d, offs, modelViewScratch2);
+        }
         const col = this.material.color;
         const emit = this.material.emission;
         offs += fillVec4(d, offs, col.r, col.g, col.b, col.a);
@@ -593,6 +613,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private directionalLights = new Map<number, TotemLight>();
     private omniResources = new Map<number, TotemOmni>();
     private omniInstances = new Map<number, OmniInstance>();
+    private rotshapes = new Map<number, TotemRotshape>();
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -840,12 +861,20 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             builder.addTri(1, 3, 2);
             const vertexdata = builder.build(this.device, face.material);
             this.otherMeshes.push(vertexdata);
-            this.addMeshRenderer(mat4.create(), vertexdata, true, 0, 0);
+            this.addMeshRenderer(mat4.create(), vertexdata, true, 0, 0, undefined);
         }
     }
 
-    private addMeshRenderer(tx: mat4, mesh: VertexData, isSkybox: boolean, lightid: number, hfogid: number) {
-        let material = this.materials.get(mesh.material_id);
+    private addMeshRenderer(
+        tx: mat4,
+        mesh: VertexData,
+        isSkybox: boolean,
+        lightid: number,
+        hfogid: number,
+        rotshape: TotemRotshape | undefined,
+        material_id: number = mesh.material_id
+    ) {
+        let material = this.materials.get(material_id);
         if (material === undefined) {
             // use a default material for now, might search node data?
             material = {
@@ -866,14 +895,14 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
         let light = this.directionalLights.get(lightid);
         const hfog = this.hfogResources.get(hfogid);
-        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox, light, hfog);
+        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox, light, hfog, rotshape);
         renderer.updateOmniLights(this.omniInstances);
         this.meshRenderers.push(renderer);
     }
 
     private addMeshInfo(tx: mat4, meshInfo: MeshInfo, lightid: number, hfogid: number) {
         for (const mesh of meshInfo.meshes) {
-            this.addMeshRenderer(tx, mesh, false, lightid, hfogid);
+            this.addMeshRenderer(tx, mesh, false, lightid, hfogid, undefined);
         }
     }
 
@@ -919,6 +948,28 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
                 console.log("UNRECOGNIZED NODE LOD", node, resid);
             }
         }
+    }
+
+    addRotshapeNode(node: TotemNode, resid: number = node.resource_id) {
+        const rotshape = this.rotshapes.get(resid);
+        if (rotshape === undefined) {
+            console.log(`NO ROTSHAPE ${resid}`);
+            return;
+        }
+        let builder = new VertexDataBuilder();
+        const a = rotshape.size[0];
+        const b = rotshape.size[1];
+        const o = rotshape.offset;
+        console.log("ROTSHAPE", a, b, o);
+        builder.addVertex([a[0] + o[0], a[1] + o[1], 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]);
+        builder.addVertex([b[0] + o[0], a[1] + o[1], 0.0, 1.0, 0.0, 0.0, 0.0, -1.0]);
+        builder.addVertex([b[0] + o[0], b[1] + o[1], 0.0, 1.0, 1.0, 0.0, 0.0, -1.0]);
+        builder.addVertex([a[0] + o[0], b[1] + o[1], 0.0, 0.0, 1.0, 0.0, 0.0, -1.0]);
+        builder.addTri(0, 1, 2);
+        builder.addTri(0, 2, 3);
+        const mesh = builder.build(this.device, rotshape.materialanim_id);
+        this.otherMeshes.push(mesh);
+        this.addMeshRenderer(node.global_transform, mesh, false, node.light_id, node.hfog_id, rotshape);
     }
 
     addLight(id: number, light: TotemLight) {
@@ -992,6 +1043,12 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             this.hfogResources.set(file.nameHash, data);
         }
 
+        for (const file of archive.iterFilesOfType(FileType.ROTSHAPE)) {
+            const reader = new DataStream(file.data, 0, false);
+            const data = readRotshape(reader);
+            this.rotshapes.set(file.nameHash, data);
+        }
+
         const nodes = [];
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
             const reader = new DataStream(nodeFile.data, 0, false);
@@ -1028,6 +1085,9 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             }
             else if (resourceFile.typeHash === FileType.SKIN) {
                 this.addSkinNode(nodeData);
+            }
+            else if (resourceFile.typeHash === FileType.ROTSHAPE) {
+                this.addRotshapeNode(nodeData);
             }
         }
     }
