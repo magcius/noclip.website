@@ -222,9 +222,10 @@ export class VertexDataBuilder {
     }
 
     addMeshMaterial(mesh: MeshObject, material_index: number) {
+        const first = Math.min(...mesh.strips.map(x => x.material_index));
         for (const strip of mesh.strips) {
             // only consider materials for corresponding material_index
-            if (strip.material_index % mesh.materials.length !== material_index) {
+            if ((strip.material_index - first) % mesh.materials.length !== material_index) {
                 continue;
             }
             for (let i = 0; i < strip.elements.length-2; i++) {
@@ -960,7 +961,6 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         const a = rotshape.size[0];
         const b = rotshape.size[1];
         const o = rotshape.offset;
-        console.log("ROTSHAPE", a, b, o);
         builder.addVertex([a[0] + o[0], a[1] + o[1], 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]);
         builder.addVertex([b[0] + o[0], a[1] + o[1], 0.0, 1.0, 0.0, 0.0, 0.0, -1.0]);
         builder.addVertex([b[0] + o[0], b[1] + o[1], 0.0, 1.0, 1.0, 0.0, 0.0, -1.0]);
