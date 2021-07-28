@@ -1,8 +1,7 @@
-import { mat3, mat4, vec2, vec3 } from "gl-matrix";
+import { mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
-    GfxAttachmentState,
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
     GfxBlendMode,
@@ -27,7 +26,7 @@ import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderI
 import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as Viewer from '../viewer';
 import { CameraController, computeViewMatrix } from "../Camera";
-import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import {
@@ -42,6 +41,7 @@ import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { nArray } from "../util";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
 import { readBitmap, Texture, TotemBitmap } from "./bitmap";
+import { readHFog, TotemHFog } from "./hfog";
 import { readLight, TotemLight } from "./light";
 import { readLod, TotemLod } from "./lod";
 import { getMaterialFlag, Material, MaterialFlags, readMaterial } from "./material";
@@ -56,10 +56,10 @@ import { FileType, TotemArchive } from "./archive";
 class RotfdProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_LightParams = 2;
+    public static ub_InstanceParams = 2;
     public static SCENEPARAM_SIZE = 4*4;
-    public static MATERIALPARAM_SIZE = 4*4 + 4 + 4 + 4*4;
-    public static LIGHTPARAM_SIZE = 4 + 4 + 4;
+    public static MATERIALPARAM_SIZE = 4*4 + 4*4 + 4 + 4 + 4*4;
+    public static INSTANCEPARAM_SIZE = 4 + 4 + 4 * 4*4 + 4;
 
     public both = `
 layout(std140) uniform ub_SceneParams {
@@ -68,15 +68,18 @@ layout(std140) uniform ub_SceneParams {
 
 layout(std140) uniform ub_MaterialParams {
     Mat4x4 u_ModelView;
+    Mat4x4 u_View;
     vec4 u_Color;
     vec4 u_Emit;
     Mat4x4 u_TexTransform;
 };
 
-layout(std140) uniform ub_LightParams {
+layout(std140) uniform ub_InstanceParams {
     vec3 u_LightDirection;
     vec3 u_LightColor;
     vec3 u_LightAmbient;
+    Mat4x4 u_HFogTransform;
+    vec4 u_HFogColor;
 };
 
 uniform sampler2D u_Texture;
@@ -92,7 +95,8 @@ layout(location = 2) in vec3 a_Normal;
 
 out vec3 v_Normal;
 out vec2 v_TexCoord;
-out vec4 v_Position;
+out vec4 v_WorldPosition;
+out vec4 v_ViewPosition;
 
 void main() {
     mat3 realmat = mat3(
@@ -100,8 +104,9 @@ void main() {
         u_TexTransform.my.xyz,
         u_TexTransform.mz.xyz
     );
-    v_Position = Mul(u_ModelView, vec4(a_Position, 1.0));
-    gl_Position = Mul(u_Projection, v_Position);
+    v_WorldPosition = Mul(u_ModelView, vec4(a_Position, 1.0));
+    v_ViewPosition = Mul(u_View, v_WorldPosition);
+    gl_Position = Mul(u_Projection, v_ViewPosition);
     v_Normal = normalize(Mul(u_Projection, Mul(u_ModelView, vec4(a_Normal, 0.0))).xyz);
     v_TexCoord = (vec3(a_TexCoord.xy, 1.0) * realmat).xy;
 }
@@ -110,7 +115,8 @@ void main() {
     public frag: string = `
 in vec3 v_Normal;
 in vec2 v_TexCoord;
-in vec4 v_Position;
+in vec4 v_WorldPosition;
+in vec4 v_ViewPosition;
 
 void main() {
     // AMBIENT
@@ -125,7 +131,15 @@ void main() {
     // COLOR
     vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     vec4 surfacecol = texcol * u_Color;
-    gl_FragColor += surfacecol * vec4(lightColor, 1.0) + vec4(u_Emit.rgb * texcol.rgb, 0);
+    gl_FragColor += surfacecol * vec4(lightColor, 1.0);
+
+    if (u_HFogColor.a > 0.0) {
+        vec4 fogPos = Mul(u_HFogTransform, v_WorldPosition);
+        float fogAmount = clamp(1.0 - fogPos.y, 0.0, 1.0);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, u_HFogColor.rgb, fogAmount * u_HFogColor.a);
+    }
+
+    gl_FragColor += vec4(u_Emit.rgb * texcol.rgb, 0);
 }
 `;
 }
@@ -329,11 +343,11 @@ function colorToRGB(out: vec3, col: Color) {
     out[2] = col.b;
 }
 
-function colorToRGBA(out: vec3, col: Color) {
+function colorToRGBA(out: vec4, col: Color, a: number = col.a) {
     out[0] = col.r;
     out[1] = col.g;
     out[2] = col.b;
-    out[3] = col.a;
+    out[3] = a;
 }
 
 const AttachmentsStateBlendColor = [
@@ -371,6 +385,7 @@ const AttachmentsStateBlendAlpha = [
 let bboxScratch = new AABB();
 let modelViewScratch = mat4.create();
 let vec3Scratch = vec3.create();
+let vec4Scratch = vec4.create();
 export class MeshRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
@@ -381,6 +396,7 @@ export class MeshRenderer {
         private textureMap: Map<number, Texture>,
         private isSkybox: boolean,
         private directionalLight: TotemLight | undefined,
+        private hFog: TotemHFog | undefined,
     ) {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
         this.megaStateFlags.cullMode = GfxCullMode.Back;
@@ -439,7 +455,7 @@ export class MeshRenderer {
             this.megaStateFlags.attachmentsState = undefined;
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
+        offs += fillMatrix4x4(d, offs, this.modelMatrix);
         offs += fillMatrix4x4(d, offs, modelViewScratch);
         const col = this.material.color;
         const emit = this.material.emission;
@@ -452,8 +468,8 @@ export class MeshRenderer {
             tx[6], tx[7], tx[8], 0,
             0, 0, 0, 1
         ]);
-        let offs2 = renderInst.allocateUniformBuffer(RotfdProgram.ub_LightParams, RotfdProgram.LIGHTPARAM_SIZE);
-        const d2 = renderInst.mapUniformBufferF32(RotfdProgram.ub_LightParams);
+        let offs2 = renderInst.allocateUniformBuffer(RotfdProgram.ub_InstanceParams, RotfdProgram.INSTANCEPARAM_SIZE);
+        const d2 = renderInst.mapUniformBufferF32(RotfdProgram.ub_InstanceParams);
         if (this.directionalLight !== undefined) {
             offs2 += fillVec3v(d2, offs2, this.directionalLight.direction);
             colorToRGB(vec3Scratch, this.directionalLight.color1);
@@ -465,6 +481,19 @@ export class MeshRenderer {
             offs2 += fillVec3v(d2, offs2, [0, 1, 0]);
             offs2 += fillVec3v(d2, offs2, [0, 0, 0]);
             offs2 += fillVec3v(d2, offs2, [1, 1, 1]);
+        }
+        if (this.hFog !== undefined) {
+            mat4.identity(modelViewScratch);
+            mat4.mul(modelViewScratch, modelViewScratch, this.hFog.transform2);
+            mat4.invert(modelViewScratch, modelViewScratch);
+            offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
+            colorToRGBA(vec4Scratch, this.hFog.color, 1.0);
+            offs2 += fillVec4v(d2, offs2, vec4Scratch);
+        }
+        else {
+            mat4.identity(modelViewScratch);
+            offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
+            offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
         }
 
         renderInst.drawIndexes(this.geometryData.indexCount);
@@ -488,7 +517,6 @@ type SkinInfo = {
 type LodInfo = {
     resources: number[] // can be SKIN or MESH
 }
-
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     public renderHelper: GfxRenderHelper;
@@ -500,6 +528,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     public sampler: GfxSampler;
     private lods = new Map<number, LodInfo>();
     private skins = new Map<number, SkinInfo>();
+    private hfogResources = new Map<number, TotemHFog>();
     private otherMeshes: VertexData[] = [];
     private directionalLights = new Map<number, TotemLight>();
 
@@ -741,11 +770,11 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             builder.addTri(1, 3, 2);
             const vertexdata = builder.build(this.device, face.material);
             this.otherMeshes.push(vertexdata);
-            this.addMeshRenderer(mat4.create(), vertexdata, true, 0);
+            this.addMeshRenderer(mat4.create(), vertexdata, true, 0, 0);
         }
     }
 
-    private addMeshRenderer(tx: mat4, mesh: VertexData, isSkybox: boolean, lightid: number) {
+    private addMeshRenderer(tx: mat4, mesh: VertexData, isSkybox: boolean, lightid: number, hfogid: number) {
         let material = this.materials.get(mesh.material_id);
         if (material === undefined) {
             // use a default material for now, might search node data?
@@ -766,18 +795,19 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             };
         }
         let light = this.directionalLights.get(lightid);
-        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox, light);
+        const hfog = this.hfogResources.get(hfogid);
+        const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox, light, hfog);
         this.meshRenderers.push(renderer);
     }
 
-    private addMeshInfo(tx: mat4, meshInfo: MeshInfo, lightid: number) {
+    private addMeshInfo(tx: mat4, meshInfo: MeshInfo, lightid: number, hfogid: number) {
         for (const mesh of meshInfo.meshes) {
-            this.addMeshRenderer(tx, mesh, false, lightid);
+            this.addMeshRenderer(tx, mesh, false, lightid, hfogid);
         }
     }
 
     private addMeshInfoFromNode(node: TotemNode, meshinfo: MeshInfo) {
-        this.addMeshInfo(node.global_transform, meshinfo, node.light_id);
+        this.addMeshInfo(node.global_transform, meshinfo, node.light_id, node.hfog_id);
     }
 
     addMeshNode(node: TotemNode, resid: number = node.resource_id) {
@@ -879,6 +909,12 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             this.addWarp(warpFile.nameHash, warpData);
         }
 
+        for (const file of archive.iterFilesOfType(FileType.HFOG)) {
+            const reader = new DataStream(file.data, 0, false);
+            const data = readHFog(reader);
+            this.hfogResources.set(file.nameHash, data);
+        }
+
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
             const reader = new DataStream(nodeFile.data, 0, false);
             const nodeData = readNode(reader);
@@ -900,4 +936,35 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             }
         }
     }
+}
+
+function buildCube(device: GfxDevice, material: number, extents: vec3) {
+    const builder = new VertexDataBuilder();
+    for (const face of iterWarpSkybox({
+        // material_ids and size don't matter here
+        material_ids: [0, 0, 0, 0, 0, 0],
+        size: 1.0,
+        vertices: [
+            [-extents[0], -extents[1], +extents[2]],
+            [-extents[0], -extents[1], -extents[2]],
+            [+extents[0], -extents[1], -extents[2]],
+            [+extents[0], -extents[1], +extents[2]],
+            [-extents[0], +extents[1], +extents[2]],
+            [-extents[0], +extents[1], -extents[2]],
+            [+extents[0], +extents[1], -extents[2]],
+            [+extents[0], +extents[1], +extents[2]],
+        ],
+        texcoords: [[0, 0], [0, 1], [1, 1], [1, 0]],
+    })) {
+        let n = face.normal;
+        let verts = [];
+        for (let i = 0; i < 4; i++) {
+            let v = face.positions[i];
+            let t = face.texcoords[i];
+            verts.push(builder.addVertex([v[0], v[1], v[2], t[0], t[1], n[0], n[1], n[2]]));
+        }
+        builder.addTri(verts[0], verts[2], verts[1]);
+        builder.addTri(verts[1], verts[2], verts[3]);
+    }
+    return builder.build(device, material);
 }

@@ -8,7 +8,6 @@ import { ROTFDRenderer } from './render';
 TODO:
  * lighting (OMNI) - needs a bit more research
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
- * fog (HFOG) - needs research
  * billboards (ROTSHAPE)
  * PARTICLES - needs research
  * additional material flags (needs research)
