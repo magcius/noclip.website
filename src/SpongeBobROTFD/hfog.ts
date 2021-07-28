@@ -9,8 +9,8 @@ export function readHFog(data: DataStream) {
         translation: data.readVec3(),
         scale: data.readVec3(),
         rotation: data.readQuat(),
-        transform1: data.readMat4(),
-        transform2: data.readMat4(),
+        local_transform: data.readMat4(),
+        global_transform: data.readMat4(),
     }
 }
 

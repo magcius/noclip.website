@@ -36,7 +36,7 @@ import {
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { TextureMapping } from "../TextureHolder";
-import { lerp } from "../MathHelpers";
+import { getMatrixTranslation, lerp } from "../MathHelpers";
 import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { nArray } from "../util";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
@@ -48,6 +48,7 @@ import { getMaterialFlag, Material, MaterialFlags, readMaterial } from "./materi
 import { interpTrack, interpTrackInPlace, MaterialAnim, readMaterialAnim } from "./materialanim";
 import { MeshObject, readMesh } from "./mesh";
 import { readNode, TotemNode } from "./node";
+import { readOmni, TotemOmni } from "./omni";
 import { readSkin, TotemSkin } from "./skin";
 import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, readSurface, SurfaceObject } from "./surface";
 import { iterWarpSkybox, readWarp, TotemWarp } from "./warp";
@@ -59,7 +60,7 @@ class RotfdProgram {
     public static ub_InstanceParams = 2;
     public static SCENEPARAM_SIZE = 4*4;
     public static MATERIALPARAM_SIZE = 4*4 + 4*4 + 4 + 4 + 4*4;
-    public static INSTANCEPARAM_SIZE = 4 + 4 + 4 * 4*4 + 4;
+    public static INSTANCEPARAM_SIZE = 4 + 4 + 4 * 4*4 + 4 + 4 * (4 + 4 + 4);
 
     public both = `
 layout(std140) uniform ub_SceneParams {
@@ -80,6 +81,9 @@ layout(std140) uniform ub_InstanceParams {
     vec3 u_LightAmbient;
     Mat4x4 u_HFogTransform;
     vec4 u_HFogColor;
+    vec4 u_OmniPosition[4];
+    vec4 u_OmniColor[4];
+    vec4 u_OmniAttenuation[4];
 };
 
 uniform sampler2D u_Texture;
@@ -93,10 +97,11 @@ layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec2 a_TexCoord;
 layout(location = 2) in vec3 a_Normal;
 
-out vec3 v_Normal;
+out vec3 v_WorldNormal;
+out vec3 v_ClipNormal;
 out vec2 v_TexCoord;
 out vec4 v_WorldPosition;
-out vec4 v_ViewPosition;
+out vec4 v_ClipPosition;
 
 void main() {
     mat3 realmat = mat3(
@@ -105,29 +110,43 @@ void main() {
         u_TexTransform.mz.xyz
     );
     v_WorldPosition = Mul(u_ModelView, vec4(a_Position, 1.0));
-    v_ViewPosition = Mul(u_View, v_WorldPosition);
-    gl_Position = Mul(u_Projection, v_ViewPosition);
-    v_Normal = normalize(Mul(u_Projection, Mul(u_ModelView, vec4(a_Normal, 0.0))).xyz);
+    v_ClipPosition = Mul(u_View, v_WorldPosition);
+    gl_Position = Mul(u_Projection, v_ClipPosition);
+    v_WorldNormal = normalize(Mul(u_ModelView, vec4(a_Normal, 0.0)).xyz);
+    v_ClipNormal = normalize(Mul(u_Projection, Mul(u_View, Mul(u_ModelView, vec4(a_Normal, 0.0)))).xyz);
     v_TexCoord = (vec3(a_TexCoord.xy, 1.0) * realmat).xy;
 }
 `;
 
     public frag: string = `
-in vec3 v_Normal;
+in vec3 v_WorldNormal;
+in vec3 v_ClipNormal;
 in vec2 v_TexCoord;
 in vec4 v_WorldPosition;
-in vec4 v_ViewPosition;
+in vec4 v_ClipPosition;
 
 void main() {
     // AMBIENT
     vec3 lightColor = u_LightAmbient;
     // DIFFUSE
-    float lightDot = max(0.0, dot(v_Normal, u_LightDirection));
+    float lightDot = max(0.0, dot(v_WorldNormal, u_LightDirection));
     lightColor += lightDot * u_LightColor;
     // SPECULAR
-    vec3 reflectLight = normalize(reflect(u_LightDirection, v_Normal));
+    vec3 reflectLight = normalize(reflect(u_LightDirection, v_ClipNormal));
     vec4 reflectionColor = texture(SAMPLER_2D(u_TextureReflection), reflectLight.xy);
     lightColor += reflectionColor.rgb;
+    // OMNI LIGHTS
+    for (int i = 0; i < 4; i++) {
+
+            vec3 diff = u_OmniPosition[i].xyz - v_WorldPosition.xyz;
+            vec3 lightDirection = normalize(diff);
+            float distance = length(diff);
+            float attenuation = u_OmniAttenuation[i][0];
+            float range = u_OmniAttenuation[i][1];
+            vec4 color = u_OmniColor[i];
+            lightColor += color.rgb * clamp(range / distance, 0.0, 1.0) * max(0.0, dot(v_WorldNormal, lightDirection));
+
+    }
     // COLOR
     vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     vec4 surfacecol = texcol * u_Color;
@@ -135,6 +154,8 @@ void main() {
 
     if (u_HFogColor.a > 0.0) {
         vec4 fogPos = Mul(u_HFogTransform, v_WorldPosition);
+        // float viewDot = abs(dot(v_ClipNormal, vec3(0.0, 0.0, 1.0)));
+        // float fogAmount = pow(clamp(1.0 - fogPos.y, 0.0, 1.0), 1.0 / (2.0 - viewDot));
         float fogAmount = clamp(1.0 - fogPos.y, 0.0, 1.0);
         gl_FragColor.rgb = mix(gl_FragColor.rgb, u_HFogColor.rgb, fogAmount * u_HFogColor.a);
     }
@@ -388,6 +409,7 @@ let vec3Scratch = vec3.create();
 let vec4Scratch = vec4.create();
 export class MeshRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private omniLights: OmniInstance[] = [];
 
     constructor(
         private geometryData: VertexData,
@@ -484,7 +506,7 @@ export class MeshRenderer {
         }
         if (this.hFog !== undefined) {
             mat4.identity(modelViewScratch);
-            mat4.mul(modelViewScratch, modelViewScratch, this.hFog.transform2);
+            mat4.mul(modelViewScratch, modelViewScratch, this.hFog.global_transform);
             mat4.invert(modelViewScratch, modelViewScratch);
             offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
             colorToRGBA(vec4Scratch, this.hFog.color, 1.0);
@@ -495,9 +517,33 @@ export class MeshRenderer {
             offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
         }
+        for (let i = 0; i < Math.min(4, this.omniLights.length); i++) {
+            const instance = this.omniLights[i];
+            getMatrixTranslation(vec3Scratch, instance.transform);
+            fillVec3v(d2, offs2 + i * 4, vec3Scratch);
+            colorToRGBA(vec4Scratch, instance.omni.color, 1.0);
+            fillVec4v(d2, offs2 + i * 4 + 16, vec4Scratch);
+            fillVec4(d2, offs2 + i * 4 + 32, instance.omni.attenuation[0], instance.omni.attenuation[1], 0, 0);
+        }
+        for (let i = this.omniLights.length; i < 4; i++) {
+            fillVec4(d2, offs2 + i * 4, 0, 0, 0);
+            fillVec4(d2, offs2 + i * 4 + 16, 0, 0, 0, 0);
+            fillVec4(d2, offs2 + i * 4 + 32, 0, 0, 0, 0);
+        }
 
         renderInst.drawIndexes(this.geometryData.indexCount);
         renderInstManager.submitRenderInst(renderInst);
+    }
+
+    updateOmniLights(omniInstances: Map<number, OmniInstance>) {
+        this.omniLights = [];
+        bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
+        for (const instance of omniInstances.values()) {
+            getMatrixTranslation(vec3Scratch, instance.transform);
+            if (bboxScratch.containsSphere(vec3Scratch, instance.omni.attenuation[1])) {
+                this.omniLights.push(instance);
+            }
+        }
     }
 }
 
@@ -517,20 +563,30 @@ type SkinInfo = {
 type LodInfo = {
     resources: number[] // can be SKIN or MESH
 }
+
+type OmniInstance = {
+    omni: TotemOmni;
+    transform: mat4;
+}
+
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     public renderHelper: GfxRenderHelper;
-    private meshes = new Map<number, MeshInfo>();
-    private materials = new Map<number, Material>();
-    private meshRenderers: MeshRenderer[] = [];
-    private bitmaps = new Map<number, Texture>();
-    private materialAnims: MaterialAnimInfo[] = [];
     public sampler: GfxSampler;
+    // mesh info
+    private meshes = new Map<number, MeshInfo>();
+    private otherMeshes: VertexData[] = [];
+    private meshRenderers: MeshRenderer[] = [];
     private lods = new Map<number, LodInfo>();
     private skins = new Map<number, SkinInfo>();
+    // resources
+    private materials = new Map<number, Material>();
+    private bitmaps = new Map<number, Texture>();
+    private materialAnims: MaterialAnimInfo[] = [];
     private hfogResources = new Map<number, TotemHFog>();
-    private otherMeshes: VertexData[] = [];
     private directionalLights = new Map<number, TotemLight>();
+    private omniResources = new Map<number, TotemOmni>();
+    private omniInstances = new Map<number, OmniInstance>();
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -797,6 +853,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         let light = this.directionalLights.get(lightid);
         const hfog = this.hfogResources.get(hfogid);
         const renderer = new MeshRenderer(mesh, material, tx, this.bitmaps, isSkybox, light, hfog);
+        renderer.updateOmniLights(this.omniInstances);
         this.meshRenderers.push(renderer);
     }
 
@@ -861,6 +918,12 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             this.addLight(file.nameHash, data);
         }
 
+        for (const file of archive.iterFilesOfType(FileType.OMNI)) {
+            const reader = new DataStream(file.data, 0, false);
+            const data = readOmni(reader);
+            this.omniResources.set(file.nameHash, data);
+        }
+
         for (const bitmapFile of archive.iterFilesOfType(FileType.BITMAP)) {
             const reader = new DataStream(bitmapFile.data, 0, false);
             const bitmapData = readBitmap(reader);
@@ -915,24 +978,42 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             this.hfogResources.set(file.nameHash, data);
         }
 
+        const nodes = [];
         for (const nodeFile of archive.iterFilesOfType(FileType.NODE)) {
             const reader = new DataStream(nodeFile.data, 0, false);
             const nodeData = readNode(reader);
             if (nodeData.resource_id !== 0) {
-                const resourceFile = archive.getFile(nodeData.resource_id);
-                if (resourceFile === undefined) {
-                    console.log("ERROR!");
-                    continue;
-                }
-                if (resourceFile.typeHash === FileType.MESH || resourceFile.typeHash === FileType.SURFACE) {
-                    this.addMeshNode(nodeData);
-                }
-                else if (resourceFile.typeHash === FileType.LOD) {
-                    this.addLodNode(nodeData);
-                }
-                else if (resourceFile.typeHash === FileType.SKIN) {
-                    this.addSkinNode(nodeData);
-                }
+                nodes.push(nodeData);
+            }
+        }
+        for (const nodeData of nodes) {
+            const resourceFile = archive.getFile(nodeData.resource_id);
+            if (resourceFile === undefined) {
+                console.log("ERROR!");
+                continue;
+            }
+            if (resourceFile.typeHash === FileType.OMNI) {
+                this.omniInstances.set(resourceFile.nameHash, {
+                    omni: this.omniResources.get(resourceFile.nameHash)!,
+                    transform: nodeData.global_transform,
+                })
+            }
+        }
+
+        for (const nodeData of nodes) {
+            const resourceFile = archive.getFile(nodeData.resource_id);
+            if (resourceFile === undefined) {
+                console.log("ERROR!");
+                continue;
+            }
+            if (resourceFile.typeHash === FileType.MESH || resourceFile.typeHash === FileType.SURFACE) {
+                this.addMeshNode(nodeData);
+            }
+            else if (resourceFile.typeHash === FileType.LOD) {
+                this.addLodNode(nodeData);
+            }
+            else if (resourceFile.typeHash === FileType.SKIN) {
+                this.addSkinNode(nodeData);
             }
         }
     }

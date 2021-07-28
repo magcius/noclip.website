@@ -6,7 +6,6 @@ import { ROTFDRenderer } from './render';
 
 /*
 TODO:
- * lighting (OMNI) - needs a bit more research
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
  * billboards (ROTSHAPE)
  * PARTICLES - needs research
