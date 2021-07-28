@@ -35,7 +35,7 @@ function readTrack<T>(data: DataStream, func: (data: DataStream) => T): Track<T>
     }
 }
 
-type Track<T> = {
+export type Track<T> = {
     interp: number;
     frames: {
         framestart: number;

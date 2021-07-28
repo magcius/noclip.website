@@ -60,8 +60,8 @@ class RotfdProgram {
     public static ub_MaterialParams = 1;
     public static ub_InstanceParams = 2;
     public static SCENEPARAM_SIZE = 4*4;
-    public static MATERIALPARAM_SIZE = 4*4 + 4*4 + 4 + 4 + 4*4;
-    public static INSTANCEPARAM_SIZE = 4 + 4 + 4 * 4*4 + 4 + 4 * (4 + 4 + 4);
+    public static MATERIALPARAM_SIZE = 4*3 + 4*3 + 4 + 4 + 4*4;
+    public static INSTANCEPARAM_SIZE = 4 + 4 + 4 + 4*4 + 4 + 4 * (4 + 4 + 4);
 
     public both = `
 layout(std140) uniform ub_SceneParams {
@@ -189,7 +189,7 @@ function vertexHash(a: Vertex): number {
     return hashCodeNumberFinish(hash);
 }
 
-export class VertexDataBuilder {
+class VertexDataBuilder {
     private indices: number[] = [];
     private vertices: number[] = [];
     private bbox = new AABB();
@@ -197,7 +197,7 @@ export class VertexDataBuilder {
 
     constructor() { }
 
-    addVertex(vertex: Vertex): number {
+    public addVertex(vertex: Vertex): number {
         const existing = this.hashmap.get(vertex);
         if (existing !== null) {
             return existing;
@@ -215,13 +215,13 @@ export class VertexDataBuilder {
         return this.vertices.length / 8 - 1;
     }
 
-    addTri(a: number, b: number, c: number) {
+    public addTri(a: number, b: number, c: number) {
         this.indices.push(a);
         this.indices.push(b);
         this.indices.push(c);
     }
 
-    addMeshMaterial(mesh: MeshObject, material_index: number) {
+    public addMeshMaterial(mesh: MeshObject, material_index: number) {
         const first = Math.min(...mesh.strips.map(x => x.material_index));
         for (const strip of mesh.strips) {
             // only consider materials for corresponding material_index
@@ -250,7 +250,7 @@ export class VertexDataBuilder {
         }
     }
 
-    addSurfaceIndex(surf: SurfaceObject, index: number) {
+    public addSurfaceIndex(surf: SurfaceObject, index: number) {
         const patch = surf.surfaces[index];
         const normals = patch.normal_indices.map(i => surf.normals[i]);
         let curves = nArray(4, () => nArray(4, () => vec3.create()));
@@ -316,12 +316,13 @@ export class VertexDataBuilder {
             }
         }
     }
-    build(device: GfxDevice, material: number): VertexData {
+
+    public build(device: GfxDevice, material: number): VertexData {
         return new VertexData(device, this.indices, this.vertices, this.bbox, material);
     }
 }
 
-export class VertexData {
+class VertexData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
@@ -412,7 +413,7 @@ let modelViewScratch = mat4.create();
 let modelViewScratch2 = mat4.create();
 let vec3Scratch = vec3.create();
 let vec4Scratch = vec4.create();
-export class MeshRenderer {
+class MeshRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private omniLights: OmniInstance[] = [];
 
@@ -561,7 +562,7 @@ export class MeshRenderer {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    updateOmniLights(omniInstances: Map<number, OmniInstance>) {
+    public updateOmniLights(omniInstances: Map<number, OmniInstance>) {
         this.omniLights = [];
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
         for (const instance of omniInstances.values()) {
@@ -603,7 +604,6 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     // mesh info
     private meshes = new Map<number, MeshInfo>();
     private otherMeshes: VertexData[] = [];
-    private meshRenderers: MeshRenderer[] = [];
     private lods = new Map<number, LodInfo>();
     private skins = new Map<number, SkinInfo>();
     // resources
@@ -613,8 +613,10 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private hfogResources = new Map<number, TotemHFog>();
     private directionalLights = new Map<number, TotemLight>();
     private omniResources = new Map<number, TotemOmni>();
-    private omniInstances = new Map<number, OmniInstance>();
     private rotshapes = new Map<number, TotemRotshape>();
+    // node instances
+    private omniInstances = new Map<number, OmniInstance>();
+    private meshRenderers: MeshRenderer[] = [];
 
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -628,7 +630,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
-
+        // probably not correct, will need to research bitmap flags
         this.warpSampler = device.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
@@ -643,11 +645,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(1/60);
     }
 
-    onstatechanged() {
-        
-    }
-
-    updateMaterialAnims(frame: number) {
+    private updateMaterialAnims(frame: number) {
         for (const animInfo of this.materialAnims) {
             const anim = animInfo.anim;
             let material = this.materials.get(animInfo.id);
@@ -736,7 +734,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         renderInstManager.resetRenderInsts();
     }
 
-    destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice) {
         this.renderHelper.destroy();
         for (const meshinfo of this.meshes.values()) {
             for (const mesh of meshinfo.meshes) {
@@ -751,7 +749,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
     }
 
-    addMesh(id: number, mesh: MeshObject) {
+    private addMesh(id: number, mesh: MeshObject) {
         let meshes: VertexData[] = [];
         for (let i = 0; i < mesh.materials.length; i++) {
             let builder = new VertexDataBuilder();
@@ -763,7 +761,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         });
     }
 
-    addSurface(id: number, surf: SurfaceObject) {
+    private addSurface(id: number, surf: SurfaceObject) {
         let builders = new Map<number, VertexDataBuilder>();
         for (let i = 0; i < surf.surfaces.length; i++) {
             let material = surf.surfaces[i].materialanim_id;
@@ -783,15 +781,15 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         })
     }
 
-    addBitmap(id: number, bitmap: TotemBitmap) {
+    private addBitmap(id: number, bitmap: TotemBitmap) {
         this.bitmaps.set(id, new Texture(id, bitmap, this.device));
     }
 
-    addMaterial(id: number, material: Material) {
+    private addMaterial(id: number, material: Material) {
         this.materials.set(id, material);
     }
 
-    addMaterialAnim(id: number, anim: MaterialAnim) {
+    private addMaterialAnim(id: number, anim: MaterialAnim) {
         let material = this.materials.get(anim.material_id);
         if (material === undefined) {
             console.log(id);
@@ -837,19 +835,19 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         })
     }
 
-    addSkin(id: number, skin: TotemSkin) {
+    private addSkin(id: number, skin: TotemSkin) {
         this.skins.set(id, {
             meshes: skin.meshes
         })
     }
 
-    addLod(id: number, lod: TotemLod) {
+    private addLod(id: number, lod: TotemLod) {
         this.lods.set(id, {
             resources: lod.meshes,
         })
     }
 
-    addWarp(id: number, warp: TotemWarp) {
+    private addWarp(id: number, warp: TotemWarp) {
         for (const face of iterWarpSkybox(warp)) {
             let builder = new VertexDataBuilder();
             let n = face.normal;
@@ -911,7 +909,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.addMeshInfo(node.global_transform, meshinfo, node.light_id, node.hfog_id);
     }
 
-    addMeshNode(node: TotemNode, resid: number = node.resource_id) {
+    private addMeshNode(node: TotemNode, resid: number = node.resource_id) {
         const meshInfo = this.meshes.get(resid);
         if (meshInfo === undefined) {
             console.log(`NO MESH ${resid}`);
@@ -920,7 +918,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.addMeshInfoFromNode(node, meshInfo);
     }
 
-    addSkinNode(node: TotemNode, resid: number = node.resource_id) {
+    private addSkinNode(node: TotemNode, resid: number = node.resource_id) {
         const skinInfo = this.skins.get(resid);
         if (skinInfo === undefined) {
             console.log(`NO SKIN ${resid}`);
@@ -931,7 +929,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
     }
 
-    addLodNode(node: TotemNode, resid: number = node.resource_id) {
+    private addLodNode(node: TotemNode, resid: number = node.resource_id) {
         const lodInfo = this.lods.get(resid);
         if (lodInfo === undefined) {
             console.log(`NO LOD ${resid}`);
@@ -951,7 +949,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
     }
 
-    addRotshapeNode(node: TotemNode, resid: number = node.resource_id) {
+    private addRotshapeNode(node: TotemNode, resid: number = node.resource_id) {
         const rotshape = this.rotshapes.get(resid);
         if (rotshape === undefined) {
             console.log(`NO ROTSHAPE ${resid}`);
@@ -972,7 +970,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.addMeshRenderer(node.global_transform, mesh, false, node.light_id, node.hfog_id, rotshape);
     }
 
-    addLight(id: number, light: TotemLight) {
+    private addLight(id: number, light: TotemLight) {
         this.directionalLights.set(id, light);
     }
 

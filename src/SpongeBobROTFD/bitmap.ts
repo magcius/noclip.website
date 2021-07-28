@@ -64,7 +64,7 @@ export function readBitmap(data: DataStream) {
 
 export type TotemBitmap = ReturnType<typeof readBitmap>;
 
-function getPaletteType(bitmap: TotemBitmap) {
+export function getPaletteType(bitmap: TotemBitmap) {
     return bitmap.palette_format === PALETTE_RGB565 ? TexPalette.RGB565 :
            bitmap.palette_format === PALETTE_RGB5A3 ? TexPalette.RGB5A3 :
            bitmap.palette_format === PALETTE_RGBA8 ? TexPalette.RGBA8 :
@@ -171,7 +171,7 @@ export class Texture {
         }
     }
 
-    destroy() {
+    public destroy() {
         this.device.destroyTexture(this.texture);
     }
 }

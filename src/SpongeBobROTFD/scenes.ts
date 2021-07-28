@@ -7,16 +7,17 @@ import { ROTFDRenderer } from './render';
 /*
 TODO:
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
- * billboards (ROTSHAPE)
  * PARTICLES - needs research
  * additional material flags (needs research)
 */
+
+const dataBasePath = "rotfd";
 
 class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const archive = await loadArchive(context.dataFetcher, this.id);
+        const archive = await loadArchive(context.dataFetcher, `${dataBasePath}/${this.id}`);
         const renderer = new ROTFDRenderer(gfxDevice);
         renderer.addArchive(archive);
 
@@ -48,9 +49,9 @@ const sceneDescs = [
     new RotfdSceneDesc('CA/LVL_CAMG', 'Carnival Games'),
     new RotfdSceneDesc('CA/LVL_CATP', 'Tile Puzzle'),
     'Jellyfish Fields',
-    new RotfdSceneDesc('JF/LVL_JFCJ', 'Giant White Jellyfish'), // jellyfish follow area
-    new RotfdSceneDesc('JF/LVL_JFCL', 'Jellyfish Cliffs'), // Clown?
-    new RotfdSceneDesc('JF/LVL_JFCO', 'Snail Corral'), // Entrance/bait shop
+    new RotfdSceneDesc('JF/LVL_JFCJ', 'Giant White Jellyfish'),
+    new RotfdSceneDesc('JF/LVL_JFCL', 'Jellyfish Cliffs'),
+    new RotfdSceneDesc('JF/LVL_JFCO', 'Snail Corral'),
     new RotfdSceneDesc('JF/LVL_JFTP', 'Tile Puzzle'),
     'Goo Lagoon',
     new RotfdSceneDesc('GL/LVL_GLBE', 'Beach'),

@@ -77,8 +77,6 @@ export function readTHeader(data: DataStream): THeader {
 |* READ ARCHIVE *|
 \****************/
 
-const dataBasePath = "rotfd";
-
 export class TotemFile {
     constructor(
         public readonly data: ArrayBufferSlice,
@@ -109,7 +107,7 @@ export class TotemArchive {
 }
 
 export async function loadArchive(dataFetcher: DataFetcher, path: string): Promise<TotemArchive> {
-    const dgc = await dataFetcher.fetchData(`${dataBasePath}/${path}.DGC`);
+    const dgc = await dataFetcher.fetchData(`${path}.DGC`);
     // const ngc = await dataFetcher.fetchData(`${path}.NGC`);
     const dstream = new DataStream(dgc, 256, false);
     const chunkSize = dstream.readUint32();
