@@ -74,7 +74,9 @@ function getPaletteType(bitmap: TotemBitmap) {
 export class Texture {
     public texture: GfxTexture;
     public sampler: GfxSampler;
+    public alphaLevel: number;
     constructor(public id: number, bitmap: TotemBitmap, private device: GfxDevice) {
+        this.alphaLevel = bitmap.opacity_level;
         this.texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, bitmap.width, bitmap.height, 1));
         device.setResourceName(this.texture, `T_${id}`);
         const rest = {

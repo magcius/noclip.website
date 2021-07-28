@@ -38,9 +38,9 @@ export const MaterialFlags = {
     // FLAG_22: 0x22,
     FLAG_BLENDCOLOR: 0x23,
     // FLAG_24: 0x24,
-    FLAG_BLENDALPHA: 0x25,
+    FLAG_BLENDTEXTUREALPHA: 0x25,
     // FLAG_26: 0x26,
-    // FLAG_27: 0x27,
+    FLAG_BLENDCOLORALPHA: 0x27,
     // FLAG_28: 0x28,
     // FLAG_29: 0x29,
     // FLAG_2A: 0x2A, always 0

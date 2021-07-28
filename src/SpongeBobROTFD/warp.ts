@@ -12,12 +12,12 @@ export function readWarp(data: DataStream) {
 export type TotemWarp = ReturnType<typeof readWarp>;
 
 const _warp_faces = [ 
-	[1, 2, 0, 3], // -Y (bottom)
 	[4, 7, 5, 6], // +Y (top)
-	[7, 4, 3, 0], // +Z (back)
-	[6, 7, 2, 3], // +X (right)
-	[4, 5, 0, 1], // -X (left)
+	[1, 2, 0, 3], // -Y (bottom)
 	[5, 6, 1, 2], // -Z (front)
+	[4, 5, 0, 1], // -X (left)
+	[6, 7, 2, 3], // +X (right)
+	[7, 4, 3, 0], // +Z (back)
 ]
 
 const _warp_normals = [

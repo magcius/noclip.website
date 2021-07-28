@@ -140,11 +140,12 @@ void main() {
 
             vec3 diff = u_OmniPosition[i].xyz - v_WorldPosition.xyz;
             vec3 lightDirection = normalize(diff);
-            float distance = length(diff);
-            float attenuation = u_OmniAttenuation[i][0];
-            float range = u_OmniAttenuation[i][1];
+            float minrange = u_OmniAttenuation[i][0];
+            float maxrange = u_OmniAttenuation[i][1] - minrange;
+            float dist = max(0.0, length(diff) - minrange);
             vec4 color = u_OmniColor[i];
-            lightColor += color.rgb * clamp(range / distance, 0.0, 1.0) * max(0.0, dot(v_WorldNormal, lightDirection));
+            float att = clamp(maxrange/dist, 0.0, 1.0);
+            lightColor += color.rgb * att * max(0.0, dot(v_WorldNormal, lightDirection));
 
     }
     // COLOR
@@ -161,6 +162,7 @@ void main() {
     }
 
     gl_FragColor += vec4(u_Emit.rgb * texcol.rgb, 0);
+    // gl_FragColor.a = 1.0;
 }
 `;
 }
@@ -416,7 +418,7 @@ export class MeshRenderer {
         private material: Material,
         public modelMatrix: mat4,
         private textureMap: Map<number, Texture>,
-        private isSkybox: boolean,
+        public isSkybox: boolean,
         private directionalLight: TotemLight | undefined,
         private hFog: TotemHFog | undefined,
     ) {
@@ -429,7 +431,7 @@ export class MeshRenderer {
         viewerInput: Viewer.ViewerRenderInput,
         sampler: GfxSampler,
     ) {
-        if (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN)) {
+        if (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN) || this.material.color.a === 0.0) {
             return;
         }
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
@@ -441,6 +443,7 @@ export class MeshRenderer {
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         const textureMapping = new TextureMapping();
         const texture = this.textureMap.get(this.material.texture_id);
+        const textureAlpha = texture ? texture.alphaLevel : 0;
         textureMapping.gfxTexture = texture ? texture.texture : null;
         textureMapping.gfxSampler = sampler;
         const reflectionMapping = new TextureMapping();
@@ -467,7 +470,9 @@ export class MeshRenderer {
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendColor;
             this.megaStateFlags.depthWrite = false;
         }
-        else if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDALPHA)) {
+        else if (this.material.color.a < 1.0 || textureAlpha >= 1) {
+            // other material flags seem to be unreliable and erratic
+            // i.e. there are materials with no flags set who are still transparent?
             renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendAlpha;
             this.megaStateFlags.depthWrite = false;
@@ -500,9 +505,9 @@ export class MeshRenderer {
             offs2 += fillVec3v(d2, offs2, vec3Scratch);
         }
         else {
-            offs2 += fillVec3v(d2, offs2, [0, 1, 0]);
-            offs2 += fillVec3v(d2, offs2, [0, 0, 0]);
-            offs2 += fillVec3v(d2, offs2, [1, 1, 1]);
+            offs2 += fillVec4(d2, offs2, 0, 1, 0);
+            offs2 += fillVec4(d2, offs2, 0, 0, 0);
+            offs2 += fillVec4(d2, offs2, 1, 1, 1);
         }
         if (this.hFog !== undefined) {
             mat4.identity(modelViewScratch);
@@ -573,6 +578,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     public renderHelper: GfxRenderHelper;
     public sampler: GfxSampler;
+    public warpSampler: GfxSampler;
     // mesh info
     private meshes = new Map<number, MeshInfo>();
     private otherMeshes: VertexData[] = [];
@@ -595,6 +601,15 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.sampler = device.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0, maxLOD: 0,
+        });
+
+        this.warpSampler = device.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
@@ -666,7 +681,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
         for (const instance of this.meshRenderers) {
-            instance.prepareToRender(renderInstManager, viewerInput, this.sampler);
+            instance.prepareToRender(renderInstManager, viewerInput, instance.isSkybox ? this.warpSampler : this.sampler);
         }
         renderInstManager.popTemplateRenderInst();
 
@@ -728,7 +743,6 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
 
     addSurface(id: number, surf: SurfaceObject) {
         let builders = new Map<number, VertexDataBuilder>();
-
         for (let i = 0; i < surf.surfaces.length; i++) {
             let material = surf.surfaces[i].materialanim_id;
             let builder = builders.get(material);
