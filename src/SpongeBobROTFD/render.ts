@@ -111,10 +111,10 @@ void main() {
         u_TexTransform.mz.xyz
     );
     v_WorldPosition = Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0));
-    v_ClipPosition = Mul(_Mat4x4(u_View), vec4(a_Position, 1.0));
-    gl_Position = Mul(u_Projection, v_ClipPosition);
     v_WorldNormal = normalize(Mul(_Mat4x4(u_ModelView), vec4(a_Normal, 0.0)).xyz);
+    v_ClipPosition = Mul(_Mat4x4(u_View), vec4(a_Position, 1.0));
     v_ClipNormal = normalize(Mul(_Mat4x4(u_View), vec4(a_Normal, 0.0)).xyz);
+    gl_Position = Mul(u_Projection, v_ClipPosition);
     v_TexCoord = (vec3(a_TexCoord.xy, 1.0) * realmat).xy;
 }
 `;
@@ -138,7 +138,7 @@ void main() {
     lightColor += reflectionColor.rgb;
     // OMNI LIGHTS
     for (int i = 0; i < 4; i++) {
-
+        if (u_OmniColor[i].a > 0.0) {
             vec3 diff = u_OmniPosition[i].xyz - v_WorldPosition.xyz;
             vec3 lightDirection = normalize(diff);
             float minrange = u_OmniAttenuation[i][0];
@@ -147,13 +147,12 @@ void main() {
             vec4 color = u_OmniColor[i];
             float att = clamp(maxrange/dist, 0.0, 1.0);
             lightColor += color.rgb * att * max(0.0, dot(v_WorldNormal, lightDirection));
-
+        }
     }
     // COLOR
     vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     vec4 surfacecol = texcol * u_Color;
     gl_FragColor += surfacecol * vec4(lightColor, 1.0);
-
     if (u_HFogColor.a > 0.0) {
         vec4 fogPos = Mul(u_HFogTransform, v_WorldPosition);
         // float viewDot = abs(dot(v_ClipNormal, vec3(0.0, 0.0, 1.0)));
@@ -161,9 +160,7 @@ void main() {
         float fogAmount = clamp(1.0 - fogPos.y, 0.0, 1.0);
         gl_FragColor.rgb = mix(gl_FragColor.rgb, u_HFogColor.rgb, fogAmount * u_HFogColor.a);
     }
-
     gl_FragColor += vec4(u_Emit.rgb * texcol.rgb, 0);
-    // gl_FragColor.a = 1.0;
 }
 `;
 }
