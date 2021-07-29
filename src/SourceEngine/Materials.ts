@@ -7,7 +7,7 @@ import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -1460,8 +1460,6 @@ void mainPS() {
 
     vec3 t_DiffuseLighting = vec3(0.0);
 
-    vec3 t_DeferredLightmapOutput = vec3(0.0);
-
 #ifdef USE_LIGHTMAP
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
@@ -1510,9 +1508,6 @@ void mainPS() {
 #endif
 
     t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * t_DiffuseLightingScale;
-
-    // Decals can't get bumpmapping, I don't believe...
-    t_DeferredLightmapOutput.rgb = t_LightmapColor0.rgb;
 #else
     // Diffuse lighting comes from vertex shader.
     t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
@@ -3631,6 +3626,10 @@ function gammaToLinear(v: number): number {
 
 // Convert from linear light to runtime lightmap storage light (currently gamma 2.2).
 function linearToLightmap(v: number): number {
+    // Quantize v to 1/1024.
+    // TODO(jstpierre): This causes too many issues with banding / gamma correction right now.
+    // v = Math.round(v * 1024.0) / 1024.0;
+
     const gamma = 2.2;
     // 0.5 factor here is overbright.
     return Math.pow(v, 1.0 / gamma) * 0.5;
@@ -3639,9 +3638,9 @@ function linearToLightmap(v: number): number {
 function lightmapPackRuntime(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
     for (let i = 0; i < texelCount; i++) {
         const sr = linearToLightmap(src[srcOffs++]), sg = linearToLightmap(src[srcOffs++]), sb = linearToLightmap(src[srcOffs++]);
-        dst[dstOffs++] = (sr * 255.0) | 0;
-        dst[dstOffs++] = (sg * 255.0) | 0;
-        dst[dstOffs++] = (sb * 255.0) | 0;
+        dst[dstOffs++] = Math.round(sr * 255.0);
+        dst[dstOffs++] = Math.round(sg * 255.0);
+        dst[dstOffs++] = Math.round(sb * 255.0);
         dstOffs++;
     }
 }
