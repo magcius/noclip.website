@@ -250,7 +250,7 @@ export class TranslucentPlaneRenderer {
         this.gfxProgram = null;
 
         const vertexData = new Float32Array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5]);
-        const indices = new Uint8Array([0, 1, 2, 0, 2, 3]);
+        const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
