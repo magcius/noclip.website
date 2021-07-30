@@ -1171,8 +1171,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 tryStartBck(this, `Wait`);
             }
 
-            const speed = deltaTimeFrames * calcNerveValue(this, 0, 200, 15);
-            moveCoordAndFollowTrans(this, speed);
+            const speed = calcNerveValue(this, 0, 200, 15);
+            moveCoordAndFollowTrans(this, speed * deltaTimeFrames);
 
             getRailDirection(this.direction, this);
             if (this.isGreaterEqualStepAndRandom(500))
@@ -1182,8 +1182,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 startBck(this, `Spin`);
 
             const duration = getBckFrameMax(this);
-            const speed = deltaTimeFrames * calcNerveValue(this, duration, 15, 0);
-            moveCoordAndFollowTrans(this, speed);
+            const speed = calcNerveValue(this, duration, 15, 0);
+            moveCoordAndFollowTrans(this, speed * deltaTimeFrames);
             if (isBckStopped(this))
                 this.setNerve(TicoRailNrv.Wait);
         } else if (currentNerve === TicoRailNrv.TalkCancel) {
@@ -1427,7 +1427,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
             if (isFirstStep(this))
                 onCalcShadow(this);
 
-            moveCoordAndFollowTrans(this, 5.0);
+            moveCoordAndFollowTrans(this, 5.0 * deltaTimeFrames);
 
             const currentRailPointNo = getCurrentRailPointNo(this);
             if (this.currentRailPointNo !== currentRailPointNo) {

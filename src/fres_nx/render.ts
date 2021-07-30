@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
@@ -24,14 +24,18 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
         const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
-        if (bntxFile !== undefined) {
-            const bntx = BNTX.parse(bntxFile.buffer);
-            this.addTextures(device, bntx.textures);
-        }
+        if (bntxFile !== undefined)
+            this.addBNTXFile(device, bntxFile.buffer);
+    }
+
+    public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
+        const bntx = BNTX.parse(buffer);
+        this.addTextures(device, bntx.textures);
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
@@ -770,10 +774,12 @@ export class FMDLRenderer {
     public name: string;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public textureHolder: BRTITextureHolder, public fmdlData: FMDLData) {
-        this.name = fmdlData.fmdl.name;
+        const fmdl = this.fmdlData.fmdl;
+        this.name = fmdl.name;
 
-        for (let i = 0; i < this.fmdlData.fmdl.fmat.length; i++)
-            this.fmatInst.push(new FMATInstance(device, cache, this.textureHolder, this.fmdlData.fmdl.fmat[i]));
+        for (let i = 0; i < fmdl.fmat.length; i++)
+            this.fmatInst.push(new FMATInstance(device, cache, this.textureHolder, fmdl.fmat[i]));
+
         for (let i = 0; i < this.fmdlData.fshpData.length; i++) {
             const fshpData = this.fmdlData.fshpData[i];
             const fmatInstance = this.fmatInst[fshpData.fshp.materialIndex];

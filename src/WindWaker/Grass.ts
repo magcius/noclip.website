@@ -601,7 +601,8 @@ export class TreePacket {
         const y = globals.scnPlay.bgS.GroundCross(chk);
         if (y > -Infinity) {
             treeData.pos[1] = y;
-            globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx).getNormal(scratchVec3a);
+            const pla = globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx)
+            vec3.copy(scratchVec3a, pla.n);
         } else {
             treeData.pos[1] = y;
             vec3.set(scratchVec3a, 0, 1, 0);

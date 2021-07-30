@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis, getMatrixAxisX } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
@@ -829,10 +829,10 @@ export class OrbitCameraController implements CameraController {
             const kSpringZ = 0.1;
             this.z += zTargetDelta * kSpringZ;
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
+            getMatrixAxisX(scratchVec3a, this.camera.worldMatrix);
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel);
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
+            getMatrixAxisY(scratchVec3a, this.camera.worldMatrix);
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel);
 
             const eyePos = scratchVec3a;
@@ -862,9 +862,9 @@ export class OrthoCameraController implements CameraController {
 
     public x: number = -Math.PI / 2;
     public y: number = 2;
-    public z: number = 200;
+    public z: number = -200;
+    public zTarget: number = -200;
     public orbitSpeed: number = -0.05;
-    public zVel: number = 0;
     public xTarget: number = this.x;
     public yTarget: number = this.y;
 
@@ -872,13 +872,16 @@ export class OrthoCameraController implements CameraController {
     public txVel: number = 0;
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
-    private farPlane = 100000;
+    private farPlane = 500000;
     private nearPlane = -this.farPlane;
+
+    private sceneMoveSpeedMult = 1;
 
     constructor() {
     }
 
     public setSceneMoveSpeedMult(v: number): void {
+        this.sceneMoveSpeedMult = v;
     }
 
     public cameraUpdateForced(): void {
@@ -939,8 +942,8 @@ export class OrthoCameraController implements CameraController {
 
         // Get new velocities from inputs.
         if (!!(inputManager.buttons & 4)) {
-            this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
-            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
+            this.txVel += inputManager.dx * (-10 - Math.min(-this.z, 0.01)) / -5000;
+            this.tyVel += inputManager.dy * (-10 - Math.min(-this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
             this.xTarget += inputManager.dx / 200 * invertXMult;
             this.yTarget += inputManager.dy / 200 * invertYMult;
@@ -948,12 +951,15 @@ export class OrthoCameraController implements CameraController {
             this.xTarget += this.orbitSpeed * 1/25;
         }
 
-        let zAccel = inputManager.dz * -1;
+        let zTargetAdjAmt = inputManager.dz * 80.0;
         if (inputManager.isKeyDown('KeyQ'))
-            zAccel += 1.0;
+            zTargetAdjAmt -= 80.0;
         if (inputManager.isKeyDown('KeyE'))
-            zAccel -= 1.0;
-        this.zVel += zAccel;
+            zTargetAdjAmt += 80.0;
+        this.zTarget += zTargetAdjAmt * this.sceneMoveSpeedMult;
+        if (this.zTarget > -10)
+            this.zTarget = -10;
+        let zTargetDelta = this.zTarget - this.z;
 
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
         if (!isShiftPressed) {
@@ -985,7 +991,7 @@ export class OrthoCameraController implements CameraController {
         this.xTarget = this.xTarget % MathConstants.TAU;
         this.yTarget = this.yTarget % MathConstants.TAU;
 
-        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || zTargetDelta !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             this.x = lerpAngle(this.x, this.xTarget, 0.1);
             this.y = lerpAngle(this.y, this.yTarget, 0.1);
@@ -995,19 +1001,14 @@ export class OrthoCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += this.zVel;
-            if (zAccel === 0)
-                this.zVel *= drag * 0.98;
-            if (this.z < 1) {
-                this.z = 1;
-                this.zVel = 0;
-            }
+            const kSpringZ = 0.1;
+            this.z += zTargetDelta * kSpringZ;
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * -this.z);
+            getMatrixAxisX(scratchVec3a, this.camera.worldMatrix);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * this.z);
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * -this.z);
+            getMatrixAxisY(scratchVec3a, this.camera.worldMatrix);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * this.z);
 
             this.forceUpdate = false;
         }
@@ -1019,7 +1020,7 @@ export class OrthoCameraController implements CameraController {
         vec3.add(eyePos, eyePos, this.translation);
         mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, Vec3UnitY);
         mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
-        this.camera.setOrthographic(this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
+        this.camera.setOrthographic(-this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
         this.camera.worldMatrixUpdated();
 
         return updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;

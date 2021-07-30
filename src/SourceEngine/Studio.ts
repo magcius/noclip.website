@@ -10,9 +10,10 @@ import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { bitsAsFloat32, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
+import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -69,6 +70,27 @@ export function computeModelMatrixPosQAngle(dst: mat4, pos: ReadonlyVec3, qangle
     const yaw =   qangle[1] * MathConstants.DEG_TO_RAD;
     const roll =  qangle[2] * MathConstants.DEG_TO_RAD;
     computeModelMatrixPosRotInternal(dst, pitch, yaw, roll, pos);
+}
+
+export function computePosQAngleModelMatrix(pos: vec3 | null, qangle: vec3 | null, m: ReadonlyMat4): void {
+    if (pos !== null)
+        getMatrixTranslation(pos, m);
+
+    if (qangle !== null) {
+        const xyDist = Math.hypot(m[0], m[1]);
+        qangle[0] = Math.atan2(-m[2], xyDist);
+
+        if (xyDist > 0.001) {
+            qangle[1] = Math.atan2(m[1], m[0]);
+            qangle[2] = Math.atan2(m[6], m[10]);
+        } else {
+            qangle[1] = Math.atan2(-m[4], m[5]);
+            qangle[2] = 0;
+        }
+
+        // QAngle is in degrees.
+        vec3.scale(qangle, qangle, MathConstants.RAD_TO_DEG);
+    }
 }
 
 function computeModelMatrixPosRadianEuler(dst: mat4, pos: ReadonlyVec3, radianEuler: ReadonlyVec3): void {
@@ -526,7 +548,8 @@ export class StudioModelData {
 
     public bodyPartData: StudioModelBodyPartData[] = [];
     public checksum: number;
-    public bbox: AABB;
+    public hullBB: AABB;
+    public viewBB: AABB;
     public bones: Bone[] = [];
     public illumPosition = vec3.create();
     public anim: AnimDesc[] = [];
@@ -568,14 +591,17 @@ export class StudioModelData {
         const moveHullMaxX = mdlView.getFloat32(0x74, true);
         const moveHullMaxY = mdlView.getFloat32(0x78, true);
         const moveHullMaxZ = mdlView.getFloat32(0x7C, true);
+        this.hullBB = new AABB(moveHullMinX, moveHullMinY, moveHullMinZ, moveHullMaxX, moveHullMaxY, moveHullMaxZ);
 
-        const bboxMinX = mdlView.getFloat32(0x80, true);
-        const bboxMinY = mdlView.getFloat32(0x84, true);
-        const bboxMinZ = mdlView.getFloat32(0x88, true);
-        const bboxMaxX = mdlView.getFloat32(0x8C, true);
-        const bboxMaxY = mdlView.getFloat32(0x90, true);
-        const bboxMaxZ = mdlView.getFloat32(0x94, true);
-        this.bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+        const viewBBoxMinX = mdlView.getFloat32(0x80, true);
+        const viewBBoxMinY = mdlView.getFloat32(0x84, true);
+        const viewBBoxMinZ = mdlView.getFloat32(0x88, true);
+        const viewBBoxMaxX = mdlView.getFloat32(0x8C, true);
+        const viewBBoxMaxY = mdlView.getFloat32(0x90, true);
+        const viewBBoxMaxZ = mdlView.getFloat32(0x94, true);
+        this.viewBB = new AABB(viewBBoxMinX, viewBBoxMinY, viewBBoxMinZ, viewBBoxMaxX, viewBBoxMaxY, viewBBoxMaxZ);
+        if (this.viewBB.isEmpty())
+            this.viewBB.copy(this.hullBB);
 
         const flags: StudioModelFlags = mdlView.getUint32(0x98, true);
         const isStaticProp = !!(flags & StudioModelFlags.STATIC_PROP);
@@ -1551,12 +1577,13 @@ class StudioModelMeshInstance {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[]) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[], depth: number) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, template, modelMatrix);
+        this.materialInstance.setOnRenderInst(renderContext, template);
+        this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
 
         // Bind color mesh if we have a per-instance version.
         if (this.inputStateWithColorMesh !== null)
@@ -1573,6 +1600,7 @@ class StudioModelMeshInstance {
                 this.materialInstance.setOnRenderInstSkinningParams(renderInst, boneMatrix, stripData.hardwareBoneTable);
                 renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
                 renderInst.debug = this;
+                renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
                 this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);
             }
         }
@@ -1599,9 +1627,9 @@ class StudioModelLODInstance {
             this.meshInstance[i].movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[]) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[], depth: number) {
         for (let i = 0; i < this.meshInstance.length; i++)
-            this.meshInstance[i].prepareToRender(renderContext, renderInstManager, modelMatrix, boneMatrix);
+            this.meshInstance[i].prepareToRender(renderContext, renderInstManager, modelMatrix, boneMatrix, depth);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1671,6 +1699,7 @@ function setupPoseFinalize(worldFromPoseMatrix: mat4[], boneMatrix: ReadonlyMat4
     }
 }
 
+const scratchAABB = new AABB();
 export class StudioModelInstance {
     public visible: boolean = true;
     // Pose data
@@ -1753,8 +1782,15 @@ export class StudioModelInstance {
         if (!this.visible)
             return;
 
+        scratchAABB.transform(this.modelData.viewBB, this.modelMatrix);
+        if (!renderContext.currentView.frustum.contains(scratchAABB))
+            return;
+
+        scratchAABB.centerPoint(scratchVec3);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
+
         const lodIndex = this.getLODModelIndex(renderContext);
-        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix);
+        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix, depth);
     }
 
     public destroy(device: GfxDevice): void {

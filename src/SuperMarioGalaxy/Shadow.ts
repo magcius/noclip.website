@@ -1532,31 +1532,43 @@ export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | 
     getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
 }
 
+export function setShadowVolumeEndDropOffset(actor: LiveActor, name: string | null, v: number): void {
+    getShadowVolumeDrawer(actor, name).endDrawShapeOffset = v;
+}
+
 export function setShadowVolumeBoxSize(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
     vec3.copy(getShadowVolumeBox(actor, name).size, v);
 }
 
-export function isExistShadow(actor: LiveActor, name: string | null): boolean {
+export function onShadowVolumeCutDropLength(actor: LiveActor, name: string | null = null): void {
+    getShadowVolumeDrawer(actor, name).cutDropShadow = true;
+}
+
+export function isExistShadow(actor: LiveActor, name: string | null = null): boolean {
     if (actor.shadowControllerList === null)
         return false;
     return actor.shadowControllerList.getController(name) !== null;
 }
 
-export function isShadowProjected(actor: LiveActor, name: string | null): boolean {
+export function isShadowProjected(actor: LiveActor, name: string | null = null): boolean {
     if (actor.shadowControllerList === null)
         return false;
     return actor.shadowControllerList.getController(name)!.isProjected;
 }
 
-export function getShadowProjectionPos(actor: LiveActor, name: string | null): ReadonlyVec3 {
+export function getShadowProjectionPos(actor: LiveActor, name: string | null = null): ReadonlyVec3 {
     return actor.shadowControllerList!.getController(name)!.getProjectionPos();
 }
 
-export function getShadowProjectedSensor(actor: LiveActor, name: string | null): HitSensor {
+export function getShadowProjectionNormal(actor: LiveActor, name: string | null = null): ReadonlyVec3 {
+    return actor.shadowControllerList!.getController(name)!.getProjectionNormal();
+}
+
+export function getShadowProjectedSensor(actor: LiveActor, name: string | null = null): HitSensor {
     return actor.shadowControllerList!.getController(name)!.triHitSensor!;
 }
 
-export function getShadowProjectionLength(actor: LiveActor, name: string | null): number | null {
+export function getShadowProjectionLength(actor: LiveActor, name: string | null = null): number | null {
     const controller = actor.shadowControllerList!.getController(name)!;
     if (controller.isProjected)
         return controller.getProjectionLength();

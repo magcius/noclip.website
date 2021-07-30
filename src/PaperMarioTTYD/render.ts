@@ -134,9 +134,9 @@ class MaterialInstance {
             return MaterialInstance.translateSampler(device, cache, sampler);
         });
 
-        this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
+        this.isTranslucent = material.materialLayer === MaterialLayer.Blend;
 
-        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
+        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.AlphaTest;
     }
 
     public setMaterialHacks(materialHacks: GXMaterialHacks): void {
@@ -145,15 +145,15 @@ class MaterialInstance {
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
         switch (materialLayer) {
-        case MaterialLayer.OPAQUE:
+        case MaterialLayer.Opaque:
             return GfxRendererLayer.OPAQUE;
-        case MaterialLayer.OPAQUE_PUNCHTHROUGH:
+        case MaterialLayer.OpaquePunchthrough:
             return GfxRendererLayer.OPAQUE + 1;
-        case MaterialLayer.ALPHA_TEST:
+        case MaterialLayer.AlphaTest:
             return GfxRendererLayer.ALPHA_TEST;
-        case MaterialLayer.ALPHA_TEST_PUNCHTHROUGH:
+        case MaterialLayer.AlphaTestPunchthrough:
             return GfxRendererLayer.ALPHA_TEST + 1;
-        case MaterialLayer.BLEND:
+        case MaterialLayer.Blend:
             return GfxRendererLayer.TRANSLUCENT;
         }
     }
@@ -248,13 +248,13 @@ class BatchInstance {
 }
 
 function fillDebugColorFromCollisionFlags(dst: Color, flags: CollisionFlags): void {
-    if (!!(flags & CollisionFlags.WALK_SLOW)) {
+    if (!!(flags & CollisionFlags.WalkSlow)) {
         colorFromRGBA(dst, 0.0, 0.0, 1.0);
-    } else if (!!(flags & CollisionFlags.HAZARD_RESPAWN_ENABLED)) {
+    } else if (!!(flags & CollisionFlags.HazardRespawnEnabled)) {
         colorFromRGBA(dst, 0.0, 1.0, 0.0);
     } else if (!!(flags & 0x200000)) {
         colorFromRGBA(dst, 1.0, 0.0, 1.0);
-    } else if (flags !== 0) {
+    } else if (flags !== CollisionFlags.None) {
         colorFromRGBA(dst, 1.0, 0.0, 0.0);
     } else {
         colorFromRGBA(dst, 1.0, 1.0, 1.0);
@@ -282,7 +282,7 @@ class NodeInstance {
 
     constructor(public node: SceneGraphNode, parentNamePath: string, private childIndex: number) {
         this.namePath = `${parentNamePath}/${node.nameStr}`;
-        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IS_DECAL);
+        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IsDecal);
         this.megaStateFlags = Object.assign({}, this.node.renderFlags);
     }
 
@@ -334,9 +334,9 @@ class NodeInstance {
                 const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, viewerInput.camera.clipSpaceNearZ);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, camera.clipSpaceNearZ);
                 sceneParams.u_Projection[10] *= depthBias;
-                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
                 fillSceneParamsData(d, offs, sceneParams);
             }
         }
@@ -367,7 +367,7 @@ class NodeInstance {
             samplers: [],
             texMtx: [],
             matColorReg: White,
-            materialLayer: MaterialLayer.BLEND,
+            materialLayer: MaterialLayer.Blend,
             name: "Collision",
             gxMaterial: mb.finish(),
         };

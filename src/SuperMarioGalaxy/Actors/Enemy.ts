@@ -2920,7 +2920,7 @@ export class EyeBeamer extends LiveActor<EyeBeamerNrv> {
         this.beamBloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, 'EyeBeamerBeamBloom', 'EyeBeamerBeamBloom', this.partsModelMtx, DrawBufferType.BloomModel, -2, -2);
         this.beamModel = new ModelObj(zoneAndLayer, sceneObjHolder, 'EyeBeamerBeam', 'EyeBeamerBeam', this.partsModelMtx, DrawBufferType.IndirectMapObj, -2, -2);
         startBtk(this.beamModel, 'EyeBeamerBeam');
-        connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObjStrongLight, DrawType.EyeBeamer);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObjStrongLight, DrawType.VolumeModel);
 
         quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
         quat.copy(this.initPoseQuat, this.poseQuat);
@@ -3457,9 +3457,10 @@ export class Mogu extends LiveActor<MoguNrv> {
     }
 }
 
+const enum NokonokoLandType { Normal, Fast }
 const enum NokonokoLandNrv { Walk, LookAround, TurnStart, Turn, TurnEnd }
 export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
-    private type: number;
+    private type: NokonokoLandType;
     private effectAppearTrs = vec3.create();
     private pointPassChecker: MapPartsRailPointPassChecker;
     private poseQuat = quat.create();
@@ -3469,7 +3470,7 @@ export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        this.type = fallback(getJMapInfoArg0(infoIter), 0);
+        this.type = fallback(getJMapInfoArg0(infoIter), NokonokoLandType.Normal);
         startBrk(this, 'NokonokoLand');
         setBrkFrameAndStop(this, this.type);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -3540,16 +3541,14 @@ export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NokonokoLandNrv, deltaTimeFrames: number): void {
         if (currentNerve === NokonokoLandNrv.Walk) {
             if (isFirstStep(this)) {
-                if (this.type === 1) {
+                if (this.type === NokonokoLandType.Fast)
                     this.startBckBtp('WalkFastWait', 'WalkWait');
-                    setRailCoordSpeed(this, 3.2);
-                } else {
+                else
                     this.startBckBtp('WalkWait');
-                    setRailCoordSpeed(this, 1.6);
-                }
             }
 
-            moveCoordAndFollowTrans(this);
+            const speed = (this.type === NokonokoLandType.Fast ? 3.2 : 1.6);
+            moveCoordAndFollowTrans(this, speed * deltaTimeFrames);
             getRailDirection(scratchVec3a, this);
             vec3.negate(scratchVec3b, this.gravityVector);
             makeQuatFromVec(this.poseQuat, scratchVec3a, scratchVec3b);

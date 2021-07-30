@@ -64,6 +64,8 @@ import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrike
 import * as Scenes_CounterStrikeGO from './SourceEngine/Scenes_CounterStrikeGO';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM';
+import * as Scenes_HalfLife2Ep1 from './SourceEngine/Scenes_HalfLife2Ep1';
+import * as Scenes_HalfLife2Ep2 from './SourceEngine/Scenes_HalfLife2Ep2';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_Portal2 from './SourceEngine/Scenes_Portal2';
@@ -72,6 +74,7 @@ import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
+import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes';
 
 import * as Scenes_FZEROGX from './FZEROGX/Scenes_FZEROGX';
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
@@ -158,6 +161,7 @@ const sceneGroups = [
     Scenes_HalfLife2DM.sceneGroup,
     Scenes_TeamFortress2.sceneGroup,
     Scenes_Portal.sceneGroup,
+    Scenes_Portal2.sceneGroup,
     "Experimental",
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
@@ -179,8 +183,10 @@ const sceneGroups = [
     Scenes_TheWitness.sceneGroup,
     Scenes_WiiBanner.sceneGroup,
     Scenes_Zelda_OcarinaOfTime_Beta.sceneGroup,
-    Scenes_Portal2.sceneGroup,
     Scenes_CounterStrikeGO.sceneGroup,
+    Scenes_HalfLife2Ep1.sceneGroup,
+    Scenes_HalfLife2Ep2.sceneGroup,
+    Scenes_MarioKart8Deluxe.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {

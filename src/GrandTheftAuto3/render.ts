@@ -248,10 +248,10 @@ export class SkyRenderer extends BaseRenderer {
         super(skyProgram, atlas);
         // fullscreen quad
         const vbuf = new Float32Array([
-            -1, -1, 1,
-            -1,  1, 1,
-             1,  1, 1,
-             1, -1, 1,
+            -1, -1, -1,
+            -1,  1, -1,
+             1,  1, -1,
+             1, -1, -1,
         ]);
         const ibuf = new Uint32Array([0,1,2,0,2,3]);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
@@ -629,8 +629,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         lerpColorSet(this.currentColors, cs1, cs2, t % 1);
 
         viewerInput.camera.setClipPlanes(1);
-        this.renderHelper.pushTemplateRenderInst();
-        const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+        const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16 + 2 * 12 + 6 * 4 + 4);
@@ -656,7 +655,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }

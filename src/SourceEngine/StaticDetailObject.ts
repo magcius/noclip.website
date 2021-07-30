@@ -13,7 +13,7 @@ import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
 import BitMap from "../BitMap";
-import { BSPFile, BSPLeaf } from "./BSPFile";
+import { BSPFile } from "./BSPFile";
 import { AABB } from "../Geometry";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
@@ -354,7 +354,8 @@ export class DetailPropLeafRenderer {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         mat4.identity(scratchMatrix);
 
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, scratchMatrix);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst);
+        this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMatrix);
 
         const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.centerPoint);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
@@ -563,7 +564,7 @@ export class StaticPropRenderer {
 
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         scaleMatrix(scratchMatrix, scratchMatrix, this.staticProp.scale);
-        this.bbox.transform(modelData.bbox, scratchMatrix);
+        this.bbox.transform(modelData.viewBB, scratchMatrix);
 
         if (this.staticProp.lightingOrigin !== null)
             vec3.copy(this.lightingOrigin, this.staticProp.lightingOrigin);

@@ -50,10 +50,12 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     const blockHeightLog2_2 = getBlockHeightLog2(height / bh);
 
     // TODO(jstpierre): Support images where this isn't true.
+    /*
     if (blockHeightLog2 !== blockHeightLog2_2)
         return null;
 
     assert(blockHeightLog2 === blockHeightLog2_2);
+    */
 
     const textureDataSize = view.getUint32(offs + 0x50, littleEndian);
     const alignment = view.getUint32(offs + 0x54, littleEndian);

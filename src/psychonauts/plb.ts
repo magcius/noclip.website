@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataStream } from "./DataStream";
 import { assert } from "../util";
 import { AABB } from "../Geometry";
-import { vec3 } from "gl-matrix";
+import { ReadonlyVec2, vec2, vec3, vec4 } from "gl-matrix";
 import { normalizeTextureName } from "./ppf";
 import { GfxTopology } from "../gfx/helpers/TopologyHelpers";
 
@@ -12,12 +12,22 @@ export interface EScene {
     domain: EDomain;
 }
 
+function readEVec2(stream: DataStream): vec2 {
+    return vec2.fromValues(stream.readFloat32(), stream.readFloat32());
+}
+
 function readEVec3(stream: DataStream): vec3 {
     return vec3.fromValues(stream.readFloat32(), stream.readFloat32(), stream.readFloat32());
 }
 
+function readEVec4(stream: DataStream): vec4 {
+    return vec4.fromValues(stream.readFloat32(), stream.readFloat32(), stream.readFloat32(), stream.readFloat32());
+}
+
 function readEBox3(stream: DataStream): AABB {
-    return new AABB(stream.readFloat32(), stream.readFloat32(), stream.readFloat32(), stream.readFloat32(), stream.readFloat32(), stream.readFloat32());
+    const min = readEVec3(stream);
+    const max = readEVec3(stream);
+    return new AABB(min[0], min[1], min[2], max[0], max[1], max[2]);
 }
 
 export interface EModelTriggerOBB {
@@ -126,11 +136,25 @@ function readESkeleton(stream: DataStream): ESkeleton {
     return { name, joints };
 }
 
+export const enum MaterialFlags {
+    Alpha           = 0x00000001,
+    Skinned         = 0x00000004,
+    Bumpmap         = 0x00000008,
+    DoubleSided     = 0x00000010,
+    Lightmap        = 0x00000020,
+    AdditiveBlended = 0x00000200,
+    BinaryAlpha     = 0x00000400,
+    Decal           = 0x00000800,
+    Distortion      = 0x00010000,
+    Tristrip        = 0x01000000,
+    DetailTexture   = 0x40000000,
+}
+
 export interface EMeshFrag {
+    materialFlags: MaterialFlags;
     bbox: AABB;
     textureIds: number[];
-    iVertCount: number;
-    iPolyCount: number;
+    texCoordTransVel: ReadonlyVec2;
     streamPosNrm: ArrayBufferSlice;
     streamColor: ArrayBufferSlice | null;
     streamUVCount: number;
@@ -138,63 +162,59 @@ export interface EMeshFrag {
     streamUV: ArrayBufferSlice | null;
     streamIdx: ArrayBufferSlice;
     topology: GfxTopology;
+    iVertCount: number;
+    iPolyCount: number;
 }
 
 function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
+    // This is actually EModelFrag...
+
     const bbox = readEBox3(stream);
 
-    let flags1: number = 0;
+    let modelFlags: number = 0;
     if (version > 0x13D)
-        flags1 = stream.readUint32();
+        modelFlags = stream.readUint32();
 
-    const flags2 = stream.readUint32();
-    const flags3 = stream.readUint32();
+    const materialFlags = stream.readUint32();
+    const unk00 = stream.readUint32(); // unused
 
-    const field_59 = stream.readUint8();
-    const blend_flags = stream.readUint8();
-
-    const unk_tranform0 = stream.readFloat32();
-    const unk_tranform1 = stream.readFloat32();
-    const unk_tranform2 = stream.readFloat32();
-    const unk_tranform3 = stream.readFloat32();
+    const distantLOD = stream.readUint8();
+    const blendFlags = stream.readUint8();
+    const color = readEVec4(stream);
 
     const textureCount = stream.readUint32();
     const textureIds: number[] = [];
     for (let i = 0; i < textureCount; i++)
         textureIds.push(stream.readUint32());
 
-    if (flags2 & 0x20) {
-        const v87_0 = stream.readUint32();
-        const v87_1 = stream.readUint32();
-        if (v87_1 != 0xFFFFFFFF) {
+    if (!!(materialFlags & MaterialFlags.Lightmap)) {
+        const lightmap0TextureID = stream.readUint32();
+        const lightmap1TextureID = stream.readUint32();
+        if (lightmap1TextureID != 0xFFFFFFFF) {
             const switchLightName = stream.readStringStream_4b();
         }
     }
 
-    if (flags2 & 0x08) {
-        const txid_1 = stream.readUint32();
+    if (!!(materialFlags & MaterialFlags.Bumpmap)) {
+        const bumpmapTextureID = stream.readUint32();
     }
-    const txid_2 = stream.readUint32();
-    if (flags2 & 0x20000) {
+    const glossmapTextureID = stream.readUint32();
+    if (materialFlags & 0x20000) {
         const blinn_info_18 = stream.readFloat32();
-        const blinn_info_1C_0 = stream.readFloat32();
-        const blinn_info_1C_1 = stream.readFloat32();
-        const blinn_info_1C_2 = stream.readFloat32();
+        const blinn_info_1C = readEVec3(stream);
     }
-    const txid_reflection_map = stream.readUint32();
-    const blinn_info_04_0 = stream.readFloat32();
-    const blinn_info_04_1 = stream.readFloat32();
-    const blinn_info_04_2 = stream.readFloat32();
-    if (flags2 & 0x40000000) {
-        const txid_3 = stream.readUint32();
-        const field_50_0 = stream.readFloat32();
-        const field_50_1 = stream.readFloat32();
+    const reflectionTextureID = stream.readUint32();
+
+    const blinn_info_04 = readEVec3(stream);
+
+    if (!!(materialFlags & MaterialFlags.DetailTexture)) {
+        const detailTextureID = stream.readUint32();
+        const detailFactor = readEVec2(stream);
     }
 
-    const field_70 = stream.readFloat32();
-    const field_48_0 = stream.readFloat32();
-    const field_48_1 = stream.readFloat32();
-    const v96 = stream.readUint32();
+    const glareIntensity = stream.readFloat32();
+    const texCoordTransVel = readEVec2(stream);
+    const unk01 = stream.readUint32(); // unused
 
     const iVertCount = stream.readUint32();
     const streamPosNrm = stream.readSlice(0x10 * iVertCount);
@@ -224,7 +244,7 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
     // Tristrip
     let streamIdx: ArrayBufferSlice;
     let topology: GfxTopology;
-    if (flags2 & 0x1000000) {
+    if (!!(materialFlags & MaterialFlags.Tristrip)) {
         topology = GfxTopology.TRISTRIP;
         streamIdx = stream.readSlice(0x02 * (iPolyCount + 2));
     } else {
@@ -232,11 +252,17 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
         streamIdx = stream.readSlice(0x02 * (iPolyCount * 3));
     }
 
-    if (flags2 & 0x04) {
+    if (!!(materialFlags & MaterialFlags.Skinned)) {
+        // Denotes an animated / skinned stream.
         assert(false);
     }
 
-    return { bbox, textureIds, iVertCount, iPolyCount, streamPosNrm, streamColor, streamUVCount, uvCoordScale, streamUV, streamIdx, topology };
+    return {
+        materialFlags, bbox,
+        textureIds, texCoordTransVel,
+        streamPosNrm, streamColor, streamUVCount, uvCoordScale, streamUV, streamIdx,
+        iVertCount, iPolyCount, topology,
+     };
 }
 
 function readECollisionMesh(stream: DataStream): void {

@@ -124,7 +124,11 @@ class ValveKeyValueParser {
     }
 
     private num(start: string): string {
-        return this.run(/[0-9.]/, start);
+        const num = this.run(/[0-9.]/, start);
+        // numbers can have garbage at the end of them. this is ugly...
+        // shoutouts to materials/models/props_lab/printout_sheet.vmt which has a random letter "y" after a number
+        this.run(/[a-zA-Z]/, '');
+        return num;
     }
 
     private unquote(start: string): string {
@@ -143,6 +147,7 @@ class ValveKeyValueParser {
             return this.unquote(tok);
         else if (/[-0-9.]/.test(tok))
             return this.num(tok);
+        console.log(tok);
         debugger;
         throw "whoops";
     }
@@ -296,8 +301,7 @@ export interface BSPEntity {
     [k: string]: string;
 }
 
-export function parseEntitiesLump(buffer: ArrayBufferSlice): BSPEntity[] {
-    const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
+export function parseEntitiesLump(str: string): BSPEntity[] {
     const p = new ValveKeyValueParser(str);
     const entities: BSPEntity[] = [];
     while (p.hastok()) {

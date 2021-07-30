@@ -124,6 +124,24 @@ function ctz(n: number): number {
     return i;
 }
 
+function getAddrBlockLinear(x: number, y: number, w: number, bpp: number, blockHeight: number, baseAddr: number = 0): number {
+    const widthInGOBs = (((w * bpp) + 63) / 64) | 0;
+    let gobAddr = baseAddr;
+
+    gobAddr += ((y / (8 * blockHeight)) | 0) * 512 * blockHeight * widthInGOBs;
+    gobAddr += ((x * bpp / 64) | 0) * 512 * blockHeight;
+    gobAddr += ((y % (8 * blockHeight) / 8) | 0) * 512;
+
+    x *= bpp;
+    let addr = gobAddr;
+    addr += (((x % 64) / 32) | 0) * 256;
+    addr += (((y % 8) / 2) | 0) * 64;
+    addr += (((x % 32) / 16) | 0) * 32;
+    addr += (((y % 2) / 16) | 0);
+    addr += (x % 16);
+    return addr;
+}
+
 // https://github.com/gdkchan/BnTxx/blob/master/BnTxx/BlockLinearSwizzle.cs
 // TODO(jstpierre): Integrate the proper algorithm from Yuzu
 export function deswizzle(swizzledSurface: SwizzledSurface): Uint8Array {
@@ -163,6 +181,8 @@ export function deswizzle(swizzledSurface: SwizzledSurface): Uint8Array {
             p += ((nx & 0x0F) >>> 0) << 0;
 
             const srcOffs = p;
+            // const srcOffs = getAddrBlockLinear(x, y, widthInBlocks, bpp, blockHeight);
+
             const dstOffs = ((y * widthInBlocks) + x) * bpp;
             memcpy(dst, dstOffs, src, srcOffs, bpp);
         }

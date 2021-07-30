@@ -6,8 +6,8 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, Gfx
 import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
+import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -17,9 +17,9 @@ import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA,
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 
 //#region Base Classes
-const scratchVec4 = vec4.create();
 const scratchColor = colorNewCopy(White);
 
 export const enum StaticLightingMode {
@@ -38,14 +38,24 @@ export const enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     FramebufferDepth = `framebuffer-depth`,
     WaterReflection  = `water-reflection`,
-    DeferredLightmap = `deferred-lightmap`,
 }
 
 export class FogParams {
-    public color = colorNewCopy(White);
+    public color: Color;
     public start: number = 0;
     public end: number = 0;
     public maxdensity: number = 0;
+
+    constructor(color: Color = White) {
+        this.color = colorNewCopy(color);
+    }
+
+    public copy(o: FogParams): void {
+        colorCopy(this.color, o.color);
+        this.start = o.start;
+        this.end = o.end;
+        this.maxdensity = o.maxdensity;
+    }
 }
 
 export class MaterialProgramBase extends DeviceProgram {
@@ -59,14 +69,24 @@ export class MaterialProgramBase extends DeviceProgram {
     public static a_BoneIDs = 7;
 
     public static ub_SceneParams = 0;
+    public static ub_SkinningParams = 1;
 
-    public Common = `
+    public static MaxSkinningParamsBoneMatrix = 53;
+
+    public static Common = `
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
     vec4 u_FogColor;
     vec4 u_FogParams;
-    vec4 u_ClipPlaneWorld[1];
+};
+
+layout(std140) uniform ub_SkinningParams {
+#if SKINNING_MODE == ${SkinningMode.Smooth}
+    Mat4x3 u_BoneMatrix[${MaterialProgramBase.MaxSkinningParamsBoneMatrix}];
+#else
+    Mat4x3 u_ModelMatrix;
+#endif
 };
 
 #define u_FogStart      (u_FogParams.x)
@@ -132,14 +152,45 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 #endif
 }
 
+#ifdef VERT
+layout(location = ${MaterialProgramBase.a_Position}) in vec3 a_Position;
+layout(location = ${MaterialProgramBase.a_Normal}) in vec4 a_Normal;
+layout(location = ${MaterialProgramBase.a_TangentS}) in vec4 a_TangentS;
+layout(location = ${MaterialProgramBase.a_TexCoord}) in vec4 a_TexCoord;
+#ifdef USE_VERTEX_COLOR
+layout(location = ${MaterialProgramBase.a_Color}) in vec4 a_Color;
+#endif
+#ifdef USE_STATIC_VERTEX_LIGHTING
+layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) in vec3 a_StaticVertexLighting;
+#endif
+#if SKINNING_MODE == ${SkinningMode.Smooth}
+layout(location = ${MaterialProgramBase.a_BoneWeights}) in vec4 a_BoneWeights;
+layout(location = ${MaterialProgramBase.a_BoneIDs}) in vec4 a_BoneIndices;
+#endif
+
+Mat4x3 CalcWorldFromLocalMatrix() {
+#if SKINNING_MODE == ${SkinningMode.Smooth}
+    // Calculate our per-vertex position.
+    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
+
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
+    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
+
+    return t_WorldFromLocalMatrix;
+#else
+    return u_ModelMatrix;
+#endif
+}
+#endif
+
 #ifdef FRAG
 layout(location = 0) out vec4 o_Color0;
-layout(location = 1) out vec4 o_Color1;
 
 void OutputLinearColor(in vec4 t_Color) {
     // We do gamma correction in post now, as we need linear blending.
     o_Color0.rgba = t_Color.rgba;
-    o_Color1.rgba = vec4(0.0);
 }
 #endif
 `;
@@ -147,34 +198,23 @@ void OutputLinearColor(in vec4 t_Color) {
 
 function fillFogParams(d: Float32Array, offs: number, params: Readonly<FogParams>): number {
     const baseOffs = offs;
-    offs += fillColor(d, offs, params.color);
+    offs += fillGammaColor(d, offs, params.color);
     offs += fillVec4(d, offs, params.start, params.end, params.maxdensity);
     return offs - baseOffs;
 }
 
-function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEngineView>): number {
+function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams>): number {
     const baseOffs = offs;
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
     offs += fillVec3v(d, offs, view.cameraPos);
-    offs += fillFogParams(d, offs, view.fogParams);
-    for (let i = 0; i < 1; i++) {
-        const clipPlaneWorld = view.clipPlaneWorld[i];
-        if (clipPlaneWorld)
-            offs += fillVec4v(d, offs, view.clipPlaneWorld[i]);
-        else
-            offs += fillVec4(d, offs, 0, 0, 0, 0);
-    }
+    offs += fillFogParams(d, offs, fogParams);
     return offs - baseOffs;
 }
 
-export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>): void {
-    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
+export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams> = view.fogParams): void {
+    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
-    fillSceneParams(d, offs, view);
-}
-
-function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
-    vec4.set(dst, scale, scale, x, y);
+    fillSceneParams(d, offs, view, fogParams);
 }
 
 interface Parameter {
@@ -210,7 +250,7 @@ class ParameterTexture {
             if (this.isEnvmap) {
                 if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null)
                     filename = entityParams.lightCache.envCubemap.filename;
-                else if (materialCache.usingHDR)
+                else if (materialCache.isUsingHDR())
                     filename = `${filename}.hdr`;
             }
             this.texture = await materialCache.fetchVTF(filename, this.isSRGB);
@@ -309,7 +349,7 @@ class ParameterMatrix {
         const sections = findall(S, /([a-z]+) ([^a-z]+)/g);
 
         let cx = 0, cy = 0, sx = 1, sy = 1, r = 0, tx = 0, ty = 0;
-        sections.forEach(([mode, items]) => {
+        sections.forEach(([str, mode, items]) => {
             let values = items.split(' ').map((v) => parseFloat(v));
             if (values[1] === undefined)
                 values[1] = values[0];
@@ -435,21 +475,49 @@ function createParameterAuto(value: any): Parameter | null {
     return null;
 }
 
-function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {
-    for (const key in vmt) {
-        if (!key.startsWith('$'))
+function parseKey(key: string, defines: string[]): string | null {
+    const question = key.indexOf('?');
+    if (question >= 0) {
+        let define = key.slice(0, question);
+
+        let negate = false;
+        if (key.charAt(0) === '!') {
+            define = define.slice(1);
+            negate = true;
+        }
+
+        let isValid = defines.includes(define);
+        if (negate)
+            isValid = !isValid;
+
+        if (!isValid)
+            return null;
+
+        key = key.slice(question + 1);
+    }
+
+    return key;
+}
+
+function setupParametersFromVMT(param: ParameterMap, vmt: VMT, defines: string[]): void {
+    for (const vmtKey in vmt) {
+        const destKey = parseKey(vmtKey, defines);
+        if (destKey === null)
             continue;
-        const value = vmt[key];
-        if (key in param) {
+        if (!destKey.startsWith('$'))
+            continue;
+
+        const value = vmt[vmtKey];
+        if (destKey in param) {
             // Easy case -- existing parameter.
-            param[key].parse(value as string);
+            param[destKey].parse(value as string);
         } else {
             // Hard case -- auto-detect type from string.
             const p = createParameterAuto(value);
             if (p !== null) {
-                param[key] = p;
+                param[destKey] = p;
             } else {
-                console.warn("Could not parse parameter", key, value);
+                console.warn("Could not parse parameter", destKey, value);
             }
         }
     }
@@ -479,12 +547,13 @@ function fillGammaColor(d: Float32Array, offs: number, c: Color): number {
     return fillColor(d, offs, scratchColor);
 }
 
+const blackFogParams = new FogParams(TransparentBlack);
+
 export abstract class BaseMaterial {
     private visible = true;
     public hasVertexColorInput = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
-    public wantsDeferredLightmap = false;
     public wantsTexCoord0Scale = false;
     public isTranslucent = false;
     public isIndirect = false;
@@ -497,6 +566,7 @@ export abstract class BaseMaterial {
     protected proxyDriver: MaterialProxyDriver | null = null;
     protected representativeTexture: VTF | null = null;
     protected texCoord0Scale = vec2.create();
+    protected isAdditive = false;
 
     constructor(public vmt: VMT) {
     }
@@ -504,7 +574,7 @@ export abstract class BaseMaterial {
     public async init(renderContext: SourceRenderContext) {
         this.initParameters();
 
-        this.setupParametersFromVMT();
+        this.setupParametersFromVMT(renderContext);
         if (this.vmt.proxies !== undefined)
             this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
 
@@ -527,6 +597,9 @@ export abstract class BaseMaterial {
         if (this.isToolMaterial && !renderContext.showToolMaterials)
             return false;
 
+        if (this.paramGetBoolean('$decal') && !renderContext.showDecalMaterials)
+            return false;
+
         return true;
     }
 
@@ -534,10 +607,9 @@ export abstract class BaseMaterial {
         // Nothing by default.
     }
 
-    private findFallbackBlock(shaderTypeName: string): any | null {
-        const fallbackSuffixes = [`gpu>=1`, `gpu>=2`, `>=dx90_20b`, `>=dx90`, `>dx90`, `ldr`, `srgb`, `dx9`];
-        for (let i = 0; i < fallbackSuffixes.length; i++) {
-            const suffix = fallbackSuffixes[i];
+    private findFallbackBlock(shaderTypeName: string, materialDefines: string[]): any | null {
+        for (let i = 0; i < materialDefines.length; i++) {
+            const suffix = materialDefines[i];
             let block: any;
 
             block = this.vmt[suffix];
@@ -552,13 +624,15 @@ export abstract class BaseMaterial {
         return null;
     }
 
-    private setupParametersFromVMT(): void {
-        setupParametersFromVMT(this.param, this.vmt);
+    private setupParametersFromVMT(renderContext: SourceRenderContext): void {
+        const materialDefines = renderContext.materialCache.materialDefines;
+
+        setupParametersFromVMT(this.param, this.vmt, materialDefines);
 
         const shaderTypeName = this.vmt._Root.toLowerCase();
-        const fallback = this.findFallbackBlock(shaderTypeName);
+        const fallback = this.findFallbackBlock(shaderTypeName, materialDefines);
         if (fallback !== null)
-            setupParametersFromVMT(this.param, fallback);
+            setupParametersFromVMT(this.param, fallback, materialDefines);
     }
 
     protected paramGetTexture(name: string): ParameterTexture {
@@ -588,7 +662,7 @@ export abstract class BaseMaterial {
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
-        // assert(m[1] === 0.0 && m[2] === 0.0);
+        assert(m[1] === 0.0 && m[2] === 0.0);
         let scaleS = m[0];
         let scaleT = m[5];
         if (useMappingTransform) {
@@ -654,6 +728,14 @@ export abstract class BaseMaterial {
         return texture.isTranslucent();
     }
 
+    protected setSkinningMode(p: MaterialProgramBase): void {
+        p.setDefineString('SKINNING_MODE', '' + this.skinningMode);
+    }
+
+    protected setFogMode(p: MaterialProgramBase): void {
+        p.setDefineBool('USE_FOG', !this.paramGetBoolean('$nofog'));
+    }
+
     protected setCullMode(megaStateFlags: Partial<GfxMegaStateDescriptor>): void {
         megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
@@ -685,6 +767,7 @@ export abstract class BaseMaterial {
                 blendDstFactor: GfxBlendFactor.One,
             });
             megaStateFlags.depthWrite = false;
+            this.isAdditive = true;
             return true;
         } else if (alphaBlendMode === AlphaBlendMode.None) {
             setAttachmentStateSimple(megaStateFlags, {
@@ -730,6 +813,7 @@ export abstract class BaseMaterial {
         p['$vertexalpha']                  = new ParameterBoolean(false, false);
         p['$nocull']                       = new ParameterBoolean(false, false);
         p['$nofog']                        = new ParameterBoolean(false, false);
+        p['$decal']                        = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture(true);
@@ -831,19 +915,54 @@ export abstract class BaseMaterial {
             this.proxyDriver.update(renderContext, this.entityParams);
     }
 
-    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex?: number): void;
+    protected setupFogParams(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        if (this.isAdditive) {
+            // We need to swap out the fog for additive materials, so allocate a new scene params...
+            fillSceneParamsOnRenderInst(renderInst, renderContext.currentView, blackFogParams);
+        }
+    }
+
+    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex?: number): void;
+
+    public setOnRenderInstModelMatrix(renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+        if (this.skinningMode === SkinningMode.None) {
+
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
+            offs += fillMatrix4x3(d, offs, modelMatrix!);
+        }
+    }
 
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
-        // Nothing by default.
+        if (this.skinningMode === SkinningMode.Smooth) {
+            assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
+            mat4.identity(scratchMatrix);
+            for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
+                const boneIndex = bonePaletteTable[i];
+                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
+                offs += fillMatrix4x3(d, offs, m);
+            }
+        } else if (this.skinningMode === SkinningMode.Rigid) {
+            assert(bonePaletteTable.length === 1);
+
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
+            const boneIndex = bonePaletteTable[0];
+            const m = boneMatrix[boneIndex];
+            offs += fillMatrix4x3(d, offs, m);
+        }
     }
 
     public getRenderInstListForView(view: SourceEngineView): GfxRenderInstList {
         // Choose the right list.
         if (this.isIndirect)
             return view.indirectList;
-
-        if (this.wantsDeferredLightmap)
-            return view.deferredDecalList;
 
         return view.mainList;
     }
@@ -856,16 +975,14 @@ const enum ShaderWorldLightType {
 }
 
 class Material_Generic_Program extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
-    public static ub_SkinningParams = 2;
+    public static ub_ObjectParams = 2;
 
     public static MaxDynamicWorldLights = 4;
-    public static MaxSkinningParamsBoneMatrix = 53;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 struct WorldLight {
     // w = ShaderWorldLightType.
@@ -879,10 +996,6 @@ struct WorldLight {
 };
 
 layout(std140) uniform ub_ObjectParams {
-#if SKINNING_MODE == ${SkinningMode.None}
-    Mat4x3 u_ModelMatrix;
-#endif
-
 #ifdef USE_AMBIENT_CUBE
     // TODO(jstpierre): Pack this more efficiently?
     vec4 u_AmbientCube[6];
@@ -891,15 +1004,15 @@ layout(std140) uniform ub_ObjectParams {
     // We support up to N lights.
     WorldLight u_WorldLights[${Material_Generic_Program.MaxDynamicWorldLights}];
 #endif
-    vec4 u_BaseTextureScaleBias;
-#ifdef USE_DETAIL
-    vec4 u_DetailScaleBias;
-#endif
+    Mat4x2 u_BaseTextureTransform;
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
 #ifdef USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
+#endif
+#ifdef USE_BLEND_MODULATE
+    vec4 u_BlendModulateScaleBias;
 #endif
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
@@ -917,31 +1030,16 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
-
-#if SKINNING_MODE != ${SkinningMode.None}
-layout(std140) uniform ub_SkinningParams {
-#if SKINNING_MODE == ${SkinningMode.Rigid}
-    Mat4x3 u_ModelMatrix;
-#elif SKINNING_MODE == ${SkinningMode.Smooth}
-    Mat4x3 u_BoneMatrix[${Material_Generic_Program.MaxSkinningParamsBoneMatrix}];
-#endif
-};
-#endif
+#define u_DetailScale        (u_Misc[0].z)
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
-#define HAS_PROJECTED_TEXCOORD (USE_DEFERRED_LIGHTMAP)
 
-// Base, Detail
+// Base, Bumpmap
 varying vec4 v_TexCoord0;
 // Lightmap (0), Envmap Mask
 varying vec4 v_TexCoord1;
-// Bumpmap
+// Blend Modulate
 varying vec4 v_TexCoord2;
-
-#ifdef HAS_PROJECTED_TEXCOORD
-// Projected TexCoord
-varying vec3 v_TexCoord3;
-#endif
 
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
@@ -962,10 +1060,18 @@ varying float v_LightmapOffset;
 varying vec4 v_LightAtten;
 #endif
 
-// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum
-uniform sampler2D u_Texture[8];
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2, SpecularExponent, SelfIllum, BlendModulate
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureDetail;
+uniform sampler2D u_TextureBumpmap;
+uniform sampler2D u_TextureLightmap;
+uniform sampler2D u_TextureEnvmapMask;
+uniform sampler2D u_TextureBase2;
+uniform sampler2D u_TextureSpecularExponent;
+uniform sampler2D u_TextureSelfIllum;
+uniform sampler2D u_TextureBlendModulate;
 // Envmap
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 // #define DEBUG_DIFFUSEONLY 1
 // #define DEBUG_FULLBRIGHT 1
@@ -1067,22 +1173,6 @@ vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
 }
 #endif
 
-#ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-#ifdef USE_VERTEX_COLOR
-layout(location = ${MaterialProgramBase.a_Color}) attribute vec4 a_Color;
-#endif
-#ifdef USE_STATIC_VERTEX_LIGHTING
-layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) attribute vec3 a_StaticVertexLighting;
-#endif
-#if SKINNING_MODE == ${SkinningMode.Smooth}
-layout(location = ${MaterialProgramBase.a_BoneWeights}) attribute vec4 a_BoneWeights;
-layout(location = ${MaterialProgramBase.a_BoneIDs}) attribute vec4 a_BoneIndices;
-#endif
-
 #ifdef USE_AMBIENT_CUBE
 vec3 AmbientLight(in vec3 t_NormalWorld) {
 #ifdef DEBUG_FULLBRIGHT
@@ -1099,29 +1189,13 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 }
 #endif
 
-Mat4x3 WorldFromLocalMatrixCalc() {
-#if SKINNING_MODE == ${SkinningMode.Smooth}
-    // Calculate our per-vertex position.
-    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
-
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
-
-    return t_WorldFromLocalMatrix;
-#else
-    return u_ModelMatrix;
-#endif
-}
-
+#ifdef VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = WorldFromLocalMatrixCalc();
-
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
 #ifdef USE_VERTEX_COLOR
@@ -1189,9 +1263,10 @@ void mainVS() {
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias);
-#ifdef USE_DETAIL
-    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+#ifdef USE_BUMPMAP
+    v_LightmapOffset = abs(a_TangentS.w);
+    v_TexCoord0.zw = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
@@ -1199,15 +1274,8 @@ void mainVS() {
 #ifdef USE_ENVMAP_MASK
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
 #endif
-#ifdef USE_BUMPMAP
-    v_LightmapOffset = abs(a_TangentS.w);
-    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
-#endif
-
-#ifdef HAS_PROJECTED_TEXCOORD
-    // Convert from projected position to texture space.
-    vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
-    v_TexCoord3.xyz = vec3(t_ProjTexCoord, gl_Position.w);
+#ifdef USE_BLEND_MODULATE
+    v_TexCoord2.xy = CalcScaleBias(a_TexCoord.xy, u_BlendModulateScaleBias);
 #endif
 }
 #endif
@@ -1342,45 +1410,39 @@ vec4 DebugLightmapTexture(vec4 t_TextureSample) {
     return t_TextureSample;
 }
 
-bool CheckClipPlanes(vec3 t_PositionWorld) {
-#ifdef USE_CLIP_PLANES
-    // TODO(jstpierre): Optimize this if we have hardware clip plane in vertex shader (GL extension?)
-    for (int i = 0; i < 1; i++) {
-        if (dot(u_ClipPlaneWorld[i].xyz, t_PositionWorld.xyz) + u_ClipPlaneWorld[i].w < 0.0)
-            return false;
-    }
+void mainPS() {
+    vec4 t_Albedo, t_BlendedAlpha;
+
+    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
+
+#ifdef USE_BASETEXTURE2
+    // Blend in BaseTexture2 using blend factor.
+    float t_BlendFactor = v_PositionWorld.w;
+
+#ifdef USE_BLEND_MODULATE
+    vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord2.xy);
+    float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
+    float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
+    t_BlendFactor = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactor);
 #endif
 
-    return true;
-}
-
-void mainPS() {
-    if (!CheckClipPlanes(v_PositionWorld.xyz)) {
-        discard;
-        return;
-    }
-
-    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)));
-
-    vec4 t_Albedo, t_BlendedAlpha;
-#ifdef USE_DETAIL
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)));
-    t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
+    vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
+    t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactor);
 #else
     t_Albedo = t_BaseTexture;
 #endif
 
-#ifdef USE_BASETEXTURE2
-    // Blend in BaseTexture2 using blend factor.
-    vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy));
-    t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
+#ifdef USE_DETAIL
+    vec2 t_DetailTexCoord = v_TexCoord0.xy * u_DetailScale;
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail, t_DetailTexCoord)));
+    t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
     vec4 t_FinalColor;
 
     vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
-    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord2.xy));
+    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_TextureBumpmap, v_TexCoord0.zw));
 
 #ifdef USE_SSBUMP
     // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
@@ -1398,16 +1460,14 @@ void mainPS() {
 
     vec3 t_DiffuseLighting = vec3(0.0);
 
-    vec3 t_DeferredLightmapOutput = vec3(0.0);
-
 #ifdef USE_LIGHTMAP
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
-    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy)).rgb;
+    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy)).rgb;
 #ifdef USE_DIFFUSE_BUMPMAP
-    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
-    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
-    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2D(u_Texture[3]), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
+    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
+    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
+    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
 
     vec3 t_Influence;
 
@@ -1448,17 +1508,9 @@ void mainPS() {
 #endif
 
     t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * t_DiffuseLightingScale;
-
-    // Decals can't get bumpmapping, I don't believe...
-    t_DeferredLightmapOutput.rgb = t_LightmapColor0.rgb;
 #else
     // Diffuse lighting comes from vertex shader.
     t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
-#endif
-
-#ifdef USE_DEFERRED_LIGHTMAP
-    vec2 t_ProjTexCoord = v_TexCoord3.xy / v_TexCoord3.z;
-    t_DiffuseLighting.rgb = texture(SAMPLER_2D(u_Texture[3]), t_ProjTexCoord).rgb;
 #endif
 
     t_Albedo *= v_Color;
@@ -1498,11 +1550,10 @@ void mainPS() {
     vec3 t_SelfIllumMask;
 
 #ifdef USE_SELFILLUM_ENVMAPMASK_ALPHA
-    // TODO(jstpierre): Implement this
-    t_SelfIllumMask = vec3(0);
+    t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
 #else
 #ifdef USE_SELFILLUM_MASK
-    t_SelfIllumMask = texture(SAMPLER_2D(u_Texture[7]), v_TexCoord1.xy).rgb;
+    t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllum), v_TexCoord1.xy).rgb;
 #else
     t_SelfIllumMask = t_BaseTexture.aaa;
 #endif
@@ -1530,7 +1581,7 @@ void mainPS() {
     vec3 t_EnvmapFactor = u_EnvmapTint.rgb;
 
 #ifdef USE_ENVMAP_MASK
-    t_EnvmapFactor *= texture(SAMPLER_2D(u_Texture[4]), v_TexCoord1.zw).rgb;
+    t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
 #endif
 
 #ifdef USE_NORMALMAP_ALPHA_ENVMAP_MASK
@@ -1542,7 +1593,7 @@ void mainPS() {
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
-    vec3 t_EnvmapColor = texture(u_TextureCube[0], t_Reflection).rgb;
+    vec3 t_EnvmapColor = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgb;
     t_EnvmapColor *= t_EnvmapFactor;
 
     // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
@@ -1563,7 +1614,7 @@ void mainPS() {
     t_SpecularLightInput.Fresnel = t_Fresnel;
 
     // TODO(jstpierre): Support $phongexponentfactor override
-    vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_Texture[6]), v_TexCoord0.xy);
+    vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
     t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
     t_SpecularLightInput.RimExponent = 1.0;
 
@@ -1597,7 +1648,6 @@ void mainPS() {
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
-    o_Color1.rgba = vec4(t_DeferredLightmapOutput.rgb, 0.0);
 }
 #endif
 `;
@@ -1614,6 +1664,7 @@ class Material_Generic extends BaseMaterial {
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
     private wantsSelfIllum = false;
+    private wantsBlendModulate = false;
     private wantsPhong = false;
     private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
@@ -1624,7 +1675,7 @@ class Material_Generic extends BaseMaterial {
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
-    private textureMapping: TextureMapping[] = nArray(9, () => new TextureMapping());
+    private textureMapping: TextureMapping[] = nArray(10, () => new TextureMapping());
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
         let wantsDynamicVertexLighting: boolean;
@@ -1699,6 +1750,8 @@ class Material_Generic extends BaseMaterial {
         // World Vertex Transition
         p['$basetexture2']                 = new ParameterTexture(true);
         p['$frame2']                       = new ParameterNumber(0.0);
+        p['$blendmodulatetexture']         = new ParameterTexture(true);
+        p['$blendmasktransform']           = new ParameterMatrix();
 
         // Phong (Skin)
         p['$phong']                        = new ParameterBoolean(false, false);
@@ -1750,8 +1803,6 @@ class Material_Generic extends BaseMaterial {
 
         this.program = new Material_Generic_Program();
 
-        this.program.setDefineString('SKINNING_MODE', '' + this.skinningMode);
-
         if (this.shaderType === GenericShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
             // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
             this.shaderType = GenericShaderType.Skin;
@@ -1796,15 +1847,8 @@ class Material_Generic extends BaseMaterial {
         }
 
         if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
-            if (this.wantsDeferredLightmap) {
-                this.wantsLightmap = false;
-                this.program.setDefineBool('USE_DEFERRED_LIGHTMAP', true);
-            } else {
-                this.wantsLightmap = true;
-                this.program.setDefineBool('USE_LIGHTMAP', true);
-            }
-        } else {
-            this.wantsDeferredLightmap = false;
+            this.wantsLightmap = true;
+            this.program.setDefineBool('USE_LIGHTMAP', true);
         }
 
         if (this.shaderType === GenericShaderType.WorldVertexTransition) {
@@ -1812,6 +1856,11 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_BASETEXTURE2', true);
         }
 
+        if (this.wantsBaseTexture2 && this.paramGetVTF('$blendmodulatetexture') !== null) {
+            this.wantsBlendModulate = true;
+            this.program.setDefineBool('USE_BLEND_MODULATE', true);
+        }
+    
         // Modulation color is used differently between lightmapped and non-lightmapped.
         // In vertexlit / unlit, then the modulation color is multiplied in with the texture (and possibly blended).
         // In lightmappedgeneric, then the modulation color is used as the diffuse lightmap scale, and contains the
@@ -1868,13 +1917,12 @@ class Material_Generic extends BaseMaterial {
             this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         }
 
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
+        this.setCullMode(this.megaStateFlags);
 
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
-
-        this.setCullMode(this.megaStateFlags);
 
         this.recacheProgram(cache);
     }
@@ -1898,36 +1946,20 @@ class Material_Generic extends BaseMaterial {
             this.paramGetTexture('$basetexture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
         this.paramGetTexture('$phongexponenttexture').fillTextureMapping(this.textureMapping[6], 0);
         this.paramGetTexture('$selfillummask').fillTextureMapping(this.textureMapping[7], 0);
-        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[8], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$blendmodulatetexture').fillTextureMapping(this.textureMapping[8], 0);
+        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[9], this.paramGetInt('$envmapframe'));
     }
 
-    private fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
-        let origOffs = offs;
-
-        // Rigid/smooth skinning do not use the model matrix.
-        if (this.skinningMode === SkinningMode.None)
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
-
-        return offs - origOffs;
-    }
-
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(renderContext);
         if (this.wantsLightmap)
             renderContext.lightmapManager.fillTextureMapping(this.textureMapping[3], lightmapPageIndex);
-        else if (this.wantsDeferredLightmap)
-            this.textureMapping[3].lateBinding = LateBindingTexture.DeferredLightmap;
 
-        // TODO(jstpierre): The cost of reprocessing shaders every frame toggling between clip planes and not-clip planes is too massive right now...
-        // GfxRenderCache happens *post*-preprocess, and the expensive thing appears to be preprocessGLSL.
-        const useClipPlanes = true; // renderContext.currentView.clipPlaneWorld.length > 0;
-        if (this.program.setDefineBool('USE_CLIP_PLANES', useClipPlanes))
-            this.gfxProgram = null;
+        this.setupFogParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 132);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 124);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
-        offs += this.fillModelMatrix(d, offs, modelMatrix);
 
         if (this.wantsAmbientCube) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
@@ -1936,21 +1968,19 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsDynamicLighting) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
-            offs += lightCache.fillWorldLights(d, offs);
+            offs += lightCache.fillWorldLights(d, offs, renderContext.worldLightingState);
         }
 
-        offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
-
-        if (this.wantsDetail) {
-            scaleBiasSet(scratchVec4, this.paramGetNumber('$detailscale'));
-            offs += fillVec4v(d, offs, scratchVec4);
-        }
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
 
         if (this.wantsEnvmapMask)
             offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
+
+        if (this.wantsBlendModulate)
+            offs += this.paramFillScaleBias(d, offs, '$blendmasktransform');
 
         if (this.wantsEnvmap) {
             offs += this.paramFillColor(d, offs, '$envmaptint');
@@ -1960,9 +1990,8 @@ class Material_Generic extends BaseMaterial {
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
         }
 
-        if (this.wantsSelfIllum) {
+        if (this.wantsSelfIllum)
             offs += this.paramFillGammaColor(d, offs, '$selfillumtint');
-        }
 
         if (this.wantsPhong) {
             const fresnelRanges = this.paramGetVector('$phongfresnelranges');
@@ -1989,7 +2018,8 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
+        const detailScale = this.paramGetNumber('$detailscale');
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, detailScale);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1998,46 +2028,131 @@ class Material_Generic extends BaseMaterial {
         renderInst.sortKey = this.sortKeyBase;
     }
 
-    public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
-        if (this.skinningMode === SkinningMode.Smooth) {
-            assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+    public destroy(device: GfxDevice): void {
+    }
+}
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+// Modulate
+class ModulateProgram extends MaterialProgramBase {
+    public static ub_ObjectParams = 2;
 
-            mat4.identity(scratchMatrix);
-            for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
-                const boneIndex = bonePaletteTable[i];
-                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
-                offs += fillMatrix4x3(d, offs, m);
-            }
-        } else if (this.skinningMode === SkinningMode.Rigid) {
-            assert(bonePaletteTable.length === 1);
+    public both = `
+precision mediump float;
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+${MaterialProgramBase.Common}
 
-            const boneIndex = bonePaletteTable[0];
-            const m = boneMatrix[boneIndex];
-            offs += fillMatrix4x3(d, offs, m);
-        }
+layout(std140) uniform ub_ObjectParams {
+    Mat4x2 u_BaseTextureTransform;
+};
+
+varying vec3 v_PositionWorld;
+// BaseTexture
+varying vec2 v_TexCoord0;
+
+// BaseTexture
+uniform sampler2D u_BaseTexture;
+
+#ifdef VERT
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_BaseTextureSample = texture(SAMPLER_2D(u_BaseTexture, v_TexCoord0.xy));
+    vec4 t_FinalColor = t_BaseTextureSample;
+    t_FinalColor.rgb = mix(vec3(0.5), t_FinalColor.rgb, t_FinalColor.a);
+
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
+    OutputLinearColor(t_FinalColor);
+}
+#endif
+`;
+}
+
+class Material_Modulate extends BaseMaterial {
+    private program: ModulateProgram;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+
+    protected initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$mod2x']                        = new ParameterBoolean(false, false);
+        p['$writez']                       = new ParameterBoolean(false, false);
     }
 
-    public destroy(device: GfxDevice): void {
+    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        super.initStatic(device, cache);
+
+        this.program = new ModulateProgram();
+
+        const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture');
+        const blendMode = this.getAlphaBlendMode(isTranslucent);
+
+        const opaque = this.paramGetBoolean('$writez') && !(blendMode === AlphaBlendMode.Blend || blendMode === AlphaBlendMode.BlendAdd);
+
+        this.megaStateFlags.depthWrite = opaque;
+        this.isTranslucent = !opaque;
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.Dst,
+            blendDstFactor: this.paramGetBoolean('$mod2x') ? GfxBlendFactor.Src : GfxBlendFactor.Zero,
+        });
+
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
+        this.setCullMode(this.megaStateFlags);
+
+        this.gfxProgram = cache.createProgram(this.program);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(): void {
+        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings();
+
+        this.setupFogParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 8);
+        const d = renderInst.mapUniformBufferF32(ModulateProgram.ub_ObjectParams);
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
     }
 }
 
 // UnlitTwoTexture
 class UnlitTwoTextureProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_ModelMatrix;
     Mat4x2 u_Texture1Transform;
     Mat4x2 u_Texture2Transform;
     vec4 u_ModulationColor;
@@ -2048,14 +2163,13 @@ varying vec3 v_PositionWorld;
 varying vec4 v_TexCoord0;
 
 // Texture1, Texture2
-uniform sampler2D u_Texture[2];
+uniform sampler2D u_Texture1;
+uniform sampler2D u_Texture2;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
@@ -2066,8 +2180,8 @@ void mainVS() {
 
 #ifdef FRAG
 void mainPS() {
-    vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
-    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw));
+    vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture1, v_TexCoord0.xy));
+    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture2, v_TexCoord0.zw));
     vec4 t_FinalColor = t_Texture1 * t_Texture2 * u_ModulationColor;
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
@@ -2101,15 +2215,14 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         this.program = new UnlitTwoTextureProgram();
 
-        const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
+        const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
         this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
         this.setCullMode(this.megaStateFlags);
-
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -2120,13 +2233,14 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$frame2'));
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
+        this.setupFogParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
-        offs += fillMatrix4x3(d, offs, modelMatrix!);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
@@ -2143,15 +2257,14 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 const enum WaterShaderType { Normal, Flow }
 
 class WaterMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_ModelMatrix;
     vec4 u_BumpScaleBias;
 #ifdef USE_TEXSCROLL
     vec4 u_TexScroll;
@@ -2162,6 +2275,8 @@ layout(std140) uniform ub_ObjectParams {
     Mat4x4 u_ProjectedDepthToWorld;
 };
 
+#define u_RefractAmount (u_RefractTint.a)
+#define u_ReflectAmount (u_ReflectTint.a)
 #define u_WaterFogRange (u_WaterFogColor.a)
 
 // Refract Coordinates
@@ -2176,21 +2291,20 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
 // Refract Texture, Normalmap, Framebuffer Depth Texture, Reflect Texture (Expensive Water)
-uniform sampler2D u_Texture[4];
+uniform sampler2D u_TextureRefract;
+uniform sampler2D u_TextureNormalmap;
+uniform sampler2D u_TextureFramebufferDepth;
+uniform sampler2D u_TextureReflect;
 // Envmap ("Cheap" Water)
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     v_PositionWorld.w = gl_Position.z; // Clip-space Z
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -2210,12 +2324,21 @@ void mainVS() {
 #endif
 
 #ifdef FRAG
-float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
-    float t_DepthSample = texture(SAMPLER_2D(u_Texture[2]), t_ProjTexCoord).r;
+float SampleFramebufferDepth(vec2 t_ProjTexCoord) {
+    return texture(SAMPLER_2D(u_TextureFramebufferDepth), t_ProjTexCoord).r;
+}
 
+bool IsSomethingInFront(float t_DepthSample) {
+    if (t_DepthSample ${IS_DEPTH_REVERSED ? `>` : `<`} gl_FragCoord.z)
+        return true;
+
+    return false;
+}
+
+float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord, float t_DepthSample) {
     // Reconstruct world-space position for the sample.
-    vec3 t_DepthSamplePos01 = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
-    vec4 t_DepthSamplePosClip = vec4(t_DepthSamplePos01 * vec3(2.0) - vec3(1.0), 1.0);
+    vec3 t_DepthSamplePosViewport = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
+    vec4 t_DepthSamplePosClip = vec4(t_DepthSamplePosViewport * vec3(2.0) - vec3(1.0), 1.0);
     vec4 t_DepthSamplePosWorld = Mul(u_ProjectedDepthToWorld, t_DepthSamplePosClip);
     // Divide by W.
     t_DepthSamplePosWorld.xyz /= t_DepthSamplePosWorld.www;
@@ -2236,12 +2359,12 @@ float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord) {
 void mainPS() {
     // Sample our normal map with scroll offsets.
     vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
-    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord0));
+    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord0));
 #ifdef USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
-    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord1));
+    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord1));
     vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
-    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord2));
+    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord2));
     vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
 #else
     vec4 t_BumpmapSample = t_BumpmapSample0;
@@ -2253,13 +2376,23 @@ void mainPS() {
 
     vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
 
-    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord);
-    float t_RefractAmount = u_RefractTint.a * t_RefractFogBendAmount;
+    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(t_ProjTexCoord));
+    float t_RefractAmount = u_RefractAmount * t_RefractFogBendAmount;
     vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractAmount);
-    vec4 t_RefractSample = texture(SAMPLER_2D(u_Texture[0], t_RefractTexCoord));
+
+    float t_RefractFogAmount;
+    float t_RefractDepthSample = SampleFramebufferDepth(t_RefractTexCoord);
+    if (IsSomethingInFront(t_RefractDepthSample)) {
+        // Something's in front, just use the original...
+        t_RefractTexCoord = t_ProjTexCoord;
+        t_RefractFogAmount = t_RefractFogBendAmount;
+    } else {
+        t_RefractFogAmount = CalcFogAmountFromScreenPos(t_RefractTexCoord, t_RefractDepthSample);
+    }
+
+    vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract, t_RefractTexCoord));
     vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
 
-    float t_RefractFogAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord + (t_TexCoordBumpOffset.xy * -t_RefractAmount));
     t_RefractColor.rgb = mix(t_RefractColor.rgb, u_WaterFogColor.rgb, t_RefractFogAmount);
 
     vec3 t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
@@ -2269,15 +2402,15 @@ void mainPS() {
 
     vec3 t_ReflectColor = vec3(0.0);
 #ifdef USE_EXPENSIVE_REFLECT
-    float t_ReflectAmount = u_ReflectTint.a * 0.25;
+    float t_ReflectAmount = u_ReflectAmount * 0.25;
     vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
     // Reflection texture is stored upside down
     t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
 
-    vec4 t_ReflectSample = texture(SAMPLER_2D(u_Texture[3]), t_ReflectTexCoord);
+    vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #else
-    vec4 t_ReflectSample = texture(u_TextureCube[0], t_Reflection);
+    vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
     t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
 #endif
 
@@ -2295,15 +2428,14 @@ void mainPS() {
 }
 
 class WaterFlowMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_ModelMatrix;
     vec4 u_BaseTextureScaleBias;
     vec4 u_WaterFogColor;
     vec4 u_Misc[3];
@@ -2322,6 +2454,7 @@ layout(std140) uniform ub_ObjectParams {
 #define u_FlowBumpStrength                 (u_Misc[2].x)
 #define u_FlowColorDisplacementStrength    (u_Misc[2].y)
 #define u_FlowColorLerpExp                 (u_Misc[2].z)
+#define u_WaterBlendFactor                 (u_Misc[2].w)
 
 // Base Texture, Lightmap
 varying vec4 v_TexCoord0;
@@ -2333,21 +2466,21 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
 // BaseTexture, Lightmap, Normal Map, Flow Map, Flow Noise
-uniform sampler2D u_Texture[5];
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureLightmap;
+uniform sampler2D u_TextureNormalmap;
+uniform sampler2D u_TextureFlowmap;
+uniform sampler2D u_TextureFlowNoise;
 // Envmap
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
@@ -2368,8 +2501,7 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
     return vec3(t_NormalXY.xy, t_NormalZ);
 }
 
-vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp)
-{
+vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp) {
     float t_ScrollTime1 = fract(t_FlowTimeInIntervals + 0.0);
     float t_ScrollTime2 = fract(t_FlowTimeInIntervals + 0.5);
     float t_ScrollPhase1 = floor(t_FlowTimeInIntervals) * 0.311;
@@ -2397,15 +2529,15 @@ void mainPS() {
 
     vec2 t_TexCoordWorldBase = vec2(v_PositionWorld.x, -v_PositionWorld.y);
     vec2 t_FlowNoiseTexCoord = t_TexCoordWorldBase * u_FlowNoiseTexCoordScale;
-    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_Texture[4]), t_FlowNoiseTexCoord.xy);
+    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_TextureFlowNoise), t_FlowNoiseTexCoord.xy);
 
-    vec4 t_FlowSample = texture(SAMPLER_2D(u_Texture[3]), t_FlowTexCoord.xy);
+    vec4 t_FlowSample = texture(SAMPLER_2D(u_TextureFlowmap), t_FlowTexCoord.xy);
     vec2 t_FlowVectorTangent = UnpackUnsignedNormalMap(t_FlowSample).rg;
 
     vec2 t_FlowNormalTexCoordBase = t_TexCoordWorldBase * u_FlowNormalTexCoordScale;
     float t_FlowTimeInIntervals = u_FlowTimeInIntervals + t_FlowNoiseSample.g;
     float t_FlowNormalLerpExp = 1.0;
-    vec4 t_FlowNormalSample = SampleFlowMap(PP_SAMPLER_2D(u_Texture[2]), t_FlowNormalTexCoordBase.xy, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, t_FlowNormalLerpExp);
+    vec4 t_FlowNormalSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureNormalmap), t_FlowNormalTexCoordBase.xy, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, t_FlowNormalLerpExp);
 
     vec2 t_FlowNormalXY = UnpackUnsignedNormalMap(t_FlowNormalSample).xy * (length(t_FlowVectorTangent.xy) + 0.1) * u_FlowBumpStrength;
     vec4 t_NormalWorld = vec4(ReconstructNormal(t_FlowNormalXY), 1.0);
@@ -2425,7 +2557,7 @@ void mainPS() {
     vec3 t_WaterFogColor = u_WaterFogColor.rgb;
 
 #ifdef USE_LIGHTMAP_WATER_FOG
-    vec3 t_LightmapColor = texture(SAMPLER_2D(u_Texture[1]), v_TexCoord0.zw).rgb;
+    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord0.zw).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
     t_LightmapColor *= t_LightmapScale;
 
@@ -2436,7 +2568,7 @@ void mainPS() {
     t_RefractColor.rgb += t_WaterFogColor;
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld.xyz, t_PositionToEye.xyz);
-    t_ReflectColor += texture(u_TextureCube[0], t_Reflection).rgba;
+    t_ReflectColor += texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgba;
 
     float t_RefractAmount = t_Fresnel;
 
@@ -2446,7 +2578,7 @@ void mainPS() {
     vec3 t_InteriorDirection = t_ParallaxStrength * (t_LookDir.xyz - t_NormalWorld.xyz);
     vec2 t_FlowColorTexCoordBase = t_TexCoordWorldBase.xy * u_FlowColorTexCoordScale + t_InteriorDirection.xy;
     float t_FlowColorTimeInIntervals = u_FlowColorTimeInIntervals + t_FlowNoiseSample.g;
-    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_Texture[0]), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
+    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureBase), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
 
     vec4 t_FlowColor = t_FlowColorSample.rgba;
 
@@ -2465,7 +2597,7 @@ void mainPS() {
 #endif
 
     t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_RefractAmount);
-    t_FinalColor.a = 1.0;
+    t_FinalColor.a = u_WaterBlendFactor;
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -2523,6 +2655,7 @@ class Material_Water extends BaseMaterial {
         p['$color_flow_displacebynormalstrength'] = new ParameterNumber(0.0025);
 
         p['$lightmapwaterfog']             = new ParameterBoolean(false, false);
+        p['$waterblendfactor']             = new ParameterNumber(1.0);
         p['$fogcolor']                     = new ParameterColor(0, 0, 0);
 
         // Hacky way to get RT depth
@@ -2568,17 +2701,18 @@ class Material_Water extends BaseMaterial {
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
         this.setCullMode(this.megaStateFlags);
-
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
+
+        this.setupFogParams(renderContext, renderInst);
 
         if (this.shaderType === WaterShaderType.Flow) {
             this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
@@ -2588,9 +2722,8 @@ class Material_Water extends BaseMaterial {
             this.paramGetTexture('$flow_noise_texture').fillTextureMapping(this.textureMapping[4], 0);
             this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$envmapframe'));
 
-            let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 64);
+            let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 20);
             const d = renderInst.mapUniformBufferF32(WaterFlowMaterialProgram.ub_ObjectParams);
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
 
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
             offs += this.paramFillGammaColor(d, offs, '$fogcolor');
@@ -2614,7 +2747,8 @@ class Material_Water extends BaseMaterial {
             offs += fillVec4(d, offs,
                 this.paramGetNumber('$flow_bumpstrength'),
                 this.paramGetNumber('$color_flow_displacebynormalstrength'),
-                this.paramGetNumber('$color_flow_lerpexp'));
+                this.paramGetNumber('$color_flow_lerpexp'),
+                this.paramGetNumber('$waterblendfactor'));
         } else if (this.shaderType === WaterShaderType.Normal) {
             this.paramGetTexture('$refracttexture').fillTextureMapping(this.textureMapping[0], 0);
             this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
@@ -2622,9 +2756,8 @@ class Material_Water extends BaseMaterial {
             this.paramGetTexture('$reflecttexture').fillTextureMapping(this.textureMapping[3], 0);
             this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapframe'));
 
-            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
+            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 36);
             const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
             offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
             if (this.wantsTexScroll) {
@@ -2666,15 +2799,14 @@ class Material_Water extends BaseMaterial {
 
 //#region Refract
 class RefractMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 1;
+    public static ub_ObjectParams = 2;
 
     public both = `
 precision mediump float;
 
-${this.Common}
+${MaterialProgramBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_ModelMatrix;
     vec4 u_BumpScaleBias;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
@@ -2699,21 +2831,19 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 
 // Base Texture, Normalmap, Refract Tint Texture
-uniform sampler2D u_Texture[3];
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureNormalmap;
+uniform sampler2D u_TextureRefractTint;
 // Envmap
-uniform samplerCube u_TextureCube[1];
+uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
-
 void mainVS() {
-    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
@@ -2735,14 +2865,14 @@ void mainVS() {
 void mainPS() {
     // Sample our normal map with scroll offsets.
     vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
-    vec4 t_BumpmapSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_Texture[1]), t_BumpmapCoord0));
+    vec4 t_BumpmapSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0));
     vec3 t_BumpmapNormal = t_BumpmapSample.rgb;
 
     vec4 t_FinalColor = vec4(0);
 
     vec3 t_RefractTint = u_RefractTint.rgb;
 #ifdef USE_REFRACT_TINT_TEXTURE
-    vec4 t_RefractTintTextureSample = texture(SAMPLER_2D(u_Texture[2]), t_BumpmapCoord0);
+    vec4 t_RefractTintTextureSample = texture(SAMPLER_2D(u_TextureRefractTint), t_BumpmapCoord0);
     t_RefractTint *= 2.0 * t_RefractTintTextureSample.rgb;
 #endif
 
@@ -2763,13 +2893,13 @@ void mainPS() {
     t_RefractTexCoordOffs += t_BumpmapNormal.xy;
     t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
 
-    vec2 t_TexSize = vec2(textureSize(u_Texture[0], 0));
+    vec2 t_TexSize = vec2(textureSize(u_TextureBase, 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
     t_RefractTexCoordOffs *= t_Aspect * u_RefractDepth;
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
 
-    vec4 t_Refract1 = texture(SAMPLER_2D(u_Texture[0]), saturate(t_RefractTexCoord));
-    vec4 t_Refract2 = texture(SAMPLER_2D(u_Texture[0]), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
+    vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
+    vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
     vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
     float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
 
@@ -2784,12 +2914,12 @@ void mainPS() {
     int g_BlurWidth = g_BlurAmount * 2 + 1;
     float g_BlurWeight = 1.0 / float(g_BlurWidth * g_BlurWidth);
 
-    vec2 t_FramebufferSize = vec2(textureSize(u_Texture[0], 0));
+    vec2 t_FramebufferSize = vec2(textureSize(u_TextureBase, 0));
     vec2 t_BlurSampleOffset = vec2(1.0) / t_FramebufferSize;
     for (int y = -g_BlurAmount; y <= g_BlurAmount; y++) {
         for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
             vec2 t_TexCoord = t_RefractTexCoord + vec2(t_BlurSampleOffset.x * float(x), t_BlurSampleOffset.y * float(y));
-            t_BlurAccum += g_BlurWeight * texture(SAMPLER_2D(u_Texture[0]), t_TexCoord);
+            t_BlurAccum += g_BlurWeight * texture(SAMPLER_2D(u_TextureBase), t_TexCoord);
         }
     }
 
@@ -2806,7 +2936,7 @@ void mainPS() {
     t_SpecularFactor.rgb *= t_BumpmapSample.a;
 
     vec3 t_SpecularLighting = vec3(0.0);
-    t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
+    t_SpecularLighting += texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgb;
     t_SpecularLighting *= t_SpecularFactor;
 
     t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
@@ -2887,10 +3017,9 @@ class Material_Refract extends BaseMaterial {
         this.sortKeyBase = makeSortKey(sortLayer);
         this.isIndirect = this.textureIsIndirect('$basetexture');
 
+        this.setSkinningMode(this.program);
+        this.setFogMode(this.program);
         this.setCullMode(this.megaStateFlags);
-
-        if (!this.paramGetBoolean('$nofog'))
-            this.program.setDefineBool('USE_FOG', true);
 
         this.gfxProgram = cache.createProgram(this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -2903,13 +3032,14 @@ class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[3], this.paramGetInt('$envmapframe'));
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 68);
+        this.setupFogParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
-        offs += fillMatrix4x3(d, offs, modelMatrix!);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
         offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
@@ -2965,8 +3095,9 @@ export class MaterialCache {
     private textureCache = new Map<string, VTF>();
     private texturePromiseCache = new Map<string, Promise<VTF>>();
     private materialPromiseCache = new Map<string, Promise<VMT>>();
+    private usingHDR: boolean = false;
     public systemTextures: SystemTextures;
-    public usingHDR: boolean = false;
+    public materialDefines: string[] = [];
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
@@ -2975,6 +3106,17 @@ export class MaterialCache {
         this.textureCache.set('_rt_WaterReflection', new VTF(device, cache, null, '_rt_WaterReflection', false, LateBindingTexture.WaterReflection));
         this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.systemTextures = new SystemTextures(device);
+    }
+
+    public setUsingHDR(hdr: boolean): void {
+        this.usingHDR = hdr;
+
+        this.materialDefines = [`gpu>=1`, `gpu>=2`, `gpu>=3`, `>=dx90_20b`, `>=dx90`, `>dx90`, `srgb`, `srgb_pc`, `dx9`];
+        this.materialDefines.push(this.usingHDR ? `hdr` : `ldr`);
+    }
+
+    public isUsingHDR(): boolean {
+        return this.usingHDR;
     }
 
     public async bindLocalCubemap(cubemap: Cubemap) {
@@ -3003,6 +3145,8 @@ export class MaterialCache {
         const shaderType = vmt._Root.toLowerCase();
         if (shaderType === 'water')
             return new Material_Water(vmt);
+        else if (shaderType === 'modulate')
+            return new Material_Modulate(vmt);
         else if (shaderType === 'unlittwotexture' || shaderType === 'monitorscreen')
             return new Material_UnlitTwoTexture(vmt);
         else if (shaderType === 'refract')
@@ -3105,7 +3249,7 @@ function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): numb
 const scratchVec3 = vec3.create();
 const ntscGrayscale = vec3.fromValues(0.299, 0.587, 0.114);
 
-function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null): number {
+function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null, worldLightingState: WorldLightingState): number {
     const base = offs;
 
     if (light === null) {
@@ -3113,31 +3257,39 @@ function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null)
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
-    } else if (light.type === WorldLightType.Surface) {
+        return offs - base;
+    }
+
+    if (light.style >= 0)
+        vec3.scale(scratchVec3, light.intensity, worldLightingState.styleIntensities[light.style]);
+    else
+        vec3.copy(scratchVec3, light.intensity);
+
+    if (light.type === WorldLightType.Surface) {
         // 180 degree spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec4(d, offs, 0, 0, 1);
         offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.Spotlight) {
         // Controllable spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity, light.exponent);
+        offs += fillVec3v(d, offs, scratchVec3, light.exponent);
         offs += fillVec3v(d, offs, light.distAttenuation, light.stopdot);
         offs += fillVec3v(d, offs, light.normal, light.stopdot2);
     } else if (light.type === WorldLightType.Point) {
         const type = ShaderWorldLightType.Point;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec3v(d, offs, light.distAttenuation);
         offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.SkyLight) {
         // Directional.
         const type = ShaderWorldLightType.Directional;
         offs += fillVec3v(d, offs, Vec3Zero, type);
-        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, scratchVec3);
         offs += fillVec4(d, offs, 0);
         offs += fillVec3v(d, offs, light.normal);
     } else {
@@ -3161,8 +3313,8 @@ class LightCacheWorldLight {
         this.intensity = 0;
     }
 
-    public fill(d: Float32Array, offs: number): number {
-        return fillWorldLight(d, offs, this.worldLight);
+    public fill(d: Float32Array, offs: number, worldLightingState: WorldLightingState): number {
+        return fillWorldLight(d, offs, this.worldLight, worldLightingState);
     }
 }
 
@@ -3220,7 +3372,7 @@ export class LightCache {
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
     private ambientCube: AmbientCube = newAmbientCube();
 
-    constructor(private bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
+    constructor(bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
         this.leaf = bspfile.findLeafIdxForPoint(pos);
         assert(this.leaf >= 0);
 
@@ -3320,10 +3472,10 @@ export class LightCache {
         return offs - base;
     }
 
-    public fillWorldLights(d: Float32Array, offs: number): number {
+    public fillWorldLights(d: Float32Array, offs: number, worldLightingState: WorldLightingState): number {
         const base = offs;
         for (let i = 0; i < this.worldLights.length; i++)
-            offs += this.worldLights[i].fill(d, offs);
+            offs += this.worldLights[i].fill(d, offs, worldLightingState);
         return offs - base;
     }
 }
@@ -3388,6 +3540,7 @@ class LightmapPage {
             instance.lightmapUploadDirty = false;
         }
 
+        // TODO(jstpierre): Track sub-data resource uploads? :/
         if (anyDirty) {
             device.uploadTextureData(this.gfxTexture, 0, [data]);
         }
@@ -3423,9 +3576,11 @@ export class LightmapManager {
         m.gfxSampler = this.gfxSampler;
     }
 
-    public appendPackerManager(manager: LightmapPackerManager): void {
+    public appendPackerManager(manager: LightmapPackerManager): number {
+        const startPage = this.lightmapPages.length;
         for (let i = 0; i < manager.pages.length; i++)
             this.lightmapPages.push(new LightmapPage(this.device, manager.pages[i]));
+        return startPage;
     }
 
     public prepareToRender(device: GfxDevice): void {
@@ -3437,9 +3592,8 @@ export class LightmapManager {
         return this.lightmapPages[pageIndex].gfxTexture;
     }
 
-    public registerSurfaceLightmap(instance: SurfaceLightmap): void {
-        // TODO(jstpierre): PageIndex isn't unique / won't work with multiple BSP files.
-        this.lightmapPages[instance.lightmapData.pageIndex].registerSurfaceLightmap(instance);
+    public registerSurfaceLightmap(instance: SurfaceLightmap, pageIndex: number): void {
+        this.lightmapPages[pageIndex].registerSurfaceLightmap(instance);
     }
 
     public destroy(device: GfxDevice): void {
@@ -3472,6 +3626,10 @@ function gammaToLinear(v: number): number {
 
 // Convert from linear light to runtime lightmap storage light (currently gamma 2.2).
 function linearToLightmap(v: number): number {
+    // Quantize v to 1/1024.
+    // TODO(jstpierre): This causes too many issues with banding / gamma correction right now.
+    // v = Math.round(v * 1024.0) / 1024.0;
+
     const gamma = 2.2;
     // 0.5 factor here is overbright.
     return Math.pow(v, 1.0 / gamma) * 0.5;
@@ -3480,13 +3638,41 @@ function linearToLightmap(v: number): number {
 function lightmapPackRuntime(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
     for (let i = 0; i < texelCount; i++) {
         const sr = linearToLightmap(src[srcOffs++]), sg = linearToLightmap(src[srcOffs++]), sb = linearToLightmap(src[srcOffs++]);
-        dst[dstOffs++] = (sr * 255.0) | 0;
-        dst[dstOffs++] = (sg * 255.0) | 0;
-        dst[dstOffs++] = (sb * 255.0) | 0;
+        dst[dstOffs++] = Math.round(sr * 255.0);
+        dst[dstOffs++] = Math.round(sg * 255.0);
+        dst[dstOffs++] = Math.round(sb * 255.0);
         dstOffs++;
     }
 }
 
+class LightmapColor {
+    public r: number = 0;
+    public g: number = 0;
+    public b: number = 0;
+    public origMax: number = 0;
+
+    public calcMax(): number {
+        return Math.max(this.r, this.g, this.b);
+    }
+
+    public fetch(src: Float32Array, offs: number): number {
+        this.r = src[offs++];
+        this.g = src[offs++];
+        this.b = src[offs++];
+        return 3;
+    }
+
+    public fill(dst: Uint8ClampedArray, offs: number): number {
+        dst[offs++] = Math.round(this.r * 255.0);
+        dst[offs++] = Math.round(this.g * 255.0);
+        dst[offs++] = Math.round(this.b * 255.0);
+        // offs++;
+        return 4;
+    }
+}
+
+const scratchColors = [new LightmapColor(), new LightmapColor(), new LightmapColor()];
+const scratchColorSort = [0, 1, 2];
 function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
     const srcSize = texelCount * 3;
     const dstSize = texelCount * 4;
@@ -3502,82 +3688,116 @@ function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src
         dst[dstOffs0++] = Math.round(sb * 255.0);
         dstOffs0++;
 
-        let b0r = src[srcOffs1++], b0g = src[srcOffs1++], b0b = src[srcOffs1++];
-        let b1r = src[srcOffs2++], b1g = src[srcOffs2++], b1b = src[srcOffs2++];
-        let b2r = src[srcOffs3++], b2g = src[srcOffs3++], b2b = src[srcOffs3++];
-        const avgr = sr / Math.max((b0r + b1r + b2r) / 3.0, MathConstants.EPSILON);
-        const avgg = sg / Math.max((b0g + b1g + b2g) / 3.0, MathConstants.EPSILON);
-        const avgb = sb / Math.max((b0b + b1b + b2b) / 3.0, MathConstants.EPSILON);
+        const c = scratchColors;
+        srcOffs1 += c[0].fetch(src, srcOffs1);
+        srcOffs2 += c[1].fetch(src, srcOffs2);
+        srcOffs3 += c[2].fetch(src, srcOffs3);
 
-        b0r *= avgr; b0g *= avgg; b0b *= avgb;
-        b1r *= avgr; b1g *= avgg; b1b *= avgb;
-        b2r *= avgr; b2g *= avgg; b2b *= avgb;
+        const avgr = sr / Math.max((c[0].r + c[1].r + c[2].r) / 3.0, MathConstants.EPSILON);
+        const avgg = sg / Math.max((c[0].g + c[1].g + c[2].g) / 3.0, MathConstants.EPSILON);
+        const avgb = sb / Math.max((c[0].b + c[1].b + c[2].b) / 3.0, MathConstants.EPSILON);
+        for (let j = 0; j < 3; j++) {
+            const cc = c[j];
+            cc.r *= avgr;
+            cc.g *= avgg;
+            cc.b *= avgb;
+            cc.origMax = cc.calcMax();
+        }
 
         // Clamp & redistribute colors if necessary
-        const b0m = Math.max(b0r, b0g, b0b), b1m = Math.max(b1r, b1g, b1b), b2m = Math.max(b2r, b2g, b2b);
-        if (b0m > 1.0 || b1m > 1.0 || b2m > 1.0) {
-            // Slow path, just allocate here to save our sanity.
-            const colors = [[0, b0m, b0r, b0g, b0b], [1, b1m, b1r, b1g, b1b], [2, b2m, b2r, b2g, b2b]];
-            colors.sort((a, b) => b[1] - a[1]);
+        if (c[0].origMax > 1.0 || c[1].origMax > 1.0 || c[2].origMax > 1.0) {
+            const sort = scratchColorSort;
+            for (let j = 0; j < 3; j++) { sort[j] = j; }
+            sort.sort((a, b) => c[b].origMax - c[a].origMax);
 
-            for (let j = 0; j < colors.length; j++) {
-                if (colors[j][1] > 1.0) {
-                    const max = Math.max(colors[j][2], colors[j][3], colors[j][4]);
+            for (let j = 0; j < c.length; j++) {
+                const c0 = c[sort[j]];
+                if (c0.origMax > 1.0) {
+                    const max = c0.calcMax();
                     const m = (max - 1.0) / max;
-                    const mr = m * colors[j][2], mg = m * colors[j][3], mb = m * colors[j][4];
-                    colors[j][2] -= mr;
-                    colors[j][3] -= mg;
-                    colors[j][4] -= mb;
+                    const mr = m * c0.r, mg = m * c0.g, mb = m * c0.b;
 
-                    colors[(j+1)%3][2] += mr * 0.5;
-                    colors[(j+1)%3][3] += mg * 0.5;
-                    colors[(j+1)%3][4] += mb * 0.5;
+                    c0.r -= mr;
+                    c0.g -= mg;
+                    c0.b -= mb;
 
-                    colors[(j+2)%3][2] += mr * 0.5;
-                    colors[(j+2)%3][3] += mg * 0.5;
-                    colors[(j+2)%3][4] += mb * 0.5;
-                }
-            }
+                    const c1 = c[sort[(j+1)%3]];
+                    c1.r += mr * 0.5;
+                    c1.g += mg * 0.5;
+                    c1.b += mb * 0.5;
 
-            for (let j = 0; j < colors.length; j++) {
-                if (colors[j][0] === 0) {
-                    b0r = colors[j][2];
-                    b0g = colors[j][3];
-                    b0b = colors[j][4];
-                } else if (colors[j][0] === 1) {
-                    b1r = colors[j][2];
-                    b1g = colors[j][3];
-                    b1b = colors[j][4];
-                } else if (colors[j][0] === 2) {
-                    b2r = colors[j][2];
-                    b2g = colors[j][3];
-                    b2b = colors[j][4];
+                    const c2 = c[sort[(j+2)%3]];
+                    c2.r += mr * 0.5;
+                    c2.g += mg * 0.5;
+                    c2.b += mb * 0.5;
                 }
             }
         }
 
-        dst[dstOffs1++] = Math.round(b0r * 255.0);
-        dst[dstOffs1++] = Math.round(b0g * 255.0);
-        dst[dstOffs1++] = Math.round(b0b * 255.0);
-        dstOffs1++;
-
-        dst[dstOffs2++] = Math.round(b1r * 255.0);
-        dst[dstOffs2++] = Math.round(b1g * 255.0);
-        dst[dstOffs2++] = Math.round(b1b * 255.0);
-        dstOffs2++;
-
-        dst[dstOffs3++] = Math.round(b2r * 255.0);
-        dst[dstOffs3++] = Math.round(b2g * 255.0);
-        dst[dstOffs3++] = Math.round(b2b * 255.0);
-        dstOffs3++;
+        dstOffs1 += c[0].fill(dst, dstOffs1);
+        dstOffs2 += c[1].fill(dst, dstOffs2);
+        dstOffs3 += c[2].fill(dst, dstOffs3);
     }
 }
 
 export class WorldLightingState {
-    public styleIntensities = new Float32Array(255);
+    public styleIntensities = new Float32Array(64);
+    public stylePatterns: string[] = [
+        'm',
+        'mmnmmommommnonmmonqnmmo',
+        'abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba',
+        'mmmmmaaaaammmmmaaaaaabcdefgabcdefg',
+        'mamamamamama',
+        'jklmnopqrstuvwxyzyxwvutsrqponmlkj',
+        'nmonqnmomnmomomno',
+        'mmmaaaabcdefgmmmmaaaammmaamm',
+        'mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa',
+        'aaaaaaaazzzzzzzz',
+        'mmamammmmammamamaaamammma',
+        'abcdefghijklmnopqrrqponmlkjihgfedcba',
+        'mmnnmmnnnmmnn',
+    ];
+    private smoothAnim = false;
+    private doUpdates = true;
 
     constructor() {
         this.styleIntensities.fill(1.0);
+    }
+
+    private styleIntensityFromChar(c: number): number {
+        const alpha = c - 0x61;
+        assert(alpha >= 0 && alpha <= 25);
+        return (alpha * 22) / 264.0;
+    }
+
+    private styleIntensityFromPattern(pattern: string, time: number): number {
+        const t = time % pattern.length;
+        const i0 = t | 0;
+        const p0 = this.styleIntensityFromChar(pattern.charCodeAt(i0));
+
+        if (this.smoothAnim) {
+            const i1 = (i0 + 1) % pattern.length;
+            const t01 = t - i0;
+
+            const p1 = this.styleIntensityFromChar(pattern.charCodeAt(i1));
+            return lerp(p0, p1, t01);
+        } else {
+            return p0;
+        }
+    }
+
+    public update(timeInSeconds: number): void {
+        if (!this.doUpdates)
+            return;
+
+       const time = (timeInSeconds * 10);
+        for (let i = 0; i < this.styleIntensities.length; i++) {
+            const pattern = this.stylePatterns[i];
+            if (pattern === undefined)
+                continue;
+
+            this.styleIntensities[i] = this.styleIntensityFromPattern(pattern, time);
+        }
     }
 }
 
@@ -3601,22 +3821,21 @@ export class SurfaceLightmap {
     public lightmapUploadDirty: boolean = false;
     public pixelData: Uint8ClampedArray | null;
 
-    private scratchpad: Float32Array;
-
-    constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
-        this.scratchpad = lightmapManager.scratchpad;
-
+    constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
         this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
 
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
 
         if (this.wantsLightmap) {
             // Associate ourselves with the right page.
-            lightmapManager.registerSurfaceLightmap(this);
+            lightmapManager.registerSurfaceLightmap(this, pageIndex);
         }
     }
 
-    public buildLightmap(worldLightingState: WorldLightingState): void {
+    public buildLightmap(renderContext: SourceRenderContext): void {
+        const worldLightingState = renderContext.worldLightingState;
+        const scratchpad = renderContext.lightmapManager.scratchpad;
+
         // Check if our lightmap needs rebuilding.
         let dirty = false;
         for (let i = 0; i < this.lightmapData.styles.length; i++) {
@@ -3636,7 +3855,6 @@ export class SurfaceLightmap {
             const srcNumLightmaps = (this.wantsBumpmap && this.lightmapData.hasBumpmapSamples) ? 4 : 1;
             const srcSize = srcNumLightmaps * texelCount * 4;
 
-            const scratchpad = this.scratchpad;
             scratchpad.fill(0);
             assert(scratchpad.byteLength >= srcSize);
 
@@ -3668,6 +3886,7 @@ export class SurfaceLightmap {
         }
 
         this.lightmapUploadDirty = true;
+        renderContext.debugStatistics.lightmapsBuilt++;
     }
 }
 //#endregion
@@ -3748,6 +3967,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_PlayerProximity);
         this.registerProxyFactory(MaterialProxy_GaussianNoise);
         this.registerProxyFactory(MaterialProxy_AnimatedTexture);
+        this.registerProxyFactory(MaterialProxy_MaterialModify);
         this.registerProxyFactory(MaterialProxy_MaterialModifyAnimated);
         this.registerProxyFactory(MaterialProxy_WaterLOD);
         this.registerProxyFactory(MaterialProxy_TextureTransform);
@@ -4026,7 +4246,6 @@ class MaterialProxy_TextureScroll {
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext): void {
-        // TODO(jstpierre): Proximity.
         const p = paramLookup(map, this.texturescrollvar);
 
         const scale = paramGetNum(map, this.texturescale);
@@ -4106,6 +4325,14 @@ class MaterialProxy_AnimatedTexture {
         }
 
         paramSetNum(map, this.animatedtextureframenumvar, frame);
+    }
+}
+
+class MaterialProxy_MaterialModify {
+    public static type = 'materialmodify';
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        // Nothing to do
     }
 }
 

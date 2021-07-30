@@ -3,6 +3,8 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, align } from "../util";
 import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum";
 import { AABB } from "../Geometry";
+import { vec4 } from "gl-matrix";
+import { Color } from "../Color";
 
 export interface FSKL_Bone {
     name: string;
@@ -104,9 +106,8 @@ export const enum FMAT_ShaderParamType {
 export interface FMAT_ShaderParam {
     name: string;
     type: FMAT_ShaderParamType;
-    srcSize: number;
-    srcOffset: number;
-    offset: number;
+    rawData: ArrayBufferSlice;
+    littleEndian: boolean;
 }
 
 export interface FMAT {
@@ -304,6 +305,32 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     return { name, mesh, vertexIndex, boneIndex, materialIndex };
 }
 
+export function parseFMAT_ShaderParam_Float(p: FMAT_ShaderParam): number {
+    assert(p.type === FMAT_ShaderParamType.Float);
+    assert(p.rawData.byteLength === 4);
+    const view = p.rawData.createDataView();
+    return view.getFloat32(0x00, p.littleEndian);
+}
+
+export function parseFMAT_ShaderParam_Float4(dst: vec4, p: FMAT_ShaderParam): void {
+    assert(p.type === FMAT_ShaderParamType.Float4);
+    assert(p.rawData.byteLength === 16);
+    const view = p.rawData.createDataView();
+    dst[0] = view.getFloat32(0x00, p.littleEndian);
+    dst[1] = view.getFloat32(0x04, p.littleEndian);
+    dst[2] = view.getFloat32(0x08, p.littleEndian);
+    dst[3] = view.getFloat32(0x0C, p.littleEndian);
+}
+
+export function parseFMAT_ShaderParam_Color3(dst: Color, p: FMAT_ShaderParam): void {
+    assert(p.type === FMAT_ShaderParamType.Float3);
+    assert(p.rawData.byteLength === 12);
+    const view = p.rawData.createDataView();
+    dst.r = view.getFloat32(0x00, p.littleEndian);
+    dst.g = view.getFloat32(0x04, p.littleEndian);
+    dst.b = view.getFloat32(0x08, p.littleEndian);
+}
+
 function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FMAT {
     const view = buffer.createDataView();
 
@@ -442,11 +469,11 @@ function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     const shaderParam: FMAT_ShaderParam[] = [];
     for (let i = 0; i < shaderParamCount; i++) {
         const name = readBinStr(buffer, view.getUint32(shaderParamArrayIdx + 0x08, littleEndian), littleEndian);
-        const type = view.getUint8(shaderParamArrayIdx + 0x10);
+        const type: FMAT_ShaderParamType = view.getUint8(shaderParamArrayIdx + 0x10);
         const srcSize = view.getUint8(shaderParamArrayIdx + 0x11);
         const srcOffset = view.getUint16(shaderParamArrayIdx + 0x12, littleEndian);
-        const offset = view.getUint32(shaderParamArrayIdx + 0x14, littleEndian);
-        shaderParam.push({ name, type, srcSize, srcOffset, offset });
+        const rawData = buffer.subarray(srcParamOffs + srcOffset, srcSize);
+        shaderParam.push({ name, type, rawData, littleEndian });
         shaderParamArrayIdx += 0x20;
     }
 

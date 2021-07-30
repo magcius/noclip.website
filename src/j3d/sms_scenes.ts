@@ -302,15 +302,6 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-    }
-
     private setIndirectTextureOverride(): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
             // In options.szs, the seaindirect appears to have more than one sampler named "indirectdummy". WTF?
@@ -327,11 +318,20 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         }
     }
 
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderHelper.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         this.setIndirectTextureOverride();
+        this.prepareToRender(device, viewerInput);
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
@@ -386,7 +386,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.prepareToRender(device, viewerInput);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }

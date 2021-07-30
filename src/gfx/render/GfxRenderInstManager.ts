@@ -271,7 +271,7 @@ export class GfxRenderInst {
     }
 
     private _setBindingLayout(bindingLayout: GfxBindingLayoutDescriptor): void {
-        assert(bindingLayout.numUniformBuffers < this._dynamicUniformBufferByteOffsets.length);
+        assert(bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
         this._renderPipelineDescriptor.bindingLayouts[0] = bindingLayout;
         this._bindingDescriptors[0].bindingLayout = bindingLayout;
 
@@ -322,7 +322,7 @@ export class GfxRenderInst {
      * {@see getUniformBufferOffset}.
      */
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
-        assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers < this._dynamicUniformBufferByteOffsets.length);
+        assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
         this._dynamicUniformBufferByteOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount) << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
