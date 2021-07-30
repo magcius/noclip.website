@@ -132,15 +132,12 @@ class TurboUBER extends DeviceProgram {
 
     public static NumEnvLightParams = 6;
 
-    public isTranslucent: boolean = false;
-
     constructor(public fmat: FMAT) {
         super();
 
         this.name = this.fmat.name;
         assert(this.fmat.samplerInfo.length <= 8);
 
-        this.isTranslucent = false;
         this.frag = this.generateFrag();
     }
 
@@ -163,6 +160,7 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_TexCoordBake1ScaleBias;
     vec4 u_AlbedoColor;
     vec4 u_EmissionColor;
+    vec4 u_BakeLightScale;
     EnvLightParam u_EnvLightParams[${TurboUBER.NumEnvLightParams}];
 };
 
@@ -297,7 +295,7 @@ void CalcBakeResult(out BakeResult t_Result, in vec4 t_TexCoordBake) {
         // Lightmap.
         vec4 t_Bake1Sample = texture(u_TextureBake1, t_TexCoordBake.zw);
         vec3 t_Bake1Color = t_Bake1Sample.rgb * t_Bake1Sample.a;
-        t_Result.IndirectLight = t_Bake1Color;
+        t_Result.IndirectLight = t_Bake1Color * u_BakeLightScale.rgb;
     } else {
         // Unknown.
         t_Result.IndirectLight = vec3(0.0);
@@ -508,8 +506,7 @@ class FMATInstance {
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    public inOpaquePass: boolean = false;
-    public inTranslucentPass: boolean = false;
+    public inColorPass: boolean = false;
     public inShadowMap: boolean = false;
 
     // Shader params, should maybe be generic?
@@ -517,7 +514,9 @@ class FMATInstance {
     private texCoordBake1ScaleBias = vec4.create();
     private albedoColor = colorNewCopy(White);
     private emissionColor = colorNewCopy(White);
+    private bakeLightScale = colorNewCopy(White);
     private emissionIntensity = 1.0;
+    private sortKey: number = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: BRTITextureHolder, public fmat: FMAT) {
         this.program = new TurboUBER(fmat);
@@ -565,11 +564,10 @@ class FMATInstance {
         this.gfxProgram = device.createProgram(this.program);
 
         // Render flags.
-        const isTranslucent = this.program.isTranslucent;
         this.megaStateFlags = {
             cullMode:       translateCullMode(fmat),
             depthCompare:   reverseDepthForCompareMode(translateDepthCompare(fmat)),
-            depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),
+            depthWrite:     translateDepthWrite(fmat),
         };
 
         const blendMode = getRenderInfoSingleString(fmat.renderInfo.get('gsys_render_state_blend_mode')!);
@@ -593,14 +591,13 @@ class FMATInstance {
             throw "whoops";
         }
 
-        this.inOpaquePass = !isTranslucent;
-        this.inTranslucentPass = isTranslucent;
-
         const dynamic_depth_shadow = getRenderInfoBoolean(fmat.renderInfo.get('gsys_dynamic_depth_shadow')!);
         const dynamic_depth_shadow_only = getRenderInfoBoolean(fmat.renderInfo.get('gsys_dynamic_depth_shadow_only')!);
 
         const static_depth_shadow = getRenderInfoBoolean(fmat.renderInfo.get('gsys_static_depth_shadow')!);
         const static_depth_shadow_only = getRenderInfoBoolean(fmat.renderInfo.get('gsys_static_depth_shadow_only')!);
+
+        this.inColorPass = true;
 
         if (dynamic_depth_shadow || static_depth_shadow) {
             this.inShadowMap = true;
@@ -608,20 +605,29 @@ class FMATInstance {
 
         if (dynamic_depth_shadow_only || static_depth_shadow_only) {
             this.inShadowMap = true;
-            this.inOpaquePass = false;
-            this.inTranslucentPass = false;
+            this.inColorPass = false;
         }
 
         const cube_map_only = getRenderInfoBoolean(fmat.renderInfo.get('gsys_cube_map_only')!);
         if (cube_map_only) {
-            this.inOpaquePass = false;
-            this.inTranslucentPass = false;
+            this.inColorPass = false;
         }
 
         // Hacks!
         if (fmat.name.startsWith('CausticsArea')) {
-            this.inOpaquePass = false;
-            this.inTranslucentPass = false;
+            this.inColorPass = false;
+        }
+
+        const programKey = this.gfxProgram.ResourceUniqueId;
+        const render_state_mode = getRenderInfoSingleString(fmat.renderInfo.get('gsys_render_state_mode')!);
+        if (render_state_mode === 'opaque') {
+            this.sortKey = makeSortKey(GfxRendererLayer.OPAQUE, programKey);
+        } else if (render_state_mode === 'mask') {
+            this.sortKey = makeSortKey(GfxRendererLayer.ALPHA_TEST, programKey);
+        } else if (render_state_mode === 'translucent') {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, programKey);
+        } else {
+            throw "whoops";
         }
 
         parseFMAT_ShaderParam_Float4(this.texCoordBake0ScaleBias, findShaderParam(fmat, 'gsys_bake_st0'));
@@ -629,24 +635,24 @@ class FMATInstance {
 
         parseFMAT_ShaderParam_Color3(this.albedoColor, findShaderParam(fmat, 'albedo_tex_color'));
         parseFMAT_ShaderParam_Color3(this.emissionColor, findShaderParam(fmat, 'emission_color'));
+        parseFMAT_ShaderParam_Color3(this.bakeLightScale, findShaderParam(fmat, 'gsys_bake_light_scale'));
         this.emissionIntensity = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'emission_intensity'));
     }
 
     public setOnRenderInst(globals: TurboRenderGlobals, renderInst: GfxRenderInst): void {
-        const isTranslucent = this.program.isTranslucent;
-        const materialLayer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        renderInst.sortKey = makeSortKey(materialLayer, 0);
+        renderInst.sortKey = this.sortKey;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(TurboUBER.ub_MaterialParams, 16 + 3*4*TurboUBER.NumEnvLightParams);
+        let offs = renderInst.allocateUniformBuffer(TurboUBER.ub_MaterialParams, 4*5 + 3*4*TurboUBER.NumEnvLightParams);
         const d = renderInst.mapUniformBufferF32(TurboUBER.ub_MaterialParams);
         offs += fillVec4v(d, offs, this.texCoordBake0ScaleBias);
         offs += fillVec4v(d, offs, this.texCoordBake1ScaleBias);
         offs += fillColor(d, offs, this.albedoColor);
         colorScale(scratchColor, this.emissionColor, this.emissionIntensity);
         offs += fillColor(d, offs, scratchColor);
+        offs += fillColor(d, offs, this.bakeLightScale);
 
         const lightEnv = globals.lightEnv;
         const lmap = lightEnv.findLightMap(getRenderInfoSingleString(this.fmat.renderInfo.get('gsys_light_diffuse')!));
@@ -908,7 +914,7 @@ class FSHPInstance {
         if (!this.visible)
             return;
 
-        if (!(this.fmatInstance.inOpaquePass || this.fmatInstance.inTranslucentPass))
+        if (!this.fmatInstance.inColorPass)
             return;
 
         // TODO(jstpierre): Joints.
