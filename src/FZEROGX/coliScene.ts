@@ -1,7 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { hexzero0x, readString } from "../../util";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { hexzero0x, readString } from "../util";
 
+//#region GameObject
 interface ReferenceBinding {
     unk_0x00: number;
     unk_0x08: number,
@@ -41,10 +42,74 @@ interface GameObject {
     matrix: mat4
 }
 
+//#endregion GameObject
 
 interface Unk0x72 {
 
 }
+
+//#region TrackNode
+
+interface TrackCheckpoint {
+    curveTimeStart: number,
+    curveTimeEnd: number,
+
+    trackDistanceStart: number,
+    tangentStart: vec3,
+    positionStart: vec3,
+
+    trackDistanceEnd: number,
+    tangentEnd: vec3,
+    positionEnd: vec3,
+
+    transformDistanceEnd: number,
+    transformDistanceStart: number,
+    trackWidth: number,
+    isTrackContinuousStart: boolean,
+    isTrackContinuousEnd: boolean,
+}
+
+interface TopologyParameters {
+
+}
+
+interface TrackCornerTopology {
+
+}
+
+interface TrackUnkOption2 {
+
+}
+
+interface TrackSegment {
+    topologyMetadata: number,
+    trackProperty: number,
+    perimeterOptions: number,
+    pipeCylinderOptions: number,
+    trackAnimationCurves: TopologyParameters,
+    hairpinCornerTopology: TrackCornerTopology,
+    childIndexe: number[],
+    localScale: vec3,
+    localRotation: vec3,
+    localPosition: vec3,
+    /*
+    unk_0x38: number, // mixed flags
+    unk_0x39: number, // exclusive flags
+    unk_0x3A: number, // mixed flags
+    unk_0x3B: number, // mixed flags
+    */
+    railHeightRight: number,
+    railHeightLeft: number,
+    unk_0x4C: TrackUnkOption2, // 0, 1, 2, 3
+}
+
+interface TrackNode {
+    next_index_increase: number,
+    checkpoints: TrackCheckpoint[],
+    // segment: TrackSegment,
+}
+
+//#endregion TrackNode
 
 interface Header {
     unk_0x00: number,
@@ -92,6 +157,7 @@ interface Header {
 
 export interface ColiScene{
     header: Header,
+    trackNodes: TrackNode[],
     gameObjects: GameObject[],
 }
 
@@ -222,6 +288,97 @@ function parseGameObject(buffer: ArrayBufferSlice, offs: number): GameObject {
     return { position, scale, collisionBinding, /*animation, skeletalAnimator, */matrix };
 }
 
+function parseTrackNode(buffer: ArrayBufferSlice, offs: number): TrackNode {
+    function parseTrackPoint(buffer: ArrayBufferSlice, offs: number): TrackCheckpoint {
+        const view = buffer.createDataView();
+        const tangentStart = vec3.create();
+        const positionStart = vec3.create();
+        const tangentEnd = vec3.create();
+        const positionEnd = vec3.create();
+
+        const curveTimeStart = view.getFloat32(0x00);
+        const curveTimeEnd = view.getFloat32(0x04);
+        const trackDistanceStart = view.getFloat32(0x08);
+        vec3.set(tangentStart, view.getFloat32(0x0C), view.getFloat32(0x10), view.getFloat32(0x14));
+        vec3.set(positionStart, view.getFloat32(0x18), view.getFloat32(0x1C), view.getFloat32(0x20));
+        const trackDistanceEnd = view.getFloat32(0x24);
+        vec3.set(tangentEnd, view.getFloat32(0x28), view.getFloat32(0x2C), view.getFloat32(0x30));
+        vec3.set(positionEnd, view.getFloat32(0x34), view.getFloat32(0x38), view.getFloat32(0x3C));
+        const transformDistanceEnd = view.getFloat32(0x40);
+        const transformDistanceStart = view.getFloat32(0x44);
+        const trackWidth = view.getFloat32(0x48);
+        const isTrackContinuousStart = (view.getUint8(0x4C) == 0x01);
+        const isTrackContinuousEnd = (view.getUint8(0x4D) == 0x01);
+
+        return { 
+            curveTimeStart, curveTimeEnd,        
+            trackDistanceStart, tangentStart, positionStart,
+            trackDistanceEnd, tangentEnd, positionEnd,
+            transformDistanceEnd, transformDistanceStart, trackWidth, 
+            isTrackContinuousStart, isTrackContinuousEnd
+        }
+    }
+
+    // function parseTrackTransform(buffer: ArrayBufferSlice, offs: number): TrackSegment {
+        
+
+    //     const view = buffer.createDataView();
+    //     const localScale = vec3.create();
+    //     const localRotation = vec3.create();
+    //     const localPosition = vec3.create();
+        
+    //     const childIndexe = 0x00;
+
+    //     const topologyMetadata = view.getInt8(0x00);
+    //     const trackProperty = view.getInt8(0x01);
+    //     const perimeterOptions = view.getInt8(0x02);
+    //     const pipeCylinderOptions = view.getInt8(0x03);
+
+    //     const trackAnimationCurvesPtr = view.getInt32(0x04);
+    //     const trackAnimationCurves = ;
+
+    //     const hairpinCornerTopologyPtr = view.getInt32(0x08);
+    //     const hairpinCornerTopology = ;
+
+    //     const childrenCount = view.getInt32(0x0C);
+    //     const childrenPtrs = view.getInt32(0x10);
+
+    //     vec3.set(localScale, view.getFloat32(0x14), view.getFloat32(0x18), view.getFloat32(0x1C));
+    //     vec3.set(localRotation, view.getFloat32(0x20), view.getFloat32(0x24), view.getFloat32(0x28));
+    //     vec3.set(localPosition, view.getFloat32(0x2C), view.getFloat32(0x30), view.getFloat32(0x34));
+    //     const unk_0x38 = view.getInt8(0x38);
+    //     const unk_0x39 = view.getInt8(0x39);
+    //     const unk_0x3A = view.getInt8(0x3A);
+    //     const unk_0x3B = view.getInt8(0x3B);
+    //     const railHeightRight = view.getFloat32(0x3C);
+    //     const railHeightLeft = view.getFloat32(0x40);
+    //     const unk_0x4C = ;
+
+    //     return {
+    //         childIndexe,
+    //         topologyMetadata, trackProperty, perimeterOptions, pipeCylinderOptions,
+    //         trackAnimationCurves, hairpinCornerTopology,
+    //         localScale, localRotation, localPosition,
+    //         /*unk_0x38, unk_0x39, unk_0x3A, unk_0x3B,*/
+    //         railHeightRight, railHeightLeft, unk_0x4C
+    //     }
+    // }
+
+    const view = buffer.createDataView();
+    const checkpoints: TrackCheckpoint[] = [];
+
+    const next_index_increase = view.getInt32(0x00);
+    const trackPoint_absPtr = view.getInt32(0x04);
+    const trackTransform_absPtr = view.getInt32(0x08);
+    let trackPoint_ptr = 0x00;
+    for (let i = 0; i < next_index_increase; i++){
+        offs = trackPoint_ptr + (i * 0x0C);
+        checkpoints.push( parseTrackPoint(buffer, trackPoint_ptr) );
+    }
+    // const segment = parseTrackTransform(buffer, trackTransform_absPtr);
+    return { next_index_increase, checkpoints/*, segment*/ };
+}
+
 function parseHeader(buffer: ArrayBufferSlice, isAX: boolean): Header{
     const view = buffer.createDataView();
 
@@ -302,16 +459,23 @@ function parseHeader(buffer: ArrayBufferSlice, isAX: boolean): Header{
 
 export function parse(buffer: ArrayBufferSlice): ColiScene {
     const view = buffer.createDataView();
+    const trackNodes: TrackNode[] = [];
     const gameObjects: GameObject[] = [];
     let offs = 0x00;
 
     const headerSize = view.getInt32(0x24);
     const isAX = headerSize == 0xF8; // 0xF8 treat as AX. not 0xF8(0xFC) treat as GX.
     const header = parseHeader(buffer.slice(0x00, headerSize), isAX);
+    offs = header.trackNodeAbsPtr;
+    for (let i = 0; i < header.trackNodeCount; i++){
+        trackNodes.push( parseTrackNode(buffer, offs) );
+        offs += 0x0C;
+    }
+
     offs = header.gameObjectAbsPtr;
     for (let i = 0; i < header.gameObjectCount; i++){
         gameObjects.push( parseGameObject(buffer, offs) );
         offs += 0x40;
     }
-    return { header, gameObjects };
+    return { header, trackNodes, gameObjects };
 }

@@ -73,7 +73,7 @@ import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 
-import * as Scenes_FZEROGX from './SuperMonkeyBall/Scenes_FZEROGX';
+import * as Scenes_FZEROGX from './FZEROGX/Scenes_FZEROGX';
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';

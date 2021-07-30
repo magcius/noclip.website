@@ -172,10 +172,11 @@ class MaterialInstance {
 
         const mb = new GXMaterialBuilder();
         const matCount = material.matCount;
-        for(let i = 0; i < matCount; i++){
+        let i = 0;
+        for(i = 0; i < matCount; i++){
             mb.setTevDirect(i);
-            let ambSrc = i === 0 ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
-            let matSrc = i === 0 ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
+            let ambSrc = GX.ColorSrc.VTX;
+            let matSrc = GX.ColorSrc.VTX;
             mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, ambSrc, matSrc, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             mb.setTevOrder(i, (GX.TexCoordID.TEXCOORD0 + i) as GX.TexCoordID, (GX.TexMapID.TEXMAP0 + i) as GX.TexMapID, GX.RasColorChannelID.COLOR0A0);
             const samplerIdx = material.samplerIdxs[i];
@@ -187,49 +188,43 @@ class MaterialInstance {
 
             // Color
             let colorInA = GX.CC.ZERO;
-            let colorInB = GX.CC.TEXC;
-            let colorInC = ( (material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0) ? GX.CC.RASC : GX.CC.KONST;
+            let colorInB = ( (material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0) ? GX.CC.RASC : GX.CC.KONST;
+            let colorInC = GX.CC.TEXC;
             let colorInD = GX.CC.ZERO;
             let colorOp = GX.TevOp.ADD;
-            let TevOp = GX.TevBias.ZERO;
+            let TevOp = GX.TevBias.ZERO; // makes whiter or blacker
             let colorScale = GX.TevScale.SCALE_1;
             let colorRegId = GX.Register.PREV;
-            let sel = GX.KonstColorSel.KCSEL_1;
+            let sel = GX.KonstColorSel.KCSEL_1; // Konst value
 
             if (i > 0){
                 // tev stage more than 1
-                colorInC = GX.CC.CPREV;
+                colorInB = GX.CC.CPREV;
             }
-            if ( (colorType & 1) !== 0 ){
+            if ( colorType === 0x1 ){
                 // 0x1
-                colorInC = GX.CC.KONST;
-                colorInD = GX.CC.CPREV;
+                colorInC = GX.CC.ONE;
+                colorInD = GX.CC.TEXC;
             }
-            if ( (colorType & (1 << 1)) !== 0 ){
+            if ( colorType === 0x2 ){
                 // 0x2 sub
-                colorInA = GX.CC.TEXC;
-                colorInD = GX.CC.CPREV;
+                colorInD = colorInB;
+                colorInB = GX.CC.ONE;
                 colorOp = GX.TevOp.SUB;
             }
-            if ( (colorType & (1 << 2)) !== 0 ){
+            if ( colorType === 0x3 ){
+                // 0x3
+                colorInC = colorInB;
+                colorInB = GX.CC.ONE;
+            }
+
+            if ( colorType === 0x4 ){
                 // 0x4
                 colorInA = GX.CC.CPREV;
                 colorInB = GX.CC.TEXC;
                 colorInC = GX.CC.TEXA;
                 colorInD = GX.CC.ZERO;
             }
-
-            // if (0x03){
-            //                     //3
-            // colorInA = GX.CC.ZERO;
-            // colorInB = GX.CC.ZERO;
-            // colorInC = GX.CC.TEXA;
-            // colorInD = GX.CC.CPREV;
-            // colorOp = GX.TevOp.ADD;
-            // TevOp = GX.TevBias.ZERO;
-            // colorScale = GX.TevScale.SCALE_1;
-            // colorRegId = GX.Register.PREV;
-            // sel = GX.KonstColorSel.KCSEL_1;
             
             mb.setTevKColorSel(i, sel);
             mb.setTevColorIn(i, colorInA, colorInB, colorInC, colorInD);
@@ -305,7 +300,7 @@ class MaterialInstance {
 
         if (transparent){
             // texture conatins "alpha" value
-            mb.setAlphaCompare(GX.CompareType.GEQUAL, material.transparents[0], GX.AlphaOp.AND, GX.CompareType.LEQUAL, material.transparents[1]);
+            mb.setAlphaCompare(GX.CompareType.GEQUAL, 0x80, GX.AlphaOp.AND, GX.CompareType.LEQUAL, 0xFF);
         } else {
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         }
@@ -319,7 +314,7 @@ class MaterialInstance {
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish(), materialData.materialHacks);
 
-        let layer = transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        let layer = GfxRendererLayer.TRANSLUCENT;
         this.setSortKeyLayer(layer);
     }
 

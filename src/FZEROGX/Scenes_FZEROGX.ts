@@ -1,12 +1,12 @@
 ﻿import * as Viewer from '../viewer';
-import * as AVLZ from './AVLZ';
-import * as COLI from  './FZEROGX/coliScene';
-import * as BG from  './FZEROGX/backGround';
+import * as AVLZ from '../SuperMonkeyBall/AVLZ';
+import * as COLI from  './coliScene';
+import * as BG from  './backGround';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
-import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './scenes_AmusementVision';
+import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from '../SuperMonkeyBall/scenes_AmusementVision';
 import { mat4 } from 'gl-matrix';
 
 export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
