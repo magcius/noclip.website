@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, align } from "../util";
 import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum";
 import { AABB } from "../Geometry";
-import { vec4 } from "gl-matrix";
+import { vec2, vec4 } from "gl-matrix";
 import { Color } from "../Color";
 
 export interface FSKL_Bone {
@@ -310,6 +310,14 @@ export function parseFMAT_ShaderParam_Float(p: FMAT_ShaderParam): number {
     assert(p.rawData.byteLength === 0x04);
     const view = p.rawData.createDataView();
     return view.getFloat32(0x00, p.littleEndian);
+}
+
+export function parseFMAT_ShaderParam_Float2(dst: vec2, p: FMAT_ShaderParam): void {
+    assert(p.type === FMAT_ShaderParamType.Float2);
+    assert(p.rawData.byteLength === 0x08);
+    const view = p.rawData.createDataView();
+    dst[0] = view.getFloat32(0x00, p.littleEndian);
+    dst[1] = view.getFloat32(0x04, p.littleEndian);
 }
 
 export function parseFMAT_ShaderParam_Float4(dst: vec4, p: FMAT_ShaderParam): void {
