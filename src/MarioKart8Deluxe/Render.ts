@@ -1,5 +1,4 @@
 
-import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
@@ -8,12 +7,12 @@ import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
 import * as BNTX from '../fres_nx/bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
-import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float } from '../fres_nx/bfres';
+import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
-import { nArray, assert, assertExists } from '../util';
+import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
@@ -25,12 +24,12 @@ import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFull
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
-import { Vec3Zero } from '../MathHelpers';
+import { MathConstants, Vec3Zero } from '../MathHelpers';
 
 import * as SARC from "../fres_nx/sarc";
 import * as AGLLightMap from './AGLParameter_LightMap';
 import * as AGLEnv from './AGLParameter_Env';
-import { colorNewCopy, colorScale, OpaqueBlack, White } from '../Color';
+import { colorCopy, colorNewCopy, colorScale, OpaqueBlack, White } from '../Color';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -57,7 +56,8 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const deswizzled = deswizzle({ buffer, width, height, channelFormat });
+            const blockHeightLog2 = textureEntry.blockHeightLog2;
+            const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
             const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
             const rgbaPixels = rgbaTexture.pixels;
             device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
@@ -117,20 +117,13 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
 }
 
 class TurboUBER extends DeviceProgram {
-    public static _p0: number = 0;
-    public static _c0: number = 1;
-    public static _u0: number = 2;
-    public static _u1: number = 3;
-    public static _n0: number = 4;
-    public static _t0: number = 5;
-
-    public static a_Orders = [ '_p0', '_c0', '_u0', '_u1', '_n0', '_t0' ];
-    public static s_Orders = [ '_a0', '_s0', '_n0', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3' ];
+    public static a_Orders = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_n0', '_t0' ];
+    public static s_Orders = [ '_a0', '_s0', '_n0', '_n1', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3' ];
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
 
-    public static NumEnvLightParams = 6;
+    public static NumEnvLightParams = 2;
 
     constructor(public fmat: FMAT) {
         super();
@@ -156,13 +149,21 @@ struct EnvLightParam {
 };
 
 layout(std140) uniform ub_MaterialParams {
+    Mat4x2 u_TexCoordSRT0;
     vec4 u_TexCoordBake0ScaleBias;
     vec4 u_TexCoordBake1ScaleBias;
-    vec4 u_AlbedoColor;
-    vec4 u_EmissionColor;
+    Mat4x2 u_TexCoordSRT2;
+    Mat4x2 u_TexCoordSRT3;
+    vec4 u_AlbedoColorAndTransparency;
+    vec4 u_EmissionColorAndNormalMapWeight;
     vec4 u_BakeLightScale;
     EnvLightParam u_EnvLightParams[${TurboUBER.NumEnvLightParams}];
 };
+
+#define u_AlbedoColor (u_AlbedoColorAndTransparency.rgb)
+#define u_Transparency (u_AlbedoColorAndTransparency.a)
+#define u_EmissionColor (u_EmissionColorAndNormalMapWeight.rgb)
+#define u_NormalMapWeight (u_EmissionColorAndNormalMapWeight.a)
 
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
     return t_Pos.xy * t_SB.xy + t_SB.zw;
@@ -171,27 +172,40 @@ vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
 uniform sampler2D u_TextureAlbedo0;   // _a0
 uniform sampler2D u_TextureSpecMask;  // _s0
 uniform sampler2D u_TextureNormal0;   // _n0
+uniform sampler2D u_TextureNormal1;   // _n1
 uniform sampler2D u_TextureEmission0; // _e0
 uniform sampler2D u_TextureBake0;     // _b0
 uniform sampler2D u_TextureBake1;     // _b1
-uniform sampler2D _a1;                // _a1
-uniform sampler2D _a2;                // _a2
+uniform sampler2D u_TextureMultiA;    // _a1
+uniform sampler2D u_TextureMultiB;    // _a2
 uniform sampler2D _a3;                // _a3
 `;
 
     public both = TurboUBER.globalDefinitions;
 
     public vert = `
-layout(location = ${TurboUBER._p0}) in vec3 a_Position;  // _p0
-layout(location = ${TurboUBER._c0}) in vec4 a_Color;     // _c0
-layout(location = ${TurboUBER._u0}) in vec2 a_TexCoord0; // _u0
-layout(location = ${TurboUBER._u1}) in vec2 a_TexCoord1; // _u1
-layout(location = ${TurboUBER._n0}) in vec4 a_Normal;    // _n0
-layout(location = ${TurboUBER._t0}) in vec4 a_Tangent;   // _t0
+layout(location = ${this.getAttrLocation('_p0')}) in vec3 a_p0; // _p0
+layout(location = ${this.getAttrLocation('_c0')}) in vec4 a_c0; // _c0
+layout(location = ${this.getAttrLocation('_u0')}) in vec2 a_u0; // _u0
+layout(location = ${this.getAttrLocation('_u1')}) in vec2 a_u1; // _u1
+layout(location = ${this.getAttrLocation('_u2')}) in vec2 a_u2; // _u2
+layout(location = ${this.getAttrLocation('_u3')}) in vec2 a_u3; // _u3
+layout(location = ${this.getAttrLocation('_n0')}) in vec4 a_n0; // _n0
+layout(location = ${this.getAttrLocation('_t0')}) in vec4 a_t0; // _t0
+
+#define a_Position  (a${this.getAttrAssign('_p0')})
+#define a_Color     (a${this.getAttrAssign('_c0')})
+#define a_TexCoord0 (a${this.getAttrAssign('_u0')})
+#define a_TexCoord1 (a${this.getAttrAssign('_u1')})
+#define a_TexCoord2 (a${this.getAttrAssign('_u2')})
+#define a_TexCoord3 (a${this.getAttrAssign('_u3')})
+#define a_Normal    (a${this.getAttrAssign('_n0')})
+#define a_Tangent   (a${this.getAttrAssign('_t0')})
 
 out vec3 v_PositionWorld;
 out vec2 v_TexCoord0;
 out vec4 v_TexCoordBake;
+out vec4 v_TexCoord23;
 out vec4 v_VtxColor;
 out vec4 v_NormalWorld;
 out vec4 v_TangentWorld;
@@ -199,14 +213,32 @@ out vec4 v_TangentWorld;
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
     v_PositionWorld = a_Position.xyz;
-    v_TexCoord0 = a_TexCoord0;
+    v_TexCoord0 = Mul(u_TexCoordSRT0, vec4(a_TexCoord0.xy, 1.0, 1.0));
     v_TexCoordBake.xy = CalcScaleBias(a_TexCoord1.xy, u_TexCoordBake0ScaleBias);
     v_TexCoordBake.zw = CalcScaleBias(a_TexCoord1.xy, u_TexCoordBake1ScaleBias);
+    v_TexCoord23.xy = Mul(u_TexCoordSRT2, vec4(a_TexCoord2.xy, 1.0, 1.0));
+    v_TexCoord23.zw = Mul(u_TexCoordSRT3, vec4(a_TexCoord3.xy, 1.0, 1.0));
     v_VtxColor = a_Color;
     v_NormalWorld = a_Normal;
     v_TangentWorld = a_Tangent;
 }
 `;
+
+    private getAttrAssign(attrName: string): string {
+        const attrAssign = this.fmat.shaderAssign.attrAssign;
+        return fallbackUndefined(attrAssign.get(attrName), attrName);
+    }
+
+    private getAttrLocation(attrName: string): number {
+        const index = TurboUBER.a_Orders.indexOf(attrName);
+        assert(index >= 0);
+        return index;
+    }
+
+    private isTranslucent(): boolean {
+        const render_state_mode = getRenderInfoSingleString(this.fmat.renderInfo.get('gsys_render_state_mode')!);
+        return render_state_mode === 'translucent';
+    }
 
     private shaderOptionBool(name: string, fallback: boolean = false): boolean {
         let v = this.fmat.shaderAssign.shaderOption.get(name);
@@ -236,6 +268,7 @@ ${GfxShaderLibrary.saturate}
 in vec3 v_PositionWorld;
 in vec2 v_TexCoord0;
 in vec4 v_TexCoordBake;
+in vec4 v_TexCoord23;
 in vec4 v_VtxColor;
 in vec4 v_NormalWorld;
 in vec4 v_TangentWorld;
@@ -308,8 +341,8 @@ void CalcBakeResult(out BakeResult t_Result, in vec4 t_TexCoordBake) {
         t_Result.Shadow = 1.0;
     } else if (bake_shadow_type == 1) {
         float t_BakeSample = texture(u_TextureBake0, t_TexCoordBake.xy).r;
-        t_Result.AO = t_BakeSample;
-        t_Result.Shadow = 1.0;
+        t_Result.AO = 1.0;
+        t_Result.Shadow = t_BakeSample;
     } else if (bake_shadow_type == 2) {
         vec2 t_BakeSample = texture(u_TextureBake0, t_TexCoordBake.xy).rg;
         t_Result.AO = t_BakeSample.r;
@@ -321,14 +354,131 @@ void CalcBakeResult(out BakeResult t_Result, in vec4 t_TexCoordBake) {
     }
 }
 
+vec2 SelectTexCoord(in int t_Selection) {
+    if (t_Selection == 0)
+        return v_TexCoord0.xy;
+    else if (t_Selection == 2)
+        return v_TexCoord23.xy;
+    else if (t_Selection == 3)
+        return v_TexCoord23.zw;
+    else
+        return vec2(0.0); // error!
+}
+
+vec4 SampleMultiTextureA() {
+    vec2 t_TexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_multiA')});
+    return texture(SAMPLER_2D(u_TextureMultiA), t_TexCoord.xy);
+}
+
+vec4 SampleMultiTextureB() {
+    vec2 t_TexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_multiB')});
+    return texture(SAMPLER_2D(u_TextureMultiB), t_TexCoord.xy);
+}
+
+void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
+    bool enable_multi_texture = ${this.shaderOptionBool('enable_multi_texture')};
+    if (!enable_multi_texture)
+        return;
+
+    int multi_tex_output_type = ${this.shaderOptionInt('multi_tex_output_type')};
+    if (t_OutputType != multi_tex_output_type)
+        return;
+
+    int multi_tex_calc_type_color = ${this.shaderOptionInt('multi_tex_calc_type_color')};
+    if (multi_tex_calc_type_color == 0) { // Nothing.
+        // This space intentionally left blank.
+    } else if (multi_tex_calc_type_color == 1) { // Sample*A
+        t_Sample.rgb *= SampleMultiTextureA().rgb;
+    } else if (multi_tex_calc_type_color == 2) { // Sample*A*B
+        t_Sample.rgb *= SampleMultiTextureA().rgb * SampleMultiTextureB().rgb;
+    } else if (multi_tex_calc_type_color == 12) { // Sample*A+B
+        t_Sample.rgb = saturate(t_Sample.rgb + SampleMultiTextureA().rgb + SampleMultiTextureB().rgb);
+    } else if (multi_tex_calc_type_color == 30) { // Rainbow Road
+        // Not sure!
+        // t_Sample.rgb = SampleMultiTextureA().rgb;
+    } else {
+        // Unknown multi texture calc type.
+    }
+
+    int multi_tex_calc_type_alpha = ${this.shaderOptionInt('multi_tex_calc_type_alpha')};
+    if (multi_tex_calc_type_alpha == 0) { // Nothing
+        // This space intentionally left blank.
+    } else if (multi_tex_calc_type_alpha == 1) { // Mul A
+        t_Sample.a *= SampleMultiTextureA().a;
+    } else {
+        // Unknown multi texture calc type.
+    }
+}
+
+vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
+    return t_NormalMapSample * 2.0 - 1.0;
+}
+
+vec3 ReconstructNormal(in vec2 t_NormalXY) {
+    float t_NormalZ = sqrt(saturate(1.0 - dot(t_NormalXY.xy, t_NormalXY.xy)));
+    return vec3(t_NormalXY.xy, t_NormalZ);
+}
+
+vec3 UnpackNormalMap(in vec4 t_NormalMapSample) {
+    bool normalmap_bc1 = ${this.shaderOptionBool('gsys_normalmap_BC1')};
+
+    vec2 t_NormalXY = t_NormalMapSample.xy;
+    if (normalmap_bc1) {
+        t_NormalXY = t_NormalXY * 2.0 - 1.0;
+    }
+
+    return ReconstructNormal(t_NormalXY);
+}
+
+vec3 SampleNormalMap0() {
+    vec2 t_TexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_normal')});
+    vec4 t_NormalMapSample = texture(SAMPLER_2D(u_TextureNormal0), t_TexCoord);
+    return UnpackNormalMap(t_NormalMapSample);
+}
+
+vec3 SampleNormalMap1() {
+    vec2 t_TexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_normal2')});
+    vec4 t_NormalMapSample = texture(SAMPLER_2D(u_TextureNormal0), t_TexCoord);
+    return UnpackNormalMap(t_NormalMapSample);
+}
+
+vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
+}
+
+vec3 CalcNormalWorld() {
+    bool enable_normal_map = ${this.shaderOptionBool('enable_normal_map')};
+    if (!enable_normal_map)
+        return v_NormalWorld.xyz;
+
+    vec3 t_Basis2 = v_NormalWorld.xyz;
+    vec3 t_Basis0 = v_TangentWorld.xyz;
+    vec3 t_Basis1 = cross(v_NormalWorld.xyz, v_TangentWorld.xyz) * v_TangentWorld.z;
+
+    // We now have our basis. Now sample the normal maps.
+    vec3 t_TangentNormal0 = SampleNormalMap0();
+    vec3 t_NormalWorld0 = CalcTangentToWorld(t_TangentNormal0, t_Basis0, t_Basis1, t_Basis2);
+
+    bool gsys_enable_normal_map2 = ${this.shaderOptionBool('gsys_enable_normal_map2')};
+    if (gsys_enable_normal_map2) {
+        vec3 t_TangentNormal1 = SampleNormalMap1();
+        vec3 t_NormalWorld1 = CalcTangentToWorld(t_TangentNormal1, t_Basis0, t_Basis1, t_Basis2);
+        return normalize(mix(t_NormalWorld0, t_NormalWorld1, u_NormalMapWeight));
+    } else {
+        return t_NormalWorld0;
+    }
+}
+
 void main() {
     // ShaderOption settings.
     bool enable_diffuse = ${this.shaderOptionBool('enable_diffuse')};
     bool enable_diffuse2 = ${this.shaderOptionBool('enable_diffuse2')};
     bool enable_albedo = ${this.shaderOptionBool('enable_albedo')};
-    bool enable_vtx_color_diff = ${this.shaderOptionBool('enable_vtx_color_diff')};
     bool enable_emission = ${this.shaderOptionBool('enable_emission')};
     bool enable_emission_map = ${this.shaderOptionBool('enable_emission_map')};
+    bool enable_vtx_color_diff = ${this.shaderOptionBool('enable_vtx_color_diff')};
+    bool enable_vtx_color_emission = ${this.shaderOptionBool('enable_vtx_color_emission')};
+    bool enable_vtx_alpha_trans = ${this.shaderOptionBool('enable_vtx_alpha_trans')};
 
     vec4 t_PixelOut = vec4(0.0);
     float t_Alpha = 1.0;
@@ -340,8 +490,10 @@ void main() {
     CalcBakeResult(t_BakeResult, v_TexCoordBake);
     t_IncomingLightDiffuse += t_BakeResult.IndirectLight;
 
+    vec3 t_NormalWorld = CalcNormalWorld();
+
     LightResult t_LightResult;
-    CalcEnvLight(t_LightResult, v_NormalWorld.xyz, t_BakeResult.Shadow);
+    CalcEnvLight(t_LightResult, t_NormalWorld.xyz, t_BakeResult.Shadow);
 
     if (enable_diffuse) {
         t_IncomingLightDiffuse += t_LightResult.DiffuseColor;
@@ -354,6 +506,7 @@ void main() {
 
     if (enable_diffuse2 && enable_albedo) {
         vec4 t_AlbedoSample = texture(SAMPLER_2D(u_TextureAlbedo0), v_TexCoord0.xy);
+        CalcMultiTexture(0, t_AlbedoSample);
         t_Albedo.rgb *= t_AlbedoSample.rgb;
         t_Alpha *= t_AlbedoSample.a;
     }
@@ -363,22 +516,36 @@ void main() {
     }
 
     if (enable_emission && enable_emission_map) {
-        vec4 t_EmissionSample = texture(SAMPLER_2D(u_TextureEmission0), v_TexCoord0.xy);
+        vec2 t_EmissionTexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_emission')});
+        vec4 t_EmissionSample = texture(SAMPLER_2D(u_TextureEmission0), t_EmissionTexCoord.xy);
+        CalcMultiTexture(1, t_EmissionSample);
         t_Emission.rgb *= t_EmissionSample.rgb;
+    }
+    if (enable_emission && enable_vtx_color_emission) {
+        t_Emission.rgb *= v_VtxColor.rgb;
     }
 
     if (enable_diffuse2) {
         t_PixelOut.rgb += t_Albedo.rgb * t_IncomingLightDiffuse;
     }
 
+    vec3 t_AOColor = vec3(t_BakeResult.AO);
+    t_PixelOut.rgb *= t_AOColor;
+
     if (enable_emission) {
         t_PixelOut.rgb += t_Emission.rgb;
     }
 
-    t_PixelOut.a = t_Alpha;
+    bool is_xlu = ${this.isTranslucent()};
+    if (is_xlu) {
+        t_Alpha *= u_Transparency;
 
-    vec3 t_AOColor = vec3(t_BakeResult.AO);
-    t_PixelOut.rgb *= t_AOColor;
+        if (enable_vtx_alpha_trans) {
+            t_Alpha *= v_VtxColor.a;
+        }
+    }
+
+    t_PixelOut.a = t_Alpha;
 
 ${this.generateAlphaTest()}
 
@@ -499,6 +666,81 @@ function findShaderParam(fmat: FMAT, name: string): FMAT_ShaderParam {
     return fmat.shaderParam.find((p) => p.name === name)!;
 }
 
+function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = rotation * MathConstants.DEG_TO_RAD;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    const sinP = 0.5 * sinR - 0.5;
+    const cosP = -0.5 * cosR;
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS *  sinR;
+    dst[12] = scaleS * (cosP - sinP - translationS);
+
+    dst[1]  = scaleT * -sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = scaleT * (cosP + sinP + translationT) + 1.0;
+}
+
+function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = rotation * MathConstants.DEG_TO_RAD;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS *  sinR;
+    dst[12] = scaleS * ((-cosR * (translationS + 0.5)) + (sinR * (translationT - 0.5))) + 0.5;
+
+    dst[1]  = scaleT * -sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = scaleT * (( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5))) + 0.5;
+}
+
+function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = rotation * MathConstants.DEG_TO_RAD;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS * -sinR;
+    dst[12] = (scaleS *  sinR) - (scaleS * cosR * translationS) - (scaleS * sinR * translationT);
+
+    dst[1]  = scaleT *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = (scaleT * -cosR) - (scaleT * sinR * translationS) + (scaleT * cosR * translationT) + 1.0;
+}
+
+const enum TexSRTMode { Maya, Max, XSI }
+class TexSRT {
+    public mode = TexSRTMode.Maya;
+    public scaleS = 1.0;
+    public scaleT = 1.0;
+    public rotation = 0.0;
+    public translationS = 0.0;
+    public translationT = 0.0;
+
+    public calc(dst: mat4): void {
+        if (this.mode === TexSRTMode.Maya)
+            calcTexMtx_Maya(dst, this.scaleS, this.scaleT, this.rotation, this.translationS, this.translationT);
+        else if (this.mode === TexSRTMode.Max)
+            calcTexMtx_Max(dst, this.scaleS, this.scaleT, this.rotation, this.translationS, this.translationT);
+        else if (this.mode === TexSRTMode.XSI)
+            calcTexMtx_XSI(dst, this.scaleS, this.scaleT, this.rotation, this.translationS, this.translationT);
+    }
+
+    public fillMatrix(d: Float32Array, offs: number): number {
+        this.calc(scratchMatrix);
+        return fillMatrix4x2(d, offs, scratchMatrix);
+    }
+}
+
 class FMATInstance {
     public gfxSamplers: GfxSampler[] = [];
     public textureMapping: TextureMapping[] = [];
@@ -510,15 +752,18 @@ class FMATInstance {
     public inShadowMap: boolean = false;
 
     // Shader params, should maybe be generic?
+    private texCoordSRT0 = new TexSRT();
     private texCoordBake0ScaleBias = vec4.create();
     private texCoordBake1ScaleBias = vec4.create();
-    private albedoColor = colorNewCopy(White);
-    private emissionColor = colorNewCopy(White);
+    private texCoordSRT2 = new TexSRT();
+    private texCoordSRT3 = new TexSRT();
+    private albedoColorAndTransparency = colorNewCopy(White);
+    private emissionColorAndNormalMapWeight = colorNewCopy(White);
     private bakeLightScale = colorNewCopy(White);
     private emissionIntensity = 1.0;
     private sortKey: number = 0;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: BRTITextureHolder, public fmat: FMAT) {
+    constructor(cache: GfxRenderCache, textureHolder: BRTITextureHolder, public fmat: FMAT) {
         this.program = new TurboUBER(fmat);
 
         // Fill in our texture mappings.
@@ -549,7 +794,7 @@ class FMATInstance {
 
             // Unsupported texture type.
             if (shaderSamplerIndex < 0) {
-                assert(['_n1', '_t0'].includes(shaderSamplerName));
+                assert(['_t0'].includes(shaderSamplerName));
                 continue;
             }
 
@@ -561,7 +806,7 @@ class FMATInstance {
             shaderMapping.gfxSampler = this.gfxSamplers[samplerIndex];
         }
 
-        this.gfxProgram = device.createProgram(this.program);
+        this.gfxProgram = cache.createProgram(this.program);
 
         // Render flags.
         this.megaStateFlags = {
@@ -591,6 +836,11 @@ class FMATInstance {
             throw "whoops";
         }
 
+        const pass = getRenderInfoSingleString(fmat.renderInfo.get('gsys_pass')!);
+        if (pass === 'seal')
+            this.megaStateFlags.polygonOffset = true;
+
+        // Decide visibility.
         const dynamic_depth_shadow = getRenderInfoBoolean(fmat.renderInfo.get('gsys_dynamic_depth_shadow')!);
         const dynamic_depth_shadow_only = getRenderInfoBoolean(fmat.renderInfo.get('gsys_dynamic_depth_shadow_only')!);
 
@@ -630,13 +880,18 @@ class FMATInstance {
             throw "whoops";
         }
 
+        parseFMAT_ShaderParam_Texsrt(this.texCoordSRT0, findShaderParam(fmat, 'tex_mtx0'));
         parseFMAT_ShaderParam_Float4(this.texCoordBake0ScaleBias, findShaderParam(fmat, 'gsys_bake_st0'));
         parseFMAT_ShaderParam_Float4(this.texCoordBake1ScaleBias, findShaderParam(fmat, 'gsys_bake_st1'));
+        parseFMAT_ShaderParam_Texsrt(this.texCoordSRT2, findShaderParam(fmat, 'tex_mtx1'));
+        parseFMAT_ShaderParam_Texsrt(this.texCoordSRT3, findShaderParam(fmat, 'tex_mtx2'));
 
-        parseFMAT_ShaderParam_Color3(this.albedoColor, findShaderParam(fmat, 'albedo_tex_color'));
-        parseFMAT_ShaderParam_Color3(this.emissionColor, findShaderParam(fmat, 'emission_color'));
+        parseFMAT_ShaderParam_Color3(this.albedoColorAndTransparency, findShaderParam(fmat, 'albedo_tex_color'));
+        parseFMAT_ShaderParam_Color3(this.emissionColorAndNormalMapWeight, findShaderParam(fmat, 'emission_color'));
         parseFMAT_ShaderParam_Color3(this.bakeLightScale, findShaderParam(fmat, 'gsys_bake_light_scale'));
         this.emissionIntensity = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'emission_intensity'));
+        this.albedoColorAndTransparency.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'transparency'));
+        this.emissionColorAndNormalMapWeight.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'normal_map_weight'));
     }
 
     public setOnRenderInst(globals: TurboRenderGlobals, renderInst: GfxRenderInst): void {
@@ -645,22 +900,21 @@ class FMATInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(TurboUBER.ub_MaterialParams, 4*5 + 3*4*TurboUBER.NumEnvLightParams);
+        let offs = renderInst.allocateUniformBuffer(TurboUBER.ub_MaterialParams, 4*2*4 + 4*3 + 3*4*TurboUBER.NumEnvLightParams);
         const d = renderInst.mapUniformBufferF32(TurboUBER.ub_MaterialParams);
+        offs += this.texCoordSRT0.fillMatrix(d, offs);
         offs += fillVec4v(d, offs, this.texCoordBake0ScaleBias);
         offs += fillVec4v(d, offs, this.texCoordBake1ScaleBias);
-        offs += fillColor(d, offs, this.albedoColor);
-        colorScale(scratchColor, this.emissionColor, this.emissionIntensity);
+        offs += this.texCoordSRT2.fillMatrix(d, offs);
+        offs += this.texCoordSRT3.fillMatrix(d, offs);
+        offs += fillColor(d, offs, this.albedoColorAndTransparency);
+        colorScale(scratchColor, this.emissionColorAndNormalMapWeight, this.emissionIntensity);
         offs += fillColor(d, offs, scratchColor);
         offs += fillColor(d, offs, this.bakeLightScale);
 
         const lightEnv = globals.lightEnv;
         const lmap = lightEnv.findLightMap(getRenderInfoSingleString(this.fmat.renderInfo.get('gsys_light_diffuse')!));
         offs += lightEnv.fillEnvLightParamsForMap(d, offs, lmap, TurboUBER.NumEnvLightParams);
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -941,7 +1195,7 @@ class FSHPInstance {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 9 },
+    { numUniformBuffers: 2, numSamplers: 10 },
 ];
 
 export class FMDLRenderer {
@@ -956,7 +1210,7 @@ export class FMDLRenderer {
         this.name = fmdl.name;
 
         for (let i = 0; i < fmdl.fmat.length; i++)
-            this.fmatInst.push(new FMATInstance(device, cache, this.textureHolder, fmdl.fmat[i]));
+            this.fmatInst.push(new FMATInstance(cache, this.textureHolder, fmdl.fmat[i]));
 
         for (let i = 0; i < this.fmdlData.fshpData.length; i++) {
             const fshpData = this.fmdlData.fshpData[i];
@@ -981,11 +1235,6 @@ export class FMDLRenderer {
 
         renderInstManager.popTemplateRenderInst();
     }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.fmatInst.length; i++)
-            this.fmatInst[i].destroy(device);
-    }
 }
 
 const scratchColor = colorNewCopy(White);
@@ -994,7 +1243,7 @@ export class TurboLightEnv {
     private agllmap: AGLLightMap.AGLLightMap;
     private useEnvLights = true;
     private lightIntensityScale = 1.0;
-    private directionalIsWrapped = false;
+    private directionalIsWrapped = true;
     private hemisphereIsWrapped = true;
 
     constructor(bgenvBuffer: ArrayBufferSlice) {
@@ -1103,15 +1352,11 @@ export class TurboRenderGlobals {
 export class TurboRenderer {
     public renderHelper: GfxRenderHelper;
     public fmdlRenderers: FMDLRenderer[] = [];
+    public textureHolder: BRTITextureHolder;
 
     constructor(device: GfxDevice, public globals: TurboRenderGlobals) {
         this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    public createPanels(): UI.Panel[] {
-        const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.fmdlRenderers);
-        return [layersPanel];
+        this.textureHolder = this.globals.textureHolder;
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1153,9 +1398,6 @@ export class TurboRenderer {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
-        for (let i = 0; i < this.fmdlRenderers.length; i++)
-            this.fmdlRenderers[i].destroy(device);
         this.globals.destroy(device);
     }
 }
-

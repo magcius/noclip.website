@@ -51,11 +51,10 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const deswizzled = deswizzle({ buffer, width, height, channelFormat });
+            const blockHeightLog2 = textureEntry.blockHeightLog2;
+            const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
             const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
             const rgbaPixels = rgbaTexture.pixels;
-
-
             device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
 
             const canvas = document.createElement('canvas');

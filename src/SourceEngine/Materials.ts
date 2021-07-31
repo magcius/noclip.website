@@ -2497,7 +2497,7 @@ void mainVS() {
 
 #ifdef FRAG
 vec3 ReconstructNormal(in vec2 t_NormalXY) {
-    float t_NormalZ = sqrt(saturate(1.0 - dot(t_NormalXY, t_NormalXY.xy)));
+    float t_NormalZ = sqrt(saturate(1.0 - dot(t_NormalXY.xy, t_NormalXY.xy)));
     return vec3(t_NormalXY.xy, t_NormalZ);
 }
 

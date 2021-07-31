@@ -307,14 +307,14 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
 
 export function parseFMAT_ShaderParam_Float(p: FMAT_ShaderParam): number {
     assert(p.type === FMAT_ShaderParamType.Float);
-    assert(p.rawData.byteLength === 4);
+    assert(p.rawData.byteLength === 0x04);
     const view = p.rawData.createDataView();
     return view.getFloat32(0x00, p.littleEndian);
 }
 
 export function parseFMAT_ShaderParam_Float4(dst: vec4, p: FMAT_ShaderParam): void {
     assert(p.type === FMAT_ShaderParamType.Float4);
-    assert(p.rawData.byteLength === 16);
+    assert(p.rawData.byteLength === 0x10);
     const view = p.rawData.createDataView();
     dst[0] = view.getFloat32(0x00, p.littleEndian);
     dst[1] = view.getFloat32(0x04, p.littleEndian);
@@ -324,11 +324,32 @@ export function parseFMAT_ShaderParam_Float4(dst: vec4, p: FMAT_ShaderParam): vo
 
 export function parseFMAT_ShaderParam_Color3(dst: Color, p: FMAT_ShaderParam): void {
     assert(p.type === FMAT_ShaderParamType.Float3);
-    assert(p.rawData.byteLength === 12);
+    assert(p.rawData.byteLength === 0x0C);
     const view = p.rawData.createDataView();
     dst.r = view.getFloat32(0x00, p.littleEndian);
     dst.g = view.getFloat32(0x04, p.littleEndian);
     dst.b = view.getFloat32(0x08, p.littleEndian);
+}
+
+interface Texsrt {
+    mode: number;
+    scaleS: number;
+    scaleT: number;
+    rotation: number;
+    translationS: number;
+    translationT: number;
+}
+
+export function parseFMAT_ShaderParam_Texsrt(dst: Texsrt, p: FMAT_ShaderParam): void {
+    assert(p.type === FMAT_ShaderParamType.Texsrt);
+    assert(p.rawData.byteLength === 0x18);
+    const view = p.rawData.createDataView();
+    dst.mode = view.getUint32(0x00, p.littleEndian);
+    dst.scaleS = view.getFloat32(0x04, p.littleEndian);
+    dst.scaleT = view.getFloat32(0x08, p.littleEndian);
+    dst.rotation = view.getFloat32(0x0C, p.littleEndian);
+    dst.translationS = view.getFloat32(0x10, p.littleEndian);
+    dst.translationT = view.getFloat32(0x14, p.littleEndian);
 }
 
 function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FMAT {
@@ -406,6 +427,7 @@ function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         for (let i = 0; i < attrAssignCount; i++) {
             const name = readBinStr(buffer, view.getUint32(attrAssignDictIdx + 0x08, littleEndian), littleEndian);
             const value = readBinStr(buffer, view.getUint32(attrAssignArrayIdx + 0x00, littleEndian), littleEndian);
+            assert(!attrAssign.has(name));
             attrAssign.set(name, value);
             attrAssignDictIdx += 0x10;
             attrAssignArrayIdx += 0x08;
