@@ -111,4 +111,4 @@ const sceneDescs = [
     new MarioKart8SceneDesc('Gwii_GrumbleVolcano'),
     new MarioKart8SceneDesc('Gwii_MooMooMeadows'),
 ];
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };
