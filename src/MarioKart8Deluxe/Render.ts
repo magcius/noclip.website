@@ -441,10 +441,15 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
     int multi_tex_calc_type_alpha = ${this.shaderOptionInt('multi_tex_calc_type_alpha')};
     if (multi_tex_calc_type_alpha == 0) { // Nothing
         // This space intentionally left blank.
-    } else if (multi_tex_calc_type_alpha == 1) { // Mul A
+    } else if (multi_tex_calc_type_alpha == 1) {
         t_Sample.a *= SampleMultiTextureA().a;
+    } else if (multi_tex_calc_type_alpha == 8) {
+        t_Sample.a = SampleMultiTextureB().r;
     } else {
         // Unknown multi texture calc type.
+        bool is_development = ${IS_DEVELOPMENT};
+        if (is_development)
+            t_Sample.rgb = vec3(1.0, 1.0, 0.0);
     }
 }
 
