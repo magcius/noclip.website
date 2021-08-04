@@ -1,7 +1,8 @@
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
-import { loadArchive } from "./archive";
+import { loadArchive, TotemArchive } from "./archive";
 import { ROTFDRenderer } from './render';
 
 /*
@@ -17,9 +18,11 @@ class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const archive = await loadArchive(context.dataFetcher, `${dataBasePath}/${this.id}`);
         const renderer = new ROTFDRenderer(gfxDevice);
-        renderer.addArchive(archive);
+        const spongeArchive = loadArchive(context.dataFetcher, `${dataBasePath}/SPONGE`);
+        const archive = loadArchive(context.dataFetcher, `${dataBasePath}/${this.id}`);
+        renderer.addArchive(await spongeArchive);
+        renderer.addArchive(await archive);
 
         return renderer;
     }
