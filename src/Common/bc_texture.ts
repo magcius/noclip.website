@@ -124,7 +124,13 @@ function decompressBC1Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGB
 
             let colorBits = view.getUint32(srcOffs + 0x04, true);
             for (let y = 0; y < 4; y++) {
+                if (yy + y >= height)
+                    continue;
+
                 for (let x = 0; x < 4; x++) {
+                    if (xx + x >= width)
+                        continue;
+
                     const dstPx = (yy + y) * width + xx + x;
                     const dstOffs = dstPx * 4;
                     const colorIdx = colorBits & 0x03;

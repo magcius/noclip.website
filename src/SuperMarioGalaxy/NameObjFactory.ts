@@ -819,9 +819,10 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("MercatorCube",                 createMercatorCube),
 
     E("FallOutFieldDraw",             createFallOutFieldDraw),
-    E("ClipAreaCenterBox",            createClipAreaCenterBox, requestArchivesClipAreaBox),
-    E("ClipAreaBottomBox",            createClipAreaBottomBox, requestArchivesClipAreaBox),
-    E("ClipAreaSphere",               createClipAreaSphere,    requestArchivesClipAreaSphere),
+    // Clip Volumes appear to be redone in SMG2, would have to look at exactly how...
+    E("ClipAreaCenterBox",            createClipAreaCenterBox, requestArchivesClipAreaBox,    GameBits.SMG1),
+    E("ClipAreaBottomBox",            createClipAreaBottomBox, requestArchivesClipAreaBox,    GameBits.SMG1),
+    E("ClipAreaSphere",               createClipAreaSphere,    requestArchivesClipAreaSphere, GameBits.SMG1),
     _("ClipAreaDropLaser",            ClipAreaDropLaser),
 
     N("WaterArea"),

@@ -75,6 +75,7 @@ import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeOfTheFlyingDutchman/scenes";
+import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -185,6 +186,7 @@ const sceneGroups = [
     Scenes_CounterStrikeGO.sceneGroup,
     Scenes_HalfLife2Ep1.sceneGroup,
     Scenes_HalfLife2Ep2.sceneGroup,
+    Scenes_MarioKart8Deluxe.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
