@@ -11,7 +11,7 @@ TODO:
  * additional material flags (needs research)
  */
 
-const dataBasePath = "rotfd";
+const dataBasePath = "SpongebobRevengeOfTheFlyingDutchman";
 
 class RotfdSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
