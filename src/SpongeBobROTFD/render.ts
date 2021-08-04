@@ -219,7 +219,10 @@ class VertexDataBuilder {
     }
 
     public addMeshMaterial(mesh: MeshObject, material_index: number) {
-        const first = Math.min(...mesh.strips.map(x => x.material_index));
+        let first = 0;
+        if (mesh.header.flags === 4) {
+            first = Math.min(...mesh.strips.map(x => x.material_index));
+        }
         for (const strip of mesh.strips) {
             // only consider materials for corresponding material_index
             if ((strip.material_index - first) % mesh.materials.length !== material_index) {
