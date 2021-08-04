@@ -484,23 +484,6 @@ export function quatFromEulerRadians(dst: quat, x: number, y: number, z: number)
     dst[3] = cx * cy * cz + sx * sy * sz;
 }
 
-export function eulerRadiansFromQuat(src: quat): vec3 {
-    // roll (x-axis rotation)
-    let sinr_cosp = 2.0 * (src[3] * src[0] + src[1] * src[2]);
-    let cosr_cosp = 1.0 - 2.0 * (src[0] * src[0] + src[1] * src[1]);
-    let roll = Math.atan2(sinr_cosp, cosr_cosp);
-    // pitch (y-axis rotation)
-    let sinp = 2.0 * (src[3] * src[1] - src[2] * src[0]);
-    let pitch = (Math.abs(sinp) >= 1.0) ?
-        Math.sign(sinp) * Math.PI / 2.0 : // use 90 degrees if out of range
-        Math.asin(sinp);
-    // yaw (z-axis rotation)
-    let siny_cosp = 2.0 * (src[3] * src[2] + src[0] * src[1]);
-    let cosy_cosp = 1.0 - 2.0 * (src[1] * src[1] + src[2] * src[2]);
-    let yaw = Math.atan2(siny_cosp, cosy_cosp);
-    return [roll, pitch, yaw];
-}
-
 export function getMatrixAxisX(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[0], m[1], m[2]);
 }
