@@ -50,6 +50,11 @@ export const FileType = {
     WORLD: CRC32.bstr("WORLD"),
 };
 
+export const SpecialNames = {
+    SCRIPT_DAMAGE_OBJ: CRC32.bstr("DB:>GAMEOBJ>SCRIPT_DAMAGE_OBJ.TLOD"),
+    SCRIPT_OBJ: CRC32.bstr("DB:>GAMEOBJ>SCRIPT_OBJ.TLOD"),
+};
+
 /****************\
 |* READ ARCHIVE *|
 \****************/

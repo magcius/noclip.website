@@ -48,6 +48,7 @@ import {
     TotemNode, TotemOmni, TotemRotshape, TotemSkin, TotemSurfaceObject, TotemWarp
 } from "./types";
 import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
+import * as CRC32 from "crc-32";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -159,6 +160,11 @@ void main() {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
+];
+
+export const ResourceIgnore = [
+    CRC32.bstr("DB:>GAMEOBJ>SCRIPT_DAMAGE_OBJ.TLOD"),
+    CRC32.bstr("DB:>GAMEOBJ>SCRIPT_OBJ.TLOD"),
 ];
 
 type Vertex = [number, number, number, number, number, number, number, number];
@@ -1062,6 +1068,10 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
 
         for (const nodeData of nodes) {
+            if (ResourceIgnore.includes(nodeData.resource_id)) {
+                // maybe not 100% correct, but fine for now
+                continue;
+            }
             const resourceFile = archive.getFile(nodeData.resource_id);
             if (resourceFile === undefined) {
                 console.log("ERROR!");
