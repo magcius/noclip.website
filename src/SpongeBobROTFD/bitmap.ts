@@ -2,7 +2,6 @@ import { DataStream } from "./util";
 import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { decodeTexture } from "../gx/gx_texture";
 import { TexFormat, TexPalette } from "../gx/gx_enum";
-import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export const FORMAT_C4 = 1;
 export const FORMAT_C8 = 2;
@@ -80,12 +79,6 @@ export function getFormatType(bitmap: TotemBitmap) {
            undefined;
 }
 
-const fakePalette = new Uint8Array(2 * 256);
-for (let i = 0; i < 256; i++) {
-    fakePalette[i*2] = i; 
-    fakePalette[i*2+1] = i; 
-}
-
 export class Texture {
     public texture: GfxTexture;
     public sampler: GfxSampler;
@@ -150,31 +143,9 @@ export class Texture {
                 break;
             case FORMAT_C4:
             case FORMAT_C8:
-                if (bitmap.palette_format === PALETTE_RGBA8) {
-                    decodeTexture({
-                        format: getFormatType(bitmap)!,
-                        paletteFormat: TexPalette.IA8,
-                        paletteData: new ArrayBufferSlice(fakePalette.buffer, 0, 512),
-                        ...rest
-                    }).then(data => {
-                        // use ALPHA value of decoded pixels as indices into actual RGBA palette
-                        // I could do this *properly* but I don't feel like re-writing the block
-                        // handling code :(
-                        let newData = new Uint8Array(bitmap.width * bitmap.height * 4);
-                        const paletteView = bitmap.palette_data.createDataView();
-                        const dataView = new DataView(data.pixels.buffer, 0, data.pixels.byteLength);
-                        for (let i = 0; i < bitmap.width * bitmap.height; i++) {
-                            const index = dataView.getUint8(i*4+3);
-                            newData[i*4] = paletteView.getUint8(index*4);
-                            newData[i*4+1] = paletteView.getUint8(index*4+1);
-                            newData[i*4+2] = paletteView.getUint8(index*4+2);
-                            newData[i*4+3] = paletteView.getUint8(index*4+3);
-                        }
-                        device.uploadTextureData(this.texture, 0, [ newData ]);
-                        console.log("UPLOADED");
-                    });
-                }
-                else {
+                if (bitmap.palette_format !== PALETTE_RGBA8) {
+                    // turns out, RGBA8 palette is not used anywhere except in one
+                    // specific menu texture in Jimmy Neutron: Boy Genius
                     decodeTexture({
                         format: getFormatType(bitmap)!,
                         paletteFormat: getPaletteType(bitmap),
