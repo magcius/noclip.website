@@ -62,9 +62,8 @@ function readTrack<T>(data: DataStream, func: (data: DataStream) => T): Track<T>
     return {
         interp: data.readUint16(),
         frames: data.readArrayDynamic(data.readUint32, (data) => {
-            // store an extra 'framestart' data to allow binary search of frames
             const framestart = data.readUint16();
-            const junk = data.readJunk(2);
+            data.readJunk(2);
             return {
                 framestart,
                 value: newfunc(),
