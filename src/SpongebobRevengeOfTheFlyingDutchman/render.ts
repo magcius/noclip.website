@@ -164,6 +164,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 export const ResourceIgnore = [
     CRC32.bstr("DB:>GAMEOBJ>SCRIPT_DAMAGE_OBJ.TLOD"),
+    CRC32.bstr("DB:>GAMEOBJ>DAMGEAGENT.TLOD"), // yes it's "DAMGE"
     CRC32.bstr("DB:>GAMEOBJ>SCRIPT_OBJ.TLOD"),
 ];
 
