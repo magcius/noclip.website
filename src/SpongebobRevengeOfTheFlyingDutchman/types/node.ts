@@ -1,5 +1,6 @@
 import { readMaterial } from "./material";
 import { DataStream } from "../util";
+import * as CRC32 from "crc-32";
 
 export function readNode(data: DataStream) {
     return {
@@ -28,14 +29,14 @@ export function readNode(data: DataStream) {
 }
 
 // node union
-const T_ROTSHAPEDATA = 733875652;
-const T_MESHDATA = -1724712303;
-const T_SKEL = 1985457034;
-const T_SURFACEDATAS = 413080818;
-const T_LODDATA = -141015160;
-const T_PARTICLESDATA = -241612565;
+const T_ROTSHAPEDATA = CRC32.bstr("ROTSHAPEDATA");
+const T_MESHDATA = CRC32.bstr("MESHDATA");
+const T_SKEL = CRC32.bstr("SKEL");
+const T_SURFACEDATAS = CRC32.bstr("SURFACEDATAS");
+const T_LODDATA = CRC32.bstr("LODDATA");
+const T_PARTICLESDATA = CRC32.bstr("PARTICLESDATA");
 // extra data union
-const E_USERDATA = -1879206489;
+const E_USERDATA = CRC32.bstr("USERDEFINE");
 
 function readNodeData(data: DataStream) {
     const invariant = data.readInt32();
