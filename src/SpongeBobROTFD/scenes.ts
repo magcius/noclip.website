@@ -9,7 +9,7 @@ TODO:
  * animated meshes (SKIN + ANIMATION) - ANIMATION files need research
  * PARTICLES - needs research
  * additional material flags (needs research)
-*/
+ */
 
 const dataBasePath = "rotfd";
 
