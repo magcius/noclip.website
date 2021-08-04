@@ -68,7 +68,7 @@ const sceneDescs = [
     new RotfdSceneDesc('DG/LVL_DGTP', 'Tile Puzzle'),
 ];
 
-const id = 'rotfd';
+const id = 'SpongebobRevengeOfTheFlyingDutchman';
 const name = "SpongeBob SquarePants: Revenge of the Flying Dutchman";
 export const sceneGroup: Viewer.SceneGroup = {
     id, name, sceneDescs,
