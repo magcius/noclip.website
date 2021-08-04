@@ -165,3 +165,15 @@ export class DataStream {
         }
     }
 }
+
+export function readTHeader(data: DataStream) {
+    return {
+        floats_unk: data.readArrayStatic(data.readFloat32, 4),
+        transform: data.readMat4(),
+        junk: data.readJunk(16),
+        type: data.readUint16(),
+        flags: data.readUint16(),
+    }
+}
+
+export type THeader = ReturnType<typeof readTHeader>;

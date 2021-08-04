@@ -1,8 +1,7 @@
-import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
-import { loadArchive, TotemArchive } from "./archive";
+import { loadArchive } from "./archive";
 import { ROTFDRenderer } from './render';
 
 /*

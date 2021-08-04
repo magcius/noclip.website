@@ -2,7 +2,6 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
 import { DataStream } from "./util";
 import * as CRC32 from "crc-32";
-import { mat4 } from "gl-matrix";
 
 export const ResourceType = {
     SURFACE: 1,
@@ -19,7 +18,7 @@ export const ResourceType = {
     COLLISIONVOL: 14,
     OMNI: 16,
     PARTICLES: 18
-}
+};
 
 export const FileType = {
     ANIMATION: CRC32.bstr("ANIMATION"),
@@ -49,29 +48,7 @@ export const FileType = {
     USERDEFINE: CRC32.bstr("USERDEFINE"),
     WARP: CRC32.bstr("WARP"),
     WORLD: CRC32.bstr("WORLD"),
-}
-
-/******************\
-|* READ UTILITIES *|
-\******************/
-
-export type THeader = {
-    floats_unk: number[];
-    transform: mat4;
-    junk: void;
-    type: number;
-    flags: number;
-}
-
-export function readTHeader(data: DataStream): THeader {
-    return {
-        floats_unk: data.readArrayStatic(data.readFloat32, 4),
-        transform: data.readMat4(),
-        junk: data.readJunk(16),
-        type: data.readUint16(),
-        flags: data.readUint16(),
-    }
-}
+};
 
 /****************\
 |* READ ARCHIVE *|

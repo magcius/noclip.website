@@ -1,18 +1,18 @@
-import { DataStream } from "./util";
-import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
-import { decodeTexture } from "../gx/gx_texture";
-import { TexFormat, TexPalette } from "../gx/gx_enum";
+import { DataStream } from "../util";
+import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
+import { decodeTexture } from "../../gx/gx_texture";
+import { TexFormat, TexPalette } from "../../gx/gx_enum";
 
-export const FORMAT_C4 = 1;
-export const FORMAT_C8 = 2;
-export const FORMAT_RGB565 = 8;
-export const FORMAT_RGB5A3 = 10;
-export const FORMAT_RGBA8 = 12;
-export const FORMAT_RGB8 = 13;
+const FORMAT_C4 = 1;
+const FORMAT_C8 = 2;
+const FORMAT_RGB565 = 8;
+const FORMAT_RGB5A3 = 10;
+const FORMAT_RGBA8 = 12;
+const FORMAT_RGB8 = 13;
 
-export const PALETTE_RGB5A3 = 1;
-export const PALETTE_RGB565 = 2;
-export const PALETTE_RGBA8 = 3;
+const PALETTE_RGB5A3 = 1;
+const PALETTE_RGB565 = 2;
+const PALETTE_RGBA8 = 3;
 
 export function readBitmap(data: DataStream) {
     const header = {
@@ -64,13 +64,13 @@ export function readBitmap(data: DataStream) {
 
 export type TotemBitmap = ReturnType<typeof readBitmap>;
 
-export function getPaletteType(bitmap: TotemBitmap) {
+function getPaletteType(bitmap: TotemBitmap) {
     return bitmap.palette_format === PALETTE_RGB565 ? TexPalette.RGB565 :
            bitmap.palette_format === PALETTE_RGB5A3 ? TexPalette.RGB5A3 :
            undefined;
 }
 
-export function getFormatType(bitmap: TotemBitmap) {
+function getFormatType(bitmap: TotemBitmap) {
     return bitmap.format === FORMAT_RGBA8 ? TexFormat.RGBA8 :
            bitmap.format === FORMAT_RGB565 ? TexFormat.RGB565 :
            bitmap.format === FORMAT_RGB565 ? TexFormat.RGB5A3 :

@@ -1,5 +1,5 @@
 import { readMaterial } from "./material";
-import { DataStream } from "./util";
+import { DataStream } from "../util";
 
 export function readNode(data: DataStream) {
     return {

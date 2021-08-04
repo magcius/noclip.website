@@ -1,13 +1,20 @@
-import { mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
+import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { CameraController, computeViewMatrix } from "../Camera";
+import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import {
+    makeBackbufferDescSimple,
+    pushAntialiasingPostProcessPass,
+    standardFullClearRenderPassDescriptor
+} from "../gfx/helpers/RenderGraphHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import {
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
     GfxBlendMode,
     GfxBufferUsage,
     GfxChannelWriteMask,
-    GfxCompareMode,
     GfxCullMode,
     GfxDevice,
     GfxFormat,
@@ -22,38 +29,25 @@ import {
     GfxWrapMode
 } from "../gfx/platform/GfxPlatform";
 import { GfxBuffer, GfxInputLayout, GfxInputState, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
-import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
-import * as Viewer from '../viewer';
-import { CameraController, computeViewMatrix } from "../Camera";
-import { fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import {
-    makeBackbufferDescSimple,
-    pushAntialiasingPostProcessPass,
-    standardFullClearRenderPassDescriptor
-} from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { TextureMapping } from "../TextureHolder";
-import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers";
-import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
-import { nArray } from "../util";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
-import { readBitmap, Texture, TotemBitmap } from "./bitmap";
-import { readHFog, TotemHFog } from "./hfog";
-import { readLight, TotemLight } from "./light";
-import { readLod, TotemLod } from "./lod";
-import { getMaterialFlag, Material, MaterialFlags, readMaterial } from "./material";
-import { interpTrack, interpTrackInPlace, MaterialAnim, readMaterialAnim } from "./materialanim";
-import { MeshObject, readMesh } from "./mesh";
-import { readNode, TotemNode } from "./node";
-import { readOmni, TotemOmni } from "./omni";
-import { readRotshape, TotemRotshape, BillboardMode } from "./rotshape";
-import { readSkin, TotemSkin } from "./skin";
-import { precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3, readSurface, SurfaceObject } from "./surface";
-import { iterWarpSkybox, readWarp, TotemWarp } from "./warp";
+import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers";
+import { TextureMapping } from "../TextureHolder";
+import { nArray } from "../util";
+import * as Viewer from '../viewer';
 import { FileType, TotemArchive } from "./archive";
+import {
+    BillboardMode, Texture, MaterialFlags,
+    getMaterialFlag, interpTrack, interpTrackInPlace, iterWarpSkybox, precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3,
+    readBitmap, readHFog, readLight, readLod, readMaterial, readMaterialAnim, readMesh,
+    readNode, readOmni, readRotshape, readSkin, readSurface, readWarp,
+    TotemBitmap, TotemHFog, TotemLight, TotemLod, TotemMaterial, TotemMaterialAnim, TotemMesh,
+    TotemNode, TotemOmni, TotemRotshape, TotemSkin, TotemSurfaceObject, TotemWarp
+} from "./types";
+import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 
 class RotfdProgram {
     public static ub_SceneParams = 0;
@@ -90,8 +84,6 @@ layout(std140) uniform ub_InstanceParams {
 uniform sampler2D u_Texture;
 uniform sampler2D u_TextureReflection;
 `;
-
-// TODO: lighting, reflection
 
     public vert: string = `
 layout(location = 0) in vec3 a_Position;
@@ -218,7 +210,7 @@ class VertexDataBuilder {
         this.indices.push(c);
     }
 
-    public addMeshMaterial(mesh: MeshObject, material_index: number) {
+    public addMeshMaterial(mesh: TotemMesh, material_index: number) {
         let first = 0;
         if (mesh.header.flags === 4) {
             first = Math.min(...mesh.strips.map(x => x.material_index));
@@ -250,7 +242,7 @@ class VertexDataBuilder {
         }
     }
 
-    public addSurfaceIndex(surf: SurfaceObject, index: number) {
+    public addSurfaceIndex(surf: TotemSurfaceObject, index: number) {
         const patch = surf.surfaces[index];
         const normals = patch.normal_indices.map(i => surf.normals[i]);
         let curves = nArray(4, () => nArray(4, () => vec3.create()));
@@ -419,7 +411,7 @@ class MeshRenderer {
 
     constructor(
         private geometryData: VertexData,
-        private material: Material,
+        private material: TotemMaterial,
         public modelMatrix: mat4,
         private textureMap: Map<number, Texture>,
         public isSkybox: boolean,
@@ -580,7 +572,7 @@ type MeshInfo = {
 
 type MaterialAnimInfo = {
     id: number;
-    anim: MaterialAnim;
+    anim: TotemMaterialAnim;
 }
 
 type SkinInfo = {
@@ -607,7 +599,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private lods = new Map<number, LodInfo>();
     private skins = new Map<number, SkinInfo>();
     // resources
-    private materials = new Map<number, Material>();
+    private materials = new Map<number, TotemMaterial>();
     private bitmaps = new Map<number, Texture>();
     private materialAnims: MaterialAnimInfo[] = [];
     private hfogResources = new Map<number, TotemHFog>();
@@ -749,7 +741,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private addMesh(id: number, mesh: MeshObject) {
+    private addMesh(id: number, mesh: TotemMesh) {
         let meshes: VertexData[] = [];
         for (let i = 0; i < mesh.materials.length; i++) {
             let builder = new VertexDataBuilder();
@@ -761,7 +753,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         });
     }
 
-    private addSurface(id: number, surf: SurfaceObject) {
+    private addSurface(id: number, surf: TotemSurfaceObject) {
         let builders = new Map<number, VertexDataBuilder>();
         for (let i = 0; i < surf.surfaces.length; i++) {
             let material = surf.surfaces[i].materialanim_id;
@@ -785,11 +777,11 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.bitmaps.set(id, new Texture(id, bitmap, this.device));
     }
 
-    private addMaterial(id: number, material: Material) {
+    private addMaterial(id: number, material: TotemMaterial) {
         this.materials.set(id, material);
     }
 
-    private addMaterialAnim(id: number, anim: MaterialAnim) {
+    private addMaterialAnim(id: number, anim: TotemMaterialAnim) {
         let material = this.materials.get(anim.material_id);
         if (material === undefined) {
             console.log(id);

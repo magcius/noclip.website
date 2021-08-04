@@ -1,7 +1,6 @@
 import { vec2, vec3 } from "gl-matrix";
-import { nArray } from "../util";
-import { readTHeader } from "./archive";
-import { DataStream } from "./util";
+import { nArray } from "../../util";
+import { DataStream, readTHeader } from "../util";
 
 function readSurfaceSingle(data: DataStream) {
     return {
@@ -38,9 +37,9 @@ export function readSurface(data: DataStream) {
     }
 }
 
-export type SurfaceObject = ReturnType<typeof readSurface>;
-export type Surface = SurfaceObject["surfaces"][0];
-export type Curve = SurfaceObject["curves"][0];
+export type TotemSurfaceObject = ReturnType<typeof readSurface>;
+export type TotemSurface = TotemSurfaceObject["surfaces"][0];
+export type TotemCurve = TotemSurfaceObject["curves"][0];
 
 export function eval_bezier_vec3(out: vec3, points: vec3[], t: number) {
     let b0 = (1.0 - t) * (1.0 - t) * (1.0 - t);

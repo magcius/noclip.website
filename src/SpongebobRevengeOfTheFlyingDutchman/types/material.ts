@@ -1,4 +1,42 @@
-import { DataStream } from "./util";
+import { DataStream } from "../util";
+
+export const MaterialFlags = {
+    FLAG_HIDDEN: 0x20,
+    FLAG_BLENDCOLOR: 0x23,
+    FLAG_BLENDTEXTUREALPHA: 0x25,
+    FLAG_BLENDCOLORALPHA: 0x27,
+};
+
+export function getMaterialFlag(material: TotemMaterial, flag: number): boolean {
+    if (flag >= 32) {
+        return (material.flags_b & (1 << (flag - 32))) != 0;
+    }
+    else {
+        return (material.flags_a & (1 << flag)) != 0;
+    }
+}
+
+export function readMaterial(data: DataStream) {
+    return {
+        color: data.readRGBA(),
+        emission: data.readRGB(),
+        unk1: data.readFloat32(),
+        transform: data.readMat3(),
+        rotation: data.readFloat32(),
+        offset: data.readVec2(),
+        scale: data.readVec2(),
+        flags_a: data.readUint32(),
+        flags_b: data.readUint32(),
+        // unknown, but doesn't seem to matter.
+        // 'unk2' is only '1' in one material
+        unk2: data.readUint32(),
+        unk3: data.readUint8(),
+        texture_id: data.readInt32(),
+        reflection_id: data.readInt32(),
+    }
+}
+
+export type TotemMaterial = ReturnType<typeof readMaterial>;
 
 export const INTERP_DISCRETE = 1;
 export const INTERP_LINEAR = 2;
@@ -134,4 +172,4 @@ export function readMaterialAnim(data: DataStream) {
     }
 }
 
-export type MaterialAnim = ReturnType<typeof readMaterialAnim>;
+export type TotemMaterialAnim = ReturnType<typeof readMaterialAnim>;

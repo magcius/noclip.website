@@ -1,6 +1,5 @@
-import { assert } from "../util";
-import { readTHeader } from "./archive";
-import { DataStream } from "./util";
+import { assert } from "../../util";
+import { DataStream, readTHeader } from "../util";
 
 function readStrip(data: DataStream) {
     return {
@@ -50,4 +49,4 @@ export function readMesh(data: DataStream) {
     };
 }
 
-export type MeshObject = ReturnType<typeof readMesh>;
+export type TotemMesh = ReturnType<typeof readMesh>;
