@@ -1,3 +1,5 @@
+// @ts-ignore
+import program_glsl from './program.glsl';
 import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { CameraController, computeViewMatrix } from "../Camera";
 import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
@@ -8,7 +10,7 @@ import {
     pushAntialiasingPostProcessPass,
     standardFullClearRenderPassDescriptor
 } from "../gfx/helpers/RenderGraphHelpers";
-import { fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import {
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
@@ -49,113 +51,21 @@ import {
 } from "./types";
 import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as CRC32 from "crc-32";
+import { DeviceProgram } from '../Program';
 
-class RotfdProgram {
+class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_InstanceParams = 2;
     public static SCENEPARAM_SIZE = 4*4;
-    public static MATERIALPARAM_SIZE = 4*3 + 4*3 + 4 + 4 + 4*4;
+    public static MATERIALPARAM_SIZE = 4*3 + 4*3 + 4 + 4 + 4*2;
     public static INSTANCEPARAM_SIZE = 4 + 4 + 4 + 4*4 + 4 + 4 * (4 + 4 + 4);
 
-    public both = `
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-};
+    public both = program_glsl;
 
-layout(std140) uniform ub_MaterialParams {
-    Mat4x3 u_ModelView;
-    Mat4x3 u_View;
-    vec4 u_Color;
-    vec4 u_Emit;
-    Mat4x4 u_TexTransform;
-};
-
-layout(std140) uniform ub_InstanceParams {
-    vec3 u_LightDirection;
-    vec3 u_LightColor;
-    vec3 u_LightAmbient;
-    Mat4x4 u_HFogTransform;
-    vec4 u_HFogColor;
-    vec4 u_OmniPosition[4];
-    vec4 u_OmniColor[4];
-    vec4 u_OmniAttenuation[4];
-};
-
-uniform sampler2D u_Texture;
-uniform sampler2D u_TextureReflection;
-`;
-
-    public vert: string = `
-layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec2 a_TexCoord;
-layout(location = 2) in vec3 a_Normal;
-
-out vec3 v_WorldNormal;
-out vec3 v_ClipNormal;
-out vec2 v_TexCoord;
-out vec4 v_WorldPosition;
-out vec4 v_ClipPosition;
-
-void main() {
-    mat3 realmat = mat3(
-        u_TexTransform.mx.xyz,
-        u_TexTransform.my.xyz,
-        u_TexTransform.mz.xyz
-    );
-    v_WorldPosition = Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0));
-    v_WorldNormal = normalize(Mul(_Mat4x4(u_ModelView), vec4(a_Normal, 0.0)).xyz);
-    v_ClipPosition = Mul(_Mat4x4(u_View), vec4(a_Position, 1.0));
-    v_ClipNormal = normalize(Mul(_Mat4x4(u_View), vec4(a_Normal, 0.0)).xyz);
-    gl_Position = Mul(u_Projection, v_ClipPosition);
-    v_TexCoord = (vec3(a_TexCoord.xy, 1.0) * realmat).xy;
-}
-`;
-
-    public frag: string = `
-in vec3 v_WorldNormal;
-in vec3 v_ClipNormal;
-in vec2 v_TexCoord;
-in vec4 v_WorldPosition;
-in vec4 v_ClipPosition;
-
-void main() {
-    // AMBIENT
-    vec3 lightColor = u_LightAmbient;
-    // DIFFUSE
-    float lightDot = max(0.0, dot(v_WorldNormal, u_LightDirection));
-    lightColor += lightDot * u_LightColor;
-    // SPECULAR
-    vec3 reflectLight = normalize(reflect(u_LightDirection, v_ClipNormal));
-    vec4 reflectionColor = texture(SAMPLER_2D(u_TextureReflection), reflectLight.xy);
-    lightColor += reflectionColor.rgb;
-    // OMNI LIGHTS
-    for (int i = 0; i < 4; i++) {
-        if (u_OmniColor[i].a > 0.0) {
-            vec3 diff = u_OmniPosition[i].xyz - v_WorldPosition.xyz;
-            vec3 lightDirection = normalize(diff);
-            float minrange = u_OmniAttenuation[i][0];
-            float maxrange = u_OmniAttenuation[i][1] - minrange;
-            float dist = max(0.0, length(diff) - minrange);
-            vec4 color = u_OmniColor[i];
-            float att = clamp(maxrange/dist, 0.0, 1.0);
-            lightColor += color.rgb * att * max(0.0, dot(v_WorldNormal, lightDirection));
-        }
+    constructor() {
+        super();
     }
-    // COLOR
-    vec4 texcol = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    vec4 surfacecol = texcol * u_Color;
-    gl_FragColor += surfacecol * vec4(lightColor, 1.0);
-    if (u_HFogColor.a > 0.0) {
-        vec4 fogPos = Mul(u_HFogTransform, v_WorldPosition);
-        // float viewDot = abs(dot(v_ClipNormal, vec3(0.0, 0.0, 1.0)));
-        // float fogAmount = pow(clamp(1.0 - fogPos.y, 0.0, 1.0), 1.0 / (2.0 - viewDot));
-        float fogAmount = clamp(1.0 - fogPos.y, 0.0, 1.0);
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, u_HFogColor.rgb, fogAmount * u_HFogColor.a);
-    }
-    gl_FragColor += vec4(u_Emit.rgb * texcol.rgb, 0);
-}
-`;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -510,7 +420,7 @@ class MeshRenderer {
         offs += fillVec4(d, offs, col.r, col.g, col.b, col.a);
         offs += fillVec4(d, offs, emit.r, emit.g, emit.b, 0);
         const tx = this.material.transform;
-        offs += fillMatrix4x4(d, offs, [
+        offs += fillMatrix4x2(d, offs, [
             tx[0], tx[1], tx[2], 0,
             tx[3], tx[4], tx[5], 0,
             tx[6], tx[7], tx[8], 0,
@@ -546,15 +456,15 @@ class MeshRenderer {
         for (let i = 0; i < Math.min(4, this.omniLights.length); i++) {
             const instance = this.omniLights[i];
             getMatrixTranslation(vec3Scratch, instance.transform);
-            fillVec3v(d2, offs2 + i * 4, vec3Scratch);
+            offs2 += fillVec3v(d2, offs2, vec3Scratch);
             colorToRGBA(vec4Scratch, instance.omni.color, 1.0);
-            fillVec4v(d2, offs2 + i * 4 + 16, vec4Scratch);
-            fillVec4(d2, offs2 + i * 4 + 32, instance.omni.attenuation[0], instance.omni.attenuation[1], 0, 0);
+            offs2 += fillVec4v(d2, offs2, vec4Scratch);
+            offs2 += fillVec4(d2, offs2, instance.omni.attenuation[0], instance.omni.attenuation[1], 0, 0);
         }
         for (let i = this.omniLights.length; i < 4; i++) {
-            fillVec4(d2, offs2 + i * 4, 0, 0, 0);
-            fillVec4(d2, offs2 + i * 4 + 16, 0, 0, 0, 0);
-            fillVec4(d2, offs2 + i * 4 + 32, 0, 0, 0, 0);
+            offs2 += fillVec4(d2, offs2, 0, 0, 0);
+            offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
+            offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
         }
 
         renderInst.drawIndexes(this.geometryData.indexCount);
