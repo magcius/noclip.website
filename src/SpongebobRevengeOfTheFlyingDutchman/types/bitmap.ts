@@ -123,7 +123,7 @@ export class Texture {
                         format: TexFormat.RGBA8,
                         ...rest
                     }).then(data => {
-                        device.uploadTextureData(this.texture, 0, [ newData ]);
+                        device.uploadTextureData(this.texture, 0, [ data.pixels ]);
                     });
                 }
                 else {
