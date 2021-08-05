@@ -1,6 +1,7 @@
 import { mat3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color } from "../Color";
+import { lerp } from "../MathHelpers";
 
 export const SIZE_F32 = 4;
 export const SIZE_VEC3 = 12;
@@ -177,3 +178,15 @@ export function readTHeader(data: DataStream) {
 }
 
 export type THeader = ReturnType<typeof readTHeader>;
+
+export function colorLerpKeepAlpha(dst: Color, a: Color, b: Color, t: number) {
+    dst.r = lerp(a.r, b.r, t);
+    dst.g = lerp(a.g, b.g, t);
+    dst.b = lerp(a.b, b.b, t);
+}
+
+export function colorCopyKeepAlpha(dst: Color, src: Color) {
+    dst.r = src.r;
+    dst.g = src.g;
+    dst.b = src.b;
+}

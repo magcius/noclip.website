@@ -49,7 +49,7 @@ import {
     TotemBitmap, TotemHFog, TotemLight, TotemLod, TotemMaterial, TotemMaterialAnim, TotemMesh,
     TotemNode, TotemOmni, TotemRotshape, TotemSkin, TotemSurfaceObject, TotemWarp
 } from "./types";
-import { DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
+import { colorCopyKeepAlpha, colorLerpKeepAlpha, DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as CRC32 from "crc-32";
 import { DeviceProgram } from '../Program';
 
@@ -578,7 +578,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
                 shouldUpdateTransform = true;
                 material.rotation = rotation;
             }
-            interpTrackInPlace(material.color, anim.color, animFrame, colorLerp, (out, a) => colorCopy(out, a, out.a));
+            interpTrackInPlace(material.color, anim.color, animFrame, colorLerpKeepAlpha, colorCopyKeepAlpha);
             interpTrackInPlace(material.emission, anim.emission, animFrame, colorLerp, colorCopy);
             const alpha = interpTrack(anim.alpha, animFrame, lerp);
             if (alpha !== undefined) {
