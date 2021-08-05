@@ -9,10 +9,10 @@ export const MaterialFlags = {
 
 export function getMaterialFlag(material: TotemMaterial, flag: number): boolean {
     if (flag >= 32) {
-        return (material.flags_b & (1 << (flag - 32))) != 0;
+        return (material.flags_b & (1 << (flag - 32))) !== 0;
     }
     else {
-        return (material.flags_a & (1 << flag)) != 0;
+        return (material.flags_a & (1 << flag)) !== 0;
     }
 }
 

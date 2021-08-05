@@ -81,7 +81,7 @@ export const ResourceIgnore = [
 type Vertex = [number, number, number, number, number, number, number, number];
 function vertexEq(a: Vertex, b: Vertex): boolean {
     for (let i = 0; i < 8; i++) {
-        if (a[i] != b[i]) {
+        if (a[i] !== b[i]) {
             return false;
         }
     }
