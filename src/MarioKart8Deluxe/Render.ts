@@ -13,7 +13,7 @@ import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChanne
 import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec2, vec3, vec4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
@@ -24,7 +24,7 @@ import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFull
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
-import { MathConstants, Vec3Zero } from '../MathHelpers';
+import { getMatrixTranslation, MathConstants, Vec3Zero } from '../MathHelpers';
 
 import * as SARC from "../fres_nx/sarc";
 import * as AGLLightMap from './AGLParameter_LightMap';
@@ -139,8 +139,8 @@ class TurboUBER extends DeviceProgram {
 precision mediump float;
 
 layout(std140) uniform ub_ShapeParams {
-    Mat4x4 u_Projection;
-    Mat4x3 u_ModelView;
+    Mat4x4 u_ProjectionView;
+    vec4 u_CameraPosWorld;
 };
 
 struct EnvLightParam {
@@ -150,6 +150,7 @@ struct EnvLightParam {
 };
 
 layout(std140) uniform ub_MaterialParams {
+    Mat4x3 u_Model;
     Mat4x2 u_TexCoordSRT0;
     vec4 u_TexCoordBake0ScaleBias;
     vec4 u_TexCoordBake1ScaleBias;
@@ -157,7 +158,8 @@ layout(std140) uniform ub_MaterialParams {
     Mat4x2 u_TexCoordSRT3;
     vec4 u_AlbedoColorAndTransparency;
     vec4 u_EmissionColorAndNormalMapWeight;
-    vec4 u_BakeLightScale;
+    vec4 u_SpecularColorAndIntensity;
+    vec4 u_BakeLightScaleAndRoughness;
     vec4 u_MultiTexReg[3];
     vec4 u_Misc[1];
     EnvLightParam u_EnvLightParams[${TurboUBER.NumEnvLightParams}];
@@ -167,6 +169,10 @@ layout(std140) uniform ub_MaterialParams {
 #define u_Transparency (u_AlbedoColorAndTransparency.a)
 #define u_EmissionColor (u_EmissionColorAndNormalMapWeight.rgb)
 #define u_NormalMapWeight (u_EmissionColorAndNormalMapWeight.a)
+#define u_SpecularColor (u_SpecularColorAndIntensity.rgb)
+#define u_SpecularIntensity (u_SpecularColorAndIntensity.a)
+#define u_BakeLightScale (u_BakeLightScaleAndRoughness.rgb)
+#define u_SpecularRoughness (u_BakeLightScaleAndRoughness.a)
 #define u_IndirectMag (u_Misc[0].xy)
 
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
@@ -215,7 +221,7 @@ out vec3 v_NormalWorld;
 out vec4 v_TangentWorld;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
+    gl_Position = Mul(u_ProjectionView, Mul(_Mat4x4(u_Model), vec4(a_Position, 1.0)));
     v_PositionWorld = a_Position.xyz;
     v_TexCoord0 = Mul(u_TexCoordSRT0, vec4(a_TexCoord0.xy, 1.0, 1.0));
     v_TexCoordBake.xy = CalcScaleBias(a_TexCoord1.xy, u_TexCoordBake0ScaleBias);
@@ -285,42 +291,102 @@ struct BakeResult {
 
 struct LightResult {
     vec3 DiffuseColor;
+    vec3 SpecularColor;
 };
 
 struct DirectionalLight {
-    vec3 DiffuseColor;
+    vec3 Color;
     vec3 BacksideColor;
     vec3 Direction;
     bool Wrapped;
     bool VisibleInShadow;
 };
 
-void CalcDirectionalLight(out LightResult t_Result, in vec3 t_Normal, in float t_Intensity, in DirectionalLight t_Light) {
-    float t_Dot = -dot(t_Normal, t_Light.Direction);
+struct SurfaceLightParams {
+    vec3 SurfaceNormal;
+    vec3 SurfacePointToEyeDir;
+    vec3 SpecularColor;
+    float IntensityFromShadow;
+    float SpecularRoughness;
+};
 
-    // Wrapped lighting
-    if (t_Light.Wrapped)
-        t_Dot = t_Dot * 0.5 + 0.5;
-    else
-        t_Dot = saturate(t_Dot);
-
-    if (t_Light.VisibleInShadow)
-        t_Intensity = 1.0;
-    t_Result.DiffuseColor += mix(t_Light.BacksideColor, t_Light.DiffuseColor, t_Dot) * t_Intensity;
+float G1V(float NoV, float k) {
+    return 1.0 / (NoV * (1.0 - k) + k);
 }
 
-void CalcEnvLight(out LightResult t_Result, in vec3 t_Normal, in float t_Intensity) {
+void CalcDirectionalLight(out LightResult t_Result, in SurfaceLightParams t_SurfaceLightParams, in DirectionalLight t_Light) {
+    vec3 N = t_SurfaceLightParams.SurfaceNormal.xyz;
+    // Surface point to light
+    vec3 L = normalize(-t_Light.Direction.xyz);
+    // Surface point to eye
+    vec3 V = t_SurfaceLightParams.SurfacePointToEyeDir.xyz;
+
+    float NoL = dot(N, L);
+
+    float t_Intensity = t_SurfaceLightParams.IntensityFromShadow;
+    if (t_Light.VisibleInShadow)
+        t_Intensity = 1.0;
+    vec3 t_LightColor = t_Light.Color * t_Intensity;
+    vec3 t_BacksideColor = t_Light.BacksideColor * t_Intensity;
+
+    // Diffuse
+    {
+        float t_LightVisibility = NoL;
+
+        // Wrapped lighting
+        if (t_Light.Wrapped)
+            t_LightVisibility = t_LightVisibility * 0.5 + 0.5;
+        else
+            t_LightVisibility = saturate(t_LightVisibility);
+
+        t_Result.DiffuseColor += mix(t_BacksideColor, t_LightColor, t_LightVisibility);
+    }
+
+    // Specular
+
+    // TODO(jstpierre): Replace with cubemaps
+    if (!t_Light.VisibleInShadow) {
+        // Stolen from: http://filmicworlds.com/blog/optimizing-ggx-update/
+
+        vec3 H = normalize(L + V);
+        float NoV = saturate(dot(N, V));
+        float NoH = saturate(dot(N, H));
+        float LoH = saturate(dot(L, H));
+
+        float r = t_SurfaceLightParams.SpecularRoughness;
+        float r2 = r * r;
+
+        // D
+        float D = r2 / (pow(NoH * NoH * (r2 - 1.0) + 1.0, 2.0));
+
+        // V
+        float k = r2 / 2.0;
+        float vis = G1V(NoL, k) * G1V(NoV, k);
+
+        vec3 F0 = vec3(0.05);
+
+        // Stolen from: https://seblagarde.wordpress.com/2012/06/03/spherical-gaussien-approximation-for-blinn-phong-phong-and-fresnel/
+        // float LoH5 = exp2((-5.55473 * LoH - 6.98316) * LoH);
+        float LoH5 = pow(1.0 - saturate(dot(H, V)), 5.0);
+        vec3 F = F0 + (1.0 - F0) * LoH5;
+
+        vec3 t_SpecularResponse = D * F * vis;
+        t_Result.SpecularColor += NoL * t_SpecularResponse.rgb * t_LightColor.rgb * t_SurfaceLightParams.SpecularColor.rgb;
+    }
+}
+
+void CalcEnvLight(out LightResult t_Result, in SurfaceLightParams t_SurfaceLightParams) {
     for (int i = 0; i < 2; i++) {
         EnvLightParam t_EnvLightParam = u_EnvLightParams[i];
 
         DirectionalLight t_Light;
+        t_Light.Color = t_EnvLightParam.DiffuseColor.rgb;
         t_Light.BacksideColor = t_EnvLightParam.BacksideColor.rgb;
-        t_Light.DiffuseColor = t_EnvLightParam.DiffuseColor.rgb;
         t_Light.Direction = t_EnvLightParam.Direction.xyz;
         t_Light.Wrapped = bool(t_EnvLightParam.BacksideColor.a != 0.0);
         t_Light.VisibleInShadow = bool(t_EnvLightParam.DiffuseColor.a != 0.0);
 
-        CalcDirectionalLight(t_Result, t_Normal, t_Intensity, t_Light);
+        CalcDirectionalLight(t_Result, t_SurfaceLightParams, t_Light);
     }
 }
 
@@ -516,8 +582,13 @@ void main() {
     bool enable_albedo = ${this.shaderOptionBool('enable_albedo')};
     bool enable_emission = ${this.shaderOptionBool('enable_emission')};
     bool enable_emission_map = ${this.shaderOptionBool('enable_emission_map')};
+    bool enable_specular = ${this.shaderOptionBool('enable_specular')};
+    bool enable_specular_mask = ${this.shaderOptionBool('enable_specular_mask')};
+    bool enable_specular_mask_rougness = ${this.shaderOptionBool('enable_specular_mask_rougness')};
+    bool enable_specular_physical = ${this.shaderOptionBool('enable_specular_physical')};
     bool enable_vtx_color_diff = ${this.shaderOptionBool('enable_vtx_color_diff')};
     bool enable_vtx_color_emission = ${this.shaderOptionBool('enable_vtx_color_emission')};
+    bool enable_vtx_color_spec = ${this.shaderOptionBool('enable_vtx_color_spec')};
     bool enable_vtx_alpha_trans = ${this.shaderOptionBool('enable_vtx_alpha_trans')};
 
     vec4 t_PixelOut = vec4(0.0);
@@ -531,19 +602,9 @@ void main() {
     t_IncomingLightDiffuse += t_BakeResult.IndirectLight;
 
     vec3 t_NormalWorld = CalcNormalWorld();
+    vec3 t_IncomingLightSpecular = vec3(0.0);
 
-    if (enable_diffuse) {
-        LightResult t_LightResult;
-        CalcEnvLight(t_LightResult, t_NormalWorld.xyz, t_BakeResult.Shadow);
-
-        t_IncomingLightDiffuse += t_LightResult.DiffuseColor;
-    } else {
-        LightResult t_LightResult;
-        CalcEnvLight(t_LightResult, vec3(0.0, 1.0, 0.0), 0.0);
-
-        t_IncomingLightDiffuse = mix(t_LightResult.DiffuseColor, vec3(1.0), t_BakeResult.Shadow);
-    }
-
+    vec4 t_AlbedoTex = vec4(1.0);
     vec3 t_Albedo = u_AlbedoColor.rgb;
     vec3 t_Emission = u_EmissionColor.rgb;
 
@@ -551,13 +612,33 @@ void main() {
         vec2 t_AlbedoTexCoord = v_TexCoord0.xy;
         Indirect(t_AlbedoTexCoord.xy, ${this.shaderOptionBool('indirect_effect_albedo')});
         vec4 t_AlbedoSample = texture(SAMPLER_2D(u_TextureAlbedo0), t_AlbedoTexCoord.xy);
+        t_AlbedoTex.rgba = t_AlbedoSample.rgba;
         CalcMultiTexture(0, t_AlbedoSample);
         t_Albedo.rgb *= t_AlbedoSample.rgb;
         t_Alpha *= t_AlbedoSample.a;
     }
-
     if (enable_vtx_color_diff) {
         t_Albedo.rgb *= v_VtxColor.rgb;
+    }
+
+    vec3 t_SpecMask = vec3(1.0);
+    float t_SpecularRoughness = u_SpecularRoughness;
+    if (enable_specular) {
+        if (enable_specular_mask) {
+            vec2 t_SpecularTexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_specmask')});
+            Indirect(t_SpecularTexCoord.xy, ${this.shaderOptionBool('indirect_effect_specmask')});
+            vec4 t_SpecMaskSample = texture(SAMPLER_2D(u_TextureSpecMask), t_SpecularTexCoord.xy);
+            CalcMultiTexture(3, t_SpecMaskSample);
+            t_SpecMask.rgb = t_SpecMaskSample.rgb;
+
+            if (enable_specular_mask_rougness) {
+                t_SpecularRoughness *= 1.0 - t_SpecMask.g;
+            }
+        }
+
+        if (enable_specular_physical) {
+            t_SpecularRoughness = 1.0 - u_SpecularIntensity;
+        }
     }
 
     if (enable_emission && enable_emission_map) {
@@ -571,6 +652,44 @@ void main() {
         t_Emission.rgb *= v_VtxColor.rgb;
     }
 
+    vec3 t_SurfacePointToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_SurfacePointToEyeDir = normalize(t_SurfacePointToEye.xyz);
+
+    SurfaceLightParams t_SurfaceLightParams;
+    t_SurfaceLightParams.SurfaceNormal = t_NormalWorld.xyz;
+    t_SurfaceLightParams.SurfacePointToEyeDir = t_SurfacePointToEyeDir.xyz;
+    t_SurfaceLightParams.SpecularRoughness = t_SpecularRoughness;
+    t_SurfaceLightParams.SpecularColor = u_SpecularColor * u_SpecularIntensity * 10.0;
+    if (enable_specular) {
+        if (enable_specular_mask_rougness) {
+            t_SurfaceLightParams.SpecularColor.rgb *= t_SpecMask.rrr;
+        } else {
+            t_SurfaceLightParams.SpecularColor.rgb *= t_SpecMask.rgb;
+        }
+        if (enable_vtx_color_spec) {
+            t_SurfaceLightParams.SpecularColor.rgb *= v_VtxColor.rgb;
+        }
+    }
+
+    t_SurfaceLightParams.IntensityFromShadow = t_BakeResult.Shadow;
+
+    if (enable_diffuse) {
+        LightResult t_LightResult;
+        CalcEnvLight(t_LightResult, t_SurfaceLightParams);
+
+        t_IncomingLightDiffuse += t_LightResult.DiffuseColor;
+
+        // TODO(jstpierre): Calculate specular light from cubemap instead of directional lights.
+        t_IncomingLightSpecular += max(t_LightResult.SpecularColor, vec3(0.0));
+    } else {
+        LightResult t_LightResult;
+        t_SurfaceLightParams.SurfaceNormal = vec3(0.0, 1.0, 0.0);
+        t_SurfaceLightParams.IntensityFromShadow = 0.0;
+
+        CalcEnvLight(t_LightResult, t_SurfaceLightParams);
+        t_IncomingLightDiffuse = mix(t_LightResult.DiffuseColor, vec3(1.0), vec3(t_BakeResult.Shadow));
+    }
+
     if (enable_diffuse2) {
         t_PixelOut.rgb += t_Albedo.rgb * t_IncomingLightDiffuse.rgb;
     }
@@ -580,6 +699,10 @@ void main() {
 
     if (enable_emission) {
         t_PixelOut.rgb += t_Emission.rgb;
+    }
+
+    if (enable_specular) {
+        t_PixelOut.rgb += t_IncomingLightSpecular.rgb;
     }
 
     bool is_xlu = ${this.isTranslucent()};
@@ -816,7 +939,8 @@ class FMATInstance {
     private texCoordSRT3 = new TexSRT();
     private albedoColorAndTransparency = colorNewCopy(White);
     private emissionColorAndNormalMapWeight = colorNewCopy(White);
-    private bakeLightScale = colorNewCopy(White);
+    private specularColorAndIntensity = colorNewCopy(White);
+    private bakeLightScaleAndRoughness = colorNewCopy(White);
     private multiTexReg = nArray(3, () => vec4.create());
     private indirectMag = vec2.create();
     private emissionIntensity = 1.0;
@@ -947,10 +1071,13 @@ class FMATInstance {
 
         parseFMAT_ShaderParam_Color3(this.albedoColorAndTransparency, findShaderParam(fmat, 'albedo_tex_color'));
         parseFMAT_ShaderParam_Color3(this.emissionColorAndNormalMapWeight, findShaderParam(fmat, 'emission_color'));
-        parseFMAT_ShaderParam_Color3(this.bakeLightScale, findShaderParam(fmat, 'gsys_bake_light_scale'));
-        this.emissionIntensity = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'emission_intensity'));
+        parseFMAT_ShaderParam_Color3(this.specularColorAndIntensity, findShaderParam(fmat, 'specular_color'));
+        parseFMAT_ShaderParam_Color3(this.bakeLightScaleAndRoughness, findShaderParam(fmat, 'gsys_bake_light_scale'));
         this.albedoColorAndTransparency.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'transparency'));
         this.emissionColorAndNormalMapWeight.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'normal_map_weight'));
+        this.specularColorAndIntensity.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'specular_intensity'));
+        this.bakeLightScaleAndRoughness.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'specular_roughness'));
+        this.emissionIntensity = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'emission_intensity'));
 
         parseFMAT_ShaderParam_Float4(this.multiTexReg[0], findShaderParam(fmat, 'multi_tex_reg0'));
         parseFMAT_ShaderParam_Float4(this.multiTexReg[1], findShaderParam(fmat, 'multi_tex_reg1'));
@@ -958,14 +1085,15 @@ class FMATInstance {
         parseFMAT_ShaderParam_Float2(this.indirectMag, findShaderParam(fmat, 'indirect_mag'));
     }
 
-    public setOnRenderInst(globals: TurboRenderGlobals, renderInst: GfxRenderInst): void {
+    public setOnRenderInst(globals: TurboRenderGlobals, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4): void {
         renderInst.sortKey = this.sortKey;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(TurboUBER.ub_MaterialParams, 4*2*4 + 4*7 + 3*4*TurboUBER.NumEnvLightParams);
+        let offs = renderInst.allocateUniformBuffer(TurboUBER.ub_MaterialParams, 4*4 + 4*2*4 + 4*8 + 3*4*TurboUBER.NumEnvLightParams);
         const d = renderInst.mapUniformBufferF32(TurboUBER.ub_MaterialParams);
+        offs += fillMatrix4x3(d, offs, modelMatrix);
         offs += this.texCoordSRT0.fillMatrix(d, offs);
         offs += fillVec4v(d, offs, this.texCoordBake0ScaleBias);
         offs += fillVec4v(d, offs, this.texCoordBake1ScaleBias);
@@ -973,8 +1101,10 @@ class FMATInstance {
         offs += this.texCoordSRT3.fillMatrix(d, offs);
         offs += fillColor(d, offs, this.albedoColorAndTransparency);
         colorScale(scratchColor, this.emissionColorAndNormalMapWeight, this.emissionIntensity);
+        scratchColor.a = this.emissionColorAndNormalMapWeight.a;
         offs += fillColor(d, offs, scratchColor);
-        offs += fillColor(d, offs, this.bakeLightScale);
+        offs += fillColor(d, offs, this.specularColorAndIntensity);
+        offs += fillColor(d, offs, this.bakeLightScaleAndRoughness);
         offs += fillVec4v(d, offs, this.multiTexReg[0]);
         offs += fillVec4v(d, offs, this.multiTexReg[1]);
         offs += fillVec4v(d, offs, this.multiTexReg[2]);
@@ -1224,15 +1354,7 @@ class FSHPInstance {
             this.lodMeshInstances.push(new FSHPMeshInstance(fshpData.meshData[i]));
     }
 
-    public computeModelView(modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): mat4 {
-        // Build view matrix
-        const viewMatrix = scratchMatrix;
-        computeViewMatrix(viewMatrix, viewerInput.camera);
-        mat4.mul(viewMatrix, viewMatrix, modelMatrix);
-        return viewMatrix;
-    }
-
-    public prepareToRender(globals: TurboRenderGlobals, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(globals: TurboRenderGlobals, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
@@ -1240,15 +1362,8 @@ class FSHPInstance {
             return;
 
         // TODO(jstpierre): Joints.
-        // TODO(jstpierre): This should probably be global, not per-shape.
-
         const template = renderInstManager.pushTemplateRenderInst();
-        let offs = template.allocateUniformBuffer(TurboUBER.ub_SceneParams, 16+12);
-        const d = template.mapUniformBufferF32(TurboUBER.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x3(d, offs, this.computeModelView(modelMatrix, viewerInput));
-
-        this.fmatInstance.setOnRenderInst(globals, template);
+        this.fmatInstance.setOnRenderInst(globals, template, modelMatrix);
 
         for (let i = 0; i < this.lodMeshInstances.length; i++) {
             bboxScratch.transform(this.lodMeshInstances[i].meshData.mesh.bbox, modelMatrix);
@@ -1295,13 +1410,8 @@ export class FMDLRenderer {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
-
         for (let i = 0; i < this.fshpInst.length; i++)
             this.fshpInst[i].prepareToRender(globals, renderInstManager, this.modelMatrix, viewerInput);
-
-        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -1431,7 +1541,15 @@ export class TurboRenderer {
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.renderHelper.pushTemplateRenderInst();
+        const template = this.renderHelper.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+
+        let offs = template.allocateUniformBuffer(TurboUBER.ub_SceneParams, 16+4);
+        const d = template.mapUniformBufferF32(TurboUBER.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.clipFromWorldMatrix);
+        getMatrixTranslation(scratchVec3, viewerInput.camera.worldMatrix);
+        offs += fillVec3v(d, offs, scratchVec3);
+
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].prepareToRender(this.globals, renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
