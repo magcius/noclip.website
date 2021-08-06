@@ -471,8 +471,8 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         return;
 
     int multi_tex_calc_type_color = ${this.shaderOptionInt('multi_tex_calc_type_color')};
-    if (multi_tex_calc_type_color == 0) { // Nothing.
-        // This space intentionally left blank.
+    if (multi_tex_calc_type_color == 0) {
+        t_Sample.rgb = mix(t_Sample.rgb, SampleMultiTextureA().rgb, t_Sample.a);
     } else if (multi_tex_calc_type_color == 1) {
         t_Sample.rgb *= SampleMultiTextureA().rgb;
     } else if (multi_tex_calc_type_color == 2) {

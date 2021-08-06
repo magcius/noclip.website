@@ -631,10 +631,10 @@ export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotat
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
+    dst[4]  = scaleS *  sinR;
     dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
 
-    dst[4]  = scaleS *  sinR;
+    dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
     dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
