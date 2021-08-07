@@ -7,7 +7,7 @@ import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldS
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
-import { assert, assertExists, fallbackUndefined, leftPad, nullify } from '../util';
+import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
@@ -167,6 +167,9 @@ export class BaseEntity {
     }
 
     public fireInput(entitySystem: EntitySystem, inputName: string, value: EntityMessageValue): void {
+        if (!this.alive)
+            return;
+
         const func = this.inputs.get(inputName);
         if (!func) {
             console.warn(`Unknown input: ${this.targetName} (${this.entity.classname}) ${inputName} ${value}`);
@@ -293,7 +296,7 @@ export class BaseEntity {
             const modelMatrix = this.updateModelMatrix()!;
             getMatrixTranslation(this.materialParams!.position, modelMatrix);
 
-            let visible = this.visible;
+            let visible = this.visible && this.enabled && this.alive;
             if (this.renderamt === 0)
                 visible = false;
             if (this.rendermode === 10)
@@ -720,10 +723,74 @@ class logic_relay extends BaseEntity {
     }
 
     private input_trigger(entitySystem: EntitySystem): void {
+        if (!this.enabled)
+            return;
+
         this.output_onTrigger.fire(entitySystem, this);
     }
 }
 
+function swap<T>(L: T[], i: number, j: number): void {
+    const t = L[i];
+    L[i] = L[j];
+    L[j] = t;
+}
+
+function shuffle<T>(src: T[]): T[] {
+    const L = src.slice();
+
+    // Fisher-Yates
+    for (let i = L.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        swap(L, i, j);
+    }
+
+    return L;
+}
+
+class logic_case extends BaseEntity {
+    public static classname = `logic_case`;
+
+    private output_oncaseNN = nArray(16, () => new EntityOutput());
+    private connectedOutputs: number[] = [];
+    private shuffled: number[] = [];
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        for (let i = 0; i < 16; i++) {
+            const oncase = this.entity[`oncase${leftPad('' + (i + 1), 2)}`];
+            if (oncase === undefined)
+                continue;
+
+            this.output_oncaseNN[i].parse(oncase);
+            this.connectedOutputs.push(i);
+        }
+
+        this.registerInput('invalue', this.input_invalue.bind(this));
+        this.registerInput('pickrandom', this.input_pickrandom.bind(this));
+        this.registerInput('pickrandomshuffle', this.input_pickrandomshuffle.bind(this));
+    }
+
+    private input_invalue(entitySystem: EntitySystem, value: string): void {
+        const c = Number(value);
+        if (c >= 0 && c < this.output_oncaseNN.length)
+            this.output_oncaseNN[c].fire(entitySystem, this);
+    }
+
+    private input_pickrandom(entitySystem: EntitySystem): void {
+        const index = (Math.random() * this.connectedOutputs.length) | 0;
+        const c = this.connectedOutputs[index];
+        this.output_oncaseNN[c].fire(entitySystem, this);
+    }
+
+    private input_pickrandomshuffle(entitySystem: EntitySystem): void {
+        if (this.shuffled.length === 0)
+            this.shuffled = shuffle(this.connectedOutputs);
+        const c = this.shuffled.pop()!;
+        this.output_oncaseNN[c].fire(entitySystem, this);
+    }
+}
 
 class logic_timer extends BaseEntity {
     public static classname = `logic_timer`;
@@ -1621,6 +1688,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
+        this.registerFactory(logic_case);
         this.registerFactory(logic_timer);
         this.registerFactory(math_counter);
         this.registerFactory(math_remap);
