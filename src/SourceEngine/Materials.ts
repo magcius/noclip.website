@@ -248,7 +248,7 @@ class ParameterTexture {
             // Special case env_cubemap if we have a local override.
             let filename = this.ref;
             if (this.isEnvmap) {
-                if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null)
+                if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null && entityParams.lightCache.envCubemap !== null)
                     filename = entityParams.lightCache.envCubemap.filename;
                 else if (materialCache.isUsingHDR())
                     filename = `${filename}.hdr`;
@@ -3199,7 +3199,7 @@ export class MaterialCache {
 //#endregion
 
 //#region Runtime Lighting / LightCache
-function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap {
+function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap | null {
     let bestDistance = Infinity;
     let bestIndex = -1;
 
@@ -3211,7 +3211,9 @@ function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap {
         }
     }
 
-    assert(bestIndex >= 0);
+    if (bestIndex < 0)
+        return null;
+
     return bspfile.cubemaps[bestIndex];
 }
 
@@ -3366,7 +3368,7 @@ function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: Readon
 const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ ] as const;
 export class LightCache {
     private leaf: number = -1;
-    public envCubemap: Cubemap;
+    public envCubemap: Cubemap | null;
     public debug: boolean = false;
 
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
