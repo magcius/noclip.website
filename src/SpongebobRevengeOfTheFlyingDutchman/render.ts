@@ -490,6 +490,10 @@ type MeshInfo = {
 type MaterialAnimInfo = {
     id: number;
     anim: TotemMaterialAnim;
+    originalTransform: mat3;
+    offset: vec2;
+    rotation: number;
+    scale: vec2;
 }
 
 type SkinInfo = {
@@ -567,31 +571,33 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             if (texture !== undefined) {
                 material.texture_id = texture;
             }
-            if (interpTrackInPlace(material.offset, anim.scroll, animFrame, vec2.lerp, vec2.copy)) {
-                shouldUpdateTransform = true;
-            }
-            if (interpTrackInPlace(material.scale, anim.stretch, animFrame, vec2.lerp, vec2.copy)) {
-                shouldUpdateTransform = true;
-            }
-            const rotation = interpTrack(anim.rotation, animFrame, lerp);
-            if (rotation !== undefined) {
-                shouldUpdateTransform = true;
-                material.rotation = rotation;
-            }
             interpTrackInPlace(material.color, anim.color, animFrame, colorLerpKeepAlpha, colorCopyKeepAlpha);
             interpTrackInPlace(material.emission, anim.emission, animFrame, colorLerp, colorCopy);
             const alpha = interpTrack(anim.alpha, animFrame, lerp);
             if (alpha !== undefined) {
                 material.color.a = alpha;
             }
+            // handle transformation
+            if (interpTrackInPlace(animInfo.offset, anim.scroll, animFrame, vec2.lerp, vec2.copy)) {
+                shouldUpdateTransform = true;
+            }
+            if (interpTrackInPlace(animInfo.scale, anim.stretch, animFrame, vec2.lerp, vec2.copy)) {
+                shouldUpdateTransform = true;
+            }
+            const rotation = interpTrack(anim.rotation, animFrame, lerp);
+            if (rotation !== undefined) {
+                shouldUpdateTransform = true;
+            }
+            animInfo.rotation = rotation ?? 0;
             if (shouldUpdateTransform) {
                 let tx = material.transform;
                 mat3.identity(tx);
                 mat3.translate(tx, tx, [0.5, 0.5]);
-                mat3.translate(tx, tx, material.offset);
-                mat3.scale(tx, tx, material.scale);
-                mat3.rotate(tx, tx, material.rotation);
+                mat3.translate(tx, tx, animInfo.offset);
+                mat3.scale(tx, tx, animInfo.scale);
+                mat3.rotate(tx, tx, animInfo.rotation);
                 mat3.translate(tx, tx, [-0.5, -0.5]);
+                mat3.mul(tx, tx, animInfo.originalTransform);
             }
         }
     }
@@ -738,9 +744,15 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         // just use the same map for both MATERIAL and MATERIALANIM,
         // it doesn't really matter. There shouldn't be any overlap anyways.
         this.materials.set(id, material);
+        const scale = vec2.create();
+        vec2.set(scale, 1, 1);
         this.materialAnims.push({
             id,
             anim,
+            originalTransform: mat3.clone(material.transform),
+            offset: vec2.create(),
+            scale,
+            rotation: 0.0
         })
     }
 
