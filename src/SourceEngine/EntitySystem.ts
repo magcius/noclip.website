@@ -701,10 +701,6 @@ class func_door_rotating extends BaseDoor {
     protected anglesOpened = vec3.create();
     protected anglesClosed = vec3.create();
 
-    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(entitySystem, renderContext, bspRenderer, entity);
-    }
-
     public spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
@@ -742,6 +738,177 @@ class func_door_rotating extends BaseDoor {
 
     protected moveToClosed(entitySystem: EntitySystem): void {
         this.angularMove(entitySystem, this.anglesClosed, this.speed);
+    }
+}
+
+function signBiasPositive(v: number): number {
+    return v >= 0.0 ? 1 : -1;
+}
+
+function clampOnEdge(from: number, to: number, target: number): number {
+    if (target >= 0 === from <= target) {
+        if (from <= target && to >= target)
+            return target;
+    } else {
+        if (from >= target && to <= target)
+            return target;
+    }
+
+    return to;
+}
+
+class func_rotating extends BaseEntity {
+    public static classname = `func_rotating`;
+
+    private output_ongetspeed = new EntityOutput();
+
+    private friction = 1;
+    private maxSpeed: number = 0;
+
+    private useAcceleration = false;
+    private rotAngles = vec3.create();
+    private speed = 0.0;
+    private targetSpeed = 0.0;
+    private reversed = false;
+    protected angVelPerSecond = vec3.create();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('setspeed', this.input_setspeed.bind(this));
+        this.registerInput('getspeed', this.input_getspeed.bind(this));
+        this.registerInput('start', this.input_start.bind(this));
+        this.registerInput('stop', this.input_stop.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('reverse', this.input_reverse.bind(this));
+        this.registerInput('startforward', this.input_startforward.bind(this));
+        this.registerInput('startbackward', this.input_startbackward.bind(this));
+        this.output_ongetspeed.parse(this.entity.ongetspeed);
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        this.friction = Math.max(Number(fallbackUndefined(this.entity.fanfriction, '0')), 1);
+
+        this.maxSpeed = Number(fallbackUndefined(this.entity.maxspeed, '0'));
+        if (this.maxSpeed === 0)
+            this.maxSpeed = 100;
+
+        const enum SpawnFlags {
+            ROTATE_START_ON  = 0x01,
+            ROTATE_BACKWARDS = 0x02,
+            ROTATE_Z_AXIS    = 0x04,
+            ROTATE_X_AXIS    = 0x08,
+            ACCDCC           = 0x10,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+
+        if (!!(spawnflags & SpawnFlags.ROTATE_Z_AXIS))
+            vec3.copy(this.rotAngles, Vec3UnitZ);
+        else if (!!(spawnflags & SpawnFlags.ROTATE_X_AXIS))
+            vec3.copy(this.rotAngles, Vec3UnitX);
+        else
+            vec3.copy(this.rotAngles, Vec3UnitY);
+
+        if (!!(spawnflags & SpawnFlags.ROTATE_BACKWARDS))
+            vec3.negate(this.rotAngles, this.rotAngles);
+
+        this.useAcceleration = !!(spawnflags & SpawnFlags.ACCDCC);
+
+        if (!!(spawnflags & SpawnFlags.ROTATE_START_ON))
+            this.toggle();
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.useAcceleration && this.targetSpeed !== this.speed) {
+            // Apply acceleration logic.
+
+            let isChangingDirections = (signBiasPositive(this.targetSpeed) !== signBiasPositive(this.speed));
+
+            // Spinning to/from zero is never considered changing directions.
+            if (this.speed === 0.0 || this.targetSpeed === 0.0)
+                isChangingDirections = false;
+
+            let effectiveTargetSpeed = Math.abs(this.targetSpeed);
+            if (isChangingDirections) {
+                // If we're changing directions, first spin down to zero before spinning back up.
+                effectiveTargetSpeed = 0;
+            }
+
+            const absCurSpeed = Math.abs(this.speed);
+
+            const spinUpSpeed = 0.2, spinDownSpeed = -0.1;
+            const spinSpeed = effectiveTargetSpeed > absCurSpeed ? spinUpSpeed : spinDownSpeed;
+
+            let newSpeed = this.speed + spinSpeed * this.maxSpeed * this.friction * signBiasPositive(this.targetSpeed);
+            newSpeed = clampOnEdge(this.speed, newSpeed, this.targetSpeed);
+
+            this.setSpeed(newSpeed);
+        }
+
+        const deltaTimeInSeconds = renderContext.globalDeltaTime;
+        vec3.scaleAndAdd(this.localAngles, this.localAngles, this.angVelPerSecond, deltaTimeInSeconds);
+    }
+
+    private setSpeed(speed: number): void {
+        this.speed = clamp(speed, -this.maxSpeed, this.maxSpeed);
+        vec3.scale(this.angVelPerSecond, this.rotAngles, speed);
+    }
+
+    private setTargetSpeed(targetSpeed: number): void {
+        this.targetSpeed = Math.abs(targetSpeed) * (this.reversed ? -1 : 1);
+
+        if (!this.useAcceleration) {
+            // In the case we're not using acceleration, just set the new speed immediately.
+            this.setSpeed(this.targetSpeed);
+        }
+    }
+
+    private toggle(): void {
+        if (this.speed !== 0) {
+            this.setTargetSpeed(0);
+        } else {
+            this.setTargetSpeed(this.maxSpeed);
+        }
+    }
+
+    private input_setspeed(entitySystem: EntitySystem, value: string): void {
+        const speed = Number(value);
+        this.setSpeed(speed);
+    }
+
+    private input_getspeed(entitySystem: EntitySystem): void {
+        this.output_ongetspeed.fire(entitySystem, this, '' + this.speed);
+    }
+
+    private input_start(entitySystem: EntitySystem): void {
+        this.setTargetSpeed(this.maxSpeed);
+    }
+
+    private input_stop(entitySystem: EntitySystem): void {
+        this.setTargetSpeed(0);
+    }
+
+    private input_toggle(entitySystem: EntitySystem): void {
+        this.toggle();
+    }
+
+    private input_reverse(entitySystem: EntitySystem): void {
+        this.reversed = !this.reversed;
+        this.setTargetSpeed(this.speed);
+    }
+
+    private input_startforward(entitySystem: EntitySystem): void {
+        this.reversed = false;
+        this.setTargetSpeed(this.maxSpeed);
+    }
+
+    private input_startbackward(entitySystem: EntitySystem): void {
+        this.reversed = true;
+        this.setTargetSpeed(this.maxSpeed);
     }
 }
 
@@ -1772,6 +1939,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_movelinear);
         this.registerFactory(func_door);
         this.registerFactory(func_door_rotating);
+        this.registerFactory(func_rotating);
         this.registerFactory(func_areaportalwindow);
         this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
