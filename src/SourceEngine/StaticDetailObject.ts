@@ -15,7 +15,7 @@ import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } fr
 import BitMap from "../BitMap";
 import { BSPFile } from "./BSPFile";
 import { AABB } from "../Geometry";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { convertToTrianglesRange, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -271,11 +271,7 @@ export class DetailPropLeafRenderer {
 
         // Upload new sprite data.
         const vertexData = this.vertexData;
-        const indexData = this.indexData;
-
         let vertexOffs = 0;
-        let vertexBase = 0;
-        let indexOffs = 0;
 
         // Build sort list.
         const sortList: DetailSpriteEntry[] = [];
@@ -335,16 +331,9 @@ export class DetailPropLeafRenderer {
             vertexData[vertexOffs++] = entry.texcoord[0];
             vertexData[vertexOffs++] = entry.texcoord[3];
             vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
-
-            indexData[indexOffs++] = vertexBase + 0;
-            indexData[indexOffs++] = vertexBase + 1;
-            indexData[indexOffs++] = vertexBase + 2;
-            indexData[indexOffs++] = vertexBase + 0;
-            indexData[indexOffs++] = vertexBase + 2;
-            indexData[indexOffs++] = vertexBase + 3;
-
-            vertexBase += 4;
         }
+
+        convertToTrianglesRange(this.indexData, 0, GfxTopology.QUADS, 0, sortList.length * 4);
 
         const device = renderContext.device;
         device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
@@ -360,7 +349,8 @@ export class DetailPropLeafRenderer {
         const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.centerPoint);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
-        renderInst.drawIndexes(indexOffs);
+        const indexCount = sortList.length * 6;
+        renderInst.drawIndexes(indexCount);
         renderInst.debug = this;
         this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }
