@@ -32,6 +32,7 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 import { reverseDepthForProjectionMatrix } from "../gfx/helpers/ReversedDepthHelpers";
+import { ParticleStaticResource } from "./Particles_Simple";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -970,6 +971,7 @@ export class SourceRenderContext {
     public currentView: SourceEngineView;
     public colorCorrection: SourceColorCorrection;
     public renderCache: GfxRenderCache;
+    public particleStaticRes: ParticleStaticResource;
 
     // Public settings
     public showToolMaterials = false;
@@ -986,6 +988,7 @@ export class SourceRenderContext {
         this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);
         this.studioModelCache = new StudioModelCache(this, this.filesystem);
         this.colorCorrection = new SourceColorCorrection(device, this.renderCache);
+        this.particleStaticRes = new ParticleStaticResource(device, this.renderCache);
     }
 
     public destroy(device: GfxDevice): void {
@@ -993,6 +996,7 @@ export class SourceRenderContext {
         this.materialCache.destroy(device);
         this.studioModelCache.destroy(device);
         this.colorCorrection.destroy(device);
+        this.particleStaticRes.destroy(device);
     }
 }
 

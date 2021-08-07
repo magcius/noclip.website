@@ -140,7 +140,7 @@ class DetailSpriteEntry {
 }
 
 // Compute a rotation matrix given a forward direction, in Source Engine space.
-function computeMatrixForForwardDir(dst: mat4, fwd: ReadonlyVec3, pos: ReadonlyVec3): void {
+export function computeMatrixForForwardDir(dst: mat4, fwd: ReadonlyVec3, pos: ReadonlyVec3): void {
     let yaw = 0, pitch = 0;
 
     if (fwd[1] === 0 && fwd[0] === 0) {
@@ -560,7 +560,7 @@ export class StaticPropRenderer {
             vec3.copy(this.lightingOrigin, this.staticProp.lightingOrigin);
         else
             transformVec3Mat4w1(this.lightingOrigin, scratchMatrix, modelData.illumPosition);
-        this.materialParams.lightCache = new LightCache(bsp, this.lightingOrigin, this.bbox);
+        this.materialParams.lightCache = new LightCache(bsp, this.lightingOrigin);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
         this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);

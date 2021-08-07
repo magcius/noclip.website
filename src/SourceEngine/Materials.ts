@@ -9,12 +9,11 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
-import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
+import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
-import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
@@ -1099,10 +1098,10 @@ float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWo
             float t_Stopdot2 = t_WorldLight.Direction.w;
 
             vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
-            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
+            float t_AngleDot = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
 
             // invlerp
-            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
+            float t_AngleAttenuation = max(invlerp(t_Stopdot2, t_Stopdot, t_AngleDot), 0.01);
             t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
 
             t_Attenuation *= t_AngleAttenuation;
@@ -1642,8 +1641,9 @@ void mainPS() {
 
     t_FinalColor.rgb += t_SpecularLighting.rgb;
 
+    t_FinalColor.a = t_Albedo.a;
 #ifndef USE_BASE_ALPHA_ENVMAP_MASK
-    t_FinalColor.a = t_BaseTexture.a;
+    t_FinalColor.a *= t_BaseTexture.a;
 #endif
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
@@ -3248,6 +3248,44 @@ function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): numb
     }
 }
 
+function worldLightAngleFalloff(light: WorldLight, surfaceNormal: ReadonlyVec3, delta: ReadonlyVec3): number {
+    if (light.type === WorldLightType.Surface) {
+        const dot1 = vec3.dot(surfaceNormal, delta);
+        if (dot1 <= 0.0)
+            return 0.0;
+        const dot2 = -vec3.dot(delta, light.normal);
+        if (dot2 <= 0.0)
+            return 0.0;
+        return dot1 * dot2;
+    } else if (light.type === WorldLightType.Point || light.type === WorldLightType.QuakeLight) {
+        const dot = vec3.dot(surfaceNormal, delta);
+        if (dot <= 0.0)
+            return 0.0;
+        return dot;
+    } else if (light.type === WorldLightType.Spotlight) {
+        const visDot = vec3.dot(surfaceNormal, delta);
+        if (visDot <= 0.0)
+            return 0.0;
+
+        const angleDot = -vec3.dot(delta, light.normal);
+        if (angleDot <= light.stopdot2) // Outside outer cone.
+            return 0.0;
+
+        if (angleDot >= light.stopdot) // Inside inner cone.
+            return visDot;
+
+        const ratio = Math.pow(invlerp(light.stopdot2, light.stopdot, angleDot), light.exponent);
+        return visDot * ratio;
+    } else if (light.type === WorldLightType.SkyLight) {
+        const dot = -vec3.dot(delta, light.normal);
+        if (dot <= 0.0)
+            return 0.0;
+        return dot;
+    } else {
+        throw "whoops";
+    }
+}
+
 const scratchVec3 = vec3.create();
 const ntscGrayscale = vec3.fromValues(0.299, 0.587, 0.114);
 
@@ -3365,6 +3403,26 @@ function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: Readon
     }
 }
 
+export function worldLightingCalcColorForPoint(dst: Color, bspRenderer: BSPRenderer, pos: ReadonlyVec3): void {
+    dst.r = 0;
+    dst.g = 0;
+    dst.b = 0;
+
+    const bspfile = bspRenderer.bsp;
+    for (let i = 0; i < bspfile.worldlights.length; i++) {
+        const light = bspfile.worldlights[i];
+
+        vec3.sub(scratchVec3, light.pos, pos);
+        const ratio = worldLightDistanceFalloff(light, scratchVec3);
+        vec3.normalize(scratchVec3, scratchVec3);
+        const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
+
+        dst.r += light.intensity[0] * ratio * angularRatio;
+        dst.g += light.intensity[1] * ratio * angularRatio;
+        dst.b += light.intensity[2] * ratio * angularRatio;
+    }
+}
+
 const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ ] as const;
 export class LightCache {
     private leaf: number = -1;
@@ -3374,7 +3432,7 @@ export class LightCache {
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
     private ambientCube: AmbientCube = newAmbientCube();
 
-    constructor(bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
+    constructor(bspfile: BSPFile, private pos: ReadonlyVec3) {
         this.leaf = bspfile.findLeafIdxForPoint(pos);
         assert(this.leaf >= 0);
 
@@ -3405,11 +3463,11 @@ export class LightCache {
         vec3.sub(scratchVec3, light.pos, this.pos);
         const ratio = worldLightDistanceFalloff(light, scratchVec3);
         vec3.normalize(scratchVec3, scratchVec3);
-        // TODO(jstpierre): Angle attenuation
+        const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
 
         for (let i = 0; i < ambientCubeDirections.length; i++) {
             const dst = this.ambientCube[i];
-            const mul = vec3.dot(scratchVec3, ambientCubeDirections[i]) * ratio;
+            const mul = vec3.dot(scratchVec3, ambientCubeDirections[i]) * ratio * angularRatio;
             if (mul <= 0)
                 continue;
             dst.r += light.intensity[0] * mul;
@@ -3430,7 +3488,9 @@ export class LightCache {
 
             vec3.sub(scratchVec3, light.pos, this.pos);
             const ratio = worldLightDistanceFalloff(light, scratchVec3);
-            const intensity = ratio * vec3.dot(light.intensity, ntscGrayscale);
+            vec3.normalize(scratchVec3, scratchVec3);
+            const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
+            const intensity = ratio * angularRatio * vec3.dot(light.intensity, ntscGrayscale);
 
             if (intensity <= 0.0)
                 continue;

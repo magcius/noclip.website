@@ -2,14 +2,18 @@
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
-import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
+import { Blue, Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, TransparentBlack, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from '../MathHelpers';
+import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
+import { clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
+import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { BSPFile } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
-import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
@@ -127,9 +131,15 @@ export class BaseEntity {
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
     }
 
-    public setModelName(renderContext: SourceRenderContext, modelName: string): void {
+    protected ensureMaterialParams(): EntityMaterialParameters {
         if (this.materialParams === null)
             this.materialParams = new EntityMaterialParameters();
+
+        return this.materialParams;
+    }
+
+    public setModelName(renderContext: SourceRenderContext, modelName: string): void {
+        this.ensureMaterialParams();
 
         if (modelName.startsWith('*')) {
             const index = parseInt(modelName.slice(1), 10);
@@ -182,7 +192,7 @@ export class BaseEntity {
     private updateLightingData(): void {
         const materialParams = this.materialParams!;
 
-        const modelMatrix = this.updateModelMatrix()!;
+        const modelMatrix = this.updateModelMatrix();
         getMatrixTranslation(materialParams.position, modelMatrix);
 
         if (this.modelStudio !== null) {
@@ -191,7 +201,7 @@ export class BaseEntity {
             vec3.copy(this.lightingOrigin, materialParams.position);
         }
 
-        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin, this.modelStudio!.modelData.viewBB);
+        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin);
     }
 
     protected modelUpdated(): void {
@@ -293,7 +303,7 @@ export class BaseEntity {
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         if (this.modelBSP !== null || this.modelStudio !== null) {
-            const modelMatrix = this.updateModelMatrix()!;
+            const modelMatrix = this.updateModelMatrix();
             getMatrixTranslation(this.materialParams!.position, modelMatrix);
 
             let visible = this.visible && this.enabled && this.alive;
@@ -421,14 +431,9 @@ class water_lod_control extends BaseEntity {
     }
 }
 
-function angleVec(dstForward: vec3, rot: ReadonlyVec3): void {
-    const rx = rot[0] * MathConstants.DEG_TO_RAD, ry = rot[1] * MathConstants.DEG_TO_RAD;
-    const sx = Math.sin(rx), cx = Math.cos(rx);
-    const sy = Math.sin(ry), cy = Math.cos(ry);
-
-    dstForward[0] = cx*cy;
-    dstForward[1] = cx*sy;
-    dstForward[2] = -sx;
+function angleVec(dstForward: vec3 | null, dstRight: vec3 | null, dstUp: vec3 | null, rot: ReadonlyVec3): void {
+    computeModelMatrixPosQAngle(scratchMat4a, Vec3Zero, rot);
+    getMatrixAxis(dstForward, dstRight, dstUp, scratchMat4a);
 }
 
 const enum ToggleState {
@@ -529,7 +534,7 @@ class func_movelinear extends BaseToggle {
     public spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        angleVec(scratchVec3a, this.moveDir);
+        angleVec(scratchVec3a, null, null, this.moveDir);
         vec3.scaleAndAdd(this.positionOpened, this.localOrigin, scratchVec3a, -this.moveDistance * this.startPosition);
         vec3.scaleAndAdd(this.positionClosed, this.localOrigin, scratchVec3a,  this.moveDistance);
     }
@@ -671,7 +676,7 @@ class func_door extends BaseDoor {
         else if (this.modelStudio !== null)
             this.modelStudio.modelData.viewBB.extents(this.modelExtents);
 
-        angleVec(scratchVec3a, this.moveDir);
+        angleVec(scratchVec3a, null, null, this.moveDir);
         const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
         vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
 
@@ -1914,6 +1919,231 @@ class env_entity_maker extends BaseEntity {
     }
 }
 
+class SteamJetParticle {
+    public position = vec3.create();
+    public velocity = vec3.create();
+    public life = 0;
+    public roll = 0;
+    public rollDelta = 0;
+}
+
+class env_steam extends BaseEntity {
+    public static classname = 'env_steam';
+
+    private startSize = 0;
+    private endSize = 0;
+    private rollSpeed = 0;
+    private spreadSpeed = 0;
+    private speed = 0;
+    private invRate = 0;
+    private particleLifetime = 0;
+    private lightingRamp: Color[] = nArray(5, () => colorNewCopy(White));
+
+    // Emit state.
+    private shouldEmit = false;
+    private emitTimer = 0;
+
+    private particlePool: SteamJetParticle[] = [];
+
+    private materialInstance: BaseMaterial | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.startSize = Number(fallbackUndefined(this.entity.startsize, '0'));
+        this.endSize = Number(fallbackUndefined(this.entity.endsize, '0'));
+        this.spreadSpeed = Number(fallbackUndefined(this.entity.spreadspeed, '0'));
+        this.speed = Number(fallbackUndefined(this.entity.speed, '0'));
+        const rate = Number(fallbackUndefined(this.entity.rate, '0'));
+        this.invRate = 1.0 / rate;
+        this.rollSpeed = Number(fallbackUndefined(this.entity.rollspeed, '0'));
+
+        const jetLength = Number(fallbackUndefined(this.entity.jetlength, '0'));
+        this.particleLifetime = jetLength / this.speed;
+
+        const initialstate = Number(fallbackUndefined(this.entity.initialstate, '0'));
+        if (initialstate !== 0)
+            this.shouldEmit = true;
+
+        const enum Type {
+            HEATWAVE = 0x01,
+        };
+        const type: Type = Number(fallbackUndefined(this.entity.type, '0'));
+
+        if (type === Type.HEATWAVE) {
+            this.bindMaterial(renderContext, `sprites/heatwave`);
+        } else {
+            this.bindMaterial(renderContext, `particle/particle_smokegrenade`);
+        }
+
+        this.registerInput('turnon', this.input_turnon.bind(this));
+        this.registerInput('turnoff', this.input_turnoff.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+    }
+
+    private newParticle(): SteamJetParticle {
+        const p = new SteamJetParticle();
+        this.particlePool.push(p);
+        return p;
+    }
+
+    private calcLightingRamp(entitySystem: EntitySystem): void {
+        const modelMatrix = this.updateModelMatrix();
+        // Forward axis.
+        getMatrixAxisX(scratchVec3b, modelMatrix);
+
+        for (let i = 0; i < this.lightingRamp.length; i++) {
+            const t = i / (this.lightingRamp.length - 1);
+
+            getMatrixTranslation(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, t);
+
+            worldLightingCalcColorForPoint(this.lightingRamp[i], entitySystem.bspRenderer, scratchVec3a);
+        }
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        this.calcLightingRamp(entitySystem);
+    }
+
+    private emit(renderContext: SourceRenderContext): void {
+        if (!this.shouldEmit)
+            return;
+
+        this.emitTimer += renderContext.globalDeltaTime;
+
+        let numParticlesToEmit = 0;
+        while (this.emitTimer >= this.invRate) {
+            numParticlesToEmit++;
+            this.emitTimer -= this.invRate;
+        }
+
+        if (numParticlesToEmit <= 0)
+            return;
+
+        const modelMatrix = this.updateModelMatrix();
+
+        for (let i = 0; i < numParticlesToEmit; i++) {
+            const p = this.newParticle();
+            getMatrixTranslation(p.position, modelMatrix);
+
+            // Forward axis
+            getMatrixAxisX(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, this.speed);
+
+            // Spread axes
+            getMatrixAxisY(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, getRandomFloat(-this.spreadSpeed, this.spreadSpeed));
+            getMatrixAxisZ(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, getRandomFloat(-this.spreadSpeed, this.spreadSpeed));
+
+            p.roll = getRandomFloat(0, 360);
+            p.rollDelta = getRandomFloat(-this.rollSpeed, this.rollSpeed);
+
+            p.life = 0.0;
+        }
+    }
+
+    private simulate(renderContext: SourceRenderContext): void {
+        const deltaTime = renderContext.globalDeltaTime;
+
+        for (let i = 0; i < this.particlePool.length; i++) {
+            const p = this.particlePool[i];
+
+            p.life += renderContext.globalDeltaTime;
+            if (p.life >= this.particleLifetime) {
+                this.particlePool.splice(i--, 1);
+                continue;
+            }
+
+            p.roll += p.rollDelta * deltaTime;
+            vec3.scaleAndAdd(p.position, p.position, p.velocity, deltaTime);
+        }
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        this.emit(renderContext);
+        this.simulate(renderContext);
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext, materialName: string) {
+        const materialCache = renderContext.materialCache;
+        const materialInstance = await materialCache.createMaterialInstance(materialName);
+        materialInstance.entityParams = this.ensureMaterialParams();
+        await materialInstance.init(renderContext);
+        this.materialInstance = materialInstance;
+    }
+
+    private calcLightingColor(dst: Color, lifeT: number): void {
+        const tt = (lifeT * (this.lightingRamp.length - 1));
+        const i0 = Math.floor(tt), i1 = Math.ceil(tt), t = tt - i0;
+        colorLerp(dst, this.lightingRamp[i0], this.lightingRamp[i1], t);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.visible || !this.enabled || !this.alive)
+            return;
+
+        if (this.materialInstance === null)
+            return;
+
+        const particleStaticRes = renderContext.particleStaticRes;
+        for (let i = 0; i < this.particlePool.length; i++) {
+            const p = this.particlePool[i];
+            const lifeT = (p.life / this.particleLifetime);
+
+            this.calcLightingColor(scratchColor, lifeT);
+            const alpha = Math.sin(lifeT * (MathConstants.TAU / 2));
+
+            const size = lerp(this.startSize, this.endSize, lifeT);
+
+            const renderInst = renderInstManager.newRenderInst();
+            particleStaticRes.setQuadOnRenderInst(renderInst);
+
+            // This is a bit hacky -- set the color/alpha per-particle. Blergh.
+            const colorParam = (this.materialInstance.param['$color'] as any);
+            colorParam.setFromColor(scratchColor);
+
+            const alphaParam = (this.materialInstance.param['$alpha'] as any);
+            alphaParam.value = this.renderamt * alpha;
+
+            this.materialInstance.setOnRenderInst(renderContext, renderInst);
+
+            computeModelMatrixR(scratchMat4a, p.roll * MathConstants.DEG_TO_RAD, 0, 0);
+
+            getMatrixAxisZ(scratchVec3a, view.worldFromViewMatrix);
+            computeMatrixForForwardDir(scratchMat4b, scratchVec3a, Vec3Zero);
+
+            mat4.mul(scratchMat4a, scratchMat4b, scratchMat4a);
+            scaleMatrix(scratchMat4a, scratchMat4a, size);
+            setMatrixTranslation(scratchMat4a, p.position);
+
+            this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
+
+            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, p.position);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+
+            this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
+        }
+    }
+
+    private input_turnon(entitySystem: EntitySystem): void {
+        this.shouldEmit = true;
+    }
+
+    private input_turnoff(entitySystem: EntitySystem): void {
+        this.shouldEmit = false;
+    }
+    
+    private input_toggle(entitySystem: EntitySystem): void {
+        this.shouldEmit = !this.shouldEmit;
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -1963,6 +2193,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(light_environment);
         this.registerFactory(point_template);
         this.registerFactory(env_entity_maker);
+        this.registerFactory(env_steam);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -1988,9 +2219,9 @@ export class EntitySystem {
     public debugger = new EntityMessageDebugger();
     private outputQueue: QueuedOutputEvent[] = [];
 
-    constructor(public renderContext: SourceRenderContext, public renderer: BSPRenderer) {
+    constructor(public renderContext: SourceRenderContext, public bspRenderer: BSPRenderer) {
         // Create our hardcoded entities first.
-        this.entities.push(new player(this, this.renderContext, this.renderer));
+        this.entities.push(new player(this, this.renderContext, this.bspRenderer));
     }
 
     public entityMatchesTargetName(entity: BaseEntity, targetName: string): boolean {
@@ -2063,7 +2294,7 @@ export class EntitySystem {
 
     public createEntity(bspEntity: BSPEntity): void {
         const registry = this.renderContext.entityFactoryRegistry;
-        const entity = registry.createEntity(this, this.renderContext, this.renderer, bspEntity);
+        const entity = registry.createEntity(this, this.renderContext, this.bspRenderer, bspEntity);
         this.entities.push(entity);
     }
 
