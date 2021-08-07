@@ -6,7 +6,7 @@ import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, W
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
@@ -441,12 +441,13 @@ abstract class BaseToggle extends BaseEntity {
     public moveDistance: number;
     public speed: number;
 
-    protected positionOpened = vec3.create();
-    protected positionClosed = vec3.create();
-
-    protected timeLeftInSeconds = 0.0;
-    protected positionTarget = vec3.create();
-    protected velocityPerSecond = vec3.create();
+    // Movement code
+    protected moveTimeLeftInSeconds = 0.0;
+    protected moveType: ('lin' | 'ang' | null) = null;
+    protected linMoveTarget = vec3.create();
+    protected linVelPerSecond = vec3.create();
+    protected angMoveTarget = vec3.create();
+    protected angVelPerSecond = vec3.create();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -457,14 +458,26 @@ abstract class BaseToggle extends BaseEntity {
         this.speed = Number(fallbackUndefined(this.entity.speed, '0'));
     }
 
-    protected moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
-        vec3.copy(this.positionTarget, positionTarget);
-        vec3.sub(this.velocityPerSecond, this.positionTarget, this.localOrigin);
-        this.timeLeftInSeconds = vec3.length(this.velocityPerSecond) / speedInSeconds;
-        if (this.timeLeftInSeconds <= 0.0)
+    protected linearMove(entitySystem: EntitySystem, linMoveTarget: ReadonlyVec3, speedInSeconds: number): void {
+        vec3.copy(this.linMoveTarget, linMoveTarget);
+        vec3.copy(this.angMoveTarget, this.localAngles);
+        vec3.sub(this.linVelPerSecond, this.linMoveTarget, this.localOrigin);
+        this.moveTimeLeftInSeconds = vec3.length(this.linVelPerSecond) / speedInSeconds;
+        if (this.moveTimeLeftInSeconds <= 0.0)
             this.moveDone(entitySystem);
         else
-            vec3.scale(this.velocityPerSecond, this.velocityPerSecond, 1.0 / this.timeLeftInSeconds);
+            vec3.scale(this.linVelPerSecond, this.linVelPerSecond, 1.0 / this.moveTimeLeftInSeconds);
+    }
+
+    protected angularMove(entitySystem: EntitySystem, angMoveTarget: ReadonlyVec3, speedInSeconds: number): void {
+        vec3.copy(this.angMoveTarget, angMoveTarget);
+        vec3.copy(this.linMoveTarget, this.localOrigin);
+        vec3.sub(this.angVelPerSecond, this.angMoveTarget, this.localAngles);
+        this.moveTimeLeftInSeconds = vec3.length(this.angVelPerSecond) / speedInSeconds;
+        if (this.moveTimeLeftInSeconds <= 0.0)
+            this.moveDone(entitySystem);
+        else
+            vec3.scale(this.angVelPerSecond, this.angVelPerSecond, 1.0 / this.moveTimeLeftInSeconds);
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -472,16 +485,19 @@ abstract class BaseToggle extends BaseEntity {
 
         const deltaTimeInSeconds = renderContext.globalDeltaTime;
 
-        if (this.timeLeftInSeconds > 0.0) {
+        if (this.moveTimeLeftInSeconds > 0.0) {
             // Apply the velocity.
-            vec3.scaleAndAdd(this.localOrigin, this.localOrigin, this.velocityPerSecond, deltaTimeInSeconds);
-            this.timeLeftInSeconds -= deltaTimeInSeconds;
+            vec3.scaleAndAdd(this.localOrigin, this.localOrigin, this.linVelPerSecond, deltaTimeInSeconds);
+            vec3.scaleAndAdd(this.localAngles, this.localAngles, this.angVelPerSecond, deltaTimeInSeconds);
+            this.moveTimeLeftInSeconds -= deltaTimeInSeconds;
 
             // If we've reached the target position, then we're done.
-            if (this.timeLeftInSeconds <= 0.0) {
-                vec3.copy(this.localOrigin, this.positionTarget);
-                vec3.zero(this.velocityPerSecond);
-                this.timeLeftInSeconds = 0.0;
+            if (this.moveTimeLeftInSeconds <= 0.0) {
+                vec3.copy(this.localOrigin, this.linMoveTarget);
+                vec3.copy(this.localAngles, this.angMoveTarget);
+                vec3.zero(this.linVelPerSecond);
+                vec3.zero(this.angVelPerSecond);
+                this.moveTimeLeftInSeconds = 0.0;
                 this.moveDone(entitySystem);
             }
         }
@@ -494,6 +510,9 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 class func_movelinear extends BaseToggle {
     public static classname = `func_movelinear`;
+
+    protected positionOpened = vec3.create();
+    protected positionClosed = vec3.create();
 
     private output_onFullyClosed = new EntityOutput();
     private output_onFullyOpen = new EntityOutput();
@@ -523,31 +542,25 @@ class func_movelinear extends BaseToggle {
     }
 
     private input_open(entitySystem: EntitySystem): void {
-        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+        this.linearMove(entitySystem, this.positionOpened, this.speed);
     }
 
     private input_close(entitySystem: EntitySystem): void {
-        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+        this.linearMove(entitySystem, this.positionClosed, this.speed);
     }
 }
 
-class func_door extends BaseToggle {
-    public static classname = `func_door`;
-
+abstract class BaseDoor extends BaseToggle {
     private output_onClose = new EntityOutput();
     private output_onOpen = new EntityOutput();
     private output_onFullyClosed = new EntityOutput();
     private output_onFullyOpen = new EntityOutput();
 
-    private modelExtents = vec3.create();
-    private lip: number;
     private locked: boolean = false;
     protected toggleState: ToggleState;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
-
-        // TODO(jstpierre): Rotating doors
 
         this.output_onClose.parse(this.entity.onclose);
         this.output_onOpen.parse(this.entity.onopen);
@@ -562,56 +575,27 @@ class func_door extends BaseToggle {
 
         const enum SpawnFlags {
             START_OPEN_OBSOLETE = 0x01,
-        }
+        };
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
 
         if (spawnpos === 1 || !!(spawnflags & SpawnFlags.START_OPEN_OBSOLETE))
             this.toggleState = ToggleState.Top;
         else
             this.toggleState = ToggleState.Bottom;
-
-        this.lip = Number(fallbackUndefined(this.entity.lip, '0'));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
-        super.spawn(entitySystem);
-
-        vec3.copy(this.positionOpened, this.localOrigin);
-        vec3.copy(this.positionClosed, this.localOrigin);
-
-        this.updateExtents();
-    }
-
-    private updateExtents(): void {
-        if (this.modelBSP !== null)
-            this.modelBSP.model.bbox.extents(this.modelExtents);
-        else if (this.modelStudio !== null)
-            this.modelStudio.modelData.viewBB.extents(this.modelExtents);
-
-        angleVec(scratchVec3a, this.moveDir);
-        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
-        vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
-
-        if (this.toggleState === ToggleState.Top) {
-            // If we should start open, then start open.
-            vec3.copy(this.localOrigin, this.positionOpened);
-        }
-    }
-
-    protected modelUpdated(): void {
-        super.modelUpdated();
-        this.updateExtents();
-    }
+    protected abstract moveToOpened(entitySystem: EntitySystem): void;
+    protected abstract moveToClosed(entitySystem: EntitySystem): void;
 
     private goToTop(entitySystem: EntitySystem): void {
         this.toggleState = ToggleState.GoingToTop;
-        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+        this.moveToOpened(entitySystem);
         this.output_onOpen.fire(entitySystem, this);
     }
 
     private goToBottom(entitySystem: EntitySystem): void {
         this.toggleState = ToggleState.GoingToBottom;
-        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+        this.moveToClosed(entitySystem);
         this.output_onClose.fire(entitySystem, this);
     }
 
@@ -655,6 +639,109 @@ class func_door extends BaseToggle {
             this.goToTop(entitySystem);
         else if (this.toggleState === ToggleState.Bottom)
             this.goToBottom(entitySystem);
+    }
+}
+
+class func_door extends BaseDoor {
+    public static classname = `func_door`;
+
+    private modelExtents = vec3.create();
+    private lip: number;
+
+    protected positionOpened = vec3.create();
+    protected positionClosed = vec3.create();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.lip = Number(fallbackUndefined(this.entity.lip, '0'));
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        vec3.copy(this.positionOpened, this.localOrigin);
+        vec3.copy(this.positionClosed, this.localOrigin);
+
+        this.updateExtents();
+    }
+
+    private updateExtents(): void {
+        if (this.modelBSP !== null)
+            this.modelBSP.model.bbox.extents(this.modelExtents);
+        else if (this.modelStudio !== null)
+            this.modelStudio.modelData.viewBB.extents(this.modelExtents);
+
+        angleVec(scratchVec3a, this.moveDir);
+        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
+        vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
+
+        if (this.toggleState === ToggleState.Top) {
+            // If we should start open, then start open.
+            vec3.copy(this.localOrigin, this.positionOpened);
+        }
+    }
+
+    protected modelUpdated(): void {
+        super.modelUpdated();
+        this.updateExtents();
+    }
+
+    protected moveToOpened(entitySystem: EntitySystem): void {
+        this.linearMove(entitySystem, this.positionOpened, this.speed);
+    }
+
+    protected moveToClosed(entitySystem: EntitySystem): void {
+        this.linearMove(entitySystem, this.positionClosed, this.speed);
+    }
+}
+
+class func_door_rotating extends BaseDoor {
+    public static classname = `func_door_rotating`;
+
+    protected anglesOpened = vec3.create();
+    protected anglesClosed = vec3.create();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        const enum SpawnFlags {
+            ROTATE_BACKWARDS = 0x02,
+            ROTATE_ROLL      = 0x40,
+            ROTATE_PITCH     = 0x80,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+
+        let rotAngles: ReadonlyVec3;
+        if (!!(spawnflags & SpawnFlags.ROTATE_ROLL))
+            rotAngles = Vec3UnitZ;
+        else if (!!(spawnflags & SpawnFlags.ROTATE_PITCH))
+            rotAngles = Vec3UnitX;
+        else
+            rotAngles = Vec3UnitY;
+
+        let distance = Number(fallbackUndefined(this.entity.distance, '0'));
+        if (!!(spawnflags & SpawnFlags.ROTATE_BACKWARDS))
+            distance *= -1.0;
+
+        vec3.copy(this.anglesClosed, this.localAngles);
+        vec3.scaleAndAdd(this.anglesOpened, this.localAngles, rotAngles, distance);
+
+        if (this.toggleState === ToggleState.Top) {
+            // If we should start open, then start open.
+            vec3.copy(this.localAngles, this.anglesOpened);
+        }
+    }
+
+    protected moveToOpened(entitySystem: EntitySystem): void {
+        this.angularMove(entitySystem, this.anglesOpened, this.speed);
+    }
+
+    protected moveToClosed(entitySystem: EntitySystem): void {
+        this.angularMove(entitySystem, this.anglesClosed, this.speed);
     }
 }
 
@@ -1684,6 +1771,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(water_lod_control);
         this.registerFactory(func_movelinear);
         this.registerFactory(func_door);
+        this.registerFactory(func_door_rotating);
         this.registerFactory(func_areaportalwindow);
         this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
