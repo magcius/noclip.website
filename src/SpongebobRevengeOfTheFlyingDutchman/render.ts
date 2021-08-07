@@ -1,7 +1,7 @@
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
-import { CameraController, computeViewMatrix } from "../Camera";
+import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -30,10 +30,10 @@ import {
     GfxVertexBufferFrequency,
     GfxWrapMode
 } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxInputState, GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
 import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers";
@@ -369,31 +369,37 @@ class MeshRenderer {
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
         const d = renderInst.mapUniformBufferF32(RotfdProgram.ub_MaterialParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
+        let isTranslucent = false;
         if (this.isSkybox) {
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
+            this.megaStateFlags.depthWrite = false;
+            this.megaStateFlags.attachmentsState = undefined;
             modelViewScratch[12] = 0.0;
             modelViewScratch[13] = 0.0;
             modelViewScratch[14] = 0.0;
-            renderInst.sortKey = GfxRendererLayer.BACKGROUND;
-            this.megaStateFlags.depthWrite = false;
         }
-        else {
+        else if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDCOLOR)) {
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.megaStateFlags.depthWrite = true;
-        }
-        if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDCOLOR)) {
-            renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendColor;
-            // this.megaStateFlags.depthWrite = false;
+            isTranslucent = true;
         }
         else if (this.material.color.a < 1.0 || textureAlpha >= 1) {
             // other material flags seem to be unreliable and erratic
             // i.e. there are materials with no flags set who are still transparent?
-            renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            this.megaStateFlags.depthWrite = true;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendAlpha;
-            // this.megaStateFlags.depthWrite = false;
+            isTranslucent = true;
         }
         else {
-            renderInst.sortKey = GfxRendererLayer.OPAQUE;
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+            this.megaStateFlags.depthWrite = true;
             this.megaStateFlags.attachmentsState = undefined;
+        }
+        if (isTranslucent) {
+            const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
         offs += fillMatrix4x3(d, offs, this.modelMatrix);
@@ -511,6 +517,7 @@ type OmniInstance = {
 
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
+    private gfxProgram: GfxProgram;
     public renderHelper: GfxRenderHelper;
     public sampler: GfxSampler;
     public warpSampler: GfxSampler;
@@ -534,7 +541,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new RotfdProgram());
-
+        this.gfxProgram = this.renderHelper.renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         this.sampler = device.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -607,11 +614,10 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         viewerInput.camera.setClipPlanes(0.5);
 
         this.updateMaterialAnims(Math.floor(viewerInput.time * 60 / 1000));
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setGfxProgram(gfxProgram);
+        template.setGfxProgram(this.gfxProgram);
         let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, RotfdProgram.SCENEPARAM_SIZE);
         const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
