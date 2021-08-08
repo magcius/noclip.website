@@ -81,18 +81,25 @@ export class BaseEntity {
 
     public targetName: string | null = null;
     public parentEntity: BaseEntity | null = null;
+    public parentAttachment: number | null = null;
     public modelMatrix = mat4.create();
     public alive = true;
     public enabled = true;
+    public ready = true;
 
-    public outputs: EntityOutput[] = [];
     public inputs = new Map<string, EntityInputFunc>();
+
+    private output_onuser1 = new EntityOutput();
+    private output_onuser2 = new EntityOutput();
+    private output_onuser3 = new EntityOutput();
+    private output_onuser4 = new EntityOutput();
 
     // Animation Playback (should probably be split out to a different class)
     private seqdefaultindex = -1;
     private seqindex = 0;
     private seqtime = 0;
     private seqplay: boolean = false;
+    private holdAnimation: boolean = false;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
         if (entity.model)
@@ -121,13 +128,26 @@ export class BaseEntity {
         else if (entity.start_disabled)
             this.enabled = !Number(entity.start_disabled);
 
+        this.holdAnimation = !!Number(fallbackUndefined(this.entity.holdanimation, '0'));
+
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
 
+        this.output_onuser1.parse(this.entity.onuser1);
+        this.output_onuser2.parse(this.entity.onuser1);
+        this.output_onuser3.parse(this.entity.onuser1);
+        this.output_onuser4.parse(this.entity.onuser1);
+        this.registerInput('fireuser1', this.input_fireuser1.bind(this));
+        this.registerInput('fireuser2', this.input_fireuser2.bind(this));
+        this.registerInput('fireuser3', this.input_fireuser3.bind(this));
+        this.registerInput('fireuser4', this.input_fireuser4.bind(this));
+
         this.registerInput('setparent', this.input_setparent.bind(this));
         this.registerInput('clearparent', this.input_clearparent.bind(this));
+        this.registerInput('setparentattachment', this.input_setparentattachment.bind(this));
+        this.registerInput('setparentattachmentmaintainoffset', this.input_setparentattachmentmaintainoffset.bind(this));
 
         // TODO(jstpierre): This should be on baseanimation / prop_dynamic
         this.registerInput('setanimation', this.input_setanimation.bind(this));
@@ -138,9 +158,34 @@ export class BaseEntity {
             this.visible = false;
     }
 
+    public shouldDraw(): boolean {
+        return this.visible && this.enabled && this.alive && this.ready;
+    }
+
+    private findSequenceLabel(label: string): number {
+        label = label.toLowerCase();
+        return this.modelStudio!.modelData.seq.findIndex((seq) => seq.label === label);
+    }
+
+    private playseqindex(index: number): void {
+        if (index < 0) {
+            debugger;
+            index = 0;
+        }
+
+        this.seqindex = index;
+        this.seqplay = true;
+        this.seqtime = 0;
+    }
+
     public spawn(entitySystem: EntitySystem): void {
         if (this.entity.parentname)
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
+
+        if (this.entity.defaultanim) {
+            this.seqdefaultindex = this.findSequenceLabel(this.entity.defaultanim);
+            this.playseqindex(this.seqdefaultindex);
+        }
     }
 
     protected ensureMaterialParams(): EntityMaterialParameters {
@@ -204,30 +249,33 @@ export class BaseEntity {
     }
 
     private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
+        this.ready = false;
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.modelStudio.setSkin(renderContext, this.skin);
         this.modelUpdated();
         this.updateLightingData();
+        this.ready = true;
+    }
+
+    private updateStudioPose(): void {
+        if (this.modelStudio === null)
+            throw "whoops";
+
+        mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
+        this.modelStudio.setupPoseFromSequence(this.seqindex, this.seqtime);
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
-        if (!this.visible || !this.enabled || !this.alive)
+        if (!this.shouldDraw())
             return;
 
-        if (this.modelBSP !== null) {
-            // BSP models are rendered by the BSP system.
-            mat4.copy(this.modelBSP.modelMatrix, this.modelMatrix);
-        } else if (this.modelStudio !== null) {
+        if (this.modelStudio !== null) {
             if (this.materialParams !== null) {
                 this.materialParams.blendColor.a = this.renderamt;
             }
 
-            mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
-            // idle animation pose?
-            if (this.seqplay)
-                this.seqtime += renderContext.globalDeltaTime * 20;
-            this.modelStudio.setupPoseFromSequence(this.seqindex, this.seqtime);
+            this.updateStudioPose();
             this.modelStudio.setSkin(renderContext, this.skin);
             this.modelStudio.prepareToRender(renderContext, renderInstManager);
 
@@ -236,10 +284,17 @@ export class BaseEntity {
         }
     }
 
+    private calcParentModelMatrix(dst: mat4): void {
+        if (this.parentAttachment !== null)
+            this.parentEntity!.getAttachmentMatrix(dst, this.parentAttachment);
+        else
+            mat4.copy(dst, this.parentEntity!.updateModelMatrix());
+    }
+
     public setAbsOrigin(origin: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            mat4.invert(scratchMat4a, parentModelMatrix);
+            this.calcParentModelMatrix(scratchMat4a);
+            mat4.invert(scratchMat4a, scratchMat4a);
             transformVec3Mat4w1(this.localOrigin, scratchMat4a, origin);
         } else {
             vec3.copy(this.localOrigin, origin);
@@ -248,8 +303,8 @@ export class BaseEntity {
 
     public setAbsOriginAndAngles(origin: ReadonlyVec3, angles: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            mat4.invert(scratchMat4a, parentModelMatrix);
+            this.calcParentModelMatrix(scratchMat4a);
+            mat4.invert(scratchMat4a, scratchMat4a);
             computeModelMatrixPosQAngle(scratchMat4b, origin, angles);
             mat4.mul(scratchMat4b, scratchMat4a, scratchMat4b);
             computePosQAngleModelMatrix(this.localOrigin, this.localAngles, scratchMat4b);
@@ -259,35 +314,81 @@ export class BaseEntity {
         }
     }
 
-    public getAbsOrigin(dst: vec3): void {
+    public getAbsOrigin(dstOrigin: vec3): void {
         if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            transformVec3Mat4w1(dst, parentModelMatrix, this.localOrigin);
+            computePosQAngleModelMatrix(dstOrigin, null, this.updateModelMatrix());
         } else {
-            vec3.copy(dst, this.localOrigin);
+            vec3.copy(dstOrigin, this.localOrigin);
         }
     }
 
-    public setParentEntity(parentEntity: BaseEntity | null): void {
-        if (parentEntity === this.parentEntity)
+    public getAbsOriginAndAngles(dstOrigin: vec3, dstAngles: vec3): void {
+        if (this.parentEntity !== null) {
+            computePosQAngleModelMatrix(dstOrigin, dstAngles, this.updateModelMatrix());
+        } else {
+            vec3.copy(dstOrigin, this.localOrigin);
+            vec3.copy(dstAngles, this.localAngles);
+        }
+    }
+
+    public setParentEntity(parentEntity: BaseEntity | null, parentAttachment: number | null = null): void {
+        if (parentEntity === this.parentEntity && parentAttachment === this.parentAttachment)
             return;
 
         // Transform origin into absolute world-space.
-        this.getAbsOrigin(this.localOrigin);
+        this.getAbsOriginAndAngles(this.localOrigin, this.localAngles);
 
         this.parentEntity = parentEntity;
+        this.parentAttachment = parentAttachment;
 
         // Transform origin from world-space into entity space.
-        this.setAbsOrigin(this.localOrigin);
+        this.setAbsOriginAndAngles(this.localOrigin, this.localAngles);
+    }
+
+    public setParentAttachment(attachmentName: string, maintainOffset: boolean) {
+        if (this.parentEntity === null)
+            return;
+
+        const parentAttachment = this.parentEntity.getAttachmentIndex(attachmentName);
+        this.setParentEntity(this.parentEntity, parentAttachment);
+
+        if (!maintainOffset) {
+            vec3.zero(this.localOrigin);
+            vec3.zero(this.localAngles);
+        }
+    }
+
+    public getAttachmentIndex(attachmentName: string): number | null {
+        if (this.modelStudio === null)
+            throw "whoops";
+
+        const attachmentIndex = this.modelStudio.modelData.attachment.findIndex((attachment) => attachment.name === attachmentName);
+        if (attachmentIndex < 0)
+            return null;
+
+        return attachmentIndex;
+    }
+
+    public getAttachmentMatrix(dst: mat4, attachmentIndex: number): void {
+        if (this.modelStudio === null)
+            throw "whoops";
+
+        this.updateModelMatrix();
+        this.updateStudioPose();
+        this.modelStudio.getAttachmentMatrix(dst, attachmentIndex);
     }
 
     public updateModelMatrix(): mat4 {
         computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.localAngles);
 
         if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null)
+            if (this.parentAttachment !== null) {
+                this.parentEntity.getAttachmentMatrix(scratchMat4a, this.parentAttachment);
+                mat4.mul(this.modelMatrix, scratchMat4a, this.modelMatrix);
+            } else {
+                const parentModelMatrix = this.parentEntity.updateModelMatrix();
                 mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
+            }
         }
 
         return this.modelMatrix;
@@ -298,7 +399,7 @@ export class BaseEntity {
             const modelMatrix = this.updateModelMatrix();
             getMatrixTranslation(this.materialParams!.position, modelMatrix);
 
-            let visible = this.visible && this.enabled && this.alive;
+            let visible = this.shouldDraw();
             if (this.renderamt === 0)
                 visible = false;
             if (this.rendermode === 10)
@@ -306,6 +407,7 @@ export class BaseEntity {
 
             if (this.modelBSP !== null) {
                 this.modelBSP.visible = visible;
+                mat4.copy(this.modelBSP.modelMatrix, modelMatrix);
             } else if (this.modelStudio !== null) {
                 this.modelStudio.visible = visible;
                 this.modelStudio.movement(renderContext);
@@ -315,9 +417,30 @@ export class BaseEntity {
         if (this.modelStudio !== null) {
             // Update animation state machine.
             if (this.seqplay) {
-                if (this.seqdefaultindex >= 0 && this.modelStudio.isSequenceFinished(this.seqindex, this.seqtime))
-                    this.seqindex = this.seqdefaultindex;
+                const oldSeqTime = this.seqtime;
+                this.seqtime += renderContext.globalDeltaTime;
+
+                // Pass to default animation if we're through.
+                if (this.seqdefaultindex >= 0 && this.modelStudio.sequenceIsFinished(this.seqindex, this.seqtime) && !this.holdAnimation)
+                    this.playseqindex(this.seqdefaultindex);
+
+                // Handle events.
+                const seq = this.modelStudio.modelData.seq[this.seqindex];
+                const anim = this.modelStudio.modelData.anim[seq.anim[0]];
+                const animcyc = anim.fps / anim.numframes;
+                for (let i = 0; i < seq.events.length; i++) {
+                    const ev = seq.events[i];
+                    if (ev.cycle > (oldSeqTime * animcyc) && ev.cycle <= (this.seqtime * animcyc)) {
+                        this.dispatchAnimEvent(entitySystem, ev.event, ev.options);
+                    }
+                }
             }
+        }
+    }
+
+    protected dispatchAnimEvent(entitySystem: EntitySystem, event: number, options: string): void {
+        if (event === 1100) { // SCRIPT_EVENT_FIRE_INPUT
+            this.fireInput(entitySystem, options, '');
         }
     }
 
@@ -337,6 +460,22 @@ export class BaseEntity {
         this.remove();
     }
 
+    private input_fireuser1(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser1.fire(entitySystem, this, value);
+    }
+
+    private input_fireuser2(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser2.fire(entitySystem, this, value);
+    }
+
+    private input_fireuser3(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser3.fire(entitySystem, this, value);
+    }
+
+    private input_fireuser4(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser4.fire(entitySystem, this, value);
+    }
+
     private input_skin(entitySystem: EntitySystem, value: string): void {
         this.skin = Number(value) || 0;
     }
@@ -351,25 +490,26 @@ export class BaseEntity {
         this.setParentEntity(null);
     }
 
+    private input_setparentattachment(entitySystem: EntitySystem, value: string): void {
+        this.setParentAttachment(value, false);
+    }
+
+    private input_setparentattachmentmaintainoffset(entitySystem: EntitySystem, value: string): void {
+        this.setParentAttachment(value, true);
+    }
+
     private input_setanimation(entitySystem: EntitySystem, value: string): void {
         if (this.modelStudio === null)
             return;
 
-        this.seqindex = this.modelStudio.modelData.seq.findIndex((seq) => seq.label === value);
-        if (this.seqindex === -1) {
-            this.seqindex = 0;
-            // not found; likely includemodel / animblockname
-            // debugger;
-        }
-        this.seqplay = true;
-        this.seqtime = 0;
+        this.playseqindex(this.findSequenceLabel(value));
     }
 
     private input_setdefaultanimation(entitySystem: EntitySystem, value: string): void {
         if (this.modelStudio === null)
             return;
 
-        this.seqdefaultindex = this.modelStudio.modelData.seq.findIndex((seq) => seq.label === value);
+        this.seqdefaultindex = this.findSequenceLabel(value);
     }
 }
 
@@ -1033,6 +1173,64 @@ class logic_relay extends BaseEntity {
             return;
 
         this.output_onTrigger.fire(entitySystem, this);
+    }
+}
+
+class logic_branch extends BaseEntity {
+    public static classname = `logic_branch`;
+
+    private value: boolean;
+    private output_onTrue = new EntityOutput();
+    private output_onFalse = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.value = this.parseValue(this.entity.initialvalue);
+        this.registerInput('setvalue', this.input_setvalue.bind(this));
+        this.registerInput('setvaluetest', this.input_setvaluetest.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('toggletest', this.input_toggletest.bind(this));
+        this.registerInput('test', this.input_test.bind(this));
+        this.output_onTrue.parse(this.entity.ontrigger);
+        this.output_onFalse.parse(this.entity.ontrigger);
+    }
+
+    private parseValue(value: string): boolean {
+        return !!Number(value);
+    }
+
+    private setValue(entitySystem: EntitySystem, value: boolean, shouldFire: boolean): void {
+        if (this.value !== value) {
+            this.value = value;
+        }
+
+        if (shouldFire) {
+            if (this.value)
+                this.output_onTrue.fire(entitySystem, this);
+            else
+                this.output_onFalse.fire(entitySystem, this);
+        }
+    }
+
+    private input_setvalue(entitySystem: EntitySystem, value: string): void {
+        this.setValue(entitySystem, this.parseValue(value), false);
+    }
+
+    private input_setvaluetest(entitySystem: EntitySystem, value: string): void {
+        this.setValue(entitySystem, this.parseValue(value), true);
+    }
+
+    private input_toggle(entitySystem: EntitySystem): void {
+        this.setValue(entitySystem, !this.value, false);
+    }
+
+    private input_toggletest(entitySystem: EntitySystem): void {
+        this.setValue(entitySystem, !this.value, true);
+    }
+
+    private input_test(entitySystem: EntitySystem): void {
+        this.setValue(entitySystem, this.value, true);
     }
 }
 
@@ -2132,7 +2330,7 @@ class env_steam extends BaseEntity {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
-        if (!this.visible || !this.enabled || !this.alive)
+        if (!this.shouldDraw())
             return;
 
         if (this.materialInstance === null)
@@ -2197,7 +2395,8 @@ interface EntityFactory<T extends BaseEntity = BaseEntity> {
 }
 
 interface QueuedOutputEvent {
-    activator: BaseEntity;
+    sender: BaseEntity;
+    activator: BaseEntity | null;
     triggerTime: number;
     action: EntityOutputAction;
     value: EntityMessageValue;
@@ -2221,6 +2420,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
+        this.registerFactory(logic_branch);
         this.registerFactory(logic_case);
         this.registerFactory(logic_timer);
         this.registerFactory(math_counter);
@@ -2265,6 +2465,8 @@ export class EntitySystem {
     public nextDynamicTemplateSpawnIndex = 0;
     public debugger = new EntityMessageDebugger();
     private outputQueue: QueuedOutputEvent[] = [];
+    private needsSpawn = true;
+    private currentActivator: BaseEntity | null = null;
 
     constructor(public renderContext: SourceRenderContext, public bspRenderer: BSPRenderer) {
         // Create our hardcoded entities first.
@@ -2279,12 +2481,13 @@ export class EntitySystem {
         return false;
     }
 
-    public queueEntityOutputAction(action: EntityOutputAction, activator: BaseEntity, value: EntityMessageValue): void {
+    public queueEntityOutputAction(action: EntityOutputAction, sender: BaseEntity, value: EntityMessageValue): void {
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
         const triggerTime = this.currentTime + action.delay;
-        this.outputQueue.push({ activator, action, triggerTime, value });
+        const activator = this.currentActivator;
+        this.outputQueue.push({ sender, activator, action, triggerTime, value });
     }
 
     public findEntityByType<T extends BaseEntity>(type: EntityFactory<T>, start: T | null = null): T | null {
@@ -2305,7 +2508,17 @@ export class EntitySystem {
     private fireInput(target: BaseEntity, event: QueuedOutputEvent): void {
         this.debugger.fireInput(target, event, this.currentTime);
 
+        this.currentActivator = event.sender;
         target.fireInput(this, event.action.inputName, event.value);
+        this.currentActivator = null;
+    }
+
+    private entityMatchesEventTarget(entity: BaseEntity, event: QueuedOutputEvent): boolean {
+        if (event.action.targetName === '!activator')
+            return entity === event.activator;
+        if (this.entityMatchesTargetName(entity, event.action.targetName))
+            return true;
+        return false;
     }
 
     private fireEntityOutputAction(event: QueuedOutputEvent): boolean {
@@ -2314,7 +2527,7 @@ export class EntitySystem {
 
         for (let i = 0; i < this.entities.length; i++) {
             const target = this.entities[i];
-            if (!this.entityMatchesTargetName(target, event.action.targetName))
+            if (!this.entityMatchesEventTarget(target, event))
                 continue;
             this.fireInput(target, event);
         }
@@ -2328,7 +2541,22 @@ export class EntitySystem {
                 this.outputQueue.splice(i--, 1);
     }
 
+    private isReady(): boolean {
+        for (let i = 0; i < this.entities.length; i++)
+            if (!this.entities[i].ready)
+                return false;
+        return true;
+    }
+
     public movement(renderContext: SourceRenderContext): void {
+        if (this.needsSpawn && this.isReady()) {
+            for (let i = 0; i < this.entities.length; i++)
+                this.entities[i].spawn(this);
+            this.needsSpawn = false;
+        } else if (this.needsSpawn) {
+            return;
+        }
+
         this.processOutputQueue();
         this.debugger.movement(renderContext);
 
@@ -2346,11 +2574,9 @@ export class EntitySystem {
     }
 
     public createAndSpawnEntities(entities: BSPEntity[]): void {
-        let startIndex = this.entities.length;
         for (let i = 0; i < entities.length; i++)
             this.createEntity(entities[i]);
-        for (let i = startIndex; i < this.entities.length; i++)
-            this.entities[i].spawn(this);
+        this.needsSpawn = true;
     }
 
     public getLocalPlayer(): player {
@@ -2403,10 +2629,10 @@ class EntityMessageDebugger {
             targetColor.a = alpha;
             lineColor.a = alpha;
 
-            const activator = message.event.activator, target = message.target;
+            const sender = message.event.sender, target = message.target;
             const ctx = getDebugOverlayCanvas2D();
 
-            activator.getAbsOrigin(scratchVec3a);
+            sender.getAbsOrigin(scratchVec3a);
             target.getAbsOrigin(scratchVec3b);
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, activatorColor, 6);
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, targetColor, 6);
