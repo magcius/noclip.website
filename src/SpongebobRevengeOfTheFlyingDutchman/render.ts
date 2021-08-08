@@ -28,9 +28,10 @@ import {
     GfxTexFilterMode,
     GfxVertexAttributeDescriptor,
     GfxVertexBufferFrequency,
-    GfxWrapMode
+    GfxWrapMode,
+    makeTextureDescriptor2D
 } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxInputState, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
@@ -52,6 +53,7 @@ import {
 import { colorCopyKeepAlpha, colorLerpKeepAlpha, DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as CRC32 from "crc-32";
 import { DeviceProgram } from '../Program';
+import * as UI from '../ui';
 
 class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -344,8 +346,9 @@ class MeshRenderer {
         renderInstManager: GfxRenderInstManager,
         viewerInput: Viewer.ViewerRenderInput,
         sampler: GfxSampler,
+        renderHackState: RenderHackState,
     ) {
-        if (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN) || this.material.color.a === 0.0) {
+        if (!renderHackState.showHidden && (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN) || this.material.color.a === 0.0)) {
             return;
         }
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
@@ -355,15 +358,22 @@ class MeshRenderer {
         
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        let textureAlpha = 0;
         const textureMapping = new TextureMapping();
-        const texture = this.textureMap.get(this.material.texture_id);
-        const textureAlpha = texture ? texture.alphaLevel : 0;
-        textureMapping.gfxTexture = texture ? texture.texture : null;
-        textureMapping.gfxSampler = sampler;
         const reflectionMapping = new TextureMapping();
-        const reflectionTexture = this.textureMap.get(this.material.reflection_id);
-        reflectionMapping.gfxTexture = reflectionTexture ? reflectionTexture.texture : null;
-        reflectionMapping.gfxSampler = sampler;
+        if (renderHackState.texturesEnabled) {
+            const texture = this.textureMap.get(this.material.texture_id);
+            textureAlpha = texture ? texture.alphaLevel : 0;
+            textureMapping.gfxSampler = sampler;
+            textureMapping.gfxTexture = texture ? texture.texture : null;
+            const reflectionTexture = this.textureMap.get(this.material.reflection_id);
+            reflectionMapping.gfxTexture = reflectionTexture ? reflectionTexture.texture : null;
+            reflectionMapping.gfxSampler = sampler;
+        }
+        else {
+            const texture = renderHackState.defaultTexture;
+            textureMapping.gfxTexture = texture;
+        }
         renderInst.setSamplerBindingsFromTextureMappings([ textureMapping, reflectionMapping ]);
 
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
@@ -434,7 +444,7 @@ class MeshRenderer {
         ]);
         let offs2 = renderInst.allocateUniformBuffer(RotfdProgram.ub_InstanceParams, RotfdProgram.INSTANCEPARAM_SIZE);
         const d2 = renderInst.mapUniformBufferF32(RotfdProgram.ub_InstanceParams);
-        if (this.directionalLight !== undefined) {
+        if (this.directionalLight !== undefined && renderHackState.enableLights) {
             offs2 += fillVec3v(d2, offs2, this.directionalLight.direction);
             colorToRGB(vec3Scratch, this.directionalLight.color1);
             offs2 += fillVec3v(d2, offs2, vec3Scratch);
@@ -446,7 +456,7 @@ class MeshRenderer {
             offs2 += fillVec4(d2, offs2, 0, 0, 0);
             offs2 += fillVec4(d2, offs2, 1, 1, 1);
         }
-        if (this.hFog !== undefined) {
+        if (this.hFog !== undefined && renderHackState.enableFog) {
             mat4.identity(modelViewScratch);
             mat4.mul(modelViewScratch, modelViewScratch, this.hFog.global_transform);
             mat4.invert(modelViewScratch, modelViewScratch);
@@ -459,7 +469,11 @@ class MeshRenderer {
             offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
         }
-        for (let i = 0; i < Math.min(4, this.omniLights.length); i++) {
+        let numOmni = this.omniLights.length;
+        if (!renderHackState.enableLights) {
+            numOmni = 0;
+        }
+        for (let i = 0; i < Math.min(4, numOmni); i++) {
             const instance = this.omniLights[i];
             getMatrixTranslation(vec3Scratch, instance.transform);
             offs2 += fillVec3v(d2, offs2, vec3Scratch);
@@ -467,7 +481,7 @@ class MeshRenderer {
             offs2 += fillVec4v(d2, offs2, vec4Scratch);
             offs2 += fillVec4(d2, offs2, instance.omni.attenuation[0], instance.omni.attenuation[1], 0, 0);
         }
-        for (let i = this.omniLights.length; i < 4; i++) {
+        for (let i = numOmni; i < 4; i++) {
             offs2 += fillVec4(d2, offs2, 0, 0, 0);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
@@ -515,12 +529,21 @@ type OmniInstance = {
     transform: mat4;
 }
 
+class RenderHackState {
+    public texturesEnabled = true;
+    public showHidden = false;
+    public defaultTexture: GfxTexture;
+    public enableFog = true;
+    public enableLights = true;
+}
+
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     private gfxProgram: GfxProgram;
     public renderHelper: GfxRenderHelper;
     public sampler: GfxSampler;
     public warpSampler: GfxSampler;
+    public renderHackState: RenderHackState;
     // mesh info
     private meshes = new Map<number, MeshInfo>();
     private otherMeshes: VertexData[] = [];
@@ -542,6 +565,13 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new RotfdProgram());
         this.gfxProgram = this.renderHelper.renderInstManager.gfxRenderCache.createProgramSimple(this.program);
+        this.renderHackState = new RenderHackState();
+        this.renderHackState.defaultTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+        let newData = new Uint8Array(4);
+        for (let i = 0; i < 4; i++) {
+            newData[i] = 255;
+        }
+        device.uploadTextureData(this.renderHackState.defaultTexture, 0, [newData]);
         this.sampler = device.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -559,6 +589,38 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            this.renderHackState.texturesEnabled = enableTextures.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const enableHidden = new UI.Checkbox('Show Hidden Objects', false);
+        enableHidden.onchanged = () => {
+            this.renderHackState.showHidden = enableHidden.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableHidden.elem);
+
+        const enableFog = new UI.Checkbox('Enable Fog', true);
+        enableFog.onchanged = () => {
+            this.renderHackState.enableFog = enableFog.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableFog.elem);
+
+        const enableLighting = new UI.Checkbox('Enable Lighting', true);
+        enableLighting.onchanged = () => {
+            this.renderHackState.enableLights = enableLighting.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableLighting.elem);
+
+        return [renderHacksPanel];
     }
 
     public adjustCameraController(c: CameraController) {
@@ -622,7 +684,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
         for (const instance of this.meshRenderers) {
-            instance.prepareToRender(renderInstManager, viewerInput, instance.isSkybox ? this.warpSampler : this.sampler);
+            instance.prepareToRender(renderInstManager, viewerInput, instance.isSkybox ? this.warpSampler : this.sampler, this.renderHackState);
         }
         renderInstManager.popTemplateRenderInst();
 
