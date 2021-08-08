@@ -538,8 +538,20 @@ class AnimDesc {
     }
 }
 
+const enum SeqFlags {
+    LOOPING = 0x01,
+}
+
 class SeqDesc {
+    public flags: SeqFlags;
+    public anims: Uint16Array;
+    public viewBB: AABB;
+
     constructor(public label: string, public activityname: string) {
+    }
+
+    public isLooping(): boolean {
+        return !!(this.flags & SeqFlags.LOOPING);
     }
 }
 
@@ -554,6 +566,7 @@ export class StudioModelData {
     public illumPosition = vec3.create();
     public anim: AnimDesc[] = [];
     public seq: SeqDesc[] = [];
+    public includemodel: string[] = [];
 
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice, vtxBuffer: ArrayBufferSlice) {
         const mdlView = mdlBuffer.createDataView();
@@ -760,9 +773,9 @@ export class StudioModelData {
         for (let i = 0; i < numlocalseqs; i++, localseqindex += 0xD4) {
             const baseptr = mdlView.getUint32(localseqindex + 0x00, true);
             const szLabel = readString(mdlBuffer, localseqindex + mdlView.getUint32(localseqindex + 0x04, true));
-            const szActivityName  = readString(mdlBuffer, localseqindex + mdlView.getUint32(localseqindex + 0x08, true));
+            const szActivityName = readString(mdlBuffer, localseqindex + mdlView.getUint32(localseqindex + 0x08, true));
             const seq = new SeqDesc(szLabel, szActivityName);
-            const flags = mdlView.getUint32(localseqindex + 0x0C, true);
+            seq.flags = mdlView.getUint32(localseqindex + 0x0C, true);
 
             const activity = mdlView.getUint32(localseqindex + 0x10, true);
             const actweight = mdlView.getUint32(localseqindex + 0x14, true);
@@ -770,18 +783,20 @@ export class StudioModelData {
             const numevents = mdlView.getUint32(localseqindex + 0x18, true);
             const eventindex = mdlView.getUint32(localseqindex + 0x1C, true);
 
-            const bboxMinX = mdlView.getFloat32(localseqindex + 0x20, true);
-            const bboxMinY = mdlView.getFloat32(localseqindex + 0x24, true);
-            const bboxMinZ = mdlView.getFloat32(localseqindex + 0x28, true);
-            const bboxMaxX = mdlView.getFloat32(localseqindex + 0x2C, true);
-            const bboxMaxY = mdlView.getFloat32(localseqindex + 0x30, true);
-            const bboxMaxZ = mdlView.getFloat32(localseqindex + 0x34, true);
+            const viewBBoxMinX = mdlView.getFloat32(localseqindex + 0x20, true);
+            const viewBBoxMinY = mdlView.getFloat32(localseqindex + 0x24, true);
+            const viewBBoxMinZ = mdlView.getFloat32(localseqindex + 0x28, true);
+            const viewBBoxMaxX = mdlView.getFloat32(localseqindex + 0x2C, true);
+            const viewBBoxMaxY = mdlView.getFloat32(localseqindex + 0x30, true);
+            const viewBBoxMaxZ = mdlView.getFloat32(localseqindex + 0x34, true);
+            seq.viewBB = new AABB(viewBBoxMinX, viewBBoxMinY, viewBBoxMinZ, viewBBoxMaxX, viewBBoxMaxY, viewBBoxMaxZ);
 
             const numblends = mdlView.getUint32(localseqindex + 0x38, true);
             const animindexindex = mdlView.getUint32(localseqindex + 0x3C, true);
             const movementindex = mdlView.getUint32(localseqindex + 0x40, true);
             const groupsizeX = mdlView.getUint32(localseqindex + 0x44, true);
             const groupsizeY = mdlView.getUint32(localseqindex + 0x48, true);
+            seq.anims = mdlBuffer.createTypedArray(Uint16Array, localseqindex + animindexindex, groupsizeX * groupsizeY);
             const paramindexX = mdlView.getUint32(localseqindex + 0x4C, true);
             const paramindexY = mdlView.getUint32(localseqindex + 0x50, true);
             const paramstartX = mdlView.getFloat32(localseqindex + 0x54, true);
@@ -834,11 +849,10 @@ export class StudioModelData {
 
         const materialSearchDirs: string[] = [];
         let cdtextureIdx = cdtextureindex;
-        for (let i = 0; i < numcdtextures; i++) {
+        for (let i = 0; i < numcdtextures; i++, cdtextureIdx += 0x04) {
             const textureDir = readString(mdlBuffer, mdlView.getUint32(cdtextureIdx + 0x00, true));
             const materialSearchDir = `materials/${textureDir}`;
             materialSearchDirs.push(materialSearchDir);
-            cdtextureIdx += 0x04;
         }
 
         const numskinref = mdlView.getUint32(0xDC, true);
@@ -888,6 +902,11 @@ export class StudioModelData {
 
         const numincludemodels = mdlView.getUint32(0x150, true);
         const includemodelindex = mdlView.getUint32(0x154, true);
+        let includemodelIdx = includemodelindex;
+        for (let i = 0; i < numincludemodels; i++, includemodelIdx += 0x08) {
+            const name = readString(mdlBuffer, includemodelIdx + mdlView.getUint32(includemodelIdx + 0x04, true));
+            this.includemodel.push(name);
+        }
 
         // Runtime backpointer.
         const virtualModel = mdlView.getUint32(0x158, true);
@@ -1641,9 +1660,8 @@ class StudioModelLODInstance {
 function findAnimationSection(anim: AnimDesc, frame: number): AnimSection | null {
     for (let i = 0; i < anim.animsection.length; i++) {
         const s = anim.animsection[i];
-        if (frame >= s.firstframe) {
+        if (frame < s.firstframe + s.numframes) {
             // should be sorted
-            assert(frame < (s.firstframe + s.numframes));
             return s;
         }
     }
@@ -1707,6 +1725,7 @@ export class StudioModelInstance {
     public worldFromPoseMatrix: mat4[];
 
     private lodInstance: StudioModelLODInstance[] = [];
+    private viewBB: AABB;
 
     constructor(renderContext: SourceRenderContext, public modelData: StudioModelData, materialParams: EntityMaterialParameters) {
         // assert(this.modelData.bodyPartData.length === 1);
@@ -1723,6 +1742,7 @@ export class StudioModelInstance {
         this.worldFromPoseMatrix = nArray(this.modelData.bones.length, () => mat4.create());
         setupPoseFromBones(this.worldFromPoseMatrix, this.modelData);
         setupPoseFinalize(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        this.viewBB = this.modelData.viewBB;
     }
 
     public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
@@ -1768,11 +1788,25 @@ export class StudioModelInstance {
         this.lodInstance[lodIndex].movement(renderContext);
     }
 
-    public setupPoseFromAnimation(animindex: number, frame: number): void {
-        const anim = this.modelData.anim[animindex];
+    public isSequenceFinished(seqindex: number, frame: number): boolean {
+        const seq = this.modelData.seq[seqindex];
+        if (seq.isLooping())
+            return false;
+        const anim = this.modelData.anim[seq.anims[0]];
+        return frame >= anim.numframes;
+    }
+
+    public setupPoseFromSequence(seqindex: number, frame: number): void {
+        const seq = this.modelData.seq[seqindex];
+        const anim = this.modelData.anim[seq.anims[0]];
+        this.viewBB = seq.viewBB;
         setupPoseFromBones(this.worldFromPoseMatrix, this.modelData);
         if (anim !== undefined) {
-            frame = frame % anim.numframes;
+            if (seq.isLooping())
+                frame = frame % anim.numframes;
+            else
+                frame = Math.min(frame, anim.numframes - 1);
+
             setupPoseFromAnimation(this.worldFromPoseMatrix, anim, frame, this.modelData);
         }
         setupPoseFinalize(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
@@ -1782,7 +1816,7 @@ export class StudioModelInstance {
         if (!this.visible)
             return;
 
-        scratchAABB.transform(this.modelData.viewBB, this.modelMatrix);
+        scratchAABB.transform(this.viewBB, this.modelMatrix);
         if (!renderContext.currentView.frustum.contains(scratchAABB))
             return;
 

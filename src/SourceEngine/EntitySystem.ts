@@ -1,16 +1,15 @@
 
-import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
-import { Blue, Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, TransparentBlack, White } from '../Color';
+import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPFile } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
@@ -89,6 +88,12 @@ export class BaseEntity {
     public outputs: EntityOutput[] = [];
     public inputs = new Map<string, EntityInputFunc>();
 
+    // Animation Playback (should probably be split out to a different class)
+    private seqdefaultindex = -1;
+    private seqindex = 0;
+    private seqtime = 0;
+    private seqplay: boolean = false;
+
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
         if (entity.model)
             this.setModelName(renderContext, entity.model);
@@ -121,6 +126,13 @@ export class BaseEntity {
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
 
+        this.registerInput('setparent', this.input_setparent.bind(this));
+        this.registerInput('clearparent', this.input_clearparent.bind(this));
+
+        // TODO(jstpierre): This should be on baseanimation / prop_dynamic
+        this.registerInput('setanimation', this.input_setanimation.bind(this));
+        this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
+
         // Set up some defaults.
         if (this.entity.classname.startsWith('func_nav_'))
             this.visible = false;
@@ -149,22 +161,6 @@ export class BaseEntity {
             // External model reference.
             this.fetchStudioModel(renderContext, modelName);
         }
-    }
-
-    private input_enable(): void {
-        this.enabled = true;
-    }
-
-    private input_disable(): void {
-        this.enabled = false;
-    }
-
-    private input_kill(): void {
-        this.remove();
-    }
-
-    private input_skin(entitySystem: EntitySystem, value: string): void {
-        this.skin = Number(value) || 0;
     }
 
     protected remove(): void {
@@ -215,10 +211,6 @@ export class BaseEntity {
         this.updateLightingData();
     }
 
-    private animindex = 0;
-    private animtime = 0;
-    private animplay: boolean = false;
-
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
         if (!this.visible || !this.enabled || !this.alive)
             return;
@@ -230,12 +222,12 @@ export class BaseEntity {
             if (this.materialParams !== null) {
                 this.materialParams.blendColor.a = this.renderamt;
             }
-    
+
             mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
             // idle animation pose?
-            if (this.animplay)
-                this.animtime += renderContext.globalDeltaTime * 60;
-            this.modelStudio.setupPoseFromAnimation(this.animindex, this.animtime);
+            if (this.seqplay)
+                this.seqtime += renderContext.globalDeltaTime * 20;
+            this.modelStudio.setupPoseFromSequence(this.seqindex, this.seqtime);
             this.modelStudio.setSkin(renderContext, this.skin);
             this.modelStudio.prepareToRender(renderContext, renderInstManager);
 
@@ -319,10 +311,65 @@ export class BaseEntity {
                 this.modelStudio.movement(renderContext);
             }
         }
+
+        if (this.modelStudio !== null) {
+            // Update animation state machine.
+            if (this.seqplay) {
+                if (this.seqdefaultindex >= 0 && this.modelStudio.isSequenceFinished(this.seqindex, this.seqtime))
+                    this.seqindex = this.seqdefaultindex;
+            }
+        }
     }
 
     public cloneMapData(): BSPEntity {
         return { ... this.entity };
+    }
+
+    private input_enable(): void {
+        this.enabled = true;
+    }
+
+    private input_disable(): void {
+        this.enabled = false;
+    }
+
+    private input_kill(): void {
+        this.remove();
+    }
+
+    private input_skin(entitySystem: EntitySystem, value: string): void {
+        this.skin = Number(value) || 0;
+    }
+
+    private input_setparent(entitySystem: EntitySystem, value: string): void {
+        const parentEntity = entitySystem.findEntityByTargetName(this.entity.parentname);
+        if (parentEntity !== null)
+            this.setParentEntity(parentEntity);
+    }
+
+    private input_clearparent(entitySystem: EntitySystem): void {
+        this.setParentEntity(null);
+    }
+
+    private input_setanimation(entitySystem: EntitySystem, value: string): void {
+        if (this.modelStudio === null)
+            return;
+
+        this.seqindex = this.modelStudio.modelData.seq.findIndex((seq) => seq.label === value);
+        if (this.seqindex === -1) {
+            this.seqindex = 0;
+            // not found; likely includemodel / animblockname
+            // debugger;
+        }
+        this.seqplay = true;
+        this.seqtime = 0;
+    }
+
+    private input_setdefaultanimation(entitySystem: EntitySystem, value: string): void {
+        if (this.modelStudio === null)
+            return;
+
+        this.seqdefaultindex = this.modelStudio.modelData.seq.findIndex((seq) => seq.label === value);
     }
 }
 
