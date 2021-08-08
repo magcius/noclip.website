@@ -1377,7 +1377,7 @@ SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in Wor
 
     t_Result.SpecularLight += vec3(pow(t_RoL, t_Input.SpecularExponent));
     // TODO(jstpierre): Specular Warp
-    t_Result.SpecularLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation;
+    t_Result.SpecularLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation * t_Input.Fresnel;
 
     t_Result.RimLight += vec3(pow(t_RoL, t_Input.RimExponent));
     t_Result.RimLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation;
@@ -1615,7 +1615,7 @@ void mainPS() {
     // TODO(jstpierre): Support $phongexponentfactor override
     vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
     t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
-    t_SpecularLightInput.RimExponent = 1.0;
+    t_SpecularLightInput.RimExponent = 4.0;
 
     // Specular mask is either in base map or normal map alpha.
     float t_SpecularMask;
@@ -3281,6 +3281,8 @@ function worldLightAngleFalloff(light: WorldLight, surfaceNormal: ReadonlyVec3, 
         if (dot <= 0.0)
             return 0.0;
         return dot;
+    } else if (light.type === WorldLightType.SkyAmbient) {
+        return 1.0;
     } else {
         throw "whoops";
     }
