@@ -555,8 +555,19 @@ class AnimDesc {
     public flags: number;
     public fps: number;
     public numframes: number;
+    public boneRemapTable: number[] | null = null;
 
     constructor(public name: string) {
+    }
+
+    public clone(boneRemapTable: number[]): AnimDesc {
+        const o = new AnimDesc(this.name);
+        o.animsection = this.animsection;
+        o.flags = this.flags;
+        o.fps = this.fps;
+        o.numframes = this.numframes;
+        o.boneRemapTable = boneRemapTable;
+        return o;
     }
 
     /*
@@ -1617,47 +1628,25 @@ export class HardwareVertData {
     }
 }
 
-function remapIncludeModelSkeleton(dst: StudioModelData, src: StudioModelData): void {
-    assert(dst.bone.length === src.bone.length);
+function remapIncludeModelSkeleton(from: StudioModelData, to: StudioModelData): number[] {
+    assert(from.bone.length === to.bone.length);
 
-    const newBoneTable: BoneDesc[] = dst.bone.slice();
-    for (let i = 0; i < newBoneTable.length; i++) {
-        const origBone = dst.bone[i];
-        const newIndex = src.bone.findIndex((bone) => bone.name === origBone.name);
-        if (newIndex === i)
-            continue;
-        // Place it at the new index.
-        newBoneTable[newIndex] = origBone;
+    const remapTable: number[] = nArray(from.bone.length, () => -1);
+    for (let i = 0; i < remapTable.length; i++) {
+        const origBone = from.bone[i];
+        const newIndex = to.bone.findIndex((bone) => bone.name === origBone.name);
+        remapTable[newIndex] = i;
     }
 
-    for (let i = 0; i < dst.anim.length; i++) {
-        for (let j = 0; j < dst.anim[i].animsection.length; j++) {
-            // We should have all the animation data we now need.
-            const animdata = assertExists(dst.anim[i].animsection[j].animdata);
-            const newTracks = animdata.tracks.slice();
-            for (let k = 0; k < animdata.tracks.length; k++) {
-                const track = animdata.tracks[k];
-                if (track === null)
-                    continue;
-
-                // Apply remap.
-                assert(k === track.boneindex);
-                track.boneindex = newBoneTable.indexOf(dst.bone[track.boneindex]);
-                if (track.boneindex === k)
-                    continue;
-
-                newTracks[track.boneindex] = track;
-            }
-            animdata.tracks = newTracks;
-        }
-    }
-    dst.bone = newBoneTable;
+    return remapTable;
 }
 
 function mergeIncludeModel(dst: StudioModelData, src: StudioModelData): void {
+    const boneRemapTable = remapIncludeModelSkeleton(src, dst);
+
     let animStart = dst.anim.length;
     for (let i = 0; i < src.anim.length; i++)
-        dst.anim.push(src.anim[i]);
+        dst.anim.push(src.anim[i].clone(boneRemapTable));
     for (let i = 0; i < src.seq.length; i++)
         dst.seq.push(src.seq[i].clone(animStart));
 }
@@ -1719,7 +1708,6 @@ export class StudioModelCache {
         for (let i = 0; i < modelData.includemodel.length; i++) {
             // includeModels should not have additional vertex information.
             const includeModel = await this.fetchStudioModelData(modelData.includemodel[i], false);
-            remapIncludeModelSkeleton(includeModel, modelData);
             mergeIncludeModel(modelData, includeModel);
         }
 
@@ -1906,14 +1894,16 @@ export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, fr
 
     for (let i = 0; i < modelData.bone.length; i++) {
         const dst = dstBoneMatrix[i];
-        const track = data.tracks[i];
+        const trackIndex = anim.boneRemapTable !== null ? anim.boneRemapTable[i] : i;
+        const track = data.tracks[trackIndex];
+        const bone = modelData.bone[i];
         if (track !== null) {
-            const bone = track.bone;
-            track.getPosRot(scratchVec3, scratchQuatb, bone, frame);
+            const trackBone = track.bone;
+            assert(trackBone.name === bone.name);
+            track.getPosRot(scratchVec3, scratchQuatb, trackBone, frame);
             mat4.fromQuat(dst, scratchQuatb);
             setMatrixTranslation(dst, scratchVec3);
         } else {
-            const bone = modelData.bone[i];
             computeModelMatrixPosRadianEuler(dst, bone.pos, bone.rot);
         }
     }
