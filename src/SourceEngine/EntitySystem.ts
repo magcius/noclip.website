@@ -1154,7 +1154,6 @@ class logic_auto extends BaseEntity {
 
     public spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
-
         this.output_onMapSpawn.fire(entitySystem, this);
     }
 }
@@ -1163,12 +1162,19 @@ class logic_relay extends BaseEntity {
     public static classname = `logic_relay`;
 
     private output_onTrigger = new EntityOutput();
+    private output_onSpawn = new EntityOutput();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.output_onTrigger.parse(this.entity.ontrigger);
+        this.output_onSpawn.parse(this.entity.onspawn);
         this.registerInput('trigger', this.input_trigger.bind(this));
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+        this.output_onSpawn.fire(entitySystem, this);
     }
 
     private input_trigger(entitySystem: EntitySystem): void {
@@ -2477,10 +2483,19 @@ export class EntitySystem {
     }
 
     public entityMatchesTargetName(entity: BaseEntity, targetName: string): boolean {
+        if (!entity.targetName)
+            return false;
+
         if (entity.targetName === targetName)
             return true;
 
-        // TODO(jstpierre): Support multicast / wildcard target names
+        if (targetName.endsWith('*')) {
+            if (entity.targetName.startsWith(targetName.slice(0, -1)))
+                return true;
+        } else if (targetName.includes('*')) {
+            debugger;
+        }
+
         return false;
     }
 
