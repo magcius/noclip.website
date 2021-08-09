@@ -273,19 +273,7 @@ class BoneDesc {
     public posScale = vec3.create();
     public rotScale = vec3.create();
 
-    constructor(private name: string, public parent: number) {
-    }
-
-    public clone(boneStart: number): BoneDesc {
-        const o = new BoneDesc(this.name, this.parent + boneStart);
-        vec3.copy(o.pos, this.pos);
-        vec3.copy(o.rot, this.rot);
-        quat.copy(o.quat, this.quat);
-        mat4.copy(o.poseToBone, this.poseToBone);
-
-        vec3.copy(o.posScale, this.posScale);
-        vec3.copy(o.rotScale, this.rotScale);
-        return o;
+    constructor(public name: string, public parent: number) {
     }
 }
 
@@ -441,7 +429,8 @@ function quatFromRadianEuler(dst: quat, roll: number, pitch: number, yaw: number
 
 const scratchQuat = nArray(2, () => quat.create());
 class AnimTrackData {
-    public bone: number;
+    public boneindex: number;
+    public bone: BoneDesc;
     public flags: AnimDataFlags;
     private view: DataView;
 
@@ -449,7 +438,7 @@ class AnimTrackData {
         const view = buffer.createDataView();
         this.view = view;
 
-        this.bone = view.getUint8(0x00);
+        this.boneindex = view.getUint8(0x00);
         this.flags = view.getUint8(0x01) as AnimDataFlags;
         // const nextoffset = view.getUint16(0x02);
     }
@@ -517,14 +506,15 @@ class AnimTrackData {
 class AnimData {
     public tracks: (AnimTrackData | null)[];
 
-    constructor(buffer: ArrayBufferSlice, numbones: number) {
+    constructor(buffer: ArrayBufferSlice, bone: BoneDesc[]) {
         const view = buffer.createDataView();
 
         let idx = 0x00;
-        this.tracks = nArray(numbones, () => null);
+        this.tracks = nArray(bone.length, () => null);
         while (true) {
             const track = new AnimTrackData(buffer.slice(idx));
-            this.tracks[track.bone] = track;
+            this.tracks[track.boneindex] = track;
+            track.bone = bone[track.boneindex];
 
             const nextoffset = view.getUint16(idx + 0x02, true);
             if (nextoffset === 0)
@@ -565,21 +555,11 @@ class AnimDesc {
     public flags: number;
     public fps: number;
     public numframes: number;
-    public boneStart = 0;
 
     constructor(public name: string) {
     }
 
-    public clone(boneStart: number): AnimDesc {
-        const o = new AnimDesc(this.name);
-        o.animsection = this.animsection;
-        o.flags = this.flags;
-        o.fps = this.fps;
-        o.numframes = this.numframes;
-        o.boneStart = boneStart;
-        return o;
-    }
-
+    /*
     public dump(modelData: StudioModelData): void {
         let S = '';
 
@@ -588,7 +568,6 @@ class AnimDesc {
 
             const section = findAnimationSection(this, frame)!;
             for (let i = 0; i < modelData.bone.length; i++) {
-                const bone = modelData.boneFull[this.boneStart + i];
                 const track = section.animdata!.tracks[i];
                 let pos = vec3.create(), rot = vec3.create(), rotQuat = null;
 
@@ -612,6 +591,7 @@ class AnimDesc {
 
         console.log(S);
     }
+    */
 }
 
 class SeqEventDesc {
@@ -672,12 +652,7 @@ export class StudioModelData {
     public checksum: number;
     public hullBB: AABB;
     public viewBB: AABB;
-
-    // Actual pose bones.
     public bone: BoneDesc[] = [];
-    // Full bone data (for animation / includemodels).
-    public boneFull: BoneDesc[] = [];
-
     public illumPosition = vec3.create();
     public anim: AnimDesc[] = [];
     public seq: SeqDesc[] = [];
@@ -807,7 +782,6 @@ export class StudioModelData {
             // int unused[8];
 
             this.bone.push(bone);
-            this.boneFull.push(bone);
             boneidx += 0xD8;
         }
 
@@ -874,7 +848,7 @@ export class StudioModelData {
                 const animsection = anim.animsection[i];
                 if (animsection.animblock === 0) {
                     const animBuffer = mdlBuffer.slice(localanimindex + animsection.animindex);
-                    animsection.animdata = new AnimData(animBuffer, numbones);
+                    animsection.animdata = new AnimData(animBuffer, this.bone);
                 } else {
                     // External block. Save for later.
                 }
@@ -1643,14 +1617,47 @@ export class HardwareVertData {
     }
 }
 
+function remapIncludeModelSkeleton(dst: StudioModelData, src: StudioModelData): void {
+    assert(dst.bone.length === src.bone.length);
+
+    const newBoneTable: BoneDesc[] = dst.bone.slice();
+    for (let i = 0; i < newBoneTable.length; i++) {
+        const origBone = dst.bone[i];
+        const newIndex = src.bone.findIndex((bone) => bone.name === origBone.name);
+        if (newIndex === i)
+            continue;
+        // Place it at the new index.
+        newBoneTable[newIndex] = origBone;
+    }
+
+    for (let i = 0; i < dst.anim.length; i++) {
+        for (let j = 0; j < dst.anim[i].animsection.length; j++) {
+            // We should have all the animation data we now need.
+            const animdata = assertExists(dst.anim[i].animsection[j].animdata);
+            const newTracks = animdata.tracks.slice();
+            for (let k = 0; k < animdata.tracks.length; k++) {
+                const track = animdata.tracks[k];
+                if (track === null)
+                    continue;
+
+                // Apply remap.
+                assert(k === track.boneindex);
+                track.boneindex = newBoneTable.indexOf(dst.bone[track.boneindex]);
+                if (track.boneindex === k)
+                    continue;
+
+                newTracks[track.boneindex] = track;
+            }
+            animdata.tracks = newTracks;
+        }
+    }
+    dst.bone = newBoneTable;
+}
+
 function mergeIncludeModel(dst: StudioModelData, src: StudioModelData): void {
     let animStart = dst.anim.length;
-    let boneStart = dst.boneFull.length;
-
-    for (let i = 0; i < src.boneFull.length; i++)
-        dst.boneFull.push(src.boneFull[i].clone(boneStart));
     for (let i = 0; i < src.anim.length; i++)
-        dst.anim.push(src.anim[i].clone(boneStart));
+        dst.anim.push(src.anim[i]);
     for (let i = 0; i < src.seq.length; i++)
         dst.seq.push(src.seq[i].clone(animStart));
 }
@@ -1690,19 +1697,12 @@ export class StudioModelCache {
 
         const modelData = new StudioModelData(this.renderContext, assertExists(mdlBuffer), vvdBuffer!, vtxBuffer!);
 
-        for (let i = 0; i < modelData.includemodel.length; i++) {
-            // includeModels should not have additional vertex information.
-            const includeModel = await this.fetchStudioModelData(modelData.includemodel[i], false);
-            mergeIncludeModel(modelData, includeModel);
-        }
-
         if (modelData.animBlockName !== null) {
             // Fetch external animation block.
             const aniPath = this.filesystem.resolvePath(modelData.animBlockName, '.ani');
             const aniBuffer = (await this.filesystem.fetchFileData(aniPath))!;
 
             // Go through each of our animations and set the relevant animation data.
-            const numbones = modelData.bone.length;
             for (let i = 0; i < modelData.anim.length; i++) {
                 for (let j = 0; j < modelData.anim[i].animsection.length; j++) {
                     const animsection = modelData.anim[i].animsection[j];
@@ -1710,10 +1710,17 @@ export class StudioModelCache {
                         assert(animsection.animblock > 0);
                         const animblock = modelData.animblocks[animsection.animblock];
                         const blockBuffer = aniBuffer.slice(animblock.dataStart, animblock.dataEnd);
-                        animsection.animdata = new AnimData(blockBuffer.slice(animsection.animindex), numbones);
+                        animsection.animdata = new AnimData(blockBuffer.slice(animsection.animindex), modelData.bone);
                     }
                 }
             }
+        }
+    
+        for (let i = 0; i < modelData.includemodel.length; i++) {
+            // includeModels should not have additional vertex information.
+            const includeModel = await this.fetchStudioModelData(modelData.includemodel[i], false);
+            remapIncludeModelSkeleton(includeModel, modelData);
+            mergeIncludeModel(modelData, includeModel);
         }
 
         this.modelData.push(modelData);
@@ -1899,13 +1906,14 @@ export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, fr
 
     for (let i = 0; i < modelData.bone.length; i++) {
         const dst = dstBoneMatrix[i];
-        const bone = modelData.boneFull[anim.boneStart + i];
         const track = data.tracks[i];
         if (track !== null) {
+            const bone = track.bone;
             track.getPosRot(scratchVec3, scratchQuatb, bone, frame);
             mat4.fromQuat(dst, scratchQuatb);
             setMatrixTranslation(dst, scratchVec3);
         } else {
+            const bone = modelData.bone[i];
             computeModelMatrixPosRadianEuler(dst, bone.pos, bone.rot);
         }
     }
