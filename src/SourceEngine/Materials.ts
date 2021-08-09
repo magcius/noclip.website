@@ -2603,6 +2603,8 @@ class Material_Water extends BaseMaterial {
         p['$cheapwaterstartdistance']      = new ParameterNumber(500.0);
         p['$cheapwaterenddistance']        = new ParameterNumber(1000.0);
 
+        p['$forceenvmap']                  = new ParameterBoolean(false, false);
+
         p['$flowmap']                      = new ParameterTexture(false, false);
         p['$flowmapframe']                 = new ParameterNumber(0);
         p['$flowmapscrollrate']            = new ParameterVector(2);
@@ -2655,14 +2657,14 @@ class Material_Water extends BaseMaterial {
 
             this.isTranslucent = false;
         } else {
-            // Non-flowmap uses refract.
-            this.program.setDefineBool('USE_REFRACT', true);
-
             if (this.paramGetVector('$scroll1').get(0) !== 0) {
                 this.wantsTexScroll = true;
                 this.program.setDefineBool('USE_TEXSCROLL', true);
             }
         }
+
+        if (this.paramGetVTF('$refracttexture') !== null)
+            this.program.setDefineBool('USE_REFRACT', true);
 
         this.isIndirect = this.textureIsIndirect('$refracttexture') || this.textureIsIndirect('$reflecttexture');
 
@@ -2706,7 +2708,8 @@ class Material_Water extends BaseMaterial {
             offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
         }
 
-        const useExpensiveReflect = renderContext.currentView.useExpensiveWater;
+        const forceEnvMap = this.paramGetBoolean('$forceenvmap');
+        const useExpensiveReflect = renderContext.currentView.useExpensiveWater && !forceEnvMap;
         if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
             this.gfxProgram = null;
 
