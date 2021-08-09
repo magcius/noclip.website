@@ -7,6 +7,8 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 pub mod yaz0;
 pub mod gx_texture;
+pub mod bcn_texture;
 
 pub use crate::yaz0::yaz0dec;
 pub use crate::gx_texture::decode_texture;
+pub use crate::bcn_texture::deswizzle;

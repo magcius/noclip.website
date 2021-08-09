@@ -6,7 +6,7 @@ import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
 
 import * as BNTX from '../fres_nx/bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
-import { translateImageFormat, deswizzle, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
+import { translateImageFormat, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2 } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
@@ -31,7 +31,14 @@ import * as AGLLightMap from './AGLParameter_LightMap';
 import * as AGLEnv from './AGLParameter_Env';
 import { colorNewCopy, colorScale, OpaqueBlack, White } from '../Color';
 import { IS_DEVELOPMENT } from '../BuildVersion';
+import { Endianness } from '../endian';
 
+let deswizzle: undefined | (typeof import("../../rust/pkg/index"))["deswizzle"];
+
+import("../../rust/pkg/index").then(x => {
+    console.log("Loaded WASM");
+    deswizzle = x["deswizzle"];
+})
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
         const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
@@ -40,11 +47,20 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     }
 
     public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
+        console.log("Loading textures...");
         const bntx = BNTX.parse(buffer);
+        const startTime = new Date().getTime();
         this.addTextures(device, bntx.textures);
+        const endTime = new Date().getTime();
+        console.log(`Took ${(endTime - startTime) / 1000.0}s to load textures`);
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
+        if (deswizzle === undefined) {
+            console.log("WHOOPS");
+            return null;
+        }
+
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
         const canvases: HTMLCanvasElement[] = [];
 
@@ -58,7 +74,9 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
             const blockHeightLog2 = textureEntry.blockHeightLog2;
-            const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
+            // const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
+            const src = buffer.createTypedArray(Uint8Array, 0, buffer.byteLength, Endianness.BIG_ENDIAN);
+            const deswizzled = deswizzle(width, height, channelFormat, src, blockHeightLog2);
             const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
             const rgbaPixels = rgbaTexture.pixels;
             device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
