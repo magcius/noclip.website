@@ -1,7 +1,7 @@
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
-import { CameraController, computeViewMatrix } from "../Camera";
+import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -10,7 +10,7 @@ import {
     pushAntialiasingPostProcessPass,
     standardFullClearRenderPassDescriptor
 } from "../gfx/helpers/RenderGraphHelpers";
-import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import {
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
@@ -28,12 +28,13 @@ import {
     GfxTexFilterMode,
     GfxVertexAttributeDescriptor,
     GfxVertexBufferFrequency,
-    GfxWrapMode
+    GfxWrapMode,
+    makeTextureDescriptor2D
 } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxInputState, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap";
 import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers";
@@ -52,6 +53,7 @@ import {
 import { colorCopyKeepAlpha, colorLerpKeepAlpha, DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util";
 import * as CRC32 from "crc-32";
 import { DeviceProgram } from '../Program';
+import * as UI from '../ui';
 
 class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -70,6 +72,38 @@ class RotfdProgram extends DeviceProgram {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
+];
+
+const AttachmentsStateBlendColor = [
+    {
+        channelWriteMask: GfxChannelWriteMask.RGB,
+        rgbBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.OneMinusSrc,
+        },
+        alphaBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.OneMinusDst,
+            blendDstFactor: GfxBlendFactor.OneMinusSrc,
+        },
+    }
+];
+
+const AttachmentsStateBlendAlpha = [
+    {
+        channelWriteMask: GfxChannelWriteMask.AllChannels,
+        rgbBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        },
+        alphaBlendState: {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        },
+    }
 ];
 
 export const ResourceIgnore = [
@@ -272,51 +306,6 @@ class VertexData {
     }
 }
 
-function colorToRGB(out: vec3, col: Color) {
-    out[0] = col.r;
-    out[1] = col.g;
-    out[2] = col.b;
-}
-
-function colorToRGBA(out: vec4, col: Color, a: number = col.a) {
-    out[0] = col.r;
-    out[1] = col.g;
-    out[2] = col.b;
-    out[3] = a;
-}
-
-const AttachmentsStateBlendColor = [
-    {
-        channelWriteMask: GfxChannelWriteMask.RGB,
-        rgbBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.One,
-            blendDstFactor: GfxBlendFactor.OneMinusSrc,
-        },
-        alphaBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.OneMinusDst,
-            blendDstFactor: GfxBlendFactor.OneMinusSrc,
-        },
-    }
-];
-
-const AttachmentsStateBlendAlpha = [
-    {
-        channelWriteMask: GfxChannelWriteMask.AllChannels,
-        rgbBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        },
-        alphaBlendState: {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.One,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        },
-    }
-];
-
 let bboxScratch = new AABB();
 let modelViewScratch = mat4.create();
 let modelViewScratch2 = mat4.create();
@@ -343,9 +332,9 @@ class MeshRenderer {
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
         viewerInput: Viewer.ViewerRenderInput,
-        sampler: GfxSampler,
+        renderer: ROTFDRenderer,
     ) {
-        if (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN) || this.material.color.a === 0.0) {
+        if (!renderer.renderHackState.showHidden && (getMaterialFlag(this.material, MaterialFlags.FLAG_HIDDEN) || this.material.color.a === 0.0)) {
             return;
         }
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
@@ -355,45 +344,58 @@ class MeshRenderer {
         
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        let textureAlpha = 0;
         const textureMapping = new TextureMapping();
-        const texture = this.textureMap.get(this.material.texture_id);
-        const textureAlpha = texture ? texture.alphaLevel : 0;
-        textureMapping.gfxTexture = texture ? texture.texture : null;
-        textureMapping.gfxSampler = sampler;
         const reflectionMapping = new TextureMapping();
-        const reflectionTexture = this.textureMap.get(this.material.reflection_id);
-        reflectionMapping.gfxTexture = reflectionTexture ? reflectionTexture.texture : null;
-        reflectionMapping.gfxSampler = sampler;
+        if (renderer.renderHackState.texturesEnabled) {
+            const texture = this.textureMap.get(this.material.texture_id);
+            textureAlpha = texture ? texture.alphaLevel : 0;
+            textureMapping.gfxSampler = this.isSkybox ? renderer.warpSampler : renderer.sampler;
+            textureMapping.gfxTexture = texture ? texture.texture : null;
+            const reflectionTexture = this.textureMap.get(this.material.reflection_id);
+            reflectionMapping.gfxTexture = reflectionTexture ? reflectionTexture.texture : null;
+            reflectionMapping.gfxSampler = this.isSkybox ? renderer.warpSampler : renderer.sampler;
+        }
+        else {
+            const texture = renderer.defaultTexture;
+            textureMapping.gfxTexture = texture;
+        }
         renderInst.setSamplerBindingsFromTextureMappings([ textureMapping, reflectionMapping ]);
 
         let offs = renderInst.allocateUniformBuffer(RotfdProgram.ub_MaterialParams, RotfdProgram.MATERIALPARAM_SIZE);
         const d = renderInst.mapUniformBufferF32(RotfdProgram.ub_MaterialParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
+        let isTranslucent = false;
         if (this.isSkybox) {
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
+            this.megaStateFlags.depthWrite = false;
+            this.megaStateFlags.attachmentsState = undefined;
             modelViewScratch[12] = 0.0;
             modelViewScratch[13] = 0.0;
             modelViewScratch[14] = 0.0;
-            renderInst.sortKey = GfxRendererLayer.BACKGROUND;
-            this.megaStateFlags.depthWrite = false;
         }
-        else {
+        else if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDCOLOR)) {
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.megaStateFlags.depthWrite = true;
-        }
-        if (getMaterialFlag(this.material, MaterialFlags.FLAG_BLENDCOLOR)) {
-            renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendColor;
-            // this.megaStateFlags.depthWrite = false;
+            isTranslucent = true;
         }
         else if (this.material.color.a < 1.0 || textureAlpha >= 1) {
             // other material flags seem to be unreliable and erratic
             // i.e. there are materials with no flags set who are still transparent?
-            renderInst.sortKey = GfxRendererLayer.TRANSLUCENT;
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            this.megaStateFlags.depthWrite = true;
             this.megaStateFlags.attachmentsState = AttachmentsStateBlendAlpha;
-            // this.megaStateFlags.depthWrite = false;
+            isTranslucent = true;
         }
         else {
-            renderInst.sortKey = GfxRendererLayer.OPAQUE;
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+            this.megaStateFlags.depthWrite = true;
             this.megaStateFlags.attachmentsState = undefined;
+        }
+        if (isTranslucent) {
+            const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);
         offs += fillMatrix4x3(d, offs, this.modelMatrix);
@@ -415,10 +417,9 @@ class MeshRenderer {
                 CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.UseZPlane);
             offs += fillMatrix4x3(d, offs, modelViewScratch2);
         }
-        const col = this.material.color;
-        const emit = this.material.emission;
-        offs += fillVec4(d, offs, col.r, col.g, col.b, col.a);
-        offs += fillVec4(d, offs, emit.r, emit.g, emit.b, 0);
+        offs += fillColor(d, offs, this.material.color);
+        this.material.emission.a = 1.0;
+        offs += fillColor(d, offs, this.material.emission);
         const tx = this.material.transform;
         offs += fillMatrix4x2(d, offs, [
             tx[0], tx[1], tx[2], 0,
@@ -428,40 +429,40 @@ class MeshRenderer {
         ]);
         let offs2 = renderInst.allocateUniformBuffer(RotfdProgram.ub_InstanceParams, RotfdProgram.INSTANCEPARAM_SIZE);
         const d2 = renderInst.mapUniformBufferF32(RotfdProgram.ub_InstanceParams);
-        if (this.directionalLight !== undefined) {
+        if (this.directionalLight !== undefined && renderer.renderHackState.enableLights) {
             offs2 += fillVec3v(d2, offs2, this.directionalLight.direction);
-            colorToRGB(vec3Scratch, this.directionalLight.color1);
-            offs2 += fillVec3v(d2, offs2, vec3Scratch);
-            colorToRGB(vec3Scratch, this.directionalLight.color2);
-            offs2 += fillVec3v(d2, offs2, vec3Scratch);
+            offs2 += fillColor(d2, offs2, this.directionalLight.color1);
+            offs2 += fillColor(d2, offs2, this.directionalLight.color2);
         }
         else {
             offs2 += fillVec4(d2, offs2, 0, 1, 0);
             offs2 += fillVec4(d2, offs2, 0, 0, 0);
             offs2 += fillVec4(d2, offs2, 1, 1, 1);
         }
-        if (this.hFog !== undefined) {
+        if (this.hFog !== undefined && renderer.renderHackState.enableFog) {
             mat4.identity(modelViewScratch);
             mat4.mul(modelViewScratch, modelViewScratch, this.hFog.global_transform);
             mat4.invert(modelViewScratch, modelViewScratch);
             offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
-            colorToRGBA(vec4Scratch, this.hFog.color, 1.0);
-            offs2 += fillVec4v(d2, offs2, vec4Scratch);
+            offs2 += fillColor(d2, offs2, this.hFog.color);
         }
         else {
             mat4.identity(modelViewScratch);
             offs2 += fillMatrix4x4(d2, offs2, modelViewScratch);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
         }
-        for (let i = 0; i < Math.min(4, this.omniLights.length); i++) {
+        let numOmni = this.omniLights.length;
+        if (!renderer.renderHackState.enableLights) {
+            numOmni = 0;
+        }
+        for (let i = 0; i < Math.min(4, numOmni); i++) {
             const instance = this.omniLights[i];
             getMatrixTranslation(vec3Scratch, instance.transform);
             offs2 += fillVec3v(d2, offs2, vec3Scratch);
-            colorToRGBA(vec4Scratch, instance.omni.color, 1.0);
-            offs2 += fillVec4v(d2, offs2, vec4Scratch);
+            offs2 += fillColor(d2, offs2, instance.omni.color);
             offs2 += fillVec4(d2, offs2, instance.omni.attenuation[0], instance.omni.attenuation[1], 0, 0);
         }
-        for (let i = this.omniLights.length; i < 4; i++) {
+        for (let i = numOmni; i < 4; i++) {
             offs2 += fillVec4(d2, offs2, 0, 0, 0);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
@@ -490,6 +491,10 @@ type MeshInfo = {
 type MaterialAnimInfo = {
     id: number;
     anim: TotemMaterialAnim;
+    originalTransform: mat3;
+    offset: vec2;
+    rotation: number;
+    scale: vec2;
 }
 
 type SkinInfo = {
@@ -505,11 +510,21 @@ type OmniInstance = {
     transform: mat4;
 }
 
+class RenderHackState {
+    public texturesEnabled = true;
+    public showHidden = false;
+    public enableFog = true;
+    public enableLights = true;
+}
+
 export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
+    private gfxProgram: GfxProgram;
     public renderHelper: GfxRenderHelper;
     public sampler: GfxSampler;
     public warpSampler: GfxSampler;
+    public renderHackState: RenderHackState;
+    public defaultTexture: GfxTexture;
     // mesh info
     private meshes = new Map<number, MeshInfo>();
     private otherMeshes: VertexData[] = [];
@@ -530,7 +545,14 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     constructor(private device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new RotfdProgram());
-
+        this.gfxProgram = this.renderHelper.renderInstManager.gfxRenderCache.createProgramSimple(this.program);
+        this.renderHackState = new RenderHackState();
+        this.defaultTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+        let newData = new Uint8Array(4);
+        for (let i = 0; i < 4; i++) {
+            newData[i] = 255;
+        }
+        device.uploadTextureData(this.defaultTexture, 0, [newData]);
         this.sampler = device.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -550,6 +572,38 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         });
     }
 
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            this.renderHackState.texturesEnabled = enableTextures.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const enableHidden = new UI.Checkbox('Show Hidden Objects', false);
+        enableHidden.onchanged = () => {
+            this.renderHackState.showHidden = enableHidden.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableHidden.elem);
+
+        const enableFog = new UI.Checkbox('Enable Fog', true);
+        enableFog.onchanged = () => {
+            this.renderHackState.enableFog = enableFog.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableFog.elem);
+
+        const enableLighting = new UI.Checkbox('Enable Lighting', true);
+        enableLighting.onchanged = () => {
+            this.renderHackState.enableLights = enableLighting.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableLighting.elem);
+
+        return [renderHacksPanel];
+    }
+
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(1/60);
     }
@@ -567,31 +621,33 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             if (texture !== undefined) {
                 material.texture_id = texture;
             }
-            if (interpTrackInPlace(material.offset, anim.scroll, animFrame, vec2.lerp, vec2.copy)) {
-                shouldUpdateTransform = true;
-            }
-            if (interpTrackInPlace(material.scale, anim.stretch, animFrame, vec2.lerp, vec2.copy)) {
-                shouldUpdateTransform = true;
-            }
-            const rotation = interpTrack(anim.rotation, animFrame, lerp);
-            if (rotation !== undefined) {
-                shouldUpdateTransform = true;
-                material.rotation = rotation;
-            }
             interpTrackInPlace(material.color, anim.color, animFrame, colorLerpKeepAlpha, colorCopyKeepAlpha);
             interpTrackInPlace(material.emission, anim.emission, animFrame, colorLerp, colorCopy);
             const alpha = interpTrack(anim.alpha, animFrame, lerp);
             if (alpha !== undefined) {
                 material.color.a = alpha;
             }
+            // handle transformation
+            if (interpTrackInPlace(animInfo.offset, anim.scroll, animFrame, vec2.lerp, vec2.copy)) {
+                shouldUpdateTransform = true;
+            }
+            if (interpTrackInPlace(animInfo.scale, anim.stretch, animFrame, vec2.lerp, vec2.copy)) {
+                shouldUpdateTransform = true;
+            }
+            const rotation = interpTrack(anim.rotation, animFrame, lerp);
+            if (rotation !== undefined) {
+                shouldUpdateTransform = true;
+            }
+            animInfo.rotation = rotation ?? 0;
             if (shouldUpdateTransform) {
                 let tx = material.transform;
                 mat3.identity(tx);
                 mat3.translate(tx, tx, [0.5, 0.5]);
-                mat3.translate(tx, tx, material.offset);
-                mat3.scale(tx, tx, material.scale);
-                mat3.rotate(tx, tx, material.rotation);
+                mat3.translate(tx, tx, animInfo.offset);
+                mat3.scale(tx, tx, animInfo.scale);
+                mat3.rotate(tx, tx, animInfo.rotation);
                 mat3.translate(tx, tx, [-0.5, -0.5]);
+                mat3.mul(tx, tx, animInfo.originalTransform);
             }
         }
     }
@@ -601,16 +657,15 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         viewerInput.camera.setClipPlanes(0.5);
 
         this.updateMaterialAnims(Math.floor(viewerInput.time * 60 / 1000));
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setGfxProgram(gfxProgram);
+        template.setGfxProgram(this.gfxProgram);
         let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, RotfdProgram.SCENEPARAM_SIZE);
         const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
         for (const instance of this.meshRenderers) {
-            instance.prepareToRender(renderInstManager, viewerInput, instance.isSkybox ? this.warpSampler : this.sampler);
+            instance.prepareToRender(renderInstManager, viewerInput, this);
         }
         renderInstManager.popTemplateRenderInst();
 
@@ -738,9 +793,15 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         // just use the same map for both MATERIAL and MATERIALANIM,
         // it doesn't really matter. There shouldn't be any overlap anyways.
         this.materials.set(id, material);
+        const scale = vec2.create();
+        vec2.set(scale, 1, 1);
         this.materialAnims.push({
             id,
             anim,
+            originalTransform: mat3.clone(material.transform),
+            offset: vec2.create(),
+            scale,
+            rotation: 0.0
         })
     }
 
