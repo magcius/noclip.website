@@ -834,6 +834,7 @@ abstract class BaseDoor extends BaseToggle {
     }
 }
 
+const scratchAABB = new AABB();
 class func_door extends BaseDoor {
     public static classname = `func_door`;
 
@@ -858,10 +859,12 @@ class func_door extends BaseDoor {
     }
 
     private updateExtents(): void {
+        computeModelMatrixPosQAngle(scratchMat4a, Vec3Zero, this.localAngles);
         if (this.modelBSP !== null)
-            this.modelBSP.model.bbox.extents(this.modelExtents);
+            scratchAABB.transform(this.modelBSP.model.bbox, scratchMat4a);
         else if (this.modelStudio !== null)
-            this.modelStudio.modelData.viewBB.extents(this.modelExtents);
+            scratchAABB.transform(this.modelStudio.modelData.viewBB, scratchMat4a);
+        scratchAABB.extents(this.modelExtents);
 
         angleVec(scratchVec3a, null, null, this.moveDir);
         const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
