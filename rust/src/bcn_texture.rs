@@ -96,7 +96,7 @@ const fn get_format_block_height(channel_format: ChannelFormat) -> usize {
     }
 }
 
-const fn get_format_bytes_per_pixel(channel_format: ChannelFormat) -> usize {
+const fn get_format_bytes_per_block(channel_format: ChannelFormat) -> usize {
     use ChannelFormat::*;
     match channel_format {
         Bc1 | Bc4 => 8,
@@ -140,7 +140,7 @@ pub fn deswizzle(
     while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
         block_height >>= 1;
     }
-    let bpp = get_format_bytes_per_pixel(channel_format);
+    let bpp = get_format_bytes_per_block(channel_format);
     let mut dst = Vec::with_capacity(width_in_blocks * height_in_blocks * bpp);
     for y in 0..height_in_blocks {
         for x in 0..width_in_blocks {
@@ -189,19 +189,17 @@ fn color_table_bc1(color_table: &mut [u8; 16], color1: u16, color2: u16) {
     color_table[0] = expand5to8(((color1 >> 11) & 0x1F) as u8);
     color_table[1] = expand6to8(((color1 >> 5) & 0x3F) as u8);
     color_table[2] = expand5to8((color1 & 0x1F) as u8);
-    color_table[3] = 0xFF;
 
     color_table[4] = expand5to8(((color2 >> 11) & 0x1F) as u8);
     color_table[5] = expand6to8(((color2 >> 5) & 0x3F) as u8);
     color_table[6] = expand5to8((color2 & 0x1F) as u8);
-    color_table[7] = 0xFF;
 
     if color1 > color2 {
         // Predict gradients.
         color_table[8]  = s3tcblend(color_table[4], color_table[0]);
         color_table[9]  = s3tcblend(color_table[5], color_table[1]);
         color_table[10] = s3tcblend(color_table[6], color_table[2]);
-        color_table[11] = 0xFF;
+
 
         color_table[12] = s3tcblend(color_table[0], color_table[4]);
         color_table[13] = s3tcblend(color_table[1], color_table[5]);
@@ -211,7 +209,6 @@ fn color_table_bc1(color_table: &mut [u8; 16], color1: u16, color2: u16) {
         color_table[8]  = ((color_table[0] as u16 + color_table[4] as u16) >> 1) as u8;
         color_table[9]  = ((color_table[1] as u16 + color_table[5] as u16) >> 1) as u8;
         color_table[10] = ((color_table[2] as u16 + color_table[6] as u16) >> 1) as u8;
-        color_table[11] = 0xFF;
 
         color_table[12] = 0x00;
         color_table[13] = 0x00;
@@ -258,9 +255,11 @@ pub enum BCNType {
 }
 
 // Software decompresses from standard BC1 (DXT1) to RGBA.
-fn decompress_bc1_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
     const BLOCK_W: usize = get_format_block_width(ChannelFormat::Bc1);
     const BLOCK_H: usize = get_format_block_height(ChannelFormat::Bc1);
+    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc1);
+    const OUTPUT_BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
@@ -271,10 +270,11 @@ fn decompress_bc1_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataU
     while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
         block_height >>= 1;
     }
-    const INPUT_BYTES_PER_CHUNK: usize = 8;
-    const OUTPUT_BYTES_PER_PIXEL: usize = 4;
     let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
     let mut color_table = [0u8; 16];
+    color_table[3] = 0xFF;
+    color_table[7] = 0xFF;
+    color_table[11] = 0xFF;
     for block_y in 0..height_in_blocks {
         for block_x in 0..width_in_blocks {
             let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
@@ -297,14 +297,13 @@ fn decompress_bc1_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataU
             }
         }
     }
-    SurfaceDataUnsigned { 
-        // meta: surface,
+    SurfaceDataUnsigned {
         pixels: dst,
     }
 }
 
 // Software decompresses from standard BC2 (DXT3) to RGBA.
-fn decompress_bc2_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
     const BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
@@ -343,60 +342,69 @@ fn decompress_bc2_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataU
             src_offs += 0x10;
         }
     }
-    SurfaceDataUnsigned { 
-        // meta: surface,
+    SurfaceDataUnsigned {
         pixels: dst,
     }
 }
 
 // Software decompresses from standard BC3 (DXT5) to RGBA.
-fn decompress_bc3_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
-    const BYTES_PER_PIXEL: usize = 4;
+fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+    const BLOCK_W: usize = get_format_block_width(ChannelFormat::Bc3);
+    const BLOCK_H: usize = get_format_block_height(ChannelFormat::Bc3);
+    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc3);
+    const OUTPUT_BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
     let tall = height * depth;
-    let src = deswizzle(width, height, ChannelFormat::Bc3, src, surface.block_height_log2);
-    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
-    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
+    let width_in_blocks = (width + BLOCK_W - 1) / BLOCK_W;
+    let height_in_blocks = (tall + BLOCK_H - 1) / BLOCK_H;
+    let mut block_height = 1 << surface.block_height_log2;
+    while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
+        block_height >>= 1;
+    }
+    let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
     let mut color_table = [0u8; 16];
     let mut alpha_table = [0u8; 8];
+    color_table[3] = 0xFF;
+    color_table[7] = 0xFF;
+    color_table[11] = 0xFF;
+    for block_y in 0..height_in_blocks {
+        for block_x in 0..width_in_blocks {
+            let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
+            let chunk = &src[src_offs..(src_offs + INPUT_BYTES_PER_CHUNK)];
 
-    let mut src_offs = 0;
-    for yy in (0..tall).step_by(4) {
-        for xx in (0..width).step_by(4) {
-            let alpha1 = src[src_offs];
-            let alpha2 = src[src_offs + 1];
-
-            alpha_table[0] = alpha1;
-            alpha_table[1] = alpha2;
+            let alpha1 = chunk[0] as u16;
+            let alpha2 = chunk[1] as u16;
+            alpha_table[0] = alpha1 as u8;
+            alpha_table[1] = alpha2 as u8;
             if alpha1 > alpha2 {
-                alpha_table[2] = ((6 * (alpha1 as u16) + 1 * (alpha2 as u16)) / 7) as u8;
-                alpha_table[3] = ((5 * (alpha1 as u16) + 2 * (alpha2 as u16)) / 7) as u8;
-                alpha_table[4] = ((4 * (alpha1 as u16) + 3 * (alpha2 as u16)) / 7) as u8;
-                alpha_table[5] = ((3 * (alpha1 as u16) + 4 * (alpha2 as u16)) / 7) as u8;
-                alpha_table[6] = ((2 * (alpha1 as u16) + 5 * (alpha2 as u16)) / 7) as u8;
-                alpha_table[7] = ((1 * (alpha1 as u16) + 6 * (alpha2 as u16)) / 7) as u8;
+                alpha_table[2] = ((6 * alpha1 + 1 * alpha2) / 7) as u8;
+                alpha_table[3] = ((5 * alpha1 + 2 * alpha2) / 7) as u8;
+                alpha_table[4] = ((4 * alpha1 + 3 * alpha2) / 7) as u8;
+                alpha_table[5] = ((3 * alpha1 + 4 * alpha2) / 7) as u8;
+                alpha_table[6] = ((2 * alpha1 + 5 * alpha2) / 7) as u8;
+                alpha_table[7] = ((1 * alpha1 + 6 * alpha2) / 7) as u8;
             } else {
-                alpha_table[2] = ((4 * (alpha1 as u16) + 1 * (alpha2 as u16)) / 5) as u8;
-                alpha_table[3] = ((3 * (alpha1 as u16) + 2 * (alpha2 as u16)) / 5) as u8;
-                alpha_table[4] = ((2 * (alpha1 as u16) + 3 * (alpha2 as u16)) / 5) as u8;
-                alpha_table[5] = ((1 * (alpha1 as u16) + 4 * (alpha2 as u16)) / 5) as u8;
+                alpha_table[2] = ((4 * alpha1 + 1 * alpha2) / 5) as u8;
+                alpha_table[3] = ((3 * alpha1 + 2 * alpha2) / 5) as u8;
+                alpha_table[4] = ((2 * alpha1 + 3 * alpha2) / 5) as u8;
+                alpha_table[5] = ((1 * alpha1 + 4 * alpha2) / 5) as u8;
                 alpha_table[6] = 0;
                 alpha_table[7] = 255;
             }
-            let alphabits1 = LittleEndian::read_u24(&src[(src_offs+2)..(src_offs+5)]);
-            let alphabits2 = LittleEndian::read_u24(&src[(src_offs+5)..(src_offs+8)]);
-            let color1 = LittleEndian::read_u16(&src[(src_offs+8)..(src_offs+10)]);
-            let color2 = LittleEndian::read_u16(&src[(src_offs+10)..(src_offs+12)]);
+            let alphabits1 = (chunk[2] as u32) | (chunk[3] as u32) << 8 | (chunk[4] as u32) << 16;
+            let alphabits2 = (chunk[5] as u32) | (chunk[6] as u32) << 8 | (chunk[7] as u32) << 16;
+            let color1 = (chunk[8] as u16) | (chunk[9] as u16) << 8;
+            let color2 = (chunk[10] as u16) | (chunk[11] as u16) << 8;
             color_table_bc1(&mut color_table, color1, color2);
-            let mut colorbits = LittleEndian::read_u32(&src[(src_offs+12)..(src_offs+16)]);
-            for y in 0..usize::min(4, tall-yy) {
-                for x in 0..usize::min(4, width-xx) {
-                    let dst_px = (yy + y) * width + xx + x;
+            let mut colorbits = (chunk[12] as u32) | (chunk[13] as u32) << 8 | (chunk[14] as u32) << 16 | (chunk[15] as u32) << 24;
+            for iy in 0..usize::min(4, tall-block_y*4) {
+                for ix in 0..usize::min(4, width-block_x*4) {
+                    let dst_px = (block_y*4 + iy) * width + block_x*4 + ix;
                     let dst_offs = dst_px * 4;
                     let color_idx = colorbits as usize & 0x03;
-                    let full_shift = (y * 4 + x) * 3;
+                    let full_shift = (iy * 4 + ix) * 3;
                     let alpha_bits = if full_shift < 24 { alphabits1 } else { alphabits2 };
                     let shift = full_shift % 24;
                     let index = (alpha_bits >> shift) & 0x07;
@@ -407,11 +415,9 @@ fn decompress_bc3_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataU
                     colorbits >>= 2;
                 }
             }
-            src_offs += 0x10;
         }
     }
-    SurfaceDataUnsigned { 
-        // meta: surface,
+    SurfaceDataUnsigned {
         pixels: dst,
     }
 }
@@ -427,54 +433,63 @@ pub enum BC45DecompressResult {
     SNorm(SurfaceDataSigned),
 }
 
-fn decompress_bc45_surface_unorm(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataUnsigned {
-    const BYTES_PER_PIXEL: usize = 4;
+fn decompress_bc45_surface_unorm_deswizzle(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataUnsigned {
+    let channel_format = if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 };
+    let block_w = get_format_block_width(channel_format);
+    let block_h = get_format_block_height(channel_format);
+    let input_bytes_per_chunk = get_format_bytes_per_block(channel_format);
+    const OUTPUT_BYTES_PER_PIXEL: usize = 4;
+    let input_num_channels = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
-    let src = deswizzle(width, height, if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 }, src, surface.block_height_log2);
-    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
-    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
-    let mut color_table = [0u8; 8];
-    let src_bytes_per_pixel = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
-
-    let mut src_offs = 0;
     let tall = height * depth;
-    for yy in (0..tall).step_by(4) {
-        for xx in (0..width).step_by(4) {
-            for ch in 0..src_bytes_per_pixel {
-                let red1 = src[src_offs];
-                let red2 = src[src_offs + 1];
+    let width_in_blocks = (width + block_w - 1) / block_w;
+    let height_in_blocks = (tall + block_h - 1) / block_h;
+    let mut block_height = 1 << surface.block_height_log2;
+    while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
+        block_height >>= 1;
+    }
+    let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
+    let mut color_table = [0u8; 8];
+    for block_y in 0..height_in_blocks {
+        for block_x in 0..width_in_blocks {
+            let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, input_bytes_per_chunk, block_height, 0);
+            for ch in 0..input_num_channels {
+                let src_offs = src_offs + ch * 8;
+                let chunk = &src[src_offs..(src_offs + 8)];
 
-                color_table[0] = red1;
-                color_table[1] = red2;
+                let red1 = chunk[0] as u16;
+                let red2 = chunk[1] as u16;
+
+                color_table[0] = red1 as u8;
+                color_table[1] = red2 as u8;
                 if red1 > red2 {
-                    color_table[2] = ((6 * (red1 as u16) + 1 * (red2 as u16)) / 7) as u8;
-                    color_table[3] = ((5 * (red1 as u16) + 2 * (red2 as u16)) / 7) as u8;
-                    color_table[4] = ((4 * (red1 as u16) + 3 * (red2 as u16)) / 7) as u8;
-                    color_table[5] = ((3 * (red1 as u16) + 4 * (red2 as u16)) / 7) as u8;
-                    color_table[6] = ((2 * (red1 as u16) + 5 * (red2 as u16)) / 7) as u8;
-                    color_table[7] = ((1 * (red1 as u16) + 6 * (red2 as u16)) / 7) as u8;
+                    color_table[2] = ((6 * red1 + 1 * red2) / 7) as u8;
+                    color_table[3] = ((5 * red1 + 2 * red2) / 7) as u8;
+                    color_table[4] = ((4 * red1 + 3 * red2) / 7) as u8;
+                    color_table[5] = ((3 * red1 + 4 * red2) / 7) as u8;
+                    color_table[6] = ((2 * red1 + 5 * red2) / 7) as u8;
+                    color_table[7] = ((1 * red1 + 6 * red2) / 7) as u8;
                 } else {
-                    color_table[2] = ((4 * (red1 as u16) + 1 * (red2 as u16)) / 5) as u8;
-                    color_table[3] = ((3 * (red1 as u16) + 2 * (red2 as u16)) / 5) as u8;
-                    color_table[4] = ((2 * (red1 as u16) + 3 * (red2 as u16)) / 5) as u8;
-                    color_table[5] = ((1 * (red1 as u16) + 4 * (red2 as u16)) / 5) as u8;
+                    color_table[2] = ((4 * red1 + 1 * red2) / 5) as u8;
+                    color_table[3] = ((3 * red1 + 2 * red2) / 5) as u8;
+                    color_table[4] = ((2 * red1 + 3 * red2) / 5) as u8;
+                    color_table[5] = ((1 * red1 + 4 * red2) / 5) as u8;
                     color_table[6] = 0;
                     color_table[7] = 255;
                 }
-
-                let colorbits1 = LittleEndian::read_u24(&src[(src_offs+2)..(src_offs+5)]);
-                let colorbits2 = LittleEndian::read_u24(&src[(src_offs+5)..(src_offs+8)]);
-                for y in 0..usize::min(4, tall-yy) {
-                    for x in 0..usize::min(4, width-xx) {
-                        let dst_px = (yy + y) * width + xx + x;
-                        let dst_offs = dst_px * BYTES_PER_PIXEL;
-                        let full_shift = (y * 4 + x) * 3;
+                let colorbits1 = (chunk[2] as u32) | (chunk[3] as u32) << 8 | (chunk[4] as u32) << 16;
+                let colorbits2 = (chunk[5] as u32) | (chunk[6] as u32) << 8 | (chunk[7] as u32) << 16;
+                for iy in 0..usize::min(4, tall-block_y*4) {
+                    for ix in 0..usize::min(4, width-block_x*4) {
+                        let dst_px = (block_y * 4 + iy) * width + block_x * 4 + ix;
+                        let dst_offs = dst_px * OUTPUT_BYTES_PER_PIXEL;
+                        let full_shift = (iy * 4 + ix) * 3;
                         let color_bits = if full_shift < 24 { colorbits1 } else { colorbits2 };
                         let shift = full_shift % 24;
                         let index = (color_bits >> shift) & 0x07;
-                        if src_bytes_per_pixel == 1 {
+                        if input_num_channels == 1 {
                             dst[dst_offs + 0] = color_table[index as usize];
                             dst[dst_offs + 1] = color_table[index as usize];
                             dst[dst_offs + 2] = color_table[index as usize];
@@ -490,70 +505,76 @@ fn decompress_bc45_surface_unorm(surface: &SurfaceMetaData, src: &[u8], bctype: 
                         }
                     }
                 }
-
-                src_offs += 0x08;
             }
         }
     }
-    SurfaceDataUnsigned { 
-        // meta: surface,
+    SurfaceDataUnsigned {
         pixels: dst,
     }
 }
 
-fn decompress_bc45_surface_snorm(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataSigned {
-    const BYTES_PER_PIXEL: usize = 4;
+fn decompress_bc45_surface_snorm_deswizzle(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataSigned {
+    let channel_format = if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 };
+    let block_w = get_format_block_width(channel_format);
+    let block_h = get_format_block_height(channel_format);
+    let input_bytes_per_chunk = get_format_bytes_per_block(channel_format);
+    const OUTPUT_BYTES_PER_PIXEL: usize = 4;
+    let input_num_channels = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
-    let src = deswizzle(width, height, if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 }, src, surface.block_height_log2);
-    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
-    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
-    let mut color_table = [0i8; 8];
-    let src_bytes_per_pixel = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
-
-    let mut src_offs = 0;
     let tall = height * depth;
-    for yy in (0..tall).step_by(4) {
-        for xx in (0..width).step_by(4) {
-            for ch in 0..src_bytes_per_pixel {
+    let width_in_blocks = (width + block_w - 1) / block_w;
+    let height_in_blocks = (tall + block_h - 1) / block_h;
+    let mut block_height = 1 << surface.block_height_log2;
+    while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
+        block_height >>= 1;
+    }
+    let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
+    let mut color_table = [0i8; 8];
+    for block_y in 0..height_in_blocks {
+        for block_x in 0..width_in_blocks {
+            let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, input_bytes_per_chunk, block_height, 0);
+            for ch in 0..input_num_channels {
+                let src_offs = src_offs + ch * 8;
+                let chunk = &src[src_offs..(src_offs + 8)];
+
                 let (red1, red2) = unsafe {
                     use std::mem::transmute_copy;
                     (
-                        transmute_copy(&src[src_offs]),
-                        transmute_copy(&src[src_offs+1]),
+                        transmute_copy::<u8, i8>(&chunk[0]) as i16,
+                        transmute_copy::<u8, i8>(&chunk[1]) as i16,
                     )
                 };
 
-                color_table[0] = red1;
-                color_table[1] = red2;
+                color_table[0] = red1 as i8;
+                color_table[1] = red2 as i8;
                 if red1 > red2 {
-                    color_table[2] = ((6 * (red1 as i16) + 1 * (red2 as i16)) / 7) as i8;
-                    color_table[3] = ((5 * (red1 as i16) + 2 * (red2 as i16)) / 7) as i8;
-                    color_table[4] = ((4 * (red1 as i16) + 3 * (red2 as i16)) / 7) as i8;
-                    color_table[5] = ((3 * (red1 as i16) + 4 * (red2 as i16)) / 7) as i8;
-                    color_table[6] = ((2 * (red1 as i16) + 5 * (red2 as i16)) / 7) as i8;
-                    color_table[7] = ((1 * (red1 as i16) + 6 * (red2 as i16)) / 7) as i8;
+                    color_table[2] = ((6 * red1 + 1 * red2) / 7) as i8;
+                    color_table[3] = ((5 * red1 + 2 * red2) / 7) as i8;
+                    color_table[4] = ((4 * red1 + 3 * red2) / 7) as i8;
+                    color_table[5] = ((3 * red1 + 4 * red2) / 7) as i8;
+                    color_table[6] = ((2 * red1 + 5 * red2) / 7) as i8;
+                    color_table[7] = ((1 * red1 + 6 * red2) / 7) as i8;
                 } else {
-                    color_table[2] = ((4 * (red1 as i16) + 1 * (red2 as i16)) / 5) as i8;
-                    color_table[3] = ((3 * (red1 as i16) + 2 * (red2 as i16)) / 5) as i8;
-                    color_table[4] = ((2 * (red1 as i16) + 3 * (red2 as i16)) / 5) as i8;
-                    color_table[5] = ((1 * (red1 as i16) + 4 * (red2 as i16)) / 5) as i8;
+                    color_table[2] = ((4 * red1 + 1 * red2) / 5) as i8;
+                    color_table[3] = ((3 * red1 + 2 * red2) / 5) as i8;
+                    color_table[4] = ((2 * red1 + 3 * red2) / 5) as i8;
+                    color_table[5] = ((1 * red1 + 4 * red2) / 5) as i8;
                     color_table[6] = -128;
                     color_table[7] = 127;
                 }
-
-                let colorbits1 = LittleEndian::read_u24(&src[(src_offs+2)..(src_offs+5)]);
-                let colorbits2 = LittleEndian::read_u24(&src[(src_offs+5)..(src_offs+8)]);
-                for y in 0..usize::min(4, tall-yy) {
-                    for x in 0..usize::min(4, width-xx) {
-                        let dst_px = (yy + y) * width + xx + x;
-                        let dst_offs = dst_px * BYTES_PER_PIXEL;
-                        let full_shift = (y * 4 + x) * 3;
+                let colorbits1 = (chunk[2] as u32) | (chunk[3] as u32) << 8 | (chunk[4] as u32) << 16;
+                let colorbits2 = (chunk[5] as u32) | (chunk[6] as u32) << 8 | (chunk[7] as u32) << 16;
+                for iy in 0..usize::min(4, tall-block_y*4) {
+                    for ix in 0..usize::min(4, width-block_x*4) {
+                        let dst_px = (block_y * 4 + iy) * width + block_x * 4 + ix;
+                        let dst_offs = dst_px * OUTPUT_BYTES_PER_PIXEL;
+                        let full_shift = (iy * 4 + ix) * 3;
                         let color_bits = if full_shift < 24 { colorbits1 } else { colorbits2 };
                         let shift = full_shift % 24;
                         let index = (color_bits >> shift) & 0x07;
-                        if src_bytes_per_pixel == 1 {
+                        if input_num_channels == 1 {
                             dst[dst_offs + 0] = color_table[index as usize];
                             dst[dst_offs + 1] = color_table[index as usize];
                             dst[dst_offs + 2] = color_table[index as usize];
@@ -569,49 +590,13 @@ fn decompress_bc45_surface_snorm(surface: &SurfaceMetaData, src: &[u8], bctype: 
                         }
                     }
                 }
-
-                src_offs += 0x08;
             }
         }
     }
-    SurfaceDataSigned { 
-        // meta: surface,
+    SurfaceDataSigned {
         pixels: dst
     }
 }
-
-// #[wasm_bindgen]
-// pub fn decompress_bcn(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<u8> {
-//     let meta = SurfaceMetaData {
-//         flag,
-//         width,
-//         height,
-//         depth,
-//         block_height_log2: 1,
-//     };
-//     match bcntype {
-//         BCNType::BC1 => decompress_bc1_surface(&meta, src).pixels,
-//         BCNType::BC2 => decompress_bc2_surface(&meta, src).pixels,
-//         BCNType::BC3 => decompress_bc3_surface(&meta, src).pixels,
-//         BCNType::BC4 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC4).pixels,
-//         BCNType::BC5 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC5).pixels,
-//     }
-// }
-
-// #[wasm_bindgen]
-// pub fn decompress_bcn_snorm(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<i8> {
-//     let meta = SurfaceMetaData {
-//         flag,
-//         width,
-//         height,
-//         depth
-//     };
-//     match bcntype {
-//         BCNType::BC4 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC4).pixels,
-//         BCNType::BC5 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC5).pixels,
-//         _ => panic!(),
-//     }
-// }
 
 #[wasm_bindgen]
 pub fn decompress_bcn_deswizzle(
@@ -631,11 +616,11 @@ pub fn decompress_bcn_deswizzle(
         block_height_log2,
     };
     match bcntype {
-        BCNType::BC1 => decompress_bc1_surface(&meta, src).pixels,
-        BCNType::BC2 => decompress_bc2_surface(&meta, src).pixels,
-        BCNType::BC3 => decompress_bc3_surface(&meta, src).pixels,
-        BCNType::BC4 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC4).pixels,
-        BCNType::BC5 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC5).pixels,
+        BCNType::BC1 => decompress_bc1_surface_deswizzle(&meta, src).pixels,
+        BCNType::BC2 => decompress_bc2_surface_deswizzle(&meta, src).pixels,
+        BCNType::BC3 => decompress_bc3_surface_deswizzle(&meta, src).pixels,
+        BCNType::BC4 => decompress_bc45_surface_unorm_deswizzle(&meta, src, BC45DecompressType::BC4).pixels,
+        BCNType::BC5 => decompress_bc45_surface_unorm_deswizzle(&meta, src, BC45DecompressType::BC5).pixels,
     }
 }
 
@@ -657,8 +642,8 @@ pub fn decompress_bcn_snorm_deswizzle(
         block_height_log2,
     };
     match bcntype {
-        BCNType::BC4 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC4).pixels,
-        BCNType::BC5 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC5).pixels,
+        BCNType::BC4 => decompress_bc45_surface_snorm_deswizzle(&meta, src, BC45DecompressType::BC4).pixels,
+        BCNType::BC5 => decompress_bc45_surface_snorm_deswizzle(&meta, src, BC45DecompressType::BC5).pixels,
         _ => panic!(),
     }
 }
