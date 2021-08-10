@@ -1,16 +1,6 @@
-
 use wasm_bindgen::prelude::*;
-
 use std::convert::TryInto;
-
-// http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
-fn expand_n_to_8(v: u8, n: u8) -> u8 {
-    match v {
-        3 => (n << (8 - 3)) | (n << (8 - 6)) | (n >> (9 - 8)),
-        v if (v >= 4) => (n << (8 - v)) | (n >> ((v*2) - 8)),
-        _ => unreachable!(),
-    }
-}
+use crate::util;
 
 fn get_u16_be(src: &[u8], i: usize) -> u16 {
     u16::from_be_bytes(src[i..i+2].try_into().unwrap())
@@ -34,23 +24,23 @@ fn halfblend(a_: u8, b_: u8) -> u8 {
 fn decode_rgb5a3_to_rgba8(dst: &mut[u8], p: u16) {
     if (p & 0x8000) != 0 {
         // RGB5
-        dst[0] = expand_n_to_8(5, ((p >> 10) & 0x1F) as u8);
-        dst[1] = expand_n_to_8(5, ((p >>  5) & 0x1F) as u8);
-        dst[2] = expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
+        dst[0] = util::expand5to8(((p >> 10) & 0x1F) as u8);
+        dst[1] = util::expand5to8(((p >>  5) & 0x1F) as u8);
+        dst[2] = util::expand5to8(((p >>  0) & 0x1F) as u8);
         dst[3] = 0xFF;
     } else {
         // A3RGB4
-        dst[0] = expand_n_to_8(4, ((p >>  8) & 0x0F) as u8);
-        dst[1] = expand_n_to_8(4, ((p >>  4) & 0x0F) as u8);
-        dst[2] = expand_n_to_8(4, ((p >>  0) & 0x0F) as u8);
-        dst[3] = expand_n_to_8(3, ((p >> 12) & 0x07) as u8);
+        dst[0] = util::expand4to8(((p >>  8) & 0x0F) as u8);
+        dst[1] = util::expand4to8(((p >>  4) & 0x0F) as u8);
+        dst[2] = util::expand4to8(((p >>  0) & 0x0F) as u8);
+        dst[3] = util::expand4to8(((p >> 12) & 0x07) as u8);
     }
 }
 
 fn decode_rgb565_to_rgba8(dst: &mut[u8], p: u16) {
-    dst[0] = expand_n_to_8(5, ((p >> 11) & 0x1F) as u8);
-    dst[1] = expand_n_to_8(6, ((p >>  5) & 0x3F) as u8);
-    dst[2] = expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
+    dst[0] = util::expand5to8(((p >> 11) & 0x1F) as u8);
+    dst[1] = util::expand6to8(((p >>  5) & 0x3F) as u8);
+    dst[2] = util::expand5to8(((p >>  0) & 0x1F) as u8);
     dst[3] = 0xFF;
 }
 
@@ -89,7 +79,7 @@ impl TiledDecoder for TiledDecoderI4 {
     fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
         let ii = src[idx >> 1];
         let i4 = ii >> (if (idx & 1) != 0 { 0 } else { 4 }) & 0x0F;
-        let i = expand_n_to_8(4, i4);
+        let i = util::expand4to8(i4);
         dst[0] = i;
         dst[1] = i;
         dst[2] = i;
@@ -118,8 +108,8 @@ struct TiledDecoderIA4 {}
 impl TiledDecoder for TiledDecoderIA4 {
     fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
         let ia = src[idx];
-        let a = expand_n_to_8(4, ia >> 4);
-        let i = expand_n_to_8(4, ia & 0x0F);
+        let a = util::expand4to8(ia >> 4);
+        let i = util::expand4to8(ia & 0x0F);
         dst[0] = i;
         dst[1] = i;
         dst[2] = i;
@@ -230,14 +220,14 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
                     // Fill in first two colors in color table.
                     let mut color_table = [0x00; 16];
 
-                    color_table[0] = expand_n_to_8(5, ((color1 >> 11) & 0x1F) as u8);
-                    color_table[1] = expand_n_to_8(6, ((color1 >> 5) & 0x3F) as u8);
-                    color_table[2] = expand_n_to_8(5, (color1 & 0x1F) as u8);
+                    color_table[0] = util::expand5to8(((color1 >> 11) & 0x1F) as u8);
+                    color_table[1] = util::expand6to8(((color1 >> 5) & 0x3F) as u8);
+                    color_table[2] = util::expand5to8((color1 & 0x1F) as u8);
                     color_table[3] = 0xFF;
 
-                    color_table[4] = expand_n_to_8(5, ((color2 >> 11) & 0x1F) as u8);
-                    color_table[5] = expand_n_to_8(6, ((color2 >> 5) & 0x3F) as u8);
-                    color_table[6] = expand_n_to_8(5, (color2 & 0x1F) as u8);
+                    color_table[4] = util::expand5to8(((color2 >> 11) & 0x1F) as u8);
+                    color_table[5] = util::expand6to8(((color2 >> 5) & 0x3F) as u8);
+                    color_table[6] = util::expand5to8((color2 & 0x1F) as u8);
                     color_table[7] = 0xFF;
 
                     if color1 > color2 {
