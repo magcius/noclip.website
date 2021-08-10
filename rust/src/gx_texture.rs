@@ -1,25 +1,5 @@
 use wasm_bindgen::prelude::*;
-use std::convert::TryInto;
 use crate::util;
-
-fn get_u16_be(src: &[u8], i: usize) -> u16 {
-    u16::from_be_bytes(src[i..i+2].try_into().unwrap())
-}
-
-fn s3tcblend(a_: u8, b_: u8) -> u8 {
-    // return (a*3 + b*5) / 8;
-    let a = a_ as u32;
-    let b = b_ as u32;
-    let tmp = (((a << 1) + a) + ((b << 2) + b)) >> 3;
-    return tmp as u8;
-}
-
-fn halfblend(a_: u8, b_: u8) -> u8 {
-    let a = a_ as u32;
-    let b = b_ as u32;
-    let tmp = (a + b) >> 1;
-    return tmp as u8;
-}
 
 fn decode_rgb5a3_to_rgba8(dst: &mut[u8], p: u16) {
     if (p & 0x8000) != 0 {
@@ -138,7 +118,7 @@ impl TiledDecoder for TiledDecoderIA8 {
 struct TiledDecoderRGB565 {}
 impl TiledDecoder for TiledDecoderRGB565 {
     fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
-        let p = get_u16_be(src, idx * 2);
+        let p = util::get_uint16_be(src, idx * 2);
         decode_rgb565_to_rgba8(dst, p);
     }
 
@@ -149,7 +129,7 @@ impl TiledDecoder for TiledDecoderRGB565 {
 struct TiledDecoderRGB5A3 {}
 impl TiledDecoder for TiledDecoderRGB5A3 {
     fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
-        let p = get_u16_be(src, idx * 2);
+        let p = util::get_uint16_be(src, idx * 2);
         decode_rgb5a3_to_rgba8(dst, p);
     }
 
@@ -214,8 +194,8 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
                     src_offs += 0x08;
 
                     // CMPR difference: Big-endian color1/2
-                    let color1 = get_u16_be(src, src_offs_idx + 0x00);
-                    let color2 = get_u16_be(src, src_offs_idx + 0x02);
+                    let color1 = util::get_uint16_be(src, src_offs_idx + 0x00);
+                    let color2 = util::get_uint16_be(src, src_offs_idx + 0x02);
 
                     // Fill in first two colors in color table.
                     let mut color_table = [0x00; 16];
@@ -232,19 +212,19 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
 
                     if color1 > color2 {
                         // Predict gradients.
-                        color_table[8]  = s3tcblend(color_table[4], color_table[0]);
-                        color_table[9]  = s3tcblend(color_table[5], color_table[1]);
-                        color_table[10] = s3tcblend(color_table[6], color_table[2]);
+                        color_table[8]  = util::s3tcblend(color_table[4], color_table[0]);
+                        color_table[9]  = util::s3tcblend(color_table[5], color_table[1]);
+                        color_table[10] = util::s3tcblend(color_table[6], color_table[2]);
                         color_table[11] = 0xFF;
 
-                        color_table[12] = s3tcblend(color_table[0], color_table[4]);
-                        color_table[13] = s3tcblend(color_table[1], color_table[5]);
-                        color_table[14] = s3tcblend(color_table[2], color_table[6]);
+                        color_table[12] = util::s3tcblend(color_table[0], color_table[4]);
+                        color_table[13] = util::s3tcblend(color_table[1], color_table[5]);
+                        color_table[14] = util::s3tcblend(color_table[2], color_table[6]);
                         color_table[15] = 0xFF;
                     } else {
-                        color_table[8] =  halfblend(color_table[0], color_table[4]);
-                        color_table[9] =  halfblend(color_table[1], color_table[5]);
-                        color_table[10] = halfblend(color_table[2], color_table[6]);
+                        color_table[8] =  util::halfblend(color_table[0], color_table[4]);
+                        color_table[9] =  util::halfblend(color_table[1], color_table[5]);
+                        color_table[10] = util::halfblend(color_table[2], color_table[6]);
                         color_table[11] = 0xFF;
 
                         // CMPR difference: GX fills with an alpha 0 midway point here.
@@ -317,14 +297,14 @@ fn decode_palette(palette_fmt: PaletteFormat, palette_src: &[u8]) -> Vec<u8> {
 
         PaletteFormat::RGB565 => {
             for i in 0..palette_count {
-                let p = get_u16_be(palette_src, i * 2);
+                let p = util::get_uint16_be(palette_src, i * 2);
                 decode_rgb565_to_rgba8(&mut dst[i*4+0 .. i*4+4], p);
             }
         },
 
         PaletteFormat::RGB5A3 => {
             for i in 0..palette_count {
-                let p = get_u16_be(palette_src, i * 2);
+                let p = util::get_uint16_be(palette_src, i * 2);
                 decode_rgb5a3_to_rgba8(&mut dst[i*4+0 .. i*4+4], p);
             }
         },
@@ -374,7 +354,7 @@ struct TiledDecoderC14X2<'a> {
 
 impl TiledDecoder for TiledDecoderC14X2<'_> {
     fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
-        let idx = (get_u16_be(src, idx * 2) as usize) & 0x3FFF;
+        let idx = (util::get_uint16_be(src, idx * 2) as usize) & 0x3FFF;
         dst[0] = self.palette[idx * 4 + 0];
         dst[1] = self.palette[idx * 4 + 1];
         dst[2] = self.palette[idx * 4 + 2];

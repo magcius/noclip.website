@@ -32,11 +32,18 @@ pub fn expand6to8(n: u8) -> u8 {
     (n << (8 - 6)) | (n >> (12 - 8))
 }
 
+pub fn halfblend(a: u8, b: u8) -> u8 {
+    let a = a as u32;
+    let b = b as u32;
+    let ret = (a + b) >> 1;
+    ret as u8
+}
+
 // Use the fast GX approximation.
 pub fn s3tcblend(a: u8, b: u8) -> u8 {
     // return (a*3 + b*5) / 8;
-    let a = a as u16;
-    let b = b as u16;
+    let a = a as u32;
+    let b = b as u32;
     let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
     ret as u8
 }
@@ -64,15 +71,45 @@ pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
 
 #[cfg(target_endian="big")]
 pub fn get_uint16_le(src: &[u8], offs: usize) -> u16 {
-    src[offs] | (src[offs+1] << 8)
+    (src[offs] as u16) | ((src[offs+1] as u16) << 8)
 }
 
 #[cfg(target_endian="big")]
 pub fn get_uint24_le(src: &[u8], offs: usize) -> u32 {
-    src[offs] | (src[offs+1] << 8) | (src[offs+1] << 16)
+    (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+1] as u32) << 16)
 }
 
 #[cfg(target_endian="big")]
 pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
-    src[offs] | (src[offs+1] << 8) | (src[offs+1] << 16) | (src[offs+1] << 24)
+    (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 24)
+}
+
+#[cfg(target_endian="big")]
+pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
+    unsafe { *mem::transmute::<&u8, &u16>(&src[offs]) }
+}
+
+#[cfg(target_endian="big")]
+pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
+    unsafe { *mem::transmute::<&u8, &u32>(&src[offs]) & 0x00FFFFFF }
+}
+
+#[cfg(target_endian="big")]
+pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
+    unsafe { *mem::transmute::<&u8, &u32>(&src[offs]) }
+}
+
+#[cfg(target_endian="little")]
+pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
+    ((src[offs] as u16) << 8) | (src[offs+1] as u16)
+}
+
+#[cfg(target_endian="little")]
+pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
+    ((src[offs] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
+}
+
+#[cfg(target_endian="little")]
+pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
+    ((src[offs] as u32) << 24) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
 }
