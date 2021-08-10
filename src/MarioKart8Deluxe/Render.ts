@@ -63,13 +63,14 @@ function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfac
             ...info,
             flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
             type: 'RGBA',
-            pixels: wasm.decompress_bcn(
+            pixels: wasm.decompress_bcn_deswizzle(
                 wasm.BCNType.BC1,
                 typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
                 width,
                 height,
                 depth,
-                pixels
+                pixels,
+                textureEntry.blockHeightLog2
             )
         };
     case ChannelFormat.Bc3:
@@ -78,13 +79,14 @@ function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfac
             ...info,
             flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
             type: 'RGBA',
-            pixels: wasm.decompress_bcn(
+            pixels: wasm.decompress_bcn_deswizzle(
                 wasm.BCNType.BC3,
                 typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
                 width,
                 height,
                 depth,
-                pixels
+                pixels,
+                textureEntry.blockHeightLog2
             )
         };
     case ChannelFormat.Bc4:
@@ -94,13 +96,14 @@ function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfac
                 ...info,
                 flag: 'UNORM',
                 type: 'RGBA',
-                pixels: wasm.decompress_bcn(
+                pixels: wasm.decompress_bcn_deswizzle(
                     wasm.BCNType.BC4,
                     wasm.SurfaceFlag.UNorm,
                     width,
                     height,
                     depth,
-                    pixels
+                    pixels,
+                    textureEntry.blockHeightLog2
                 ),
             };
         }
@@ -109,13 +112,14 @@ function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfac
                 ...info,
                 flag: 'SNORM',
                 type: 'RGBA',
-                pixels: wasm.decompress_bcn_snorm(
+                pixels: wasm.decompress_bcn_snorm_deswizzle(
                     wasm.BCNType.BC4,
                     wasm.SurfaceFlag.SNorm,
                     width,
                     height,
                     depth,
-                    pixels
+                    pixels,
+                    textureEntry.blockHeightLog2
                 ),
             };
         }
@@ -126,13 +130,14 @@ function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfac
                 ...info,
                 flag: 'UNORM',
                 type: 'RGBA',
-                pixels: wasm.decompress_bcn(
+                pixels: wasm.decompress_bcn_deswizzle(
                     wasm.BCNType.BC5,
                     wasm.SurfaceFlag.UNorm,
                     width,
                     height,
                     depth,
-                    pixels
+                    pixels,
+                    textureEntry.blockHeightLog2
                 ),
             };
         }
@@ -141,13 +146,14 @@ function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfac
                 ...info,
                 flag: 'SNORM',
                 type: 'RGBA',
-                pixels: wasm.decompress_bcn_snorm(
+                pixels: wasm.decompress_bcn_snorm_deswizzle(
                     wasm.BCNType.BC5,
                     wasm.SurfaceFlag.SNorm,
                     width,
                     height,
                     depth,
-                    pixels
+                    pixels,
+                    textureEntry.blockHeightLog2
                 ),
             };
         }
@@ -194,11 +200,8 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const blockHeightLog2 = textureEntry.blockHeightLog2;
-            // const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
-            const src = buffer.createTypedArray(Uint8Array, 0, buffer.byteLength, Endianness.BIG_ENDIAN);
-            const deswizzled = wasm.deswizzle(width, height, channelFormat, src, blockHeightLog2);
-            const rgbaTexture = decompress2({ ...textureEntry, width, height, depth }, deswizzled);
+            const src = new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength);
+            const rgbaTexture = decompress2({ ...textureEntry, width, height, depth }, src);
             const rgbaPixels = rgbaTexture.pixels;
             device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
 

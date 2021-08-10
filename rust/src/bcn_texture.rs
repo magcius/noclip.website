@@ -1,5 +1,6 @@
 use wasm_bindgen::prelude::*;
 use byteorder::{LittleEndian, ByteOrder};
+use crate::util;
 
 const GOB_SIZE_X: usize = 64;
 const GOB_SIZE_Y: usize = 8;
@@ -69,7 +70,7 @@ pub enum ChannelFormat {
     B5G5R5A1,
 }
 
-fn get_format_block_width(channel_format: ChannelFormat) -> usize {
+const fn get_format_block_width(channel_format: ChannelFormat) -> usize {
     use ChannelFormat::*;
     match channel_format {
         Bc1 | Bc2 | Bc3 | Bc4 | Bc5 | Bc6 | Bc7| Astc4x4 => 4,
@@ -82,7 +83,7 @@ fn get_format_block_width(channel_format: ChannelFormat) -> usize {
     }
 }
 
-fn get_format_block_height(channel_format: ChannelFormat) -> usize {
+const fn get_format_block_height(channel_format: ChannelFormat) -> usize {
     use ChannelFormat::*;
     match channel_format {
         Bc1 | Bc2 | Bc3 | Bc4 | Bc5 | Bc6 | Bc7 | Astc4x4 | Astc5x4 => 4,
@@ -95,13 +96,13 @@ fn get_format_block_height(channel_format: ChannelFormat) -> usize {
     }
 }
 
-fn get_format_bytes_per_pixel(channel_format: ChannelFormat) -> usize {
+const fn get_format_bytes_per_pixel(channel_format: ChannelFormat) -> usize {
     use ChannelFormat::*;
     match channel_format {
         Bc1 | Bc4 => 8,
         Bc2 | Bc3 | Bc5 => 16,
         R8G8B8A8 | B8G8R8A8 => 4,
-        _ => panic!("whoops"),
+        _ => 1,
     }
 }
 
@@ -233,6 +234,7 @@ pub struct SurfaceMetaData {
     width: usize,
     height: usize,
     depth: usize,
+    block_height_log2: usize,
 }
 
 pub struct SurfaceDataUnsigned {
@@ -256,25 +258,34 @@ pub enum BCNType {
 }
 
 // Software decompresses from standard BC1 (DXT1) to RGBA.
-fn decompress_bc1_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
-    const BYTES_PER_PIXEL: usize = 4;
+fn decompress_bc1_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+    const BLOCK_W: usize = get_format_block_width(ChannelFormat::Bc1);
+    const BLOCK_H: usize = get_format_block_height(ChannelFormat::Bc1);
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
     let tall = height * depth;
-    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let width_in_blocks = (width + BLOCK_W - 1) / BLOCK_W;
+    let height_in_blocks = (tall + BLOCK_H - 1) / BLOCK_H;
+    let mut block_height = 1 << surface.block_height_log2;
+    while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
+        block_height >>= 1;
+    }
+    const INPUT_BYTES_PER_CHUNK: usize = 8;
+    const OUTPUT_BYTES_PER_PIXEL: usize = 4;
+    let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
     let mut color_table = [0u8; 16];
-
-    let mut src_offs = 0;
-    for yy in (0..tall).step_by(4) {
-        for xx in (0..width).step_by(4) {
-            let color1 = LittleEndian::read_u16(&src[src_offs..(src_offs+2)]);
-            let color2 = LittleEndian::read_u16(&src[(src_offs+2)..(src_offs+4)]);
+    for block_y in 0..height_in_blocks {
+        for block_x in 0..width_in_blocks {
+            let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
+            let chunk = &src[src_offs..(src_offs + INPUT_BYTES_PER_CHUNK)];
+            let color1 = (chunk[0] as u16) | (chunk[1] as u16) << 8;
+            let color2 = (chunk[2] as u16) | (chunk[3] as u16) << 8;
             color_table_bc1(&mut color_table, color1, color2);
-            let mut colorbits = LittleEndian::read_u32(&src[(src_offs+4)..(src_offs+8)]);
-            for y in 0..usize::min(4, tall-yy) {
-                for x in 0..usize::min(4, width-xx) {
-                    let dst_px = (yy + y) * width + xx + x;
+            let mut colorbits = (chunk[4] as u32) | (chunk[5] as u32) << 8 | (chunk[6] as u32) << 16 | (chunk[7] as u32) << 24;
+            for iy in 0..usize::min(4, tall-block_y*4) {
+                for ix in 0..usize::min(4, width-block_x*4) {
+                    let dst_px = (block_y*4 + iy) * width + block_x*4 + ix;
                     let dst_offs = dst_px * 4;
                     let color_idx = colorbits as usize & 0x03;
                     dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
@@ -284,7 +295,6 @@ fn decompress_bc1_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUn
                     colorbits >>= 2;
                 }
             }
-            src_offs += 0x08;
         }
     }
     SurfaceDataUnsigned { 
@@ -294,13 +304,15 @@ fn decompress_bc1_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUn
 }
 
 // Software decompresses from standard BC2 (DXT3) to RGBA.
-fn decompress_bc2_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+fn decompress_bc2_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
     const BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
     let tall = height * depth;
-    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let src = deswizzle(width, height, ChannelFormat::Bc2, src, surface.block_height_log2);
+    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
+    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
     let mut color_table = [0u8; 16];
 
     let mut src_offs = 0;
@@ -338,13 +350,15 @@ fn decompress_bc2_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUn
 }
 
 // Software decompresses from standard BC3 (DXT5) to RGBA.
-fn decompress_bc3_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+fn decompress_bc3_surface(surface: &SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
     const BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
     let tall = height * depth;
-    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let src = deswizzle(width, height, ChannelFormat::Bc3, src, surface.block_height_log2);
+    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
+    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
     let mut color_table = [0u8; 16];
     let mut alpha_table = [0u8; 8];
 
@@ -413,12 +427,14 @@ pub enum BC45DecompressResult {
     SNorm(SurfaceDataSigned),
 }
 
-fn decompress_bc45_surface_unorm(surface: SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataUnsigned {
+fn decompress_bc45_surface_unorm(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataUnsigned {
     const BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
-    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let src = deswizzle(width, height, if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 }, src, surface.block_height_log2);
+    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
+    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
     let mut color_table = [0u8; 8];
     let src_bytes_per_pixel = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
 
@@ -485,12 +501,14 @@ fn decompress_bc45_surface_unorm(surface: SurfaceMetaData, src: &[u8], bctype: B
     }
 }
 
-fn decompress_bc45_surface_snorm(surface: SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataSigned {
+fn decompress_bc45_surface_snorm(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataSigned {
     const BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
     let depth = surface.depth;
-    let mut dst = vec![0i8; width * height * depth * BYTES_PER_PIXEL];
+    let src = deswizzle(width, height, if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 }, src, surface.block_height_log2);
+    let mut dst = Vec::with_capacity(width * height * depth * BYTES_PER_PIXEL);
+    unsafe { dst.set_len(width * height * depth * BYTES_PER_PIXEL); }
     let mut color_table = [0i8; 8];
     let src_bytes_per_pixel = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
 
@@ -510,17 +528,17 @@ fn decompress_bc45_surface_snorm(surface: SurfaceMetaData, src: &[u8], bctype: B
                 color_table[0] = red1;
                 color_table[1] = red2;
                 if red1 > red2 {
-                    color_table[2] = ((6 * (red1 as u16) + 1 * (red2 as u16)) / 7) as i8;
-                    color_table[3] = ((5 * (red1 as u16) + 2 * (red2 as u16)) / 7) as i8;
-                    color_table[4] = ((4 * (red1 as u16) + 3 * (red2 as u16)) / 7) as i8;
-                    color_table[5] = ((3 * (red1 as u16) + 4 * (red2 as u16)) / 7) as i8;
-                    color_table[6] = ((2 * (red1 as u16) + 5 * (red2 as u16)) / 7) as i8;
-                    color_table[7] = ((1 * (red1 as u16) + 6 * (red2 as u16)) / 7) as i8;
+                    color_table[2] = ((6 * (red1 as i16) + 1 * (red2 as i16)) / 7) as i8;
+                    color_table[3] = ((5 * (red1 as i16) + 2 * (red2 as i16)) / 7) as i8;
+                    color_table[4] = ((4 * (red1 as i16) + 3 * (red2 as i16)) / 7) as i8;
+                    color_table[5] = ((3 * (red1 as i16) + 4 * (red2 as i16)) / 7) as i8;
+                    color_table[6] = ((2 * (red1 as i16) + 5 * (red2 as i16)) / 7) as i8;
+                    color_table[7] = ((1 * (red1 as i16) + 6 * (red2 as i16)) / 7) as i8;
                 } else {
-                    color_table[2] = ((4 * (red1 as u16) + 1 * (red2 as u16)) / 5) as i8;
-                    color_table[3] = ((3 * (red1 as u16) + 2 * (red2 as u16)) / 5) as i8;
-                    color_table[4] = ((2 * (red1 as u16) + 3 * (red2 as u16)) / 5) as i8;
-                    color_table[5] = ((1 * (red1 as u16) + 4 * (red2 as u16)) / 5) as i8;
+                    color_table[2] = ((4 * (red1 as i16) + 1 * (red2 as i16)) / 5) as i8;
+                    color_table[3] = ((3 * (red1 as i16) + 2 * (red2 as i16)) / 5) as i8;
+                    color_table[4] = ((2 * (red1 as i16) + 3 * (red2 as i16)) / 5) as i8;
+                    color_table[5] = ((1 * (red1 as i16) + 4 * (red2 as i16)) / 5) as i8;
                     color_table[6] = -128;
                     color_table[7] = 127;
                 }
@@ -562,34 +580,85 @@ fn decompress_bc45_surface_snorm(surface: SurfaceMetaData, src: &[u8], bctype: B
     }
 }
 
+// #[wasm_bindgen]
+// pub fn decompress_bcn(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<u8> {
+//     let meta = SurfaceMetaData {
+//         flag,
+//         width,
+//         height,
+//         depth,
+//         block_height_log2: 1,
+//     };
+//     match bcntype {
+//         BCNType::BC1 => decompress_bc1_surface(&meta, src).pixels,
+//         BCNType::BC2 => decompress_bc2_surface(&meta, src).pixels,
+//         BCNType::BC3 => decompress_bc3_surface(&meta, src).pixels,
+//         BCNType::BC4 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC4).pixels,
+//         BCNType::BC5 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC5).pixels,
+//     }
+// }
+
+// #[wasm_bindgen]
+// pub fn decompress_bcn_snorm(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<i8> {
+//     let meta = SurfaceMetaData {
+//         flag,
+//         width,
+//         height,
+//         depth
+//     };
+//     match bcntype {
+//         BCNType::BC4 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC4).pixels,
+//         BCNType::BC5 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC5).pixels,
+//         _ => panic!(),
+//     }
+// }
+
 #[wasm_bindgen]
-pub fn decompress_bcn(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<u8> {
+pub fn decompress_bcn_deswizzle(
+    bcntype: BCNType,
+    flag: SurfaceFlag,
+    width: usize,
+    height: usize,
+    depth: usize,
+    src: &[u8],
+    block_height_log2: usize,
+) -> Vec<u8> {
     let meta = SurfaceMetaData {
         flag,
         width,
         height,
-        depth
+        depth,
+        block_height_log2,
     };
     match bcntype {
-        BCNType::BC1 => decompress_bc1_surface(meta, src).pixels,
-        BCNType::BC2 => decompress_bc2_surface(meta, src).pixels,
-        BCNType::BC3 => decompress_bc3_surface(meta, src).pixels,
-        BCNType::BC4 => decompress_bc45_surface_unorm(meta.clone(), src, BC45DecompressType::BC4).pixels,
-        BCNType::BC5 => decompress_bc45_surface_unorm(meta.clone(), src, BC45DecompressType::BC5).pixels,
+        BCNType::BC1 => decompress_bc1_surface(&meta, src).pixels,
+        BCNType::BC2 => decompress_bc2_surface(&meta, src).pixels,
+        BCNType::BC3 => decompress_bc3_surface(&meta, src).pixels,
+        BCNType::BC4 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC4).pixels,
+        BCNType::BC5 => decompress_bc45_surface_unorm(&meta, src, BC45DecompressType::BC5).pixels,
     }
 }
 
 #[wasm_bindgen]
-pub fn decompress_bcn_snorm(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<i8> {
+pub fn decompress_bcn_snorm_deswizzle(
+    bcntype: BCNType,
+    flag: SurfaceFlag,
+    width: usize,
+    height: usize,
+    depth: usize,
+    src: &[u8],
+    block_height_log2: usize,
+) -> Vec<i8> {
     let meta = SurfaceMetaData {
         flag,
         width,
         height,
-        depth
+        depth,
+        block_height_log2,
     };
     match bcntype {
-        BCNType::BC4 => decompress_bc45_surface_snorm(meta.clone(), src, BC45DecompressType::BC4).pixels,
-        BCNType::BC5 => decompress_bc45_surface_snorm(meta.clone(), src, BC45DecompressType::BC5).pixels,
+        BCNType::BC4 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC4).pixels,
+        BCNType::BC5 => decompress_bc45_surface_snorm(&meta, src, BC45DecompressType::BC5).pixels,
         _ => panic!(),
     }
 }
