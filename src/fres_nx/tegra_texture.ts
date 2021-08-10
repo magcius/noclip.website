@@ -269,3 +269,80 @@ export function translateImageFormat(imageFormat: ImageFormat): GfxFormat {
         throw "whoops";
     }
 }
+
+export async function decompress_bcn_deswizzle(textureEntry: BRTI, pixels: Uint8Array): Promise<DecodedSurfaceSW> {
+    let wasm = await import("../../rust/pkg/index");
+    const width = textureEntry.width;
+    const height = textureEntry.height;
+    const depth = textureEntry.depth;
+    const channelFormat = getChannelFormat(textureEntry.imageFormat);
+    const typeFormat = getTypeFormat(textureEntry.imageFormat);
+    const info = {
+        width,
+        height,
+        depth,
+    }
+    switch (channelFormat) {
+    case ChannelFormat.Bc1:
+    case ChannelFormat.Bc2:
+    case ChannelFormat.Bc3:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+
+        return {
+            ...info,
+            flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
+            type: 'RGBA',
+            pixels: wasm.decompress_bcn_deswizzle(
+                channelFormat === ChannelFormat.Bc1 ? wasm.BCNType.BC1 :
+                channelFormat === ChannelFormat.Bc2 ? wasm.BCNType.BC2 : wasm.BCNType.BC3,
+                typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
+                width,
+                height,
+                depth,
+                pixels,
+                textureEntry.blockHeightLog2
+            )
+        };
+    case ChannelFormat.Bc4:
+    case ChannelFormat.Bc5:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
+        if (typeFormat === TypeFormat.Unorm) {
+            return {
+                ...info,
+                flag: 'UNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_bcn_deswizzle(
+                    channelFormat === ChannelFormat.Bc4 ? wasm.BCNType.BC4 : wasm.BCNType.BC5,
+                    wasm.SurfaceFlag.UNorm,
+                    width,
+                    height,
+                    depth,
+                    pixels,
+                    textureEntry.blockHeightLog2
+                ),
+            };
+        }
+        else {
+            return {
+                ...info,
+                flag: 'SNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_bcn_snorm_deswizzle(
+                    channelFormat === ChannelFormat.Bc4 ? wasm.BCNType.BC4 : wasm.BCNType.BC5,
+                    wasm.SurfaceFlag.SNorm,
+                    width,
+                    height,
+                    depth,
+                    pixels,
+                    textureEntry.blockHeightLog2
+                ),
+            };
+        }
+    case ChannelFormat.R8_G8_B8_A8:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+        return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
+    default:
+        console.error(channelFormat.toString(16));
+        throw "whoops";
+    }
+}

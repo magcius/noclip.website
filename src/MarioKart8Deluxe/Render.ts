@@ -5,8 +5,8 @@ import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from '../fres_nx/bntx';
-import { DecodedSurfaceSW, surfaceToCanvas } from '../Common/bc_texture';
-import { translateImageFormat, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
+import { surfaceToCanvas } from '../Common/bc_texture';
+import { translateImageFormat, getImageFormatString, decompress_bcn_deswizzle } from '../fres_nx/tegra_texture';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2 } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat, TypeFormat, ChannelFormat } from '../fres_nx/nngfx_enum';
@@ -14,7 +14,7 @@ import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from 'gl-matrix';
-import { computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { DeviceProgram } from '../Program';
@@ -31,140 +31,6 @@ import * as AGLLightMap from './AGLParameter_LightMap';
 import * as AGLEnv from './AGLParameter_Env';
 import { colorNewCopy, colorScale, OpaqueBlack, White } from '../Color';
 import { IS_DEVELOPMENT } from '../BuildVersion';
-import { Endianness } from '../endian';
-
-let wasm: undefined | typeof import("../../rust/pkg/index");
-
-import("../../rust/pkg/index").then(x => {
-    console.log("Loaded WASM");
-    wasm = x;
-})
-
-
-function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfaceSW {
-    if (wasm === undefined) {
-        throw new Error("");
-    }
-    const width = textureEntry.width;
-    const height = textureEntry.height;
-    const depth = textureEntry.depth;
-    const channelFormat = getChannelFormat(textureEntry.imageFormat);
-    const typeFormat = getTypeFormat(textureEntry.imageFormat);
-    // console.log(textureEntry, channelFormat, typeFormat);
-    const info = {
-        width,
-        height,
-        depth,
-    }
-    switch (channelFormat) {
-    case ChannelFormat.Bc1:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
-        return {
-            ...info,
-            flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
-            type: 'RGBA',
-            pixels: wasm.decompress_bcn_deswizzle(
-                wasm.BCNType.BC1,
-                typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
-                width,
-                height,
-                depth,
-                pixels,
-                textureEntry.blockHeightLog2
-            )
-        };
-    case ChannelFormat.Bc3:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
-        return {
-            ...info,
-            flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
-            type: 'RGBA',
-            pixels: wasm.decompress_bcn_deswizzle(
-                wasm.BCNType.BC3,
-                typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
-                width,
-                height,
-                depth,
-                pixels,
-                textureEntry.blockHeightLog2
-            )
-        };
-    case ChannelFormat.Bc4:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
-        if (typeFormat === TypeFormat.Unorm) {
-            return {
-                ...info,
-                flag: 'UNORM',
-                type: 'RGBA',
-                pixels: wasm.decompress_bcn_deswizzle(
-                    wasm.BCNType.BC4,
-                    wasm.SurfaceFlag.UNorm,
-                    width,
-                    height,
-                    depth,
-                    pixels,
-                    textureEntry.blockHeightLog2
-                ),
-            };
-        }
-        else {
-            return {
-                ...info,
-                flag: 'SNORM',
-                type: 'RGBA',
-                pixels: wasm.decompress_bcn_snorm_deswizzle(
-                    wasm.BCNType.BC4,
-                    wasm.SurfaceFlag.SNorm,
-                    width,
-                    height,
-                    depth,
-                    pixels,
-                    textureEntry.blockHeightLog2
-                ),
-            };
-        }
-    case ChannelFormat.Bc5:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
-        if (typeFormat === TypeFormat.Unorm) {
-            return {
-                ...info,
-                flag: 'UNORM',
-                type: 'RGBA',
-                pixels: wasm.decompress_bcn_deswizzle(
-                    wasm.BCNType.BC5,
-                    wasm.SurfaceFlag.UNorm,
-                    width,
-                    height,
-                    depth,
-                    pixels,
-                    textureEntry.blockHeightLog2
-                ),
-            };
-        }
-        else {
-            return {
-                ...info,
-                flag: 'SNORM',
-                type: 'RGBA',
-                pixels: wasm.decompress_bcn_snorm_deswizzle(
-                    wasm.BCNType.BC5,
-                    wasm.SurfaceFlag.SNorm,
-                    width,
-                    height,
-                    depth,
-                    pixels,
-                    textureEntry.blockHeightLog2
-                ),
-            };
-        }
-    case ChannelFormat.R8_G8_B8_A8:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
-        return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
-    default:
-        console.error(channelFormat.toString(16));
-        throw "whoops";
-    }
-}
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -174,24 +40,13 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     }
 
     public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
-        console.log("Loading textures...");
         const bntx = BNTX.parse(buffer);
-        const startTime = new Date().getTime();
         this.addTextures(device, bntx.textures);
-        const endTime = new Date().getTime();
-        console.log(`Took ${(endTime - startTime) / 1000.0}s to load textures`);
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
-        if (wasm === undefined) {
-            console.log("WHOOPS");
-            return null;
-        }
-
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
         const canvases: HTMLCanvasElement[] = [];
-
-        const channelFormat = getChannelFormat(textureEntry.imageFormat);
 
         for (let i = 0; i < textureEntry.mipBuffers.length; i++) {
             const mipLevel = i;
@@ -201,12 +56,12 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
             const src = new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength);
-            const rgbaTexture = decompress2({ ...textureEntry, width, height, depth }, src);
-            const rgbaPixels = rgbaTexture.pixels;
-            device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-
             const canvas = document.createElement('canvas');
-            surfaceToCanvas(canvas, rgbaTexture);
+            decompress_bcn_deswizzle({ ...textureEntry, width, height, depth }, src).then(rgbaTexture => {
+                const rgbaPixels = rgbaTexture.pixels;
+                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
+                surfaceToCanvas(canvas, rgbaTexture);
+            });
             canvases.push(canvas);
         }
 
