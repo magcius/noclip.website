@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use byteorder::{LittleEndian, ByteOrder};
 
 const GOB_SIZE_X: usize = 64;
 const GOB_SIZE_Y: usize = 8;
@@ -157,4 +158,438 @@ fn next_pow2(mut v: usize) -> usize {
     v |= v >> 8;
     v |= v >> 16;
     v + 1
+}
+
+// #region Texture Decode
+fn expand4to8(n: u8) -> u8 {
+    (n << (8 - 4)) | (n >> (8 - 8))
+}
+
+fn expand5to8(n: u8) -> u8 {
+    (n << (8 - 5)) | (n >> (10 - 8))
+}
+
+fn expand6to8(n: u8) -> u8 {
+    (n << (8 - 6)) | (n >> (12 - 8))
+}
+
+// Use the fast GX approximation.
+fn s3tcblend(a: u8, b: u8) -> u8 {
+    // return (a*3 + b*5) / 8;
+    let a = a as u16;
+    let b = b as u16;
+    let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
+    ret as u8
+}
+
+fn color_table_bc1(color_table: &mut [u8; 16], color1: u16, color2: u16) {
+    // Fill in first two colors in color table.
+    // TODO(jstpierre): SRGB-correct blending.
+    color_table[0] = expand5to8(((color1 >> 11) & 0x1F) as u8);
+    color_table[1] = expand6to8(((color1 >> 5) & 0x3F) as u8);
+    color_table[2] = expand5to8((color1 & 0x1F) as u8);
+    color_table[3] = 0xFF;
+
+    color_table[4] = expand5to8(((color2 >> 11) & 0x1F) as u8);
+    color_table[5] = expand6to8(((color2 >> 5) & 0x3F) as u8);
+    color_table[6] = expand5to8((color2 & 0x1F) as u8);
+    color_table[7] = 0xFF;
+
+    if color1 > color2 {
+        // Predict gradients.
+        color_table[8]  = s3tcblend(color_table[4], color_table[0]);
+        color_table[9]  = s3tcblend(color_table[5], color_table[1]);
+        color_table[10] = s3tcblend(color_table[6], color_table[2]);
+        color_table[11] = 0xFF;
+
+        color_table[12] = s3tcblend(color_table[0], color_table[4]);
+        color_table[13] = s3tcblend(color_table[1], color_table[5]);
+        color_table[14] = s3tcblend(color_table[2], color_table[6]);
+        color_table[15] = 0xFF;
+    } else {
+        color_table[8]  = ((color_table[0] as u16 + color_table[4] as u16) >> 1) as u8;
+        color_table[9]  = ((color_table[1] as u16 + color_table[5] as u16) >> 1) as u8;
+        color_table[10] = ((color_table[2] as u16 + color_table[6] as u16) >> 1) as u8;
+        color_table[11] = 0xFF;
+
+        color_table[12] = 0x00;
+        color_table[13] = 0x00;
+        color_table[14] = 0x00;
+        color_table[15] = 0x00;
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SurfaceFlag {
+    Srgb,
+    UNorm,
+    SNorm,
+}
+
+#[derive(Clone)]
+pub struct SurfaceMetaData {
+    flag: SurfaceFlag,
+    width: usize,
+    height: usize,
+    depth: usize,
+}
+
+pub struct SurfaceDataUnsigned {
+    // meta: SurfaceMetaData,
+    pixels: Vec<u8>,
+}
+
+pub struct SurfaceDataSigned {
+    // meta: SurfaceMetaData,
+    pixels: Vec<i8>,
+}
+
+#[wasm_bindgen]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum BCNType {
+    BC1,
+    BC2,
+    BC3,
+    BC4,
+    BC5,
+}
+
+// Software decompresses from standard BC1 (DXT1) to RGBA.
+fn decompress_bc1_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+    const BYTES_PER_PIXEL: usize = 4;
+    let width = surface.width;
+    let height = surface.height;
+    let depth = surface.depth;
+    let tall = height * depth;
+    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let mut color_table = [0u8; 16];
+
+    let mut src_offs = 0;
+    for yy in (0..tall).step_by(4) {
+        for xx in (0..width).step_by(4) {
+            let color1 = LittleEndian::read_u16(&src[src_offs..(src_offs+2)]);
+            let color2 = LittleEndian::read_u16(&src[(src_offs+2)..(src_offs+4)]);
+            color_table_bc1(&mut color_table, color1, color2);
+            let mut colorbits = LittleEndian::read_u32(&src[(src_offs+4)..(src_offs+8)]);
+            for y in 0..usize::min(4, tall-yy) {
+                for x in 0..usize::min(4, width-xx) {
+                    let dst_px = (yy + y) * width + xx + x;
+                    let dst_offs = dst_px * 4;
+                    let color_idx = colorbits as usize & 0x03;
+                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
+                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
+                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 3] = color_table[color_idx * 4 + 3];
+                    colorbits >>= 2;
+                }
+            }
+            src_offs += 0x08;
+        }
+    }
+    SurfaceDataUnsigned { 
+        // meta: surface,
+        pixels: dst,
+    }
+}
+
+// Software decompresses from standard BC2 (DXT3) to RGBA.
+fn decompress_bc2_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+    const BYTES_PER_PIXEL: usize = 4;
+    let width = surface.width;
+    let height = surface.height;
+    let depth = surface.depth;
+    let tall = height * depth;
+    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let mut color_table = [0u8; 16];
+
+    let mut src_offs = 0;
+    for yy in (0..tall).step_by(4) {
+        for xx in (0..width).step_by(4) {
+            let alphabits1 = LittleEndian::read_u32(&src[src_offs..(src_offs+4)]);
+            let alphabits2 = LittleEndian::read_u32(&src[(src_offs+4)..(src_offs+8)]);
+            let color1 = LittleEndian::read_u16(&src[(src_offs+8)..(src_offs+10)]);
+            let color2 = LittleEndian::read_u16(&src[(src_offs+10)..(src_offs+12)]);
+            color_table_bc1(&mut color_table, color1, color2);
+            let mut colorbits = LittleEndian::read_u32(&src[(src_offs+12)..(src_offs+16)]);
+            for y in 0..usize::min(4, tall-yy) {
+                for x in 0..usize::min(4, width-xx) {
+                    let dst_px = (yy + y) * width + xx + x;
+                    let dst_offs = dst_px * 4;
+                    let color_idx = colorbits as usize & 0x03;
+                    let full_shift = (y * 4 + x) * 4;
+                    let alpha_bits = if full_shift < 32 { alphabits1 } else { alphabits2 };
+                    let shift = full_shift % 32;
+                    let alpha = ((alpha_bits >> shift) & 0x0F) as u8;
+                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
+                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
+                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 3] = expand4to8(alpha);
+                    colorbits >>= 2;
+                }
+            }
+            src_offs += 0x10;
+        }
+    }
+    SurfaceDataUnsigned { 
+        // meta: surface,
+        pixels: dst,
+    }
+}
+
+// Software decompresses from standard BC3 (DXT5) to RGBA.
+fn decompress_bc3_surface(surface: SurfaceMetaData, src: &[u8]) -> SurfaceDataUnsigned {
+    const BYTES_PER_PIXEL: usize = 4;
+    let width = surface.width;
+    let height = surface.height;
+    let depth = surface.depth;
+    let tall = height * depth;
+    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let mut color_table = [0u8; 16];
+    let mut alpha_table = [0u8; 8];
+
+    let mut src_offs = 0;
+    for yy in (0..tall).step_by(4) {
+        for xx in (0..width).step_by(4) {
+            let alpha1 = src[src_offs];
+            let alpha2 = src[src_offs + 1];
+
+            alpha_table[0] = alpha1;
+            alpha_table[1] = alpha2;
+            if alpha1 > alpha2 {
+                alpha_table[2] = ((6 * (alpha1 as u16) + 1 * (alpha2 as u16)) / 7) as u8;
+                alpha_table[3] = ((5 * (alpha1 as u16) + 2 * (alpha2 as u16)) / 7) as u8;
+                alpha_table[4] = ((4 * (alpha1 as u16) + 3 * (alpha2 as u16)) / 7) as u8;
+                alpha_table[5] = ((3 * (alpha1 as u16) + 4 * (alpha2 as u16)) / 7) as u8;
+                alpha_table[6] = ((2 * (alpha1 as u16) + 5 * (alpha2 as u16)) / 7) as u8;
+                alpha_table[7] = ((1 * (alpha1 as u16) + 6 * (alpha2 as u16)) / 7) as u8;
+            } else {
+                alpha_table[2] = ((4 * (alpha1 as u16) + 1 * (alpha2 as u16)) / 5) as u8;
+                alpha_table[3] = ((3 * (alpha1 as u16) + 2 * (alpha2 as u16)) / 5) as u8;
+                alpha_table[4] = ((2 * (alpha1 as u16) + 3 * (alpha2 as u16)) / 5) as u8;
+                alpha_table[5] = ((1 * (alpha1 as u16) + 4 * (alpha2 as u16)) / 5) as u8;
+                alpha_table[6] = 0;
+                alpha_table[7] = 255;
+            }
+            let alphabits1 = LittleEndian::read_u24(&src[(src_offs+2)..(src_offs+5)]);
+            let alphabits2 = LittleEndian::read_u24(&src[(src_offs+5)..(src_offs+8)]);
+            let color1 = LittleEndian::read_u16(&src[(src_offs+8)..(src_offs+10)]);
+            let color2 = LittleEndian::read_u16(&src[(src_offs+10)..(src_offs+12)]);
+            color_table_bc1(&mut color_table, color1, color2);
+            let mut colorbits = LittleEndian::read_u32(&src[(src_offs+12)..(src_offs+16)]);
+            for y in 0..usize::min(4, tall-yy) {
+                for x in 0..usize::min(4, width-xx) {
+                    let dst_px = (yy + y) * width + xx + x;
+                    let dst_offs = dst_px * 4;
+                    let color_idx = colorbits as usize & 0x03;
+                    let full_shift = (y * 4 + x) * 3;
+                    let alpha_bits = if full_shift < 24 { alphabits1 } else { alphabits2 };
+                    let shift = full_shift % 24;
+                    let index = (alpha_bits >> shift) & 0x07;
+                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
+                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
+                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 3] = alpha_table[index as usize];
+                    colorbits >>= 2;
+                }
+            }
+            src_offs += 0x10;
+        }
+    }
+    SurfaceDataUnsigned { 
+        // meta: surface,
+        pixels: dst,
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum BC45DecompressType {
+    BC4,
+    BC5,
+}
+
+pub enum BC45DecompressResult {
+    UNorm(SurfaceDataUnsigned),
+    SNorm(SurfaceDataSigned),
+}
+
+fn decompress_bc45_surface_unorm(surface: SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataUnsigned {
+    const BYTES_PER_PIXEL: usize = 4;
+    let width = surface.width;
+    let height = surface.height;
+    let depth = surface.depth;
+    let mut dst = vec![0u8; width * height * depth * BYTES_PER_PIXEL];
+    let mut color_table = [0u8; 8];
+    let src_bytes_per_pixel = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
+
+    let mut src_offs = 0;
+    let tall = height * depth;
+    for yy in (0..tall).step_by(4) {
+        for xx in (0..width).step_by(4) {
+            for ch in 0..src_bytes_per_pixel {
+                let red1 = src[src_offs];
+                let red2 = src[src_offs + 1];
+
+                color_table[0] = red1;
+                color_table[1] = red2;
+                if red1 > red2 {
+                    color_table[2] = ((6 * (red1 as u16) + 1 * (red2 as u16)) / 7) as u8;
+                    color_table[3] = ((5 * (red1 as u16) + 2 * (red2 as u16)) / 7) as u8;
+                    color_table[4] = ((4 * (red1 as u16) + 3 * (red2 as u16)) / 7) as u8;
+                    color_table[5] = ((3 * (red1 as u16) + 4 * (red2 as u16)) / 7) as u8;
+                    color_table[6] = ((2 * (red1 as u16) + 5 * (red2 as u16)) / 7) as u8;
+                    color_table[7] = ((1 * (red1 as u16) + 6 * (red2 as u16)) / 7) as u8;
+                } else {
+                    color_table[2] = ((4 * (red1 as u16) + 1 * (red2 as u16)) / 5) as u8;
+                    color_table[3] = ((3 * (red1 as u16) + 2 * (red2 as u16)) / 5) as u8;
+                    color_table[4] = ((2 * (red1 as u16) + 3 * (red2 as u16)) / 5) as u8;
+                    color_table[5] = ((1 * (red1 as u16) + 4 * (red2 as u16)) / 5) as u8;
+                    color_table[6] = 0;
+                    color_table[7] = 255;
+                }
+
+                let colorbits1 = LittleEndian::read_u24(&src[(src_offs+2)..(src_offs+5)]);
+                let colorbits2 = LittleEndian::read_u24(&src[(src_offs+5)..(src_offs+8)]);
+                for y in 0..usize::min(4, tall-yy) {
+                    for x in 0..usize::min(4, width-xx) {
+                        let dst_px = (yy + y) * width + xx + x;
+                        let dst_offs = dst_px * BYTES_PER_PIXEL;
+                        let full_shift = (y * 4 + x) * 3;
+                        let color_bits = if full_shift < 24 { colorbits1 } else { colorbits2 };
+                        let shift = full_shift % 24;
+                        let index = (color_bits >> shift) & 0x07;
+                        if src_bytes_per_pixel == 1 {
+                            dst[dst_offs + 0] = color_table[index as usize];
+                            dst[dst_offs + 1] = color_table[index as usize];
+                            dst[dst_offs + 2] = color_table[index as usize];
+                            dst[dst_offs + 3] = color_table[index as usize];
+                        } else {
+                            if ch == 0 {
+                                dst[dst_offs + 0] = color_table[index as usize];
+                            } else if ch == 1 {
+                                dst[dst_offs + 1] = color_table[index as usize];
+                                dst[dst_offs + 2] = 255;
+                                dst[dst_offs + 3] = 255;
+                            }
+                        }
+                    }
+                }
+
+                src_offs += 0x08;
+            }
+        }
+    }
+    SurfaceDataUnsigned { 
+        // meta: surface,
+        pixels: dst,
+    }
+}
+
+fn decompress_bc45_surface_snorm(surface: SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> SurfaceDataSigned {
+    const BYTES_PER_PIXEL: usize = 4;
+    let width = surface.width;
+    let height = surface.height;
+    let depth = surface.depth;
+    let mut dst = vec![0i8; width * height * depth * BYTES_PER_PIXEL];
+    let mut color_table = [0i8; 8];
+    let src_bytes_per_pixel = if bctype == BC45DecompressType::BC4 { 1 } else { 2 };
+
+    let mut src_offs = 0;
+    let tall = height * depth;
+    for yy in (0..tall).step_by(4) {
+        for xx in (0..width).step_by(4) {
+            for ch in 0..src_bytes_per_pixel {
+                let (red1, red2) = unsafe {
+                    use std::mem::transmute_copy;
+                    (
+                        transmute_copy(&src[src_offs]),
+                        transmute_copy(&src[src_offs+1]),
+                    )
+                };
+
+                color_table[0] = red1;
+                color_table[1] = red2;
+                if red1 > red2 {
+                    color_table[2] = ((6 * (red1 as u16) + 1 * (red2 as u16)) / 7) as i8;
+                    color_table[3] = ((5 * (red1 as u16) + 2 * (red2 as u16)) / 7) as i8;
+                    color_table[4] = ((4 * (red1 as u16) + 3 * (red2 as u16)) / 7) as i8;
+                    color_table[5] = ((3 * (red1 as u16) + 4 * (red2 as u16)) / 7) as i8;
+                    color_table[6] = ((2 * (red1 as u16) + 5 * (red2 as u16)) / 7) as i8;
+                    color_table[7] = ((1 * (red1 as u16) + 6 * (red2 as u16)) / 7) as i8;
+                } else {
+                    color_table[2] = ((4 * (red1 as u16) + 1 * (red2 as u16)) / 5) as i8;
+                    color_table[3] = ((3 * (red1 as u16) + 2 * (red2 as u16)) / 5) as i8;
+                    color_table[4] = ((2 * (red1 as u16) + 3 * (red2 as u16)) / 5) as i8;
+                    color_table[5] = ((1 * (red1 as u16) + 4 * (red2 as u16)) / 5) as i8;
+                    color_table[6] = -128;
+                    color_table[7] = 127;
+                }
+
+                let colorbits1 = LittleEndian::read_u24(&src[(src_offs+2)..(src_offs+5)]);
+                let colorbits2 = LittleEndian::read_u24(&src[(src_offs+5)..(src_offs+8)]);
+                for y in 0..usize::min(4, tall-yy) {
+                    for x in 0..usize::min(4, width-xx) {
+                        let dst_px = (yy + y) * width + xx + x;
+                        let dst_offs = dst_px * BYTES_PER_PIXEL;
+                        let full_shift = (y * 4 + x) * 3;
+                        let color_bits = if full_shift < 24 { colorbits1 } else { colorbits2 };
+                        let shift = full_shift % 24;
+                        let index = (color_bits >> shift) & 0x07;
+                        if src_bytes_per_pixel == 1 {
+                            dst[dst_offs + 0] = color_table[index as usize];
+                            dst[dst_offs + 1] = color_table[index as usize];
+                            dst[dst_offs + 2] = color_table[index as usize];
+                            dst[dst_offs + 3] = color_table[index as usize];
+                        } else {
+                            if ch == 0 {
+                                dst[dst_offs + 0] = color_table[index as usize];
+                            } else if ch == 1 {
+                                dst[dst_offs + 1] = color_table[index as usize];
+                                dst[dst_offs + 2] = 127;
+                                dst[dst_offs + 3] = 127;
+                            }
+                        }
+                    }
+                }
+
+                src_offs += 0x08;
+            }
+        }
+    }
+    SurfaceDataSigned { 
+        // meta: surface,
+        pixels: dst
+    }
+}
+
+#[wasm_bindgen]
+pub fn decompress_bcn(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<u8> {
+    let meta = SurfaceMetaData {
+        flag,
+        width,
+        height,
+        depth
+    };
+    match bcntype {
+        BCNType::BC1 => decompress_bc1_surface(meta, src).pixels,
+        BCNType::BC2 => decompress_bc2_surface(meta, src).pixels,
+        BCNType::BC3 => decompress_bc3_surface(meta, src).pixels,
+        BCNType::BC4 => decompress_bc45_surface_unorm(meta.clone(), src, BC45DecompressType::BC4).pixels,
+        BCNType::BC5 => decompress_bc45_surface_unorm(meta.clone(), src, BC45DecompressType::BC5).pixels,
+    }
+}
+
+#[wasm_bindgen]
+pub fn decompress_bcn_snorm(bcntype: BCNType, flag: SurfaceFlag, width: usize, height: usize, depth: usize, src: &[u8]) -> Vec<i8> {
+    let meta = SurfaceMetaData {
+        flag,
+        width,
+        height,
+        depth
+    };
+    match bcntype {
+        BCNType::BC4 => decompress_bc45_surface_snorm(meta.clone(), src, BC45DecompressType::BC4).pixels,
+        BCNType::BC5 => decompress_bc45_surface_snorm(meta.clone(), src, BC45DecompressType::BC5).pixels,
+        _ => panic!(),
+    }
 }

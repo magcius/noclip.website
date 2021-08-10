@@ -5,11 +5,11 @@ import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from '../fres_nx/bntx';
-import { surfaceToCanvas } from '../Common/bc_texture';
+import { DecodedSurfaceSW, surfaceToCanvas } from '../Common/bc_texture';
 import { translateImageFormat, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2 } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
+import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat, TypeFormat, ChannelFormat } from '../fres_nx/nngfx_enum';
 import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -33,12 +33,133 @@ import { colorNewCopy, colorScale, OpaqueBlack, White } from '../Color';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { Endianness } from '../endian';
 
-let deswizzle: undefined | (typeof import("../../rust/pkg/index"))["deswizzle"];
+let wasm: undefined | typeof import("../../rust/pkg/index");
 
 import("../../rust/pkg/index").then(x => {
     console.log("Loaded WASM");
-    deswizzle = x["deswizzle"];
+    wasm = x;
 })
+
+
+function decompress2(textureEntry: BNTX.BRTI, pixels: Uint8Array): DecodedSurfaceSW {
+    if (wasm === undefined) {
+        throw new Error("");
+    }
+    const width = textureEntry.width;
+    const height = textureEntry.height;
+    const depth = textureEntry.depth;
+    const channelFormat = getChannelFormat(textureEntry.imageFormat);
+    const typeFormat = getTypeFormat(textureEntry.imageFormat);
+    // console.log(textureEntry, channelFormat, typeFormat);
+    const info = {
+        width,
+        height,
+        depth,
+    }
+    switch (channelFormat) {
+    case ChannelFormat.Bc1:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+        return {
+            ...info,
+            flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
+            type: 'RGBA',
+            pixels: wasm.decompress_bcn(
+                wasm.BCNType.BC1,
+                typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
+                width,
+                height,
+                depth,
+                pixels
+            )
+        };
+    case ChannelFormat.Bc3:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+        return {
+            ...info,
+            flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
+            type: 'RGBA',
+            pixels: wasm.decompress_bcn(
+                wasm.BCNType.BC3,
+                typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
+                width,
+                height,
+                depth,
+                pixels
+            )
+        };
+    case ChannelFormat.Bc4:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
+        if (typeFormat === TypeFormat.Unorm) {
+            return {
+                ...info,
+                flag: 'UNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_bcn(
+                    wasm.BCNType.BC4,
+                    wasm.SurfaceFlag.UNorm,
+                    width,
+                    height,
+                    depth,
+                    pixels
+                ),
+            };
+        }
+        else {
+            return {
+                ...info,
+                flag: 'SNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_bcn_snorm(
+                    wasm.BCNType.BC4,
+                    wasm.SurfaceFlag.SNorm,
+                    width,
+                    height,
+                    depth,
+                    pixels
+                ),
+            };
+        }
+    case ChannelFormat.Bc5:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
+        if (typeFormat === TypeFormat.Unorm) {
+            return {
+                ...info,
+                flag: 'UNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_bcn(
+                    wasm.BCNType.BC5,
+                    wasm.SurfaceFlag.UNorm,
+                    width,
+                    height,
+                    depth,
+                    pixels
+                ),
+            };
+        }
+        else {
+            return {
+                ...info,
+                flag: 'SNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_bcn_snorm(
+                    wasm.BCNType.BC5,
+                    wasm.SurfaceFlag.SNorm,
+                    width,
+                    height,
+                    depth,
+                    pixels
+                ),
+            };
+        }
+    case ChannelFormat.R8_G8_B8_A8:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+        return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
+    default:
+        console.error(channelFormat.toString(16));
+        throw "whoops";
+    }
+}
+
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
         const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
@@ -56,7 +177,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
-        if (deswizzle === undefined) {
+        if (wasm === undefined) {
             console.log("WHOOPS");
             return null;
         }
@@ -76,8 +197,8 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const blockHeightLog2 = textureEntry.blockHeightLog2;
             // const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
             const src = buffer.createTypedArray(Uint8Array, 0, buffer.byteLength, Endianness.BIG_ENDIAN);
-            const deswizzled = deswizzle(width, height, channelFormat, src, blockHeightLog2);
-            const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
+            const deswizzled = wasm.deswizzle(width, height, channelFormat, src, blockHeightLog2);
+            const rgbaTexture = decompress2({ ...textureEntry, width, height, depth }, deswizzled);
             const rgbaPixels = rgbaTexture.pixels;
             device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
 
