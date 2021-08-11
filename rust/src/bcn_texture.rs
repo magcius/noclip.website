@@ -158,37 +158,48 @@ pub fn deswizzle(
     dst
 }
 
-fn color_table_bc1(color_table: &mut [u8; 16], color1: u16, color2: u16) {
+fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16) {
     // Fill in first two colors in color table.
     // TODO(jstpierre): SRGB-correct blending.
-    color_table[0] = util::expand5to8(((color1 >> 11) & 0x1F) as u8);
-    color_table[1] = util::expand6to8(((color1 >> 5) & 0x3F) as u8);
-    color_table[2] = util::expand5to8((color1 & 0x1F) as u8);
-
-    color_table[4] = util::expand5to8(((color2 >> 11) & 0x1F) as u8);
-    color_table[5] = util::expand6to8(((color2 >> 5) & 0x3F) as u8);
-    color_table[6] = util::expand5to8((color2 & 0x1F) as u8);
-
+    color_table[0] = [
+        util::expand5to8(((color1 >> 11) & 0x1F) as u8),
+        util::expand6to8(((color1 >> 5) & 0x3F) as u8),
+        util::expand5to8((color1 & 0x1F) as u8),
+        0xFF,
+    ];
+    color_table[1] = [
+        util::expand5to8(((color2 >> 11) & 0x1F) as u8),
+        util::expand6to8(((color2 >> 5) & 0x3F) as u8),
+        util::expand5to8((color2 & 0x1F) as u8),
+        0xFF
+    ];
     if color1 > color2 {
         // Predict gradients.
-        color_table[8]  = util::s3tcblend(color_table[4], color_table[0]);
-        color_table[9]  = util::s3tcblend(color_table[5], color_table[1]);
-        color_table[10] = util::s3tcblend(color_table[6], color_table[2]);
-
-
-        color_table[12] = util::s3tcblend(color_table[0], color_table[4]);
-        color_table[13] = util::s3tcblend(color_table[1], color_table[5]);
-        color_table[14] = util::s3tcblend(color_table[2], color_table[6]);
-        color_table[15] = 0xFF;
+        color_table[2] = [
+            util::s3tcblend(color_table[1][0], color_table[0][0]),
+            util::s3tcblend(color_table[1][1], color_table[0][1]),
+            util::s3tcblend(color_table[1][2], color_table[0][2]),
+            0xFF,
+        ];
+        color_table[3] = [
+            util::s3tcblend(color_table[0][0], color_table[1][0]),
+            util::s3tcblend(color_table[0][1], color_table[1][1]),
+            util::s3tcblend(color_table[0][2], color_table[1][2]),
+            0xFF
+        ];
     } else {
-        color_table[8]  = ((color_table[0] as u16 + color_table[4] as u16) >> 1) as u8;
-        color_table[9]  = ((color_table[1] as u16 + color_table[5] as u16) >> 1) as u8;
-        color_table[10] = ((color_table[2] as u16 + color_table[6] as u16) >> 1) as u8;
-
-        color_table[12] = 0x00;
-        color_table[13] = 0x00;
-        color_table[14] = 0x00;
-        color_table[15] = 0x00;
+        color_table[2] = [
+            ((color_table[0][0] as u16 + color_table[1][0] as u16) >> 1) as u8,
+            ((color_table[0][1] as u16 + color_table[1][1] as u16) >> 1) as u8,
+            ((color_table[0][2] as u16 + color_table[1][2] as u16) >> 1) as u8,
+            0xFF,
+        ];
+        color_table[3] = [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ];
     }
 }
 
@@ -249,10 +260,7 @@ fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
         panic!("BC1: Given source size does not match provided metadata.");
     }
     let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
-    let mut color_table = [0u8; 16];
-    color_table[3] = 0xFF;
-    color_table[7] = 0xFF;
-    color_table[11] = 0xFF;
+    let mut color_table = [[0u8; 4]; 4];
     for block_y in 0..height_in_blocks {
         for block_x in 0..width_in_blocks {
             let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
@@ -265,10 +273,10 @@ fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     let dst_px = (block_y*4 + iy) * width + block_x*4 + ix;
                     let dst_offs = dst_px * 4;
                     let color_idx = colorbits as usize & 0x03;
-                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
-                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
-                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
-                    dst[dst_offs + 3] = color_table[color_idx * 4 + 3];
+                    dst[dst_offs + 0] = color_table[color_idx][0];
+                    dst[dst_offs + 1] = color_table[color_idx][1];
+                    dst[dst_offs + 2] = color_table[color_idx][2];
+                    dst[dst_offs + 3] = color_table[color_idx][3];
                     colorbits >>= 2;
                 }
             }
@@ -299,10 +307,7 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
         panic!("BC2: Given source size does not match provided metadata.");
     }
     let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
-    let mut color_table = [0u8; 16];
-    color_table[3] = 0xFF;
-    color_table[7] = 0xFF;
-    color_table[11] = 0xFF;
+    let mut color_table = [[0u8; 4]; 4];
     for block_y in 0..height_in_blocks {
         for block_x in 0..width_in_blocks {
             let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
@@ -319,9 +324,9 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     let color_idx = colorbits as usize & 0x03;
                     let shift = (iy * 4 + ix) * 4;
                     let alpha = ((alphabits1 >> shift) & 0x0F) as u8;
-                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
-                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
-                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 0] = color_table[color_idx][0];
+                    dst[dst_offs + 1] = color_table[color_idx][1];
+                    dst[dst_offs + 2] = color_table[color_idx][2];
                     dst[dst_offs + 3] = util::expand4to8(alpha);
                     colorbits >>= 2;
                 }
@@ -333,9 +338,9 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     let color_idx = colorbits as usize & 0x03;
                     let shift = (iy * 4 + ix) * 4 - 32;
                     let alpha = ((alphabits2 >> shift) & 0x0F) as u8;
-                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
-                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
-                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 0] = color_table[color_idx][0];
+                    dst[dst_offs + 1] = color_table[color_idx][1];
+                    dst[dst_offs + 2] = color_table[color_idx][2];
                     dst[dst_offs + 3] = util::expand4to8(alpha);
                     colorbits >>= 2;
                 }
@@ -367,11 +372,8 @@ fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
         panic!("BC3: Given source size does not match provided metadata.");
     }
     let mut dst = unsafe { util::unitialized_vec(width * tall * OUTPUT_BYTES_PER_PIXEL) };
-    let mut color_table = [0u8; 16];
+    let mut color_table = [[0u8; 4]; 4];
     let mut alpha_table = [0u8; 8];
-    color_table[3] = 0xFF;
-    color_table[7] = 0xFF;
-    color_table[11] = 0xFF;
     for block_y in 0..height_in_blocks {
         for block_x in 0..width_in_blocks {
             let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
@@ -407,9 +409,9 @@ fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     let color_idx = colorbits as usize & 0x03;
                     let shift = (iy * 4 + ix) * 3;
                     let index = (alphabits1 >> shift) & 0x07;
-                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
-                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
-                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 0] = color_table[color_idx][0];
+                    dst[dst_offs + 1] = color_table[color_idx][1];
+                    dst[dst_offs + 2] = color_table[color_idx][2];
                     dst[dst_offs + 3] = alpha_table[index as usize];
                     colorbits >>= 2;
                 }
@@ -421,9 +423,9 @@ fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     let color_idx = colorbits as usize & 0x03;
                     let shift = (iy * 4 + ix) * 3 - 24;
                     let index = (alphabits2 >> shift) & 0x07;
-                    dst[dst_offs + 0] = color_table[color_idx * 4 + 0];
-                    dst[dst_offs + 1] = color_table[color_idx * 4 + 1];
-                    dst[dst_offs + 2] = color_table[color_idx * 4 + 2];
+                    dst[dst_offs + 0] = color_table[color_idx][0];
+                    dst[dst_offs + 1] = color_table[color_idx][1];
+                    dst[dst_offs + 2] = color_table[color_idx][2];
                     dst[dst_offs + 3] = alpha_table[index as usize];
                     colorbits >>= 2;
                 }
