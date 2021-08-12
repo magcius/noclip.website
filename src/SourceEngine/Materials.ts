@@ -210,6 +210,16 @@ function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEng
     return offs - baseOffs;
 }
 
+function fillScaleBias(d: Float32Array, offs: number, m: ReadonlyMat4): number {
+    // Make sure there's no rotation. We should definitely handle this eventually, though.
+    assert(m[1] === 0.0 && m[2] === 0.0);
+    const scaleS = m[0];
+    const scaleT = m[5];
+    const transS = m[12];
+    const transT = m[13];
+    return fillVec4(d, offs, scaleS, scaleT, transS, transT);
+}
+
 export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams> = view.fogParams): void {
     let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
@@ -666,6 +676,10 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterVector);
     }
 
+    protected paramGetMatrix(name: string): ReadonlyMat4 {
+        return (this.param[name] as ParameterMatrix).matrix;
+    }
+
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
@@ -1023,6 +1037,9 @@ layout(std140) uniform ub_ObjectParams {
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
+#ifdef USE_DETAIL
+    vec4 u_DetailScaleBias;
+#endif
 #ifdef USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
 #endif
@@ -1045,7 +1062,6 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
-#define u_DetailScale        (u_Misc[0].z)
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1448,7 +1464,7 @@ void mainPS() {
 #endif
 
 #ifdef USE_DETAIL
-    vec2 t_DetailTexCoord = v_TexCoord0.xy * u_DetailScale;
+    vec2 t_DetailTexCoord = CalcScaleBias(v_TexCoord0.xy, u_DetailScaleBias);
     vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail, t_DetailTexCoord)));
     t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
@@ -1753,6 +1769,7 @@ class Material_Generic extends BaseMaterial {
         p['$detailblendfactor']            = new ParameterNumber(1);
         p['$detailtint']                   = new ParameterColor(1, 1, 1);
         p['$detailscale']                  = new ParameterNumber(4);
+        p['$detailtexturetransform']       = new ParameterMatrix();
         p['$bumpmap']                      = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
@@ -1976,7 +1993,7 @@ class Material_Generic extends BaseMaterial {
 
         this.setupFogParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 124);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
 
         if (this.wantsAmbientCube) {
@@ -1993,6 +2010,13 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
+
+        if (this.wantsDetail) {
+            const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
+            const detailScale = this.paramGetNumber('$detailscale');
+            scaleMatrix(scratchMatrix, detailTextureTransform, detailScale, detailScale);
+            offs += fillScaleBias(d, offs, scratchMatrix);
+        }
 
         if (this.wantsEnvmapMask)
             offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
@@ -2036,8 +2060,7 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        const detailScale = this.paramGetNumber('$detailscale');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, detailScale);
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
