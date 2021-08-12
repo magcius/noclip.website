@@ -67,7 +67,6 @@ export class SourceFileSystem {
 
     public resolvePath(path: string, ext: string): string {
         path = path.toLowerCase().replace(/\\/g, '/');
-        path = path.replace(/\.\//g, '');
         if (!path.endsWith(ext))
             path = `${path}${ext}`;
 
@@ -83,6 +82,7 @@ export class SourceFileSystem {
             path = parts.join('/');
         }
 
+        path = path.replace(/\.\//g, '');
         return path;
     }
 
