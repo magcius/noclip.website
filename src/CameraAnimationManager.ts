@@ -1,85 +1,14 @@
 import { vec3 } from 'gl-matrix';
+import { angleDist } from './MathHelpers';
 import { getPointHermite } from './Spline';
+import { CameraAnimation, KeyframeTrack, MILLISECONDS_IN_SECOND } from './Studio';
+
+export const PREVIEW_STEP_TIME_MS = 16;
 
 export class InterpolationStep {
     pos: vec3 = vec3.create();
     lookAtPos: vec3 = vec3.create();
     bank: number = 0;
-}
-
-export interface Keyframe {
-    time: number;
-    value: number;
-    tangentIn: number;
-    tangentOut: number;
-}
-
-export class KeyframeTrack {
-    constructor(public keyframes: Keyframe[]) {
-
-    }
-
-    /**
-     * Adds a new keyframe to this keyframe track. If the keyframe to be added is at the same time as an existing keyframe, the existing keyframe will be overwritten.
-     * 
-     * @param kf The Keyframe to add
-     */
-    public addKeyframe(kf: Keyframe) {
-        const nextKfIndex = this.getNextKeyframeIndexAtTime(kf.time);
-        if (nextKfIndex === -1)
-            this.keyframes.push(kf);
-        else if (this.keyframes[nextKfIndex].time === kf.time)
-            this.keyframes.splice(nextKfIndex, 1, kf);
-        else
-            this.keyframes.splice(nextKfIndex - 1, 0, kf);
-    }
-
-    public getNextKeyframeIndexAtTime(t: number) {
-        let nextKfIndex = -1;
-        for (let i = this.keyframes.length - 1; i > -1; i--) {
-            if (t <= this.keyframes[i].time) {
-                nextKfIndex = i;
-                break;
-            }
-        }
-        return nextKfIndex;
-    }
-
-    public setAllCatmullRomTangents(speedScale: boolean, loop: boolean) {
-        this.setCatmullRomTangent(speedScale, this.keyframes[0], this.keyframes[0], this.keyframes[1]);
-
-        for (let i = 1; i < this.keyframes.length - 1; i++)
-            this.setCatmullRomTangent(speedScale, this.keyframes[i - 1], this.keyframes[i], this.keyframes[i + 1]);
-
-        if (loop) {
-            this.setCatmullRomTangent(speedScale, this.keyframes[this.keyframes.length - 2], this.keyframes[this.keyframes.length - 1], this.keyframes[0]);
-        } else {
-            this.keyframes[this.keyframes.length - 1].tangentOut = 0;
-            this.keyframes[0].tangentIn = 0;
-        }
-    };
-
-    public setCatmullRomTangent(speedScale: boolean, previous: Keyframe, current: Keyframe, next: Keyframe) {
-        let val = (next.value - previous.value) * 0.5;
-        if (speedScale) {
-            const thisDuration = current.time - previous.time;
-            const nextDuration = next.time - current.time;
-            val *= (2 * thisDuration) / (thisDuration + nextDuration);
-        }
-        current.tangentOut = val;
-        next.tangentIn = val;
-    }
-
-}
-
-export interface CameraAnimation {
-    posXTrack: KeyframeTrack;
-    posYTrack: KeyframeTrack;
-    posZTrack: KeyframeTrack;
-    lookAtXTrack: KeyframeTrack;
-    lookAtYTrack: KeyframeTrack;
-    lookAtZTrack: KeyframeTrack;
-    bankTrack: KeyframeTrack;
 }
 
 export class CameraAnimationManager {
@@ -89,11 +18,13 @@ export class CameraAnimationManager {
     private currentKeyframeIndices: Map<KeyframeTrack, number>;
     private elapsedTimeMs: number;
     private lastKeyframeTimeMs: number;
-    private loopAnimation: boolean = false;
 
-    public playAnimation(animation: Readonly<CameraAnimation>, loop: boolean, startTimeMs: number) {
+    // Normalized bank rotation values, calculated at runtime to keep the logic of the animations simpler
+    private bankFrom: number;
+    private bankTo: number;
+
+    public initAnimationPlayback(animation: Readonly<CameraAnimation>, startTimeMs: number) {
         this.animation = animation;
-        this.loopAnimation = loop;
         this.elapsedTimeMs = startTimeMs;
         this.currentKeyframeIndices = new Map();
         this.currentKeyframeIndices.set(animation.posXTrack, animation.posXTrack.getNextKeyframeIndexAtTime(startTimeMs));
@@ -110,11 +41,18 @@ export class CameraAnimationManager {
             animation.lookAtYTrack.keyframes[animation.lookAtYTrack.keyframes.length - 1].time,
             animation.lookAtZTrack.keyframes[animation.lookAtZTrack.keyframes.length - 1].time,
             animation.bankTrack.keyframes[animation.bankTrack.keyframes.length - 1].time);
+        this.bankFrom = this.animation.bankTrack.keyframes[0].value;
+        this.bankTo = this.bankFrom;
+        const bankTrackStartIndex = this.currentKeyframeIndices.get(animation.bankTrack);
+        for (let i = 1; bankTrackStartIndex && i <= bankTrackStartIndex; i++) {
+            this.bankFrom = this.bankTo;
+            this.bankTo = this.bankTo + angleDist(this.bankTo, this.animation.bankTrack.keyframes[i].value);
+        }
     }
 
     public updateElapsedTime(dt: number): void {
         this.elapsedTimeMs += dt;
-        if (this.loopAnimation && this.elapsedTimeMs >= this.lastKeyframeTimeMs) {
+        if (this.animation.loop && this.elapsedTimeMs >= this.lastKeyframeTimeMs) {
             this.currentKeyframeIndices.set(this.animation.posXTrack, 0);
             this.currentKeyframeIndices.set(this.animation.posYTrack, 0);
             this.currentKeyframeIndices.set(this.animation.posZTrack, 0);
@@ -122,8 +60,7 @@ export class CameraAnimationManager {
             this.currentKeyframeIndices.set(this.animation.lookAtYTrack, 0);
             this.currentKeyframeIndices.set(this.animation.lookAtZTrack, 0);
             this.currentKeyframeIndices.set(this.animation.bankTrack, 0);
-            const diff = this.elapsedTimeMs - this.lastKeyframeTimeMs;
-            this.elapsedTimeMs = 0 + diff;
+            this.elapsedTimeMs -= this.lastKeyframeTimeMs;
         }
     }
 
@@ -131,10 +68,21 @@ export class CameraAnimationManager {
         vec3.set(outInterpStep.pos, this.getCurrentTrackValue(this.animation.posXTrack), this.getCurrentTrackValue(this.animation.posYTrack), this.getCurrentTrackValue(this.animation.posZTrack));
         vec3.set(outInterpStep.lookAtPos, this.getCurrentTrackValue(this.animation.lookAtXTrack), this.getCurrentTrackValue(this.animation.lookAtYTrack), this.getCurrentTrackValue(this.animation.lookAtZTrack));
         outInterpStep.bank = this.getCurrentTrackValue(this.animation.bankTrack);
-
     }
 
-    public getCurrentTrackValue(track: Readonly<KeyframeTrack>): number {
+    public getPreviewSteps(animation: CameraAnimation): InterpolationStep[] {
+        const steps: InterpolationStep[] = [];
+        this.initAnimationPlayback(animation, 0);
+        for (let t = 0; t <= this.lastKeyframeTimeMs; t += PREVIEW_STEP_TIME_MS) {
+            const step = new InterpolationStep();
+            this.getAnimFrame(step);
+            steps.push(step);
+            this.updateElapsedTime(PREVIEW_STEP_TIME_MS);
+        }
+        return steps;
+    }
+
+    public getCurrentTrackValue(track: KeyframeTrack): number {
         let kfIndex = this.currentKeyframeIndices.get(track);
         if (kfIndex === undefined || kfIndex === -1)
             return track.keyframes[track.keyframes.length - 1].value;
@@ -146,6 +94,10 @@ export class CameraAnimationManager {
             } else {
                 kfIndex++;
                 this.currentKeyframeIndices.set(track, kfIndex);
+                if (track === this.animation.bankTrack) {
+                    this.bankFrom = this.bankTo;
+                    this.bankTo = this.bankTo + angleDist(this.bankTo, track.keyframes[kfIndex].value);
+                }
             }
         }
         const prevKf = track.keyframes[kfIndex - 1];
@@ -153,11 +105,19 @@ export class CameraAnimationManager {
         if (prevKf.value === curKf.value)
             return curKf.value;
 
-        return getPointHermite(prevKf.value, curKf.value, curKf.tangentIn, curKf.tangentOut, (this.elapsedTimeMs - prevKf.time) / (curKf.time - prevKf.time));
+        if (track !== this.animation.bankTrack) {
+            return getPointHermite(prevKf.value, curKf.value, curKf.tangentIn, curKf.tangentOut, (this.elapsedTimeMs - prevKf.time) / (curKf.time - prevKf.time));
+        } else {
+            return getPointHermite(this.bankFrom, this.bankTo, curKf.tangentIn, curKf.tangentOut, (this.elapsedTimeMs - prevKf.time) / (curKf.time - prevKf.time));
+        }
     }
 
     public isAnimationFinished(): boolean {
-        return !this.loopAnimation && this.elapsedTimeMs >= this.lastKeyframeTimeMs;
+        return !this.animation.loop && this.elapsedTimeMs >= this.lastKeyframeTimeMs;
+    }
+
+    public getElapsedTimeSeconds(): number {
+        return this.elapsedTimeMs / MILLISECONDS_IN_SECOND;
     }
 
 }
