@@ -1,11 +1,27 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
+import { BSPRenderer, SourceFileSystem, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
+import { BSPEntity } from "./VMT";
+
+class npc_portal_turret_floor extends BaseEntity {
+    public static classname = 'npc_portal_turret_floor';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props/Turret_01.mdl');
+    }
+}
+
 
 class PortalSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
+    }
+
+    private registerEntityFactories(registry: EntityFactoryRegistry): void {
+        registry.registerFactory(npc_portal_turret_floor);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
@@ -19,7 +35,9 @@ class PortalSceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        const renderContext = new SourceRenderContext(context.device, filesystem);
+        this.registerEntityFactories(renderContext.entityFactoryRegistry);
+        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`, renderContext);
     }
 }
 

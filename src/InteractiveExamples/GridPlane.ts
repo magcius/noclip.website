@@ -51,7 +51,7 @@ ${GfxShaderLibrary.saturate}
 // 1 at t=0, 0 at t=N, 0 at t=1-N, 1 at t=1
 float Notch(float t, float N) {
     float inv = 1.0/N;
-    return saturate((t - (1.0 - N))*inv) + Saturate(1.0 - (t * inv));
+    return saturate((t - (1.0 - N))*inv) + saturate(1.0 - (t * inv));
 }
 
 void main() {

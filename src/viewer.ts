@@ -32,6 +32,10 @@ interface MouseLocation {
     mouseY: number;
 }
 
+export interface DebugConsole {
+    addInfoLine(line: string): void;
+}
+
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
@@ -42,6 +46,7 @@ export interface ViewerRenderInput {
     onscreenTexture: GfxTexture;
     antialiasingMode: AntialiasingMode;
     mouseLocation: MouseLocation;
+    debugConsole: DebugConsole;
 }
 
 export interface SceneGfx {
@@ -67,9 +72,14 @@ function resetGfxDebugGroup(group: GfxDebugGroup): void {
 }
 
 export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, devicePixelRatio: number): void {
+    const nw = width * devicePixelRatio;
+    const nh = height * devicePixelRatio;
+    if (canvas.width === nw && canvas.height === nh)
+        return;
+
     canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
-    canvas.width = width * devicePixelRatio;
-    canvas.height = height * devicePixelRatio;
+    canvas.width = nw;
+    canvas.height = nh;
 }
 
 export class Viewer {
@@ -116,6 +126,7 @@ export class Viewer {
             onscreenTexture: null!,
             antialiasingMode: AntialiasingMode.None,
             mouseLocation: this.inputManager,
+            debugConsole: this.renderStatisticsTracker,
         };
 
         GlobalSaveManager.addSettingListener('AntialiasingMode', (saveManager, key) => {
@@ -164,10 +175,9 @@ export class Viewer {
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
-        this.renderStatisticsTracker.endFrame();
-
-        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
-        this.onstatistics(this.renderStatisticsTracker);
+        const renderStatistics = this.renderStatisticsTracker.endFrame();
+        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.onstatistics(renderStatistics);
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
@@ -219,10 +229,33 @@ export class Viewer {
         }
 
         this.gfxDevice.popDebugGroup();
-        this.renderStatisticsTracker.endFrame();
+        const renderStatistics = this.renderStatisticsTracker.endFrame();
+        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.onstatistics(renderStatistics);
+    }
 
-        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
-        this.onstatistics(this.renderStatisticsTracker);
+    private finishRenderStatistics(statistics: RenderStatistics, debugGroup: GfxDebugGroup): void {
+        if (debugGroup.drawCallCount)
+            statistics.lines.push(`Draw Calls: ${debugGroup.drawCallCount}`);
+        if (debugGroup.triangleCount)
+            statistics.lines.push(`Drawn Triangles: ${debugGroup.triangleCount}`);
+        if (debugGroup.textureBindCount)
+            statistics.lines.push(`Texture Binds: ${debugGroup.textureBindCount}`);
+        if (debugGroup.bufferUploadCount)
+            statistics.lines.push(`Buffer Uploads: ${debugGroup.bufferUploadCount}`);
+
+        const worldMatrix = this.camera.worldMatrix;
+        const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
+        statistics.lines.push(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
+
+        const vendorInfo = this.gfxDevice.queryVendorInfo();
+        statistics.lines.push(`Platform: ${vendorInfo.platformString}`);
+
+        if (vendorInfo.platformString === 'WebGL2') {
+            const impl = gfxDeviceGetImpl_GL(this.gfxDevice);
+            const w = impl.gl.drawingBufferWidth, h = impl.gl.drawingBufferHeight;
+            statistics.lines.push(`Drawing Buffer Size: ${w}x${h}`);
+        }
     }
 
     public setCameraController(cameraController: CameraController) {

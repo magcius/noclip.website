@@ -1,10 +1,9 @@
 
 // Valve Material Type
 
-import { arrayRemove, assert, assertExists } from "../util";
+import { arrayRemove, assertExists } from "../util";
 import { SourceFileSystem } from "./Main";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorFromRGBA } from "../Color";
+import { Color } from "../Color";
 
 export type VKFParamMap = { [k: string]: string };
 export type VKFPairUnit = string | number | VKFPair[];
@@ -124,7 +123,11 @@ class ValveKeyValueParser {
     }
 
     private num(start: string): string {
-        return this.run(/[0-9.]/, start);
+        const num = this.run(/[0-9.]/, start);
+        // numbers can have garbage at the end of them. this is ugly...
+        // shoutouts to materials/models/props_lab/printout_sheet.vmt which has a random letter "y" after a number
+        this.run(/[a-zA-Z]/, '');
+        return num;
     }
 
     private unquote(start: string): string {
@@ -143,6 +146,7 @@ class ValveKeyValueParser {
             return this.unquote(tok);
         else if (/[-0-9.]/.test(tok))
             return this.num(tok);
+        console.log(tok);
         debugger;
         throw "whoops";
     }
@@ -256,6 +260,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const base = await parseVMT(filesystem, vmt['include'], depth++);
         patch(base, vmt.replace, true);
         patch(base, vmt.insert, false);
+        base._Patch = base._Filename;
         base._Filename = vmt._Filename;
         return base;
     } else {
@@ -296,8 +301,7 @@ export interface BSPEntity {
     [k: string]: string;
 }
 
-export function parseEntitiesLump(buffer: ArrayBufferSlice): BSPEntity[] {
-    const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
+export function parseEntitiesLump(str: string): BSPEntity[] {
     const p = new ValveKeyValueParser(str);
     const entities: BSPEntity[] = [];
     while (p.hastok()) {

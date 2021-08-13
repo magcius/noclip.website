@@ -5,7 +5,7 @@ import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, ScenePara
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement, drawSimpleModel } from "./ActorUtil";
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
@@ -472,24 +472,15 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
     }
 
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
-        const shapeData = this.modelData!.shapeData;
+        const template = renderInstManager.pushTemplateRenderInst();
 
-        for (let i = 0; i < shapeData.length; i++) {
-            const template = renderInstManager.pushTemplateRenderInst();
+        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
 
-            assert(shapeData[i].draws.length === 1);
-            shapeData[i].shapeHelper.setOnRenderInst(template, shapeData[i].draws[0]);
+        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
 
-            const front = renderInstManager.newRenderInst();
-            this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, front);
-            renderInstManager.submitRenderInst(front);
-
-            const back = renderInstManager.newRenderInst();
-            this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, back);
-            renderInstManager.submitRenderInst(back);
-
-            renderInstManager.popTemplateRenderInst();
-        }
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -1541,31 +1532,43 @@ export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | 
     getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
 }
 
+export function setShadowVolumeEndDropOffset(actor: LiveActor, name: string | null, v: number): void {
+    getShadowVolumeDrawer(actor, name).endDrawShapeOffset = v;
+}
+
 export function setShadowVolumeBoxSize(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
     vec3.copy(getShadowVolumeBox(actor, name).size, v);
 }
 
-export function isExistShadow(actor: LiveActor, name: string | null): boolean {
+export function onShadowVolumeCutDropLength(actor: LiveActor, name: string | null = null): void {
+    getShadowVolumeDrawer(actor, name).cutDropShadow = true;
+}
+
+export function isExistShadow(actor: LiveActor, name: string | null = null): boolean {
     if (actor.shadowControllerList === null)
         return false;
     return actor.shadowControllerList.getController(name) !== null;
 }
 
-export function isShadowProjected(actor: LiveActor, name: string | null): boolean {
+export function isShadowProjected(actor: LiveActor, name: string | null = null): boolean {
     if (actor.shadowControllerList === null)
         return false;
     return actor.shadowControllerList.getController(name)!.isProjected;
 }
 
-export function getShadowProjectionPos(actor: LiveActor, name: string | null): ReadonlyVec3 {
+export function getShadowProjectionPos(actor: LiveActor, name: string | null = null): ReadonlyVec3 {
     return actor.shadowControllerList!.getController(name)!.getProjectionPos();
 }
 
-export function getShadowProjectedSensor(actor: LiveActor, name: string | null): HitSensor {
+export function getShadowProjectionNormal(actor: LiveActor, name: string | null = null): ReadonlyVec3 {
+    return actor.shadowControllerList!.getController(name)!.getProjectionNormal();
+}
+
+export function getShadowProjectedSensor(actor: LiveActor, name: string | null = null): HitSensor {
     return actor.shadowControllerList!.getController(name)!.triHitSensor!;
 }
 
-export function getShadowProjectionLength(actor: LiveActor, name: string | null): number | null {
+export function getShadowProjectionLength(actor: LiveActor, name: string | null = null): number | null {
     const controller = actor.shadowControllerList!.getController(name)!;
     if (controller.isProjected)
         return controller.getProjectionLength();

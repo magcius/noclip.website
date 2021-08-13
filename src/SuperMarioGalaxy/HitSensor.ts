@@ -162,6 +162,10 @@ export class HitSensor {
         return this.sensorType === type;
     }
 
+    public setType(type: HitSensorType): void {
+        this.sensorType = type;
+    }
+
     public addHitSensor(other: HitSensor): void {
         this.pairwiseSensors.push(other);
     }
@@ -533,6 +537,10 @@ export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveAc
 
 export function addHitSensorCallbackMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number) {
     return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor);
+}
+
+export function addHitSensorCallbackMapObjSimple(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number) {
+    return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObjSimple, pairwiseCapacity, radius, actor);
 }
 
 export function addHitSensorPosMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, pos: ReadonlyVec3, offset: ReadonlyVec3) {

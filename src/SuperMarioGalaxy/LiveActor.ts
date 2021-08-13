@@ -880,7 +880,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
         this.modelManager = new ModelManager(sceneObjHolder, objName);
 
-        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+        this.modelManager.modelInstance.setBaseScale(this.scale);
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
@@ -978,7 +978,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // calcAnmMtx
         if (this.modelManager !== null) {
-            vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+            this.modelManager.modelInstance.setBaseScale(this.scale);
             this.calcAndSetBaseMtx(sceneObjHolder);
             this.modelManager.calcAnim();
         }
@@ -1017,21 +1017,28 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 const areaLightInfo = sceneObjHolder.lightDirector.findDefaultAreaLight(sceneObjHolder);
                 const lightInfo = areaLightInfo.getActorLightInfo(lightType);
 
-                // The reason we don't setAmbient here is a bit funky -- normally how this works
-                // is that the J3DModel's DLs will set up the ambient, but when an actor has its
-                // own ActorLightCtrl, through a long series of convoluted of actions, the
-                // DrawBufferExecutor associated with that actor will stomp on the actor's ambient light
-                // configuration. Without this, we're left with the DrawBufferGroup's light configuration,
-                // and the actor's DL will override the ambient light there...
-                // Rather than emulate the whole DrawBufferGroup system, quirks and all, just hardcode
-                // this logic.
+                // The reason we pass setAmbient = false in the case where we don't have an ActorLightCtrl is a bit
+                // strange, and seems like an ordering bug in the game's original logic. The flow of the DrawBuffer
+                // system is that DrawBufferShapeDrawer will first load its associated material before drawing all
+                // of the shapes that it contains. However, the logic looks like this:
                 //
-                // Specifically, what's going on is that when an actor has an ActorLightCtrl, then the light
-                // is loaded in DrawBufferShapeDrawer, *after* the material packet DL has been run. Otherwise,
-                // it's loaded in either DrawBufferExecuter or DrawBufferGroup, which run before the material
-                // DL, so the actor will overwrite the ambient light. I'm quite sure this is a bug in the
-                // original game engine, honestly.
-                lightInfo.setOnModelInstance(this.modelInstance, camera, false);
+                // this->mpMaterial->loadMaterial();
+                // for each (pPacket in this->mpShapePackets):
+                //   if (pPacket->mpActorLightCtrl != nullptr) { pPacket->mpActorLightCtrl->load(); }
+                //   pPacket->drawShape();
+                //
+                // When an actor has an ActorLightCtrl, the actor's lights are loaded in the DrawBufferShapeDrawer
+                // *after* the material has run. But when it doesn't, it uses the group / executor's lights that
+                // are loaded in DrawBufferGroup::drawOpa / DrawBufferExecutor::drawOpa. While this normally works
+                // out OK -- objects without custom lights get their group's lighting, it breaks for the ambient
+                // color channel, since the J3D material will load its own ambient color when loadMaterial() is
+                // called. So objects with custom ActorLightCtrl's have their ActorLightCtrl being the last thing
+                // to set the ambient light, and objects without custom ActorLightCtrl's have the J3DMaterial be
+                // the last thing to set the ambient light.
+                //
+                // Rather than emulate this whole system, just hardcode the end result. So, setAmbient = false.
+                const setAmbient = false;
+                lightInfo.setOnModelInstance(this.modelInstance, camera, setAmbient);
             }
         }
     }

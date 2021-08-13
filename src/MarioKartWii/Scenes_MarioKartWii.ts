@@ -24,14 +24,43 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { EggDrawPathBloom, EggDrawPathDOF, parseBBLM, parseBDOF } from './PostEffect';
 import { BTI, BTIData } from '../Common/JSYSTEM/JUTTexture';
 
+interface ObjFlowObj {
+    name: string;
+    resources: string;
+}
+
+class ObjFlow {
+    public objects: ObjFlowObj[] = [];
+
+    constructor(buffer: ArrayBufferSlice) {
+        const view = buffer.createDataView();
+
+        const count = view.getUint16(0x00);
+        let idx = 0x02;
+        for (let i = 0; i < count; i++, idx += 0x74) {
+            const objectId = view.getUint16(idx + 0x00);
+            const name = readString(buffer, idx + 0x02, 0x20);
+            const resources = readString(buffer, idx + 0x22, 0x40);
+            this.objects[objectId] = { name, resources };
+        }
+    }
+}
+
+class CommonCache {
+    public objFlow: ObjFlow;
+
+    constructor(public commonArc: U8.U8Archive) {
+        // Parse ObjFlow.bin
+        this.objFlow = new ObjFlow(assertExists(this.commonArc.findFileData(`./ObjFlow.bin`)));
+    }
+
+    public destroy(device: GfxDevice) {
+    }
+}
+
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
     public modelCache = new Map<string, MDL0Model>();
-
-    public destroy(device: GfxDevice): void {
-        for (const v of this.modelCache.values())
-            v.destroy(device);
-    }
 
     public ensureRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, path: string): BRRES.RRES {
         if (!this.rresCache.has(path)) {
@@ -47,6 +76,11 @@ class ModelCache {
         }
 
         return this.rresCache.get(path)!;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.modelCache.values())
+            v.destroy(device);
     }
 }
 
@@ -80,7 +114,7 @@ class MarioKartWiiRenderer {
     public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
 
-    constructor(context: SceneContext) {
+    constructor(context: SceneContext, public commonCache: CommonCache) {
         this.renderHelper = new GXRenderHelperGfx(context.device, context);
     }
 
@@ -201,7 +235,6 @@ class MarioKartWiiRenderer {
         this.textureHolder.destroy(device);
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].destroy(device);
-        this.modelCache.destroy(device);
     }
 }
 
@@ -353,6 +386,10 @@ class Aurora extends SimpleObjectRenderer {
     }
 }
 
+async function loadSZS(buffer: ArrayBufferSlice): Promise<U8.U8Archive> {
+    return U8.parse(await Yaz0.decompress(buffer));
+}
+
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
@@ -383,318 +420,309 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             return obj;
         };
 
-        // Object IDs taken from http://wiki.tockdom.com/wiki/Object
+        const obj = renderer.commonCache.objFlow.objects[gobj.objectId];
+        const objName = obj.name;
+
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
-        if (gobj.objectId === 0x0002) { // Psea
+        if (objName === `Psea`) {
             const b1 = spawnSimpleObject(`Psea`, `Psea1sand`);
             const b2 = spawnSimpleObject(`Psea`, `Psea2dark`);
             const b3 = spawnSimpleObject(`Psea`, `Psea3nami`);
             const b4 = spawnSimpleObject(`Psea`, `Psea4tex`);
             const b5 = spawnSimpleObject(`Psea`, `Psea5spc`);
-
-            // Value established by trial and error. Needs more research. See
-            // http://wiki.tockdom.com/wiki/Object/Psea
-            //b1.modelMatrix[13] -= 8550;
-            //b2.modelMatrix[13] -= 8550;
-            //b3.modelMatrix[13] -= 8550;
-            //b4.modelMatrix[13] -= 8550;
-            //b5.modelMatrix[13] -= 8550;
-
-            //Offset not needed anymore?
-
-        } else if (gobj.objectId === 0x0003) { // lensFX
+        } else if (objName === `lensFX`) {
             // Lens flare effect -- runtime determined, not a BRRES.
-        } else if (gobj.objectId === 0x0015) { // sound_Mii
+        } else if (objName === `sound_Mii`) {
             // sound generator
-        } else if (gobj.objectId === 0x00D2) { // skyship
+        } else if (objName === `skyship`) {
             spawnSimpleObject(`skyship`);
-        } else if (gobj.objectId === 0x0065) { // itembox
+        } else if (objName === `itembox`) {
             const b = spawnSimpleObject(`itembox`);
             b.modelMatrix[13] += 20;
-        } else if (gobj.objectId === 0x006F) { // sun
+        } else if (objName === `sun`) {
             // TODO(jstpierre): Sun doesn't show up? Need to figure out what this is...
             spawnSimpleObject(`sun`);
-        } else if (gobj.objectId === 0x0071) { // KmoonZ
+        } else if (objName === `KmoonZ`) {
             spawnSimpleObject(`KmoonZ`);
-        } else if (gobj.objectId === 0x0072) { // sunDS
+        } else if (objName === `sunDS`) {
             spawnSimpleObject(`sunDS`);
-        } else if (gobj.objectId === 0x0073) { // coin
+        } else if (objName === `coin`) {
             const b = spawnSimpleObject(`coin`);
             b.modelMatrix[13] += 15;
             // pull it out the ground, doesn't spin still
-        } else if (gobj.objectId === 0x00ca) { // MashBalloonGC
+        } else if (objName === `MashBalloonGC`) {
             spawnSimpleObject(`MashBalloonGC`);
-        } else if (gobj.objectId === 0x00cb) { // WLwallGC
+        } else if (objName === `WLwallGC`) {
             spawnSimpleObject(`WLwallGC`);
-        } else if (gobj.objectId === 0x00cc) { // CarA1
+        } else if (objName === `CarA1`) {
             spawnSimpleObject(`CarA1`);
-        } else if (gobj.objectId === 0x00cd) { // basabasa
+        } else if (objName === `basabasa`) {
             spawnSimpleObject(`basabasa`);
-        } else if (gobj.objectId === 0x00ce) { // HeyhoShipGBA
+        } else if (objName === `HeyhoShipGBA`) {
             spawnSimpleObject(`HeyhoShipGBA`);
-        //} else if (gobj.objectId === 0x00d0) { // kart_truck
+        //} else if (objName === `kart_truck`) {
         //    spawnObject(`K_truck`);
-        //} else if (gobj.objectId === 0x00d1) { // car_body
+        //} else if (objName === `car_body`) {
         //    spawnObject(`K_car_body`);
-        } else if (gobj.objectId === 0x00d2) { // skyship
+        } else if (objName === `skyship`) {
             spawnSimpleObject(`skyship`);
-        } else if (gobj.objectId === 0x00d7) { // penguin_s
+        } else if (objName === `penguin_s`) {
             spawnSimpleObject(`penguin_s`);
             // wiki says they should be creating a mirrored one below it, for the fake reflection but it isnt
-        } else if (gobj.objectId === 0x00d8) { // penguin_m
+        } else if (objName === `penguin_m`) {
             spawnSimpleObject(`penguin_m`);
-        } else if (gobj.objectId === 0x00d9) { // penguin_l
+        } else if (objName === `penguin_l`) {
             spawnSimpleObject(`penguin_l`);
-        } else if (gobj.objectId === 0x00da) { // castleballoon1
+        } else if (objName === `castleballoon1`) {
             spawnSimpleObject(`castleballoon1`);
-        } else if (gobj.objectId === 0x00db) { // dossunc
+        } else if (objName === `dossunc`) {
             spawnSimpleObject(`dossun`);
-        } else if (gobj.objectId === 0x00dd) { // boble
+        } else if (objName === `boble`) {
             spawnSimpleObject(`boble`);
-        } else if (gobj.objectId === 0x00de) { // K_bomb_car
+        } else if (objName === `K_bomb_car`) {
             spawnSimpleObject(`K_bomb_car`);
-        //} else if (gobj.objectId === 0x00e2) { // hanachan
+        //} else if (objName === `hanachan`) {
         //    spawnObject(`hanachan`);
             // only shows up as his head
-        } else if (gobj.objectId === 0x00e3) { // seagull
+        } else if (objName === `seagull`) {
             spawnSimpleObject(`seagull`);
-        } else if (gobj.objectId === 0x00e4) { // moray
+        } else if (objName === `moray`) {
             spawnSimpleObject(`moray`);
-        } else if (gobj.objectId === 0x00e5) { // crab
+        } else if (objName === `crab`) {
             spawnSimpleObject(`crab`);
-        } else if (gobj.objectId === 0x00e7) { // CarA2
+        } else if (objName === `CarA2`) {
             spawnSimpleObject(`CarA2`);
-        } else if (gobj.objectId === 0x00e8) { // CarA3
+        } else if (objName === `CarA3`) {
             spawnSimpleObject(`CarA3`);
-        } else if (gobj.objectId === 0x00e9) { // Hwanwan
+        } else if (objName === `Hwanwan`) {
             const b = spawnSimpleObject(`wanwan`);
             scaleMatrix(b.modelMatrix, b.modelMatrix, 4);
             b.modelMatrix[13] += 125;
             // scales up and out of the ground to look closer to ingame
-        } else if (gobj.objectId === 0x00eb) { // Twanwan
+        } else if (objName === `Twanwan`) {
             const b = spawnSimpleObject(`Twanwan`);
             b.modelMatrix[13] += 150;
             // offset a bit so he fits into the pipe nicer.
-        } else if (gobj.objectId === 0x00ec) { // cruiserR
+        } else if (objName === `cruiserR`) {
             spawnSimpleObject(`cruiser`);
-        } else if (gobj.objectId === 0x00ed) { // bird
+        } else if (objName === `bird`) {
             spawnSimpleObject(`bird`);
-        } else if (gobj.objectId === 0x012E) { // dokan_sfc
+        } else if (objName === `dokan_sfc`) {
             spawnSimpleObject(`dokan_sfc`);
-        } else if (gobj.objectId === 0x012f) { // castletree1
+        } else if (objName === `castletree1`) {
             spawnSimpleObject(`castletree1`);
-        } else if (gobj.objectId === 0x0130) { // castletree1c
+        } else if (objName === `castletree1c`) {
             spawnSimpleObject(`castletree1`);
-        } else if (gobj.objectId === 0x0131) { // castletree2
+        } else if (objName === `castletree2`) {
             spawnSimpleObject(`castletree2`);
-        } else if (gobj.objectId === 0x0132) { // castleflower1
+        } else if (objName === `castleflower1`) {
             spawnSimpleObject(`castleflower1`);
-        } else if (gobj.objectId === 0x0133) { // mariotreeGC
+        } else if (objName === `mariotreeGC`) {
             spawnSimpleObject(`mariotreeGC`);
-        } else if (gobj.objectId === 0x0134) { // mariotreeGCc
+        } else if (objName === `mariotreeGCc`) {
             spawnSimpleObject(`mariotreeGC`);
-        } else if (gobj.objectId === 0x0135) { // donkytree1GC
+        } else if (objName === `donkytree1GC`) {
             spawnSimpleObject(`donkytree1GC`);
-        } else if (gobj.objectId === 0x0136) { // donkytree2GC
+        } else if (objName === `donkytree2GC`) {
             spawnSimpleObject(`donkytree2GC`);
-        } else if (gobj.objectId === 0x0137) { // peachtreeGC
+        } else if (objName === `peachtreeGC`) {
             spawnSimpleObject(`peachtreeGC`);
-        } else if (gobj.objectId === 0x0138) { // peachtreeGCc
+        } else if (objName === `peachtreeGCc`) {
             spawnSimpleObject(`peachtreeGC`);
-        } else if (gobj.objectId === 0x013c) { // obakeblockSFCc
+        } else if (objName === `obakeblockSFCc`) {
             spawnSimpleObject(`obakeblockSFC`);
-        } else if (gobj.objectId === 0x013d) { // WLarrowGC
+        } else if (objName === `WLarrowGC`) {
             spawnSimpleObject(`WLarrowGC`);
-        } else if (gobj.objectId === 0x013e) { // WLscreenGC
+        } else if (objName === `WLscreenGC`) {
             spawnSimpleObject(`WLscreenGC`);
-        } else if (gobj.objectId === 0x013f) { // WLdokanGC
+        } else if (objName === `WLdokanGC`) {
             spawnSimpleObject(`WLdokanGC`);
-        } else if (gobj.objectId === 0x0140) { // MarioGo64c
+        } else if (objName === `MarioGo64c`) {
             spawnSimpleObject(`MarioGo64`);
-        } else if (gobj.objectId === 0x0141) { // PeachHunsuiGC
+        } else if (objName === `PeachHunsuiGC`) {
             spawnSimpleObject(`PeachHunsuiGC`);
-        } else if (gobj.objectId === 0x0142) { // kinokoT1
+        } else if (objName === `kinokoT1`) {
             spawnSimpleObject(`kinokoT1`);
-        } else if (gobj.objectId === 0x0144) { // pylon01
+        } else if (objName === `pylon01`) {
             const b = spawnSimpleObject(`pylon01`);
             const rres = getRRES(`pylon01`);
             b.modelInstance.bindCLR0(animFrame(gobj.objectArg0), assertExists(rres.clr0.find((clr0) => clr0.name === `pylon01`)));
-        } else if (gobj.objectId === 0x0145) { // PalmTree
+        } else if (objName === `PalmTree`) {
             spawnSimpleObject(`PalmTree`);
-        } else if (gobj.objectId === 0x0146) { // parasol
+        } else if (objName === `parasol`) {
             spawnSimpleObject(`parasol`);
-        } else if (gobj.objectId === 0x0147) { // cruiser
+        } else if (objName === `cruiser`) {
             spawnSimpleObject(`cruiser`);
-        } else if (gobj.objectId === 0x0148) { // K_sticklift00
+        } else if (objName === `K_sticklift00`) {
             spawnSimpleObject(`K_sticklift00`);
-        } else if (gobj.objectId === 0x0149) { // heyho2
+        } else if (objName === `heyho2`) {
             spawnSimpleObject(`heyho2`);
-        } else if (gobj.objectId === 0x014a) { // HeyhoTreeGBAc
+        } else if (objName === `HeyhoTreeGBAc`) {
             spawnSimpleObject(`HeyhoTreeGBA`);
-        } else if (gobj.objectId === 0x014c) { // truckChimSmk
+        } else if (objName === `truckChimSmk`) {
             spawnSimpleObject(`truckChimSmk`);
-        } else if (gobj.objectId === 0x014D) { // MiiObj01
+        } else if (objName === `MiiObj01`) {
             // Don't spawn the MiiObj's as they have placeholder textures for faces that don't look good.
             // spawnObject(`MiiObj01`);
-        } else if (gobj.objectId === 0x014E) { // MiiObj02
+        } else if (objName === `MiiObj02`) {
             // spawnObject(`MiiObj02`);
-        } else if (gobj.objectId === 0x014F) { // MiiObj03
+        } else if (objName === `MiiObj03`) {
             // spawnObject(`MiiObj03`);
-        } else if (gobj.objectId === 0x0150) { // gardentreeDS
+        } else if (objName === `gardentreeDS`) {
             spawnSimpleObject(`gardentreeDS`);
-        } else if (gobj.objectId === 0x0151) { // gardentreeDSc
+        } else if (objName === `gardentreeDSc`) {
             spawnSimpleObject(`gardentreeDS`);
-        } else if (gobj.objectId === 0x0152) { // FlagA1
+        } else if (objName === `FlagA1`) {
             spawnSimpleObject(`FlagA1`);
-        } else if (gobj.objectId === 0x0153) { // FlagA2
+        } else if (objName === `FlagA2`) {
             spawnSimpleObject(`FlagA2`);
-        } else if (gobj.objectId === 0x0154) { // FlagB1
+        } else if (objName === `FlagB1`) {
             spawnSimpleObject(`FlagB1`);
-        } else if (gobj.objectId === 0x0155) { // FlagB2
+        } else if (objName === `FlagB2`) {
             spawnSimpleObject(`FlagB2`);
-        } else if (gobj.objectId === 0x0156) { // FlagA3
+        } else if (objName === `FlagA3`) {
             spawnSimpleObject(`FlagA3`);
-        } else if (gobj.objectId === 0x0157) { // DKtreeA64
+        } else if (objName === `DKtreeA64`) {
             spawnSimpleObject(`DKtreeA64`);
-        } else if (gobj.objectId === 0x0158) { // DKtreeA64c
+        } else if (objName === `DKtreeA64c`) {
             spawnSimpleObject(`DKtreeA64`);
-        } else if (gobj.objectId === 0x0159) { // DKtreeB64
+        } else if (objName === `DKtreeB64`) {
             spawnSimpleObject(`DKtreeB64`);
-        } else if (gobj.objectId === 0x015a) { // DKtreeB64c
+        } else if (objName === `DKtreeB64c`) {
             spawnSimpleObject(`DKtreeB64`);
-        } else if (gobj.objectId === 0x015b) { // TownTreeDSc
+        } else if (objName === `TownTreeDSc`) {
             spawnSimpleObject(`TownTreeDS`);
-        } else if (gobj.objectId === 0x015c) { // Piston
+        } else if (objName === `Piston`) {
             spawnSimpleObject(`Piston`);
-        } else if (gobj.objectId === 0x015d) { // oilSFC
+        } else if (objName === `oilSFC`) {
             spawnSimpleObject(`oilSFC`);
-        } else if (gobj.objectId === 0x0160) { // mii_balloon
+        } else if (objName === `mii_balloon`) {
             spawnSimpleObject(`mii_balloon`);
-        } else if (gobj.objectId === 0x0161) { // windmill
+        } else if (objName === `windmill`) {
             spawnSimpleObject(`windmill`);
-        } else if (gobj.objectId === 0x0162) { // dossun
+        } else if (objName === `dossun`) {
             spawnSimpleObject(`dossun`);
-        } else if (gobj.objectId === 0x0163) { // TownTreeDS
+        } else if (objName === `TownTreeDS`) {
             spawnSimpleObject(`TownTreeDS`);
-        } else if (gobj.objectId === 0x0164) { // Ksticketc
+        } else if (objName === `Ksticketc`) {
             spawnSimpleObject(`Ksticketc`);
-        } else if (gobj.objectId === 0x0165) { // monte_a
+        } else if (objName === `monte_a`) {
             spawnSimpleObject(`monte_a`);
-        } else if (gobj.objectId === 0x0166) { // MiiStatueM1
+        } else if (objName === `MiiStatueM1`) {
             spawnSimpleObject(`MiiStatueM1`);
-        } else if (gobj.objectId === 0x0167) { // ShMiiObj01
+        } else if (objName === `ShMiiObj01`) {
             spawnSimpleObject(`ShMiiObj01`);
-        } else if (gobj.objectId === 0x0168) { // ShMiiObj02
+        } else if (objName === `ShMiiObj02`) {
             spawnSimpleObject(`ShMiiObj02`);
-        } else if (gobj.objectId === 0x0169) { // ShMiiObj03
+        } else if (objName === `ShMiiObj03`) {
             spawnSimpleObject(`ShMiiObj03`);
-        } else if (gobj.objectId === 0x016b) { // miiposter
+        } else if (objName === `miiposter`) {
             spawnSimpleObject(`miiposter`);
-        } else if (gobj.objectId === 0x016c) { // dk_miiobj00
+        } else if (objName === `dk_miiobj00`) {
             spawnSimpleObject(`dk_miiobj00`);
-        } else if (gobj.objectId === 0x016d) { // light_house
+        } else if (objName === `light_house`) {
             spawnSimpleObject(`light_house`);
-        } else if (gobj.objectId === 0x016e) { // r_parasol
+        } else if (objName === `r_parasol`) {
             spawnSimpleObject(`r_parasol`);
-        } else if (gobj.objectId === 0x016f) { // obakeblock2SFCc
+        } else if (objName === `obakeblock2SFCc`) {
             spawnSimpleObject(`obakeblockSFC`);
-        } else if (gobj.objectId === 0x0170) { // obakeblock3SFCc
+        } else if (objName === `obakeblock3SFCc`) {
             spawnSimpleObject(`obakeblockSFC`);
-        } else if (gobj.objectId === 0x0171) { // koopaFigure
+        } else if (objName === `koopaFigure`) {
             spawnSimpleObject(`koopaFigure`);
-        } else if (gobj.objectId === 0x0172) { // pukupuku
+        } else if (objName === `pukupuku`) {
             spawnSimpleObject(`pukupuku`);
-        } else if (gobj.objectId === 0x0176) { // karehayama
+        } else if (objName === `karehayama`) {
             spawnSimpleObject(`karehayama`);
-        } else if (gobj.objectId === 0x0177) { // EarthRing
+        } else if (objName === `EarthRing`) {
             spawnSimpleObject(`EarthRing`);
-        } else if (gobj.objectId === 0x0178) { // SpaceSun
+        } else if (objName === `SpaceSun`) {
             spawnSimpleObject(`SpaceSun`);
-        } else if (gobj.objectId === 0x017a) { // StarRing
+        } else if (objName === `StarRing`) {
             spawnSimpleObject(`StarRing`);
-        } else if (gobj.objectId === 0x017b) { // M_obj_kanban
+        } else if (objName === `M_obj_kanban`) {
             spawnSimpleObject(`M_obj_kanban`);
-        } else if (gobj.objectId === 0x017c) { // MiiStatueL1
+        } else if (objName === `MiiStatueL1`) {
             spawnSimpleObject(`MiiStatueL1`);
-        } else if (gobj.objectId === 0x017d) { // MiiStatueD1
+        } else if (objName === `MiiStatueD1`) {
             spawnSimpleObject(`MiiStatueD1`);
-        } else if (gobj.objectId === 0x017e) { // MiiSphinxY1
+        } else if (objName === `MiiSphinxY1`) {
             spawnSimpleObject(`MiiSphinxY1`);
-        } else if (gobj.objectId === 0x017f) { // MiiSphinxY2
+        } else if (objName === `MiiSphinxY2`) {
             spawnSimpleObject(`MiiSphinxY2`);
-        } else if (gobj.objectId === 0x0180) { // FlagA5
+        } else if (objName === `FlagA5`) {
             spawnSimpleObject(`FlagA5`);
-        } else if (gobj.objectId === 0x0181) { // CarB
+        } else if (objName === `CarB`) {
             spawnSimpleObject(`CarB`);
-        } else if (gobj.objectId === 0x0185) { // group_monte_a
+        } else if (objName === `group_monte_a`) {
             spawnSimpleObject(`group_monte_a`);
-        } else if (gobj.objectId === 0x0186) { // MiiStatueL2
+        } else if (objName === `MiiStatueL2`) {
             spawnSimpleObject(`MiiStatueL2`);
-        } else if (gobj.objectId === 0x0187) { // MiiStatueD2
+        } else if (objName === `MiiStatueD2`) {
             spawnSimpleObject(`MiiStatueD2`);
-        } else if (gobj.objectId === 0x0188) { // MiiStatueP1
+        } else if (objName === `MiiStatueP1`) {
             spawnSimpleObject(`MiiStatueP1`);
-        } else if (gobj.objectId === 0x0189) { // SentakuDS
+        } else if (objName === `SentakuDS`) {
             spawnSimpleObject(`SentakuDS`);
-        } else if (gobj.objectId === 0x018a) { // fks_screen_wii
+        } else if (objName === `fks_screen_wii`) {
             spawnSimpleObject(`fks_screen_wii`);
-        } else if (gobj.objectId === 0x018b) { // KoopaFigure64
+        } else if (objName === `KoopaFigure64`) {
             spawnSimpleObject(`KoopaFigure64`);
-        } else if (gobj.objectId === 0x018c) { // b_teresa
+        } else if (objName === `b_teresa`) {
             spawnSimpleObject(`b_teresa`);
-        } else if (gobj.objectId === 0x018E) { // MiiKanban
+        } else if (objName === `MiiKanban`) {
             spawnSimpleObject(`MiiKanban`);
-        } else if (gobj.objectId === 0x018f) { // BGteresaSFC
+        } else if (objName === `BGteresaSFC`) {
             spawnSimpleObject(`BGteresaSFC`);
-        } else if (gobj.objectId === 0x0191) { // kuribo
+        } else if (objName === `kuribo`) {
             const b = spawnSimpleObject(`kuribo`);
             const rres = getRRES(`kuribo`);
             b.modelInstance.bindCHR0(renderer.animationController, assertExists(rres.chr0.find((chr0) => chr0.name === 'walk_l')));
-        } else if (gobj.objectId === 0x0192) { // choropu
+        } else if (objName === `choropu`) {
             spawnSimpleObject(`choropu`);
-        } else if (gobj.objectId === 0x0193) { // cow
+        } else if (objName === `cow`) {
             spawnSimpleObject(`cow`);
-        } else if (gobj.objectId === 0x0194) { // pakkun_f
+        } else if (objName === `pakkun_f`) {
             spawnSimpleObject(`pakkun_f`);
-        } else if (gobj.objectId === 0x0195) { // WLfirebarGC
+        } else if (objName === `WLfirebarGC`) {
             spawnSimpleObject(`WLfirebarGC`);
-        } else if (gobj.objectId === 0x0196) { // wanwan
+        } else if (objName === `wanwan`) {
             spawnSimpleObject(`wanwan`);
-        } else if (gobj.objectId === 0x0197) { // poihana
+        } else if (objName === `poihana`) {
             const b = spawnSimpleObject(`poihana`);
             b.modelMatrix[13] += 25; // pull him out of the ground
-        } else if (gobj.objectId === 0x0198) { // DKrockGC
+        } else if (objName === `DKrockGC`) {
             spawnSimpleObject(`DKrockGC`);
-        } else if (gobj.objectId === 0x0199) { // sanbo
+        } else if (objName === `sanbo`) {
             spawnSimpleObject(`sanbo`);
-        } else if (gobj.objectId === 0x019a) { // choropu2
+        } else if (objName === `choropu2`) {
             spawnSimpleObject(`choropu`);
-        } else if (gobj.objectId === 0x019b) { // TruckWagon
+        } else if (objName === `TruckWagon`) {
             spawnSimpleObject(`TruckWagon`);
-        } else if (gobj.objectId === 0x019c) { // heyho
+        } else if (objName === `heyho`) {
             spawnSimpleObject(`heyho`);
-        } else if (gobj.objectId === 0x019d) { // Press
+        } else if (objName === `Press`) {
             spawnSimpleObject(`Press`);
-        } else if (gobj.objectId === 0x01a1) { // WLfireringGC
+        } else if (objName === `WLfireringGC`) {
             spawnSimpleObject(`WLfirebarGC`);
-        } else if (gobj.objectId === 0x01a2) { // pakkun_dokan
+        } else if (objName === `pakkun_dokan`) {
             spawnSimpleObject(`pakkun_dokan`);
-        //} else if (gobj.objectId === 0x01a3) { // begoman_spike
+        //} else if (objName === `begoman_spike`) {
         //    spawnSimpleObject(`begoman_spike`);
-        } else if (gobj.objectId === 0x01a4) { // FireSnake
+        } else if (objName === `FireSnake`) {
             spawnSimpleObject(`FireSnake`);
-        } else if (gobj.objectId === 0x01a5) { // koopaFirebar
+        } else if (objName === `koopaFirebar`) {
             spawnSimpleObject(`koopaFirebar`);
-        } else if (gobj.objectId === 0x01a6) { // Epropeller
+        } else if (objName === `Epropeller`) {
             spawnSimpleObject(`Epropeller`);
-        } else if (gobj.objectId === 0x01a8) { // FireSnake_v
+        } else if (objName === `FireSnake_v`) {
             spawnSimpleObject(`FireSnake`);
-        } else if (gobj.objectId === 0x01aa) { // puchi_pakkun
+        } else if (objName === `puchi_pakkun`) {
             spawnSimpleObject(`puchi_pakkun`);
-        //} else if (gobj.objectId === 0x01f5) { // kinoko_ud
+        //} else if (objName === `kinoko_ud`) {
         //    spawnObject(`kinoko`);
-        } else if (gobj.objectId === 0x01f6) { // kinoko_bend
+        } else if (objName === `kinoko_bend`) {
             if (gobj.objectArg0 === 0) {
                 spawnSimpleObject(`kinoko`, `kinoko_kuki`);
                 spawnSimpleObject(`kinoko`, `kinoko_r`);
@@ -704,13 +732,13 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "whoops";
             }
-        } else if (gobj.objectId === 0x01f7) { // VolcanoRock1
+        } else if (objName === `VolcanoRock1`) {
             spawnSimpleObject(`VolcanoRock1`);
-        } else if (gobj.objectId === 0x01f8) { // bulldozer_left
+        } else if (objName === `bulldozer_left`) {
             spawnSimpleObject(`bulldozer_left`);
-        } else if (gobj.objectId === 0x01f9) { // bulldozer_right
+        } else if (objName === `bulldozer_right`) {
             spawnSimpleObject(`bulldozer_right`);
-        } else if (gobj.objectId === 0x01fa) { // kinoko_nm
+        } else if (objName === `kinoko_nm`) {
             if (gobj.objectArg0 === 0) {
                 spawnSimpleObject(`kinoko`, `kinoko_kuki`);
                 spawnSimpleObject(`kinoko`, `kinoko_g`);
@@ -720,160 +748,163 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "whoops";
             }
-        } else if (gobj.objectId === 0x01fb) { // Crane
+        } else if (objName === `Crane`) {
             spawnSimpleObject(`Crane`);
-        } else if (gobj.objectId === 0x01fc) { // VolcanoPiece
+        } else if (objName === `VolcanoPiece`) {
             spawnSimpleObject(`VolcanoPiece1`, `VolcanoPiece${gobj.objectArg0}`);
-        } else if (gobj.objectId === 0x01fd) { // FlamePole
+        } else if (objName === `FlamePole`) {
             spawnSimpleObject(`FlamePole`);
-        } else if (gobj.objectId === 0x01fe) { // TwistedWay
+        } else if (objName === `TwistedWay`) {
             spawnSimpleObject(`TwistedWay`);
-        } else if (gobj.objectId === 0x01ff) { // TownBridgeDSc
+        } else if (objName === `TownBridgeDSc`) {
             spawnSimpleObject(`TownBridgeDS`);
-        } else if (gobj.objectId === 0x0200) { // DKship64
+        } else if (objName === `DKship64`) {
             spawnSimpleObject(`DKship64`);
-        } else if (gobj.objectId === 0x0202) { // DKturibashiGCc
+        } else if (objName === `DKturibashiGCc`) {
             spawnSimpleObject(`DKturibashiGC`);
-        } else if (gobj.objectId === 0x0204) { // aurora
+        } else if (objName === `aurora`) {
             const aurora = new Aurora(createModelInstance(`aurora`), gobj);
             renderer.baseObjects.push(aurora);
-        } else if (gobj.objectId === 0x0205) { // venice_saku
+        } else if (objName === `venice_saku`) {
             spawnSimpleObject(`venice_saku`);
-        } else if (gobj.objectId === 0x0206) { // casino_roulette
+        } else if (objName === `casino_roulette`) {
             spawnSimpleObject(`casino_roulette`);
-        } else if (gobj.objectId === 0x0209) { // dc_sandcone
+        } else if (objName === `dc_sandcone`) {
             spawnSimpleObject(`dc_sandcone`);
-        } else if (gobj.objectId === 0x020a) { // venice_hasi 
+        } else if (objName === `venice_hasi `) {
             spawnSimpleObject(`venice_hasi`);
-        } else if (gobj.objectId === 0x020b) { // bblock
+        } else if (objName === `bblock`) {
             spawnSimpleObject(`bblock1`);
-        } else if (gobj.objectId === 0x020e) { // ami
+        } else if (objName === `ami`) {
             spawnSimpleObject(`ami`);
-        } else if (gobj.objectId === 0x0211) { // RM_ring1
+        } else if (objName === `RM_ring1`) {
             const ringNames = ['RM_ring1', 'RM_ring2', 'RM_ring3'];
             const ringName = ringNames[gobj.objectArg0 - 1];
             const b = spawnSimpleObject(`RM_ring1`, ringName);
             const rres = getRRES(`RM_ring1`);
             b.modelInstance.bindRRESAnimations(renderer.animationController, rres, ringName);
             b.modelInstance.bindCLR0(null, null);
-        //} else if (gobj.objectId === 0x0212) { // FlamePole_v
+        //} else if (objName === `FlamePole_v`) {
         //    spawnObject(`FlamePole_v`);
-        } else if (gobj.objectId === 0x0214) { // InsekiA
+        } else if (objName === `InsekiA`) {
             spawnSimpleObject(`InsekiA`);
-        } else if (gobj.objectId === 0x0215) { // InsekiB
+        } else if (objName === `InsekiB`) {
             spawnSimpleObject(`InsekiB`);
-        //} else if (gobj.objectId === 0x0216) { // FlamePole_v_big
+        //} else if (objName === `FlamePole_v_big`) {
         //    spawnObject(`FlamePole_v_big`);
-        } else if (gobj.objectId === 0x0217) { // Mdush
+        } else if (objName === `Mdush`) {
             spawnSimpleObject(`Mdush`);
-        } else if (gobj.objectId === 0x0259) { // DonkyCannonGC
+        } else if (objName === `DonkyCannonGC`) {
             spawnSimpleObject(`DonkyCannonGC`);
-        } else if (gobj.objectId === 0x025a) { // BeltEasy
+        } else if (objName === `BeltEasy`) {
             spawnSimpleObject(`BeltEasy`);
-        } else if (gobj.objectId === 0x025b) { // BeltCrossing
+        } else if (objName === `BeltCrossing`) {
             spawnSimpleObject(`BeltCrossing`);
-        } else if (gobj.objectId === 0x025c) { // BeltCurveA
+        } else if (objName === `BeltCurveA`) {
             spawnSimpleObject(`BeltCurveA`);
-        } else if (gobj.objectId === 0x025e) { // escalator
+        } else if (objName === `escalator`) {
             spawnSimpleObject(`escalator`);
-        } else if (gobj.objectId === 0x025f) { // DonkyCannon_wii
+        } else if (objName === `DonkyCannon_wii`) {
             spawnSimpleObject(`DonkyCannon_wii`);
-        } else if (gobj.objectId === 0x0260) { // escalator_group
+        } else if (objName === `escalator_group`) {
             const left = spawnSimpleObject(`escalator`);
             mat4.translate(left.modelMatrix, left.modelMatrix, [-1450, 250, -600]);
             const right = spawnSimpleObject(`escalator`);
             mat4.translate(right.modelMatrix, right.modelMatrix, [1450, 250, -600]);
-        } else if (gobj.objectId === 0x0261) { // tree_cannon
+        } else if (objName === `tree_cannon`) {
             spawnSimpleObject(`tree_cannon`);
-        } else if (gobj.objectId === 0x02bd) { // group_enemy_b
+        } else if (objName === `group_enemy_b`) {
             spawnSimpleObject(`group_enemy_b`);
-        } else if (gobj.objectId === 0x02be) { // group_enemy_c
+        } else if (objName === `group_enemy_c`) {
             spawnSimpleObject(`group_enemy_c`);
-        //} else if (gobj.objectId === 0x02bf) { // taimatsu
+        //} else if (objName === `taimatsu`) {
         //    spawnObject(`taimatsu`);
-        } else if (gobj.objectId === 0x02c0) { // truckChimSmkW
+        } else if (objName === `truckChimSmkW`) {
             spawnSimpleObject(`truckChimSmkW`);
-        } else if (gobj.objectId === 0x02c2) { // dkmonitor
+        } else if (objName === `dkmonitor`) {
             spawnSimpleObject(`dkmonitor`);
-        } else if (gobj.objectId === 0x02c3) { // group_enemy_a
+        } else if (objName === `group_enemy_a`) {
             spawnSimpleObject(`group_enemy_a`);
-        } else if (gobj.objectId === 0x02c4) { // FlagB3
+        } else if (objName === `FlagB3`) {
             spawnSimpleObject(`FlagB3`);
-        } else if (gobj.objectId === 0x02c5) { // spot
+        } else if (objName === `spot`) {
             spawnSimpleObject(`spot`);
-        } else if (gobj.objectId === 0x02c7) { // FlagB4
+        } else if (objName === `FlagB4`) {
             spawnSimpleObject(`FlagB4`);
-        } else if (gobj.objectId === 0x02c8) { // group_enemy_e
+        } else if (objName === `group_enemy_e`) {
             spawnSimpleObject(`group_enemy_e`);
-        } else if (gobj.objectId === 0x02c9) { // group_monte_L
+        } else if (objName === `group_monte_L`) {
             spawnSimpleObject(`group_monte_a`);
-        } else if (gobj.objectId === 0x02ca) { // group_enemy_f
+        } else if (objName === `group_enemy_f`) {
             spawnSimpleObject(`group_enemy_f`);
-        //} else if (gobj.objectId === 0x02cc) { // FallBsB
+        //} else if (objName === `FallBsB`) {
         //    spawnObject(`FallBsB`);
-        //} else if (gobj.objectId === 0x02ce) { // volsmk
+        //} else if (objName === `volsmk`) {
         //    spawnObject(`volsmk`);
-        } else if (gobj.objectId === 0x02cf) { // ridgemii00
+        } else if (objName === `ridgemii00`) {
             spawnSimpleObject(`ridgemii00`);
-        } else if (gobj.objectId === 0x02D0) { // Flash_L
+        } else if (objName === `Flash_L`) {
             // particle effect; unsupported
-        } else if (gobj.objectId === 0x02d5) { // MiiSignNoko
+        } else if (objName === `MiiSignNoko`) {
             const b = spawnSimpleObject(`MiiSignNoko`);
             const rres = getRRES(`MiiSignNoko`);
             b.modelInstance.bindPAT0(animFrame(0), rres.pat0[0]);
-        } else if (gobj.objectId === 0x02d6) { // UtsuboDokan
+        } else if (objName === `UtsuboDokan`) {
             spawnSimpleObject(`UtsuboDokan`);
-        } else if (gobj.objectId === 0x02d7) { // Spot64
+        } else if (objName === `Spot64`) {
             spawnSimpleObject(`Spot64`);
-        //} else if (gobj.objectId === 0x02d9) { // Fall_MH
+        //} else if (objName === `Fall_MH`) {
         //    spawnObject(`Fall_MH`);
-        //} else if (gobj.objectId === 0x02da) { // Fall_Y
+        //} else if (objName === `Fall_Y`) {
         //    spawnObject(`Fall_Y`);
-        } else if (gobj.objectId === 0x02df) { // MiiStatueM2
+        } else if (objName === `MiiStatueM2`) {
             spawnSimpleObject(`MiiStatueM2`);
-        } else if (gobj.objectId === 0x02e0) { // RhMiiKanban
+        } else if (objName === `RhMiiKanban`) {
             spawnSimpleObject(`RhMiiKanban`);
-        } else if (gobj.objectId === 0x02E1) { // MiiStatueL3
+        } else if (objName === `MiiStatueL3`) {
             spawnSimpleObject(`MiiStatueL3`);
-        } else if (gobj.objectId === 0x02e2) { // MiiSignWario
+        } else if (objName === `MiiSignWario`) {
             spawnSimpleObject(`MiiSignWario`);
-        } else if (gobj.objectId === 0x02e3) { // MiiStatueBL1
+        } else if (objName === `MiiStatueBL1`) {
             spawnSimpleObject(`MiiStatueBL1`);
-        } else if (gobj.objectId === 0x02e4) { // MiiStatueBD1
+        } else if (objName === `MiiStatueBD1`) {
             spawnSimpleObject(`MiiStatueBD1`);
-        //} else if (gobj.objectId === 0x02e5) { // Kamifubuki
+        //} else if (objName === `Kamifubuki`) {
         //    spawnSimpleObject(`Kamifubuki`);
-        } else if (gobj.objectId === 0x02e6) { // Crescent64
+        } else if (objName === `Crescent64`) {
             spawnSimpleObject(`Crescent64`);
-        } else if (gobj.objectId === 0x02e7) { // MiiSighKino
+        } else if (objName === `MiiSighKino`) {
             const b = spawnSimpleObject(`MiiSighKino`);
             const rres = getRRES(`MiiSighKino`);
             b.modelInstance.bindPAT0(animFrame(0), rres.pat0[0]);
-        } else if (gobj.objectId === 0x02e8) { // MiiObjD01
+        } else if (objName === `MiiObjD01`) {
             spawnSimpleObject(`MiiObjD01`);
-        } else if (gobj.objectId === 0x02e9) { // MiiObjD02
+        } else if (objName === `MiiObjD02`) {
             spawnSimpleObject(`MiiObjD02`);
-        } else if (gobj.objectId === 0x02ea) { // MiiObjD03
+        } else if (objName === `MiiObjD03`) {
             spawnSimpleObject(`MiiObjD03`);
-        } else if (gobj.objectId === 0x02eb) { // mare_a
+        } else if (objName === `mare_a`) {
             spawnSimpleObject(`mare_a`);
-        } else if (gobj.objectId === 0x02ec) { // mare_b
+        } else if (objName === `mare_b`) {
             spawnSimpleObject(`mare_b`);
-        //} else if (gobj.objectId === 0x02f3) { // DKfalls
+        //} else if (objName === `DKfalls`) {
         //    spawnObject(`DKfalls`);
         } else {
             console.warn(`Unimplemented object ${hexzero(gobj.objectId, 4)}`);
         }
     }
 
-    public static createSceneFromU8Archive(context: SceneContext, arc: U8.U8Archive): MarioKartWiiRenderer {
+    public static async createSceneFromU8Archive(context: SceneContext, arc: U8.U8Archive): Promise<MarioKartWiiRenderer> {
+        const commonCache = await context.dataShare.ensureObject(`MarioKartWii/CommonCache`, async () => {
+            const buffer = await context.dataFetcher.fetchData(`MarioKartWii/Race/Common.szs`);
+            return new CommonCache(await loadSZS(buffer));
+        });
+
         const device = context.device;
         const kmp = parseKMP(assertExists(arc.findFileData(`./course.kmp`)));
         console.log(arc, kmp);
-        const renderer = new MarioKartWiiRenderer(context);
-        const cache = renderer.renderHelper.renderCache;
-
-        const modelCache = renderer.modelCache;
+        const renderer = new MarioKartWiiRenderer(context, commonCache);
+        const modelCache = renderer.modelCache, cache = renderer.renderHelper.renderCache;
 
         const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);
         const courseInstance = this.createModelInstanceFromRRES(renderer, courseRRES, 'course');
@@ -922,16 +953,12 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-
-        const buffer = await dataFetcher.fetchData(`mkwii/${this.id}.szs`);
-        const decompressed = await Yaz0.decompress(buffer);
-        const arc = U8.parse(decompressed);
-        return MarioKartWiiSceneDesc.createSceneFromU8Archive(context, arc);
+        const courseSZS = await context.dataFetcher.fetchData(`MarioKartWii/Race/Course/${this.id}.szs`);
+        return MarioKartWiiSceneDesc.createSceneFromU8Archive(context, await loadSZS(courseSZS));
     }
 }
 
-export function createMarioKartWiiSceneFromU8Archive(context: SceneContext, arc: U8.U8Archive) {
+export async function createMarioKartWiiSceneFromU8Archive(context: SceneContext, arc: U8.U8Archive) {
     return MarioKartWiiSceneDesc.createSceneFromU8Archive(context, arc);
 }
 

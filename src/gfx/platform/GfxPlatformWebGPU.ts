@@ -382,8 +382,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public descriptor: GfxRenderPassDescriptor;
     private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
     private gpuRenderPassDescriptor: GPURenderPassDescriptor;
-    private gpuColorAttachments: GPURenderPassColorAttachmentNew[];
-    private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachmentNew;
+    private gpuColorAttachments: GPURenderPassColorAttachment[];
+    private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachment;
     private gfxColorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private debugPointer: any;
@@ -972,7 +972,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         renderPipeline.isCreating = true;
 
-        const gpuRenderPipeline: GPURenderPipelineDescriptorNew = {
+        const gpuRenderPipeline: GPURenderPipelineDescriptor = {
             layout,
             vertex: {
                 ... vertexStage,
@@ -1196,7 +1196,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 }
 
-export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement): Promise<GfxSwapChain | null> {
+export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<GfxSwapChain | null> {
     if (navigator.gpu === undefined)
         return null;
 

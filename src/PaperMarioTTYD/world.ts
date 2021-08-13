@@ -51,11 +51,11 @@ export interface Sampler {
 }
 
 export const enum MaterialLayer {
-    OPAQUE = 0x00,
-    ALPHA_TEST = 0x01,
-    BLEND = 0x02,
-    OPAQUE_PUNCHTHROUGH = 0x03,
-    ALPHA_TEST_PUNCHTHROUGH = 0x04,
+    Opaque = 0x00,
+    AlphaTest = 0x01,
+    Blend = 0x02,
+    OpaquePunchthrough = 0x03,
+    AlphaTestPunchthrough = 0x04,
 }
 
 export interface Material {
@@ -79,12 +79,13 @@ export interface SceneGraphPart {
 }
 
 export const enum DrawModeFlags {
-    IS_DECAL = 0x10,
+    IsDecal = 0x10,
 }
 
 export const enum CollisionFlags {
-    WALK_SLOW              = 0x00000100,
-    HAZARD_RESPAWN_ENABLED = 0x40000000,
+    None                 = 0,
+    WalkSlow             = 0x00000100,
+    HazardRespawnEnabled = 0x40000000,
 }
 
 export interface SceneGraphNode {
@@ -585,10 +586,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const matColorReg = colorNewFromRGBA8(view.getUint32(materialOffs + 0x04));
         const matColorSrc: GX.ColorSrc = view.getUint8(materialOffs + 0x08);
 
-        let materialLayer: MaterialLayer = MaterialLayer.OPAQUE;
+        let materialLayer: MaterialLayer = MaterialLayer.Opaque;
 
         const materialLayerFlags: MaterialLayer = view.getUint8(materialOffs + 0x0A);
-        assert(materialLayerFlags <= MaterialLayer.BLEND);
+        assert(materialLayerFlags <= MaterialLayer.Blend);
         materialLayer = Math.max(materialLayer, materialLayerFlags);
 
         const samplerEntryTableCount = view.getUint8(materialOffs + 0x0B);
@@ -610,7 +611,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             const wrapT: GX.WrapMode = view.getUint8(samplerOffs + 0x09);
 
             const materialLayerFlags: MaterialLayer = view.getUint8(samplerOffs + 0x0A);
-            assert(materialLayerFlags <= MaterialLayer.BLEND);
+            assert(materialLayerFlags <= MaterialLayer.Blend);
             materialLayer = Math.max(materialLayer, materialLayerFlags);
 
             const textureName = readString(buffer, mainDataOffs + view.getUint32(textureEntryOffs + 0x00));
@@ -664,7 +665,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         mapSetMaterialTev(mb, samplerEntryTableCount, tevMode);
 
-        if (materialLayer === MaterialLayer.OPAQUE) {
+        if (materialLayer === MaterialLayer.Opaque) {
             // Opaque.
             // GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_OR);
             // GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
@@ -672,7 +673,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
             mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        } else if (materialLayer === MaterialLayer.ALPHA_TEST) {
+        } else if (materialLayer === MaterialLayer.AlphaTest) {
             // Alpha test.
             // GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
             // GXSetAlphaCompare(GX_GEQUAL, 0x80, GX_AOP_OR, GX_NEVER, 0);
@@ -680,7 +681,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
             mb.setAlphaCompare(GX.CompareType.GEQUAL, 0x80, GX.AlphaOp.OR, GX.CompareType.NEVER, 0);
             mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        } else if (materialLayer === MaterialLayer.BLEND) {
+        } else if (materialLayer === MaterialLayer.Blend) {
             // Transparent.
             // GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
             // GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
@@ -765,7 +766,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             const material = assertExists(materialMap.get(mainDataOffs + materialOffs));
 
-            if (material.materialLayer === MaterialLayer.BLEND)
+            if (material.materialLayer === MaterialLayer.Blend)
                 isTranslucent = true;
 
             const meshOffs = mainDataOffs + view.getUint32(partTableIdx + 0x04);

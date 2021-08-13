@@ -5,7 +5,7 @@ import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg } from '../ActorUtil';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
@@ -1171,8 +1171,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 tryStartBck(this, `Wait`);
             }
 
-            const speed = deltaTimeFrames * calcNerveValue(this, 0, 200, 15);
-            moveCoordAndFollowTrans(this, speed);
+            const speed = calcNerveValue(this, 0, 200, 15);
+            moveCoordAndFollowTrans(this, speed * deltaTimeFrames);
 
             getRailDirection(this.direction, this);
             if (this.isGreaterEqualStepAndRandom(500))
@@ -1182,8 +1182,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 startBck(this, `Spin`);
 
             const duration = getBckFrameMax(this);
-            const speed = deltaTimeFrames * calcNerveValue(this, duration, 15, 0);
-            moveCoordAndFollowTrans(this, speed);
+            const speed = calcNerveValue(this, duration, 15, 0);
+            moveCoordAndFollowTrans(this, speed * deltaTimeFrames);
             if (isBckStopped(this))
                 this.setNerve(TicoRailNrv.Wait);
         } else if (currentNerve === TicoRailNrv.TalkCancel) {
@@ -1427,7 +1427,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
             if (isFirstStep(this))
                 onCalcShadow(this);
 
-            moveCoordAndFollowTrans(this, 5.0);
+            moveCoordAndFollowTrans(this, 5.0 * deltaTimeFrames);
 
             const currentRailPointNo = getCurrentRailPointNo(this);
             if (this.currentRailPointNo !== currentRailPointNo) {
@@ -1469,5 +1469,18 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         sceneObjHolder.modelCache.requestObjectData('HoneyBee');
         const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'HoneyBee', itemGoodsIdx);
+    }
+}
+
+export class RosettaChair extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'RosettaChair');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'RosettaChair');
+        connectToSceneMapObj(sceneObjHolder, this);
+        startBck(this, 'RosettaChair');
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 }

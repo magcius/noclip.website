@@ -24,6 +24,8 @@ export class FloatingPanel implements Widget {
     protected header: HTMLElement;
     protected headerContainer: HTMLElement;
     protected svgIcon: SVGSVGElement;
+    protected minimizeButton: HTMLElement;
+    protected minimized = false;
     protected closeButton: HTMLElement;
 
     private toplevel: HTMLElement;
@@ -74,16 +76,33 @@ export class FloatingPanel implements Widget {
             this.close();
         }
 
+        this.minimizeButton = document.createElement('div');
+        this.minimizeButton.textContent = '_';
+        this.minimizeButton.title = 'Minimize';
+        this.minimizeButton.style.gridColumn = '3';
+        this.minimizeButton.style.lineHeight = '28px';
+        this.minimizeButton.style.margin = '0';
+        this.minimizeButton.style.padding = '0 4px';
+        this.minimizeButton.style.fontSize = '100%';
+        this.minimizeButton.style.cursor = 'pointer';
+        this.minimizeButton.style.userSelect = 'none';
+        this.minimizeButton.onclick = (e: MouseEvent) => {
+            this.setMinimized(!this.minimized);
+        };
+        this.minimizeButton.ondblclick = (e: MouseEvent) => {
+            e.stopPropagation();
+        };
+
         this.closeButton = document.createElement('div');
-        this.closeButton.textContent = '❌';
+        this.closeButton.textContent = 'X';
         this.closeButton.title = 'Close';
-        this.closeButton.style.gridColumn = '3';
+        this.closeButton.style.gridColumn = '4';
         this.closeButton.style.lineHeight = '28px';
         this.closeButton.style.margin = '0';
+        this.closeButton.style.padding = '0 4px';
         this.closeButton.style.fontSize = '100%';
         this.closeButton.style.cursor = 'pointer';
         this.closeButton.style.userSelect = 'none';
-        this.closeButton.style.gridColumn = '3';
         this.closeButton.onclick = () => {
             this.close();
         };
@@ -99,6 +118,7 @@ export class FloatingPanel implements Widget {
 
         this.elem = this.toplevel;
 
+        /*
         this.elem.onmouseover = () => {
             this.elem.style.opacity = '1';
         };
@@ -106,6 +126,7 @@ export class FloatingPanel implements Widget {
             this.elem.style.opacity = '0.2';
         };
         this.elem.style.opacity = '0.2';
+        */
     }
 
     public setWidth(v: number): void {
@@ -132,11 +153,19 @@ export class FloatingPanel implements Widget {
         this.toplevel.style.display = v ? 'grid' : 'none';
     }
 
+    public setMinimized(v: boolean) {
+        if (this.minimized === v)
+            return;
+        this.minimized = v;
+        this.contents.style.height = this.minimized ? '0px' : '';
+    }
+
     public setTitle(icon: string, title: string) {
         this.svgIcon = createDOMFromString(icon).querySelector('svg')!;
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
+        this.header.appendChild(this.minimizeButton);
         this.header.appendChild(this.closeButton);
         this.toplevel.dataset.title = title;
         this.syncHeaderStyle();
@@ -194,6 +223,12 @@ export class FloatingPanel implements Widget {
         if (usePercent === undefined && parentMetadata !== null)
             usePercent = parentMetadata.usepercent;
         usePercent = !!usePercent;
+
+        let labelNameMetadata = Reflect.getMetadata('df:label', obj, paramName);
+        if (labelNameMetadata === undefined && parentMetadata !== null && parentMetadata.label !== undefined)
+            labelNameMetadata = parentMetadata.label;
+        if (labelNameMetadata !== undefined)
+            labelName = labelNameMetadata;
 
         const fracDig = Math.max(0, -Math.log10(step));
         const slider = new Slider();
@@ -311,6 +346,7 @@ export class FloatingPanel implements Widget {
 
 export class DebugFloaterHolder {
     private floatingPanels: FloatingPanel[] = [];
+    private debugFloater: FloatingPanel | null = null;
     public elem: HTMLElement;
     public midiControls = new GlobalMIDIControls();
 
@@ -330,20 +366,20 @@ export class DebugFloaterHolder {
         return panel;
     }
 
-    public destroyScene(): void {
-        for (let i = 0; i < this.floatingPanels.length; i++)
-            this.floatingPanels[i].close();
-        this.floatingPanels = [];
-    }
-
-    private debugFloater: FloatingPanel | null = null;
     private getDebugFloater(): FloatingPanel {
         if (this.debugFloater === null)
             this.debugFloater = this.makeFloatingPanel('Debug');
         return this.debugFloater;
     }
 
-    private _bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
+    public destroyScene(): void {
+        for (let i = 0; i < this.floatingPanels.length; i++)
+            this.floatingPanels[i].close();
+        this.floatingPanels = [];
+        this.debugFloater = null;
+    }
+
+    private _bindPanelRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
         // Children are by default invisible, unless we're in a color, or some sort of number array.
         const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
 
@@ -360,18 +396,18 @@ export class DebugFloaterHolder {
             else if (typeof v === "boolean")
                 panel.bindCheckbox(`${parentName}.${keyName}`, obj, keyName);;
 
-            this._bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
+            this._bindPanelRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
         }
     }
 
-    public bindSliders(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
+    public bindPanel(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this._bindSlidersRecurse(obj, panel, '');
+        this._bindPanelRecurse(obj, panel, '');
     }
 }
 
@@ -504,4 +540,8 @@ export function dfSigFigs(v: number = 2) {
 
 export function dfUsePercent(v: boolean = true) {
     return Reflect.metadata('df:usepercent', v);
+}
+
+export function dfLabel(v: string) {
+    return Reflect.metadata('df:label', v);
 }

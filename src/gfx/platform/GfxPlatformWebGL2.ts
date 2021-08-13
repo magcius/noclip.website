@@ -310,58 +310,6 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setScissor, setBindings, setPipeline, setInputState, setStencilRef, setDebugPointer, draw, drawIndexed, drawIndexedInstanced, end, invalid = 0x1234 };
-class GfxRenderPassP_GL implements GfxRenderPass {
-    public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
-    public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
-    public o: any[] = [];
-    public descriptor: GfxRenderPassDescriptor;
-
-    public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
-
-    public pu32(c: number) { this.u32.n(c); }
-    public pcmd(c: number) { this.pu32(c); }
-    public pf32(c: number) { this.f32.n(c); }
-    public po(r: any) { this.o.push(r); }
-
-    public end() { this.pcmd(RenderPassCmd.end); }
-    public setRenderPassParameters(ca: (GfxRenderTarget | null)[], cr: (GfxTexture | null)[], cc: (GfxColor | 'load')[], dsa: GfxRenderTarget | null, dsr: GfxTexture | null, d: number, s: number) {
-        this.pcmd(RenderPassCmd.setRenderPassParameters);
-        this.pu32(ca.length);
-
-        for (let i = 0; i < ca.length; i++) {
-            this.po(ca[i]);
-            this.po(cr[i]);
-            const c = cc[i];
-            if (c !== 'load') {
-                this.pu32(1);
-                this.pf32(c.r);
-                this.pf32(c.g);
-                this.pf32(c.b);
-                this.pf32(c.a);
-            } else {
-                this.pu32(0);
-            }
-        }
-
-        this.po(dsa);
-        this.po(dsr);
-        this.pf32(d);
-        this.pf32(s);
-    }
-
-    public setViewport(x: number, y: number, w: number, h: number) { this.pcmd(RenderPassCmd.setViewport); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
-    public setScissor(x: number, y: number, w: number, h: number)  { this.pcmd(RenderPassCmd.setScissor); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
-    public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
-    public setBindings(n: number, r: GfxBindings, o: number[]) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); this.pu32(o.length); for (let i = 0; i < o.length; i++) this.pu32(o[i]); }
-    public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
-    public setStencilRef(v: number)               { this.pcmd(RenderPassCmd.setStencilRef); this.pf32(v); }
-    public setDebugPointer(v: any)                { this.pcmd(RenderPassCmd.setDebugPointer); this.po(v); }
-    public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
-    public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
-    public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
-}
-
 function isBlendStateNone(blendState: GfxChannelBlendState): boolean {
     return (
         blendState.blendMode == GfxBlendMode.Add &&
@@ -445,9 +393,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _OES_draw_buffers_indexed: OES_draw_buffers_indexed | null = null;
     private _uniformBufferMaxPageByteSize: number;
 
-    // Object pools
-    private _renderPassPool: GfxRenderPassP_GL[] = [];
-
     // Swap Chain
     private _scTexture: GfxTexture | null = null;
     private _scPlatformFramebuffer: WebGLFramebuffer | null = null;
@@ -475,6 +420,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentUniformBufferByteSizes: number[] = [];
 
     // Pass Execution
+    private _currentRenderPassDescriptor: GfxRenderPassDescriptor | null = null;
     private _debugGroupStack: GfxDebugGroup[] = [];
     private _resolveColorAttachmentsChanged: boolean = false;
     private _resolveColorReadFramebuffer: WebGLFramebuffer;
@@ -1182,38 +1128,31 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
-    public createRenderPass(descriptor: GfxRenderPassDescriptor): GfxRenderPassP_GL {
-        let pass = this._renderPassPool.pop();
-        if (pass === undefined)
-            pass = new GfxRenderPassP_GL();
+    public createRenderPass(descriptor: GfxRenderPassDescriptor): GfxRenderPass {
+        assert(this._currentRenderPassDescriptor === null);
+        this._currentRenderPassDescriptor = descriptor;
 
         const { colorAttachment, colorClearColor, colorResolveTo, depthStencilAttachment, depthClearValue, stencilClearValue, depthStencilResolveTo } = descriptor;
-
-        let depthClearValueF = -1;
-        let stencilClearValueF = -1;
-        if (depthStencilAttachment !== null) {
-            const attachment = depthStencilAttachment as GfxRenderTargetP_GL;
-            const flags = getFormatFlags(attachment.pixelFormat);
-            if (!!(flags & FormatFlags.Depth) && depthClearValue !== 'load')
-                depthClearValueF = depthClearValue;
-            if (!!(flags & FormatFlags.Stencil) && stencilClearValue !== 'load')
-                stencilClearValueF = stencilClearValue;
+        this._setRenderPassParametersBegin(colorAttachment.length);
+        for (let i = 0; i < colorAttachment.length; i++)
+            this._setRenderPassParametersColor(i, colorAttachment[i] as GfxRenderTargetP_GL | null, colorResolveTo[i]  as GfxTextureP_GL | null);
+        this._setRenderPassParametersDepthStencil(depthStencilAttachment as GfxRenderTargetP_GL | null, depthStencilResolveTo as GfxTextureP_GL | null);
+        this._validateCurrentAttachments();
+        for (let i = 0; i < colorAttachment.length; i++) {
+            const clearColor = colorClearColor[i];
+            if (clearColor === 'load')
+                continue;
+            this._setRenderPassParametersClearColor(i, clearColor.r, clearColor.g, clearColor.b, clearColor.a);
         }
-
-        // TODO(jstpierre): This isn't kosher.
-        pass.descriptor = descriptor;
-
-        pass.setRenderPassParameters(colorAttachment, colorResolveTo, colorClearColor, depthStencilAttachment, depthStencilResolveTo, depthClearValueF, stencilClearValueF);
-        return pass;
+        this._setRenderPassParametersClearDepthStencil(depthClearValue, stencilClearValue);
+        return this;
     }
 
     public submitPass(o: GfxPass): void {
-        if (o instanceof GfxRenderPassP_GL) {
-            o.end();
-            this.executeRenderPass(o.u32.b, o.f32.b, o.o);
-            o.reset();
-            this._renderPassPool.push(o);
-        }
+        assert(o === this);
+        assert(this._currentRenderPassDescriptor !== null);
+        this.endPass();
+        this._currentRenderPassDescriptor = null;
     }
 
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
@@ -1408,8 +1347,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor> {
-        const pass = o as GfxRenderPassP_GL;
-        return pass.descriptor;
+        // assert(o === this);
+        // return assertExists(this._currentRenderPassDescriptor);
+        return this._currentRenderPassDescriptor!;
     }
 
     public queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor> {
@@ -1479,57 +1419,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     //#endregion
 
     //#region Pass execution
-    public executeRenderPass(u32: Uint32Array, f32: Float32Array, gfxr: (object | null)[]): void {
-        let iu32 = 0, if32 = 0, igfxr = 0;
-        while (true) {
-            const cmd = u32[iu32++] as RenderPassCmd;
-
-            if (cmd === RenderPassCmd.setRenderPassParameters) {
-                const numColorAttachments = u32[iu32++];
-                this._setRenderPassParametersBegin(numColorAttachments);
-                for (let i = 0; i < numColorAttachments; i++)
-                    this._setRenderPassParametersColor(i, gfxr[igfxr++] as GfxRenderTargetP_GL | null, gfxr[igfxr++] as GfxTextureP_GL | null);
-                this._setRenderPassParametersDepthStencil(gfxr[igfxr++] as GfxRenderTargetP_GL | null, gfxr[igfxr++] as GfxTextureP_GL | null);
-                this._validateCurrentAttachments();
-                for (let i = 0; i < numColorAttachments; i++) {
-                    const shouldClear = !!u32[iu32++];
-                    if (!shouldClear)
-                        continue;
-                    this._setRenderPassParametersClearColor(i, f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
-                }
-                this._setRenderPassParametersClearDepthStencil(f32[if32++], f32[if32++]);
-            } else if (cmd === RenderPassCmd.setViewport) {
-                this.setViewport(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
-            } else if (cmd === RenderPassCmd.setScissor) {
-                this.setScissor(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
-            } else if (cmd === RenderPassCmd.setBindings) {
-                const index = u32[iu32++], numOffsets = u32[iu32++];
-                this.setBindings(index, gfxr[igfxr++] as GfxBindings, numOffsets, u32, iu32);
-                iu32 += numOffsets;
-            } else if (cmd === RenderPassCmd.setPipeline) {
-                this.setPipeline(gfxr[igfxr++] as GfxRenderPipeline);
-            } else if (cmd === RenderPassCmd.setInputState) {
-                this.setInputState(gfxr[igfxr++] as GfxInputState | null);
-            } else if (cmd === RenderPassCmd.setStencilRef) {
-                this.setStencilRef(f32[if32++]);
-            } else if (cmd === RenderPassCmd.setDebugPointer) {
-                this.setDebugPointer(gfxr[igfxr++]);
-            } else if (cmd === RenderPassCmd.draw) {
-                this.draw(u32[iu32++], u32[iu32++]);
-            } else if (cmd === RenderPassCmd.drawIndexed) {
-                this.drawIndexed(u32[iu32++], u32[iu32++]);
-            } else if (cmd === RenderPassCmd.drawIndexedInstanced) {
-                this.drawIndexedInstanced(u32[iu32++], u32[iu32++], u32[iu32++]);
-            } else if (cmd === RenderPassCmd.end) {
-                this.endPass();
-                return;
-            } else {
-                const m: RenderPassCmd.invalid = cmd;
-                throw new Error("Invalid execution");
-            }
-        }
-    }
-
     private _debugGroupStatisticsDrawCall(count: number = 1): void {
         for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
             this._debugGroupStack[i].drawCallCount += count;
@@ -1742,10 +1631,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.clearBufferfv(gl.COLOR, slot, [r, g, b, a]);
     }
 
-    private _setRenderPassParametersClearDepthStencil(depthClearValue: number, stencilClearValue: number): void {
+    private _setRenderPassParametersClearDepthStencil(depthClearValue: number | 'load', stencilClearValue: number | 'load'): void {
         const gl = this.gl;
 
-        if (depthClearValue > -1) {
+        if (depthClearValue !== 'load') {
             assert(this._currentDepthStencilAttachment !== null);
             // GL clears obey the masks... bad API or worst API?
             if (!this._currentMegaState.depthWrite) {
@@ -1754,7 +1643,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             }
             gl.clearBufferfv(gl.DEPTH, 0, [depthClearValue]);
         }
-        if (stencilClearValue > -1) {
+        if (stencilClearValue !== 'load') {
             assert(this._currentDepthStencilAttachment !== null);
             if (!this._currentMegaState.stencilWrite) {
                 gl.stencilMask(0xFF);
@@ -1764,7 +1653,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsetsCount: number, dynamicByteOffsets: Uint32Array, dynamicByteOffsetsStart: number): void {
+    public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {
         const gl = this.gl;
 
         assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length);
@@ -1774,7 +1663,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // Ignore extra bindings.
         assert(uniformBufferBindings.length >= bindingLayoutTable.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayoutTable.numSamplers);
-        assert(dynamicByteOffsetsCount >= uniformBufferBindings.length);
+        assert(dynamicByteOffsets.length >= uniformBufferBindings.length);
 
         for (let i = 0; i < uniformBufferBindings.length; i++) {
             const binding = uniformBufferBindings[i];
@@ -1782,7 +1671,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 continue;
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
-            const byteOffset = dynamicByteOffsets[dynamicByteOffsetsStart + i];
+            const byteOffset = dynamicByteOffsets[i];
             const byteSize = (binding.wordCount * 4);
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index] || byteSize !== this._currentUniformBufferByteSizes[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
@@ -1822,12 +1711,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private setViewport(x: number, y: number, w: number, h: number): void {
+    public setViewport(x: number, y: number, w: number, h: number): void {
         const gl = this.gl;
         gl.viewport(x, y, w, h);
     }
 
-    private setScissor(x: number, y: number, w: number, h: number): void {
+    public setScissor(x: number, y: number, w: number, h: number): void {
         const gl = this.gl;
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(x, y, w, h);
@@ -2030,7 +1919,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             assert(this._currentSampleCount === pipeline.sampleCount);
     }
 
-    private setPipeline(o: GfxRenderPipeline): void {
+    public setPipeline(o: GfxRenderPipeline): void {
         this._currentPipeline = o as GfxRenderPipelineP_GL;
         this._validatePipelineFormats(this._currentPipeline);
 
@@ -2054,7 +1943,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
-            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
+            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;\s*$/gm);
             let samplerIndex = 0;
             for (let i = 0; i < samplers.length; i++) {
                 const [m, name, arraySizeStr] = samplers[i];
@@ -2069,7 +1958,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private setInputState(inputState_: GfxInputState | null): void {
+    public setInputState(inputState_: GfxInputState | null): void {
         const inputState = inputState_ as GfxInputStateP_GL;
         this._currentInputState = inputState;
         if (this._currentInputState !== null) {
@@ -2081,17 +1970,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private setStencilRef(value: number): void {
+    public setStencilRef(value: number): void {
         const gl = this.gl;
         gl.stencilFunc(this._currentMegaState.stencilCompare, value, 0xFF);
     }
 
     private _debugPointer: any;
-    private setDebugPointer(value: any): void {
+    public setDebugPointer(value: any): void {
         this._debugPointer = value;
     }
 
-    private draw(count: number, firstVertex: number): void {
+    public draw(count: number, firstVertex: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         gl.drawArrays(pipeline.drawMode, firstVertex, count);
@@ -2099,7 +1988,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._debugGroupStatisticsTriangles(count / 3);
     }
 
-    private drawIndexed(count: number, firstIndex: number): void {
+    public drawIndexed(count: number, firstIndex: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;
@@ -2109,7 +1998,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._debugGroupStatisticsTriangles(count / 3);
     }
 
-    private drawIndexedInstanced(count: number, firstIndex: number, instanceCount: number): void {
+    public drawIndexedInstanced(count: number, firstIndex: number, instanceCount: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;

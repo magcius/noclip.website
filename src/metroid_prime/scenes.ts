@@ -118,8 +118,6 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.modelCache.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
-        if (this.defaultSkyRenderer !== null)
-            this.defaultSkyRenderer.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {

@@ -1690,7 +1690,7 @@ class LineGraph {
         Viewer.resizeCanvas(this.canvas, width, height, window.devicePixelRatio);
 
         const ctx = this.ctx;
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.textYOffset = 24;
     }
@@ -1732,8 +1732,8 @@ class LineGraph {
 }
 
 class StatisticsPanel extends Panel {
-    public history: RenderStatistics[] = [];
     private fpsGraph = new LineGraph();
+    private fpsHistory: number[] = [];
     private fpsPoints: number[] = [];
     private fpsColor: Color = { r: 0.4, g: 0.9, b: 0.6, a: 1.0 };
 
@@ -1748,36 +1748,19 @@ class StatisticsPanel extends Panel {
         if (!this.expanded)
             return;
 
-        this.history.unshift({ ...renderStatistics });
-
-        while (this.history.length > 100) {
-            this.history.pop();
-        }
+        this.fpsHistory.unshift(renderStatistics.fps);
+        while (this.fpsHistory.length > 100)
+            this.fpsHistory.pop();
 
         this.fpsPoints.length = 100;
-        for (let i = 0; i < this.fpsPoints.length; i++) {
-            this.fpsPoints[i] = this.history[i] !== undefined ? this.history[i].fps : 0;
-        }
+        for (let i = 0; i < this.fpsPoints.length; i++)
+            this.fpsPoints[i] = this.fpsHistory[i] !== undefined ? this.fpsHistory[i] : 0;
 
-        this.fpsGraph.beginDraw(this.elem.offsetWidth, 200);
+        this.fpsGraph.beginDraw(440, 200);
         this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
 
-        this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
-        if (renderStatistics.drawCallCount)
-            this.fpsGraph.drawText(`Draw Calls: ${renderStatistics.drawCallCount}`);
-        if (renderStatistics.triangleCount)
-            this.fpsGraph.drawText(`Drawn Triangles: ${renderStatistics.triangleCount}`);
-        if (renderStatistics.textureBindCount)
-            this.fpsGraph.drawText(`Texture Binds: ${renderStatistics.textureBindCount}`);
-        if (renderStatistics.bufferUploadCount)
-            this.fpsGraph.drawText(`Buffer Uploads: ${renderStatistics.bufferUploadCount}`);
-
-        const worldMatrix = this.viewer.camera.worldMatrix;
-        const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
-        this.fpsGraph.drawText(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
-
-        const vendorInfo = this.viewer.gfxDevice.queryVendorInfo();
-        this.fpsGraph.drawText(`Platform: ${vendorInfo.platformString}`);
+        for (const line of renderStatistics.lines)
+            this.fpsGraph.drawText(line);
     }
 }
 

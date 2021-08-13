@@ -364,7 +364,7 @@ export class LightDirector extends NameObj {
         return this.findAreaLightFromZoneAndId(sceneObjHolder, zoneLightId.zoneId, zoneLightId.lightId);
     }
 
-    public findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
+    private findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
         const areaLightName = this.lightDataHolder.getAreaLightName(sceneObjHolder, zoneId, lightId);
         return assertExists(this.lightDataHolder.findAreaLight(areaLightName));
     }

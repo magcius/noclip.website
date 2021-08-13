@@ -241,7 +241,7 @@ export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, clipFromWorld
     drawWorldSpaceVector(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, mag, Blue, thickness);
 }
 
-export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, aabb: AABB, m: mat4 | null = null, color: Color = Magenta): void {
+export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, aabb: AABB, m: ReadonlyMat4 | null = null, color: Color = Magenta): void {
     vec4.set(p[0], aabb.minX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[1], aabb.maxX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[2], aabb.minX, aabb.maxY, aabb.minZ, 1.0);

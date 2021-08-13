@@ -23,12 +23,15 @@ export class DeviceProgram {
     }
 
     public setDefineString(name: string, v: string | null): boolean {
-        if (this.defines.get(name) === v)
-            return false;
-        if (v)
+        if (v !== null) {
+            if (this.defines.get(name) === v)
+                return false;
             this.defines.set(name, v);
-        else
+        } else {
+            if (!this.defines.has(name))
+                return false;
             this.defines.delete(name);
+        }
         this.definesChanged();
         return true;
     }
@@ -91,6 +94,7 @@ export class DeviceProgram {
             };
             onresize();
             (win as any).editor = editor;
+            (window as any).editor = editor;
             win.document.body.appendChild(editor.elem);
         };
         if (win.document.readyState === 'complete')
