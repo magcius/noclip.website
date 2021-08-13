@@ -2,18 +2,25 @@
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixSRT, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w1 } from '../MathHelpers';
-import { assert, assertExists, fallbackUndefined, nullify } from '../util';
+import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
+import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
+import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
-import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
-import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
+import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { computeMatrixForForwardDir } from './StaticDetailObject';
+import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
-type EntityMessageValue = string | number | Color;
+type EntityMessageValue = string;
+
+function strColor(c: Color): string {
+    return `${c.r} ${c.g} ${c.a}`;
+}
 
 interface EntityOutputAction {
     targetName: string;
@@ -56,6 +63,7 @@ class EntityOutput {
 type EntityInputFunc = (entitySystem: EntitySystem, value: EntityMessageValue) => void;
 
 const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 
 // Some part of this is definitely BaseAnimating, maybe split at some point?
 export class BaseEntity {
@@ -63,7 +71,7 @@ export class BaseEntity {
     public modelStudio: StudioModelInstance | null = null;
 
     public localOrigin = vec3.create();
-    public angles = vec3.create();
+    public localAngles = vec3.create();
     public renderamt: number = 1.0;
     public rendermode: number = 0;
     public visible = true;
@@ -73,12 +81,25 @@ export class BaseEntity {
 
     public targetName: string | null = null;
     public parentEntity: BaseEntity | null = null;
+    public parentAttachment: number | null = null;
     public modelMatrix = mat4.create();
     public alive = true;
     public enabled = true;
+    public ready = true;
 
-    public outputs: EntityOutput[] = [];
     public inputs = new Map<string, EntityInputFunc>();
+
+    private output_onuser1 = new EntityOutput();
+    private output_onuser2 = new EntityOutput();
+    private output_onuser3 = new EntityOutput();
+    private output_onuser4 = new EntityOutput();
+
+    // Animation Playback (should probably be split out to a different class)
+    private seqdefaultindex = -1;
+    private seqindex = 0;
+    private seqtime = 0;
+    private seqplay: boolean = false;
+    private holdAnimation: boolean = false;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
         if (entity.model)
@@ -91,7 +112,7 @@ export class BaseEntity {
 
         if (entity.angles) {
             const angles = vmtParseVector(entity.angles);
-            vec3.set(this.angles, angles[0], angles[1], angles[2]);
+            vec3.set(this.localAngles, angles[0], angles[1], angles[2]);
         }
 
         this.renderamt = vmtParseNumber(entity.renderamt, 255.0) / 255.0;
@@ -107,24 +128,75 @@ export class BaseEntity {
         else if (entity.start_disabled)
             this.enabled = !Number(entity.start_disabled);
 
+        this.holdAnimation = !!Number(fallbackUndefined(this.entity.holdanimation, '0'));
+
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
+
+        this.output_onuser1.parse(this.entity.onuser1);
+        this.output_onuser2.parse(this.entity.onuser1);
+        this.output_onuser3.parse(this.entity.onuser1);
+        this.output_onuser4.parse(this.entity.onuser1);
+        this.registerInput('fireuser1', this.input_fireuser1.bind(this));
+        this.registerInput('fireuser2', this.input_fireuser2.bind(this));
+        this.registerInput('fireuser3', this.input_fireuser3.bind(this));
+        this.registerInput('fireuser4', this.input_fireuser4.bind(this));
+
+        this.registerInput('setparent', this.input_setparent.bind(this));
+        this.registerInput('clearparent', this.input_clearparent.bind(this));
+        this.registerInput('setparentattachment', this.input_setparentattachment.bind(this));
+        this.registerInput('setparentattachmentmaintainoffset', this.input_setparentattachmentmaintainoffset.bind(this));
+
+        // TODO(jstpierre): This should be on baseanimation / prop_dynamic
+        this.registerInput('setanimation', this.input_setanimation.bind(this));
+        this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
 
         // Set up some defaults.
         if (this.entity.classname.startsWith('func_nav_'))
             this.visible = false;
     }
 
+    public shouldDraw(): boolean {
+        return this.visible && this.enabled && this.alive && this.ready;
+    }
+
+    private findSequenceLabel(label: string): number {
+        label = label.toLowerCase();
+        return this.modelStudio!.modelData.seq.findIndex((seq) => seq.label === label);
+    }
+
+    private playseqindex(index: number): void {
+        if (index < 0) {
+            debugger;
+            index = 0;
+        }
+
+        this.seqindex = index;
+        this.seqplay = true;
+        this.seqtime = 0;
+    }
+
     public spawn(entitySystem: EntitySystem): void {
         if (this.entity.parentname)
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
+
+        if (this.entity.defaultanim) {
+            this.seqdefaultindex = this.findSequenceLabel(this.entity.defaultanim);
+            this.playseqindex(this.seqdefaultindex);
+        }
+    }
+
+    protected ensureMaterialParams(): EntityMaterialParameters {
+        if (this.materialParams === null)
+            this.materialParams = new EntityMaterialParameters();
+
+        return this.materialParams;
     }
 
     public setModelName(renderContext: SourceRenderContext, modelName: string): void {
-        if (this.materialParams === null)
-            this.materialParams = new EntityMaterialParameters();
+        this.ensureMaterialParams();
 
         if (modelName.startsWith('*')) {
             const index = parseInt(modelName.slice(1), 10);
@@ -134,6 +206,246 @@ export class BaseEntity {
             // External model reference.
             this.fetchStudioModel(renderContext, modelName);
         }
+    }
+
+    protected remove(): void {
+        this.alive = false;
+    }
+
+    protected registerInput(inputName: string, func: EntityInputFunc): void {
+        assert(!this.inputs.has(inputName));
+        this.inputs.set(inputName, func);
+    }
+
+    public fireInput(entitySystem: EntitySystem, inputName: string, value: EntityMessageValue): void {
+        if (!this.alive)
+            return;
+
+        const func = this.inputs.get(inputName);
+        if (!func) {
+            console.warn(`Unknown input: ${this.targetName} (${this.entity.classname}) ${inputName} ${value}`);
+            return;
+        }
+
+        func(entitySystem, value);
+    }
+
+    private updateLightingData(): void {
+        const materialParams = this.materialParams!;
+
+        const modelMatrix = this.updateModelMatrix();
+        getMatrixTranslation(materialParams.position, modelMatrix);
+
+        if (this.modelStudio !== null) {
+            transformVec3Mat4w1(this.lightingOrigin, modelMatrix, this.modelStudio.modelData.illumPosition);
+        } else {
+            vec3.copy(this.lightingOrigin, materialParams.position);
+        }
+
+        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin);
+    }
+
+    protected modelUpdated(): void {
+    }
+
+    private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
+        this.ready = false;
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
+        this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
+        this.modelStudio.setSkin(renderContext, this.skin);
+        this.modelUpdated();
+        this.updateLightingData();
+        this.ready = true;
+    }
+
+    private updateStudioPose(): void {
+        if (this.modelStudio === null)
+            throw "whoops";
+
+        mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
+        this.modelStudio.setupPoseFromSequence(this.seqindex, this.seqtime);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.shouldDraw())
+            return;
+
+        if (this.modelStudio !== null) {
+            if (this.materialParams !== null) {
+                this.materialParams.blendColor.a = this.renderamt;
+            }
+
+            this.updateStudioPose();
+            this.modelStudio.setSkin(renderContext, this.skin);
+            this.modelStudio.prepareToRender(renderContext, renderInstManager);
+
+            if ((this as any).debug)
+                this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
+        }
+    }
+
+    private calcParentModelMatrix(dst: mat4): void {
+        if (this.parentAttachment !== null)
+            this.parentEntity!.getAttachmentMatrix(dst, this.parentAttachment);
+        else
+            mat4.copy(dst, this.parentEntity!.updateModelMatrix());
+    }
+
+    public setAbsOrigin(origin: ReadonlyVec3): void {
+        if (this.parentEntity !== null) {
+            this.calcParentModelMatrix(scratchMat4a);
+            mat4.invert(scratchMat4a, scratchMat4a);
+            transformVec3Mat4w1(this.localOrigin, scratchMat4a, origin);
+        } else {
+            vec3.copy(this.localOrigin, origin);
+        }
+    }
+
+    public setAbsOriginAndAngles(origin: ReadonlyVec3, angles: ReadonlyVec3): void {
+        if (this.parentEntity !== null) {
+            this.calcParentModelMatrix(scratchMat4a);
+            mat4.invert(scratchMat4a, scratchMat4a);
+            computeModelMatrixPosQAngle(scratchMat4b, origin, angles);
+            mat4.mul(scratchMat4b, scratchMat4a, scratchMat4b);
+            computePosQAngleModelMatrix(this.localOrigin, this.localAngles, scratchMat4b);
+        } else {
+            vec3.copy(this.localOrigin, origin);
+            vec3.copy(this.localAngles, angles);
+        }
+    }
+
+    public getAbsOrigin(dstOrigin: vec3): void {
+        if (this.parentEntity !== null) {
+            computePosQAngleModelMatrix(dstOrigin, null, this.updateModelMatrix());
+        } else {
+            vec3.copy(dstOrigin, this.localOrigin);
+        }
+    }
+
+    public getAbsOriginAndAngles(dstOrigin: vec3, dstAngles: vec3): void {
+        if (this.parentEntity !== null) {
+            computePosQAngleModelMatrix(dstOrigin, dstAngles, this.updateModelMatrix());
+        } else {
+            vec3.copy(dstOrigin, this.localOrigin);
+            vec3.copy(dstAngles, this.localAngles);
+        }
+    }
+
+    public setParentEntity(parentEntity: BaseEntity | null, parentAttachment: number | null = null): void {
+        if (parentEntity === this.parentEntity && parentAttachment === this.parentAttachment)
+            return;
+
+        // Transform origin into absolute world-space.
+        this.getAbsOriginAndAngles(this.localOrigin, this.localAngles);
+
+        this.parentEntity = parentEntity;
+        this.parentAttachment = parentAttachment;
+
+        // Transform origin from world-space into entity space.
+        this.setAbsOriginAndAngles(this.localOrigin, this.localAngles);
+    }
+
+    public setParentAttachment(attachmentName: string, maintainOffset: boolean) {
+        if (this.parentEntity === null)
+            return;
+
+        const parentAttachment = this.parentEntity.getAttachmentIndex(attachmentName);
+        this.setParentEntity(this.parentEntity, parentAttachment);
+
+        if (!maintainOffset) {
+            vec3.zero(this.localOrigin);
+            vec3.zero(this.localAngles);
+        }
+    }
+
+    public getAttachmentIndex(attachmentName: string): number | null {
+        if (this.modelStudio === null)
+            throw "whoops";
+
+        const attachmentIndex = this.modelStudio.modelData.attachment.findIndex((attachment) => attachment.name === attachmentName);
+        if (attachmentIndex < 0)
+            return null;
+
+        return attachmentIndex;
+    }
+
+    public getAttachmentMatrix(dst: mat4, attachmentIndex: number): void {
+        if (this.modelStudio === null)
+            throw "whoops";
+
+        this.updateModelMatrix();
+        this.updateStudioPose();
+        this.modelStudio.getAttachmentMatrix(dst, attachmentIndex);
+    }
+
+    public updateModelMatrix(): mat4 {
+        computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.localAngles);
+
+        if (this.parentEntity !== null) {
+            if (this.parentAttachment !== null) {
+                this.parentEntity.getAttachmentMatrix(scratchMat4a, this.parentAttachment);
+                mat4.mul(this.modelMatrix, scratchMat4a, this.modelMatrix);
+            } else {
+                const parentModelMatrix = this.parentEntity.updateModelMatrix();
+                mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
+            }
+        }
+
+        return this.modelMatrix;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        if (this.modelBSP !== null || this.modelStudio !== null) {
+            const modelMatrix = this.updateModelMatrix();
+            getMatrixTranslation(this.materialParams!.position, modelMatrix);
+
+            let visible = this.shouldDraw();
+            if (this.renderamt === 0)
+                visible = false;
+            if (this.rendermode === 10)
+                visible = false;
+
+            if (this.modelBSP !== null) {
+                this.modelBSP.visible = visible;
+                mat4.copy(this.modelBSP.modelMatrix, modelMatrix);
+            } else if (this.modelStudio !== null) {
+                this.modelStudio.visible = visible;
+                this.modelStudio.movement(renderContext);
+            }
+        }
+
+        if (this.modelStudio !== null) {
+            // Update animation state machine.
+            if (this.seqplay) {
+                const oldSeqTime = this.seqtime;
+                this.seqtime += renderContext.globalDeltaTime;
+
+                // Pass to default animation if we're through.
+                if (this.seqdefaultindex >= 0 && this.modelStudio.sequenceIsFinished(this.seqindex, this.seqtime) && !this.holdAnimation)
+                    this.playseqindex(this.seqdefaultindex);
+
+                // Handle events.
+                const seq = this.modelStudio.modelData.seq[this.seqindex];
+                const anim = this.modelStudio.modelData.anim[seq.anim[0]];
+                const animcyc = anim.fps / anim.numframes;
+                for (let i = 0; i < seq.events.length; i++) {
+                    const ev = seq.events[i];
+                    if (ev.cycle > (oldSeqTime * animcyc) && ev.cycle <= (this.seqtime * animcyc)) {
+                        this.dispatchAnimEvent(entitySystem, ev.event, ev.options);
+                    }
+                }
+            }
+        }
+    }
+
+    protected dispatchAnimEvent(entitySystem: EntitySystem, event: number, options: string): void {
+        if (event === 1100) { // SCRIPT_EVENT_FIRE_INPUT
+            this.fireInput(entitySystem, options, '');
+        }
+    }
+
+    public cloneMapData(): BSPEntity {
+        return { ... this.entity };
     }
 
     private input_enable(): void {
@@ -148,146 +460,56 @@ export class BaseEntity {
         this.remove();
     }
 
+    private input_fireuser1(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser1.fire(entitySystem, this, value);
+    }
+
+    private input_fireuser2(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser2.fire(entitySystem, this, value);
+    }
+
+    private input_fireuser3(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser3.fire(entitySystem, this, value);
+    }
+
+    private input_fireuser4(entitySystem: EntitySystem, value: string): void {
+        this.output_onuser4.fire(entitySystem, this, value);
+    }
+
     private input_skin(entitySystem: EntitySystem, value: string): void {
         this.skin = Number(value) || 0;
     }
 
-    protected remove(): void {
-        this.alive = false;
+    private input_setparent(entitySystem: EntitySystem, value: string): void {
+        const parentEntity = entitySystem.findEntityByTargetName(this.entity.parentname);
+        if (parentEntity !== null)
+            this.setParentEntity(parentEntity);
     }
 
-    protected registerInput(inputName: string, func: EntityInputFunc): void {
-        assert(!this.inputs.has(inputName));
-        this.inputs.set(inputName, func);
+    private input_clearparent(entitySystem: EntitySystem): void {
+        this.setParentEntity(null);
     }
 
-    public fireInput(entitySystem: EntitySystem, inputName: string, value: EntityMessageValue): void {
-        const func = this.inputs.get(inputName);
-        if (!func) {
-            console.warn(`Unknown input: ${this.targetName} (${this.entity.classname}) ${inputName} ${value}`);
-            return;
-        }
-
-        func(entitySystem, value);
+    private input_setparentattachment(entitySystem: EntitySystem, value: string): void {
+        this.setParentAttachment(value, false);
     }
 
-    private updateLightingData(): void {
-        const materialParams = this.materialParams!;
-
-        const modelMatrix = this.updateModelMatrix()!;
-        getMatrixTranslation(materialParams.position, modelMatrix);
-
-        if (this.modelStudio !== null) {
-            transformVec3Mat4w1(this.lightingOrigin, modelMatrix, this.modelStudio.modelData.illumPosition);
-        } else {
-            vec3.copy(this.lightingOrigin, materialParams.position);
-        }
-
-        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin, this.modelStudio!.modelData.viewBB);
+    private input_setparentattachmentmaintainoffset(entitySystem: EntitySystem, value: string): void {
+        this.setParentAttachment(value, true);
     }
 
-    protected modelUpdated(): void {
-    }
-
-    private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
-        const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
-        this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
-        this.modelStudio.setSkin(renderContext, this.skin);
-        this.modelUpdated();
-        this.updateLightingData();
-    }
-
-    private animindex = 0;
-    private animtime = 0;
-    private animplay: boolean = false;
-
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
-        if (!this.visible || !this.enabled || !this.alive)
+    private input_setanimation(entitySystem: EntitySystem, value: string): void {
+        if (this.modelStudio === null)
             return;
 
-        if (this.modelBSP !== null) {
-            // BSP models are rendered by the BSP system.
-            mat4.copy(this.modelBSP.modelMatrix, this.modelMatrix);
-        } else if (this.modelStudio !== null) {
-            mat4.copy(this.modelStudio.modelMatrix, this.modelMatrix);
-            // idle animation pose?
-            if (this.animplay)
-                this.animtime += renderContext.globalDeltaTime * 60;
-            this.modelStudio.setupPoseFromAnimation(this.animindex, this.animtime);
-            this.modelStudio.setSkin(renderContext, this.skin);
-            this.modelStudio.prepareToRender(renderContext, renderInstManager);
-
-            if ((this as any).debug)
-                this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
-        }
+        this.playseqindex(this.findSequenceLabel(value));
     }
 
-    public setAbsOrigin(v: ReadonlyVec3): void {
-        if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null) {
-                mat4.invert(scratchMat4a, parentModelMatrix);
-                transformVec3Mat4w1(this.localOrigin, scratchMat4a, v);
-                return;
-            }
-        }
-
-        vec3.copy(this.localOrigin, v);
-    }
-
-    public getAbsOrigin(dst: vec3): void {
-        if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null) {
-                transformVec3Mat4w1(dst, parentModelMatrix, this.localOrigin);
-                return;
-            }
-        }
-
-        vec3.copy(dst, this.localOrigin);
-    }
-
-    public setParentEntity(parentEntity: BaseEntity | null): void {
-        if (parentEntity === this.parentEntity)
+    private input_setdefaultanimation(entitySystem: EntitySystem, value: string): void {
+        if (this.modelStudio === null)
             return;
 
-        // Transform origin into absolute world-space.
-        this.getAbsOrigin(this.localOrigin);
-
-        this.parentEntity = parentEntity;
-
-        // Transform origin from world-space into entity space.
-        this.setAbsOrigin(this.localOrigin);
-    }
-
-    protected updateModelMatrix(): mat4 {
-        computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.angles);
-
-        if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null)
-                mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
-        }
-
-        return this.modelMatrix;
-    }
-
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
-        if (this.modelBSP !== null || this.modelStudio !== null) {
-            const modelMatrix = this.updateModelMatrix()!;
-            getMatrixTranslation(this.materialParams!.position, modelMatrix);
-
-            let visible = this.visible;
-            if (this.renderamt === 0)
-                visible = false;
-            if (this.rendermode === 10)
-                visible = false;
-
-            if (this.modelBSP !== null)
-                this.modelBSP.visible = visible;
-            else if (this.modelStudio !== null)
-                this.modelStudio.visible = visible;
-        }
+        this.seqdefaultindex = this.findSequenceLabel(value);
     }
 }
 
@@ -396,14 +618,9 @@ class water_lod_control extends BaseEntity {
     }
 }
 
-function angleVec(dstForward: vec3, rot: ReadonlyVec3): void {
-    const rx = rot[0] * MathConstants.DEG_TO_RAD, ry = rot[1] * MathConstants.DEG_TO_RAD;
-    const sx = Math.sin(rx), cx = Math.cos(rx);
-    const sy = Math.sin(ry), cy = Math.cos(ry);
-
-    dstForward[0] = cx*cy;
-    dstForward[1] = cx*sy;
-    dstForward[2] = -sx;
+function angleVec(dstForward: vec3 | null, dstRight: vec3 | null, dstUp: vec3 | null, rot: ReadonlyVec3): void {
+    computeModelMatrixPosQAngle(scratchMat4a, Vec3Zero, rot);
+    getMatrixAxis(dstForward, dstRight, dstUp, scratchMat4a);
 }
 
 const enum ToggleState {
@@ -415,13 +632,14 @@ abstract class BaseToggle extends BaseEntity {
     public startPosition: number;
     public moveDistance: number;
     public speed: number;
-    
-    protected positionOpened = vec3.create();
-    protected positionClosed = vec3.create();
 
-    protected timeLeftInSeconds = 0.0;
-    protected positionTarget = vec3.create();
-    protected velocityPerSecond = vec3.create();
+    // Movement code
+    protected moveTimeLeftInSeconds = 0.0;
+    protected moveType: ('lin' | 'ang' | null) = null;
+    protected linMoveTarget = vec3.create();
+    protected linVelPerSecond = vec3.create();
+    protected angMoveTarget = vec3.create();
+    protected angVelPerSecond = vec3.create();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -432,14 +650,26 @@ abstract class BaseToggle extends BaseEntity {
         this.speed = Number(fallbackUndefined(this.entity.speed, '0'));
     }
 
-    protected moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
-        vec3.copy(this.positionTarget, positionTarget);
-        vec3.sub(this.velocityPerSecond, this.positionTarget, this.localOrigin);
-        this.timeLeftInSeconds = vec3.length(this.velocityPerSecond) / speedInSeconds;
-        if (this.timeLeftInSeconds <= 0.0)
+    protected linearMove(entitySystem: EntitySystem, linMoveTarget: ReadonlyVec3, speedInSeconds: number): void {
+        vec3.copy(this.linMoveTarget, linMoveTarget);
+        vec3.copy(this.angMoveTarget, this.localAngles);
+        vec3.sub(this.linVelPerSecond, this.linMoveTarget, this.localOrigin);
+        this.moveTimeLeftInSeconds = vec3.length(this.linVelPerSecond) / speedInSeconds;
+        if (this.moveTimeLeftInSeconds <= 0.0)
             this.moveDone(entitySystem);
         else
-            vec3.scale(this.velocityPerSecond, this.velocityPerSecond, 1.0 / this.timeLeftInSeconds);
+            vec3.scale(this.linVelPerSecond, this.linVelPerSecond, 1.0 / this.moveTimeLeftInSeconds);
+    }
+
+    protected angularMove(entitySystem: EntitySystem, angMoveTarget: ReadonlyVec3, speedInSeconds: number): void {
+        vec3.copy(this.angMoveTarget, angMoveTarget);
+        vec3.copy(this.linMoveTarget, this.localOrigin);
+        vec3.sub(this.angVelPerSecond, this.angMoveTarget, this.localAngles);
+        this.moveTimeLeftInSeconds = vec3.length(this.angVelPerSecond) / speedInSeconds;
+        if (this.moveTimeLeftInSeconds <= 0.0)
+            this.moveDone(entitySystem);
+        else
+            vec3.scale(this.angVelPerSecond, this.angVelPerSecond, 1.0 / this.moveTimeLeftInSeconds);
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -447,16 +677,19 @@ abstract class BaseToggle extends BaseEntity {
 
         const deltaTimeInSeconds = renderContext.globalDeltaTime;
 
-        if (this.timeLeftInSeconds > 0.0) {
+        if (this.moveTimeLeftInSeconds > 0.0) {
             // Apply the velocity.
-            vec3.scaleAndAdd(this.localOrigin, this.localOrigin, this.velocityPerSecond, deltaTimeInSeconds);
-            this.timeLeftInSeconds -= deltaTimeInSeconds;
+            vec3.scaleAndAdd(this.localOrigin, this.localOrigin, this.linVelPerSecond, deltaTimeInSeconds);
+            vec3.scaleAndAdd(this.localAngles, this.localAngles, this.angVelPerSecond, deltaTimeInSeconds);
+            this.moveTimeLeftInSeconds -= deltaTimeInSeconds;
 
             // If we've reached the target position, then we're done.
-            if (this.timeLeftInSeconds <= 0.0) {
-                vec3.copy(this.localOrigin, this.positionTarget);
-                vec3.zero(this.velocityPerSecond);
-                this.timeLeftInSeconds = 0.0;
+            if (this.moveTimeLeftInSeconds <= 0.0) {
+                vec3.copy(this.localOrigin, this.linMoveTarget);
+                vec3.copy(this.localAngles, this.angMoveTarget);
+                vec3.zero(this.linVelPerSecond);
+                vec3.zero(this.angVelPerSecond);
+                this.moveTimeLeftInSeconds = 0.0;
                 this.moveDone(entitySystem);
             }
         }
@@ -469,6 +702,9 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 class func_movelinear extends BaseToggle {
     public static classname = `func_movelinear`;
+
+    protected positionOpened = vec3.create();
+    protected positionClosed = vec3.create();
 
     private output_onFullyClosed = new EntityOutput();
     private output_onFullyOpen = new EntityOutput();
@@ -485,7 +721,7 @@ class func_movelinear extends BaseToggle {
     public spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        angleVec(scratchVec3a, this.moveDir);
+        angleVec(scratchVec3a, null, null, this.moveDir);
         vec3.scaleAndAdd(this.positionOpened, this.localOrigin, scratchVec3a, -this.moveDistance * this.startPosition);
         vec3.scaleAndAdd(this.positionClosed, this.localOrigin, scratchVec3a,  this.moveDistance);
     }
@@ -498,30 +734,25 @@ class func_movelinear extends BaseToggle {
     }
 
     private input_open(entitySystem: EntitySystem): void {
-        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+        this.linearMove(entitySystem, this.positionOpened, this.speed);
     }
 
     private input_close(entitySystem: EntitySystem): void {
-        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+        this.linearMove(entitySystem, this.positionClosed, this.speed);
     }
 }
 
-class func_door extends BaseToggle {
-    public static classname = `func_door`;
-
+abstract class BaseDoor extends BaseToggle {
     private output_onClose = new EntityOutput();
     private output_onOpen = new EntityOutput();
     private output_onFullyClosed = new EntityOutput();
     private output_onFullyOpen = new EntityOutput();
 
-    private modelExtents = vec3.create();
     private locked: boolean = false;
     protected toggleState: ToggleState;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
-
-        // TODO(jstpierre): Rotating doors
 
         this.output_onClose.parse(this.entity.onclose);
         this.output_onOpen.parse(this.entity.onopen);
@@ -536,7 +767,7 @@ class func_door extends BaseToggle {
 
         const enum SpawnFlags {
             START_OPEN_OBSOLETE = 0x01,
-        }
+        };
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
 
         if (spawnpos === 1 || !!(spawnflags & SpawnFlags.START_OPEN_OBSOLETE))
@@ -545,45 +776,18 @@ class func_door extends BaseToggle {
             this.toggleState = ToggleState.Bottom;
     }
 
-    public spawn(entitySystem: EntitySystem): void {
-        super.spawn(entitySystem);
-
-        vec3.copy(this.positionOpened, this.localOrigin);
-        vec3.copy(this.positionClosed, this.localOrigin);
-
-        this.updateExtents();
-    }
-
-    private updateExtents(): void {
-        if (this.modelBSP !== null)
-            this.modelBSP.model.bbox.extents(this.modelExtents);
-        else if (this.modelStudio !== null)
-            this.modelStudio.modelData.viewBB.extents(this.modelExtents);
-
-        angleVec(scratchVec3a, this.moveDir);
-        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0);
-        vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
-
-        if (this.toggleState === ToggleState.Top) {
-            // If we should start open, then start open.
-            vec3.copy(this.localOrigin, this.positionOpened);
-        }
-    }
-
-    protected modelUpdated(): void {
-        super.modelUpdated();
-        this.updateExtents();
-    }
+    protected abstract moveToOpened(entitySystem: EntitySystem): void;
+    protected abstract moveToClosed(entitySystem: EntitySystem): void;
 
     private goToTop(entitySystem: EntitySystem): void {
         this.toggleState = ToggleState.GoingToTop;
-        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+        this.moveToOpened(entitySystem);
         this.output_onOpen.fire(entitySystem, this);
     }
 
     private goToBottom(entitySystem: EntitySystem): void {
         this.toggleState = ToggleState.GoingToBottom;
-        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+        this.moveToClosed(entitySystem);
         this.output_onClose.fire(entitySystem, this);
     }
 
@@ -627,6 +831,279 @@ class func_door extends BaseToggle {
             this.goToTop(entitySystem);
         else if (this.toggleState === ToggleState.Bottom)
             this.goToBottom(entitySystem);
+    }
+}
+
+const scratchAABB = new AABB();
+class func_door extends BaseDoor {
+    public static classname = `func_door`;
+
+    private modelExtents = vec3.create();
+    private lip: number;
+
+    protected positionOpened = vec3.create();
+    protected positionClosed = vec3.create();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.lip = Number(fallbackUndefined(this.entity.lip, '0'));
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        vec3.copy(this.positionOpened, this.localOrigin);
+        vec3.copy(this.positionClosed, this.localOrigin);
+
+        this.updateExtents();
+    }
+
+    private updateExtents(): void {
+        computeModelMatrixPosQAngle(scratchMat4a, Vec3Zero, this.localAngles);
+        if (this.modelBSP !== null)
+            scratchAABB.transform(this.modelBSP.model.bbox, scratchMat4a);
+        else if (this.modelStudio !== null)
+            scratchAABB.transform(this.modelStudio.modelData.viewBB, scratchMat4a);
+        scratchAABB.extents(this.modelExtents);
+
+        angleVec(scratchVec3a, null, null, this.moveDir);
+        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
+        vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
+
+        if (this.toggleState === ToggleState.Top) {
+            // If we should start open, then start open.
+            vec3.copy(this.localOrigin, this.positionOpened);
+        }
+    }
+
+    protected modelUpdated(): void {
+        super.modelUpdated();
+        this.updateExtents();
+    }
+
+    protected moveToOpened(entitySystem: EntitySystem): void {
+        this.linearMove(entitySystem, this.positionOpened, this.speed);
+    }
+
+    protected moveToClosed(entitySystem: EntitySystem): void {
+        this.linearMove(entitySystem, this.positionClosed, this.speed);
+    }
+}
+
+class func_door_rotating extends BaseDoor {
+    public static classname = `func_door_rotating`;
+
+    protected anglesOpened = vec3.create();
+    protected anglesClosed = vec3.create();
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        const enum SpawnFlags {
+            ROTATE_BACKWARDS = 0x02,
+            ROTATE_ROLL      = 0x40,
+            ROTATE_PITCH     = 0x80,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+
+        let rotAngles: ReadonlyVec3;
+        if (!!(spawnflags & SpawnFlags.ROTATE_ROLL))
+            rotAngles = Vec3UnitZ;
+        else if (!!(spawnflags & SpawnFlags.ROTATE_PITCH))
+            rotAngles = Vec3UnitX;
+        else
+            rotAngles = Vec3UnitY;
+
+        let distance = Number(fallbackUndefined(this.entity.distance, '0'));
+        if (!!(spawnflags & SpawnFlags.ROTATE_BACKWARDS))
+            distance *= -1.0;
+
+        vec3.copy(this.anglesClosed, this.localAngles);
+        vec3.scaleAndAdd(this.anglesOpened, this.localAngles, rotAngles, distance);
+
+        if (this.toggleState === ToggleState.Top) {
+            // If we should start open, then start open.
+            vec3.copy(this.localAngles, this.anglesOpened);
+        }
+    }
+
+    protected moveToOpened(entitySystem: EntitySystem): void {
+        this.angularMove(entitySystem, this.anglesOpened, this.speed);
+    }
+
+    protected moveToClosed(entitySystem: EntitySystem): void {
+        this.angularMove(entitySystem, this.anglesClosed, this.speed);
+    }
+}
+
+function signBiasPositive(v: number): number {
+    return v >= 0.0 ? 1 : -1;
+}
+
+function clampOnEdge(from: number, to: number, target: number): number {
+    if (target >= 0 === from <= target) {
+        if (from <= target && to >= target)
+            return target;
+    } else {
+        if (from >= target && to <= target)
+            return target;
+    }
+
+    return to;
+}
+
+class func_rotating extends BaseEntity {
+    public static classname = `func_rotating`;
+
+    private output_ongetspeed = new EntityOutput();
+
+    private friction = 1;
+    private maxSpeed: number = 0;
+
+    private useAcceleration = false;
+    private rotAngles = vec3.create();
+    private speed = 0.0;
+    private targetSpeed = 0.0;
+    private reversed = false;
+    protected angVelPerSecond = vec3.create();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('setspeed', this.input_setspeed.bind(this));
+        this.registerInput('getspeed', this.input_getspeed.bind(this));
+        this.registerInput('start', this.input_start.bind(this));
+        this.registerInput('stop', this.input_stop.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('reverse', this.input_reverse.bind(this));
+        this.registerInput('startforward', this.input_startforward.bind(this));
+        this.registerInput('startbackward', this.input_startbackward.bind(this));
+        this.output_ongetspeed.parse(this.entity.ongetspeed);
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        this.friction = Math.max(Number(fallbackUndefined(this.entity.fanfriction, '0')), 1);
+
+        this.maxSpeed = Number(fallbackUndefined(this.entity.maxspeed, '0'));
+        if (this.maxSpeed === 0)
+            this.maxSpeed = 100;
+
+        const enum SpawnFlags {
+            ROTATE_START_ON  = 0x01,
+            ROTATE_BACKWARDS = 0x02,
+            ROTATE_Z_AXIS    = 0x04,
+            ROTATE_X_AXIS    = 0x08,
+            ACCDCC           = 0x10,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+
+        if (!!(spawnflags & SpawnFlags.ROTATE_Z_AXIS))
+            vec3.copy(this.rotAngles, Vec3UnitZ);
+        else if (!!(spawnflags & SpawnFlags.ROTATE_X_AXIS))
+            vec3.copy(this.rotAngles, Vec3UnitX);
+        else
+            vec3.copy(this.rotAngles, Vec3UnitY);
+
+        if (!!(spawnflags & SpawnFlags.ROTATE_BACKWARDS))
+            vec3.negate(this.rotAngles, this.rotAngles);
+
+        this.useAcceleration = !!(spawnflags & SpawnFlags.ACCDCC);
+
+        if (!!(spawnflags & SpawnFlags.ROTATE_START_ON))
+            this.toggle();
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.useAcceleration && this.targetSpeed !== this.speed) {
+            // Apply acceleration logic.
+
+            let isChangingDirections = (signBiasPositive(this.targetSpeed) !== signBiasPositive(this.speed));
+
+            // Spinning to/from zero is never considered changing directions.
+            if (this.speed === 0.0 || this.targetSpeed === 0.0)
+                isChangingDirections = false;
+
+            let effectiveTargetSpeed = Math.abs(this.targetSpeed);
+            if (isChangingDirections) {
+                // If we're changing directions, first spin down to zero before spinning back up.
+                effectiveTargetSpeed = 0;
+            }
+
+            const absCurSpeed = Math.abs(this.speed);
+
+            const spinUpSpeed = 0.2, spinDownSpeed = -0.1;
+            const spinSpeed = effectiveTargetSpeed > absCurSpeed ? spinUpSpeed : spinDownSpeed;
+
+            let newSpeed = this.speed + spinSpeed * this.maxSpeed * this.friction * signBiasPositive(this.targetSpeed);
+            newSpeed = clampOnEdge(this.speed, newSpeed, this.targetSpeed);
+
+            this.setSpeed(newSpeed);
+        }
+
+        const deltaTimeInSeconds = renderContext.globalDeltaTime;
+        vec3.scaleAndAdd(this.localAngles, this.localAngles, this.angVelPerSecond, deltaTimeInSeconds);
+    }
+
+    private setSpeed(speed: number): void {
+        this.speed = clamp(speed, -this.maxSpeed, this.maxSpeed);
+        vec3.scale(this.angVelPerSecond, this.rotAngles, speed);
+    }
+
+    private setTargetSpeed(targetSpeed: number): void {
+        this.targetSpeed = Math.abs(targetSpeed) * (this.reversed ? -1 : 1);
+
+        if (!this.useAcceleration) {
+            // In the case we're not using acceleration, just set the new speed immediately.
+            this.setSpeed(this.targetSpeed);
+        }
+    }
+
+    private toggle(): void {
+        if (this.speed !== 0) {
+            this.setTargetSpeed(0);
+        } else {
+            this.setTargetSpeed(this.maxSpeed);
+        }
+    }
+
+    private input_setspeed(entitySystem: EntitySystem, value: string): void {
+        const speed = Number(value);
+        this.setSpeed(speed);
+    }
+
+    private input_getspeed(entitySystem: EntitySystem): void {
+        this.output_ongetspeed.fire(entitySystem, this, '' + this.speed);
+    }
+
+    private input_start(entitySystem: EntitySystem): void {
+        this.setTargetSpeed(this.maxSpeed);
+    }
+
+    private input_stop(entitySystem: EntitySystem): void {
+        this.setTargetSpeed(0);
+    }
+
+    private input_toggle(entitySystem: EntitySystem): void {
+        this.toggle();
+    }
+
+    private input_reverse(entitySystem: EntitySystem): void {
+        this.reversed = !this.reversed;
+        this.setTargetSpeed(this.speed);
+    }
+
+    private input_startforward(entitySystem: EntitySystem): void {
+        this.reversed = false;
+        this.setTargetSpeed(this.maxSpeed);
+    }
+
+    private input_startbackward(entitySystem: EntitySystem): void {
+        this.reversed = true;
+        this.setTargetSpeed(this.maxSpeed);
     }
 }
 
@@ -677,7 +1154,6 @@ class logic_auto extends BaseEntity {
 
     public spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
-
         this.output_onMapSpawn.fire(entitySystem, this);
     }
 }
@@ -686,19 +1162,148 @@ class logic_relay extends BaseEntity {
     public static classname = `logic_relay`;
 
     private output_onTrigger = new EntityOutput();
+    private output_onSpawn = new EntityOutput();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.output_onTrigger.parse(this.entity.ontrigger);
+        this.output_onSpawn.parse(this.entity.onspawn);
         this.registerInput('trigger', this.input_trigger.bind(this));
     }
 
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+        this.output_onSpawn.fire(entitySystem, this);
+    }
+
     private input_trigger(entitySystem: EntitySystem): void {
+        if (!this.enabled)
+            return;
+
         this.output_onTrigger.fire(entitySystem, this);
     }
 }
 
+class logic_branch extends BaseEntity {
+    public static classname = `logic_branch`;
+
+    private value: boolean;
+    private output_onTrue = new EntityOutput();
+    private output_onFalse = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.value = this.parseValue(this.entity.initialvalue);
+        this.registerInput('setvalue', this.input_setvalue.bind(this));
+        this.registerInput('setvaluetest', this.input_setvaluetest.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('toggletest', this.input_toggletest.bind(this));
+        this.registerInput('test', this.input_test.bind(this));
+        this.output_onTrue.parse(this.entity.ontrigger);
+        this.output_onFalse.parse(this.entity.ontrigger);
+    }
+
+    private parseValue(value: string): boolean {
+        return !!Number(value);
+    }
+
+    private setValue(entitySystem: EntitySystem, value: boolean, shouldFire: boolean): void {
+        if (this.value !== value) {
+            this.value = value;
+        }
+
+        if (shouldFire) {
+            if (this.value)
+                this.output_onTrue.fire(entitySystem, this);
+            else
+                this.output_onFalse.fire(entitySystem, this);
+        }
+    }
+
+    private input_setvalue(entitySystem: EntitySystem, value: string): void {
+        this.setValue(entitySystem, this.parseValue(value), false);
+    }
+
+    private input_setvaluetest(entitySystem: EntitySystem, value: string): void {
+        this.setValue(entitySystem, this.parseValue(value), true);
+    }
+
+    private input_toggle(entitySystem: EntitySystem): void {
+        this.setValue(entitySystem, !this.value, false);
+    }
+
+    private input_toggletest(entitySystem: EntitySystem): void {
+        this.setValue(entitySystem, !this.value, true);
+    }
+
+    private input_test(entitySystem: EntitySystem): void {
+        this.setValue(entitySystem, this.value, true);
+    }
+}
+
+function swap<T>(L: T[], i: number, j: number): void {
+    const t = L[i];
+    L[i] = L[j];
+    L[j] = t;
+}
+
+function shuffle<T>(src: T[]): T[] {
+    const L = src.slice();
+
+    // Fisher-Yates
+    for (let i = L.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        swap(L, i, j);
+    }
+
+    return L;
+}
+
+class logic_case extends BaseEntity {
+    public static classname = `logic_case`;
+
+    private output_oncaseNN = nArray(16, () => new EntityOutput());
+    private connectedOutputs: number[] = [];
+    private shuffled: number[] = [];
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        for (let i = 0; i < 16; i++) {
+            const oncase = this.entity[`oncase${leftPad('' + (i + 1), 2)}`];
+            if (oncase === undefined)
+                continue;
+
+            this.output_oncaseNN[i].parse(oncase);
+            this.connectedOutputs.push(i);
+        }
+
+        this.registerInput('invalue', this.input_invalue.bind(this));
+        this.registerInput('pickrandom', this.input_pickrandom.bind(this));
+        this.registerInput('pickrandomshuffle', this.input_pickrandomshuffle.bind(this));
+    }
+
+    private input_invalue(entitySystem: EntitySystem, value: string): void {
+        const c = Number(value);
+        if (c >= 0 && c < this.output_oncaseNN.length)
+            this.output_oncaseNN[c].fire(entitySystem, this);
+    }
+
+    private input_pickrandom(entitySystem: EntitySystem): void {
+        const index = (Math.random() * this.connectedOutputs.length) | 0;
+        const c = this.connectedOutputs[index];
+        this.output_oncaseNN[c].fire(entitySystem, this);
+    }
+
+    private input_pickrandomshuffle(entitySystem: EntitySystem): void {
+        if (this.shuffled.length === 0)
+            this.shuffled = shuffle(this.connectedOutputs);
+        const c = this.shuffled.pop()!;
+        this.output_oncaseNN[c].fire(entitySystem, this);
+    }
+}
 
 class logic_timer extends BaseEntity {
     public static classname = `logic_timer`;
@@ -868,7 +1473,7 @@ class math_remap extends BaseEntity {
         this.outMax = out2;
     }
 
-    private input_invalue(entitySystem: EntitySystem, value: number): void {
+    private input_invalue(entitySystem: EntitySystem, value: string): void {
         const num = Number(value);
 
         let t = invlerp(this.inMin, this.inMax, num);
@@ -926,7 +1531,7 @@ class math_colorblend extends BaseEntity {
         vmtParseColor(this.outColorMax, this.entity.colormax);
     }
 
-    private input_invalue(entitySystem: EntitySystem, value: number): void {
+    private input_invalue(entitySystem: EntitySystem, value: string): void {
         const num = Number(value);
 
         const t = invlerp(this.inMin, this.inMax, num);
@@ -938,7 +1543,7 @@ class math_colorblend extends BaseEntity {
         }
 
         colorLerp(scratchColor, this.outColorMin, this.outColorMax, t);
-        this.output_outColor.fire(entitySystem, this, scratchColor);
+        this.output_outColor.fire(entitySystem, this, strColor(scratchColor));
     }
 }
 
@@ -1139,15 +1744,25 @@ class env_fog_controller extends BaseEntity {
         this.fogMaxDensity = Number(this.entity.fogmaxdensity);
 
         this.registerInput('setstartdist', this.input_setstartdist.bind(this));
+        this.registerInput('setenddist', this.input_setenddist.bind(this));
+        this.registerInput('setfarz', this.input_setfarz.bind(this));
         this.registerInput('setcolor', this.input_setcolor.bind(this));
     }
 
-    private input_setstartdist(entitySystem: EntitySystem, value: number): void {
+    private input_setstartdist(entitySystem: EntitySystem, value: string): void {
         this.fogStart = Number(value);
     }
 
-    private input_setcolor(entitySystem: EntitySystem, value: Color): void {
-        colorCopy(this.fogColor1, value);
+    private input_setenddist(entitySystem: EntitySystem, value: string): void {
+        this.fogEnd = Number(value);
+    }
+
+    private input_setfarz(entitySystem: EntitySystem, value: string): void {
+        this.farZ = Number(value);
+    }
+
+    private input_setcolor(entitySystem: EntitySystem, value: string): void {
+        vmtParseColor(this.fogColor1, value);
     }
 
     public fillFogParams(dst: FogParams): void {
@@ -1378,7 +1993,6 @@ abstract class BaseLight extends BaseEntity {
     private defaultstyle: number;
     private pattern: string | null = null;
     private isOn: boolean = false;
-    private queuedIsOn: boolean | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -1389,7 +2003,7 @@ abstract class BaseLight extends BaseEntity {
 
         if (this.entity.pitch !== undefined) {
             const pitch = Number(this.entity.pitch);
-            this.angles[0] = pitch;
+            this.localAngles[0] = pitch;
         }
 
         const enum SpawnFlags {
@@ -1452,6 +2066,337 @@ class light_spot extends BaseLight { public static classname = 'light_spot'; }
 class light_glspot extends BaseLight { public static classname = 'light_glspot'; }
 class light_environment extends BaseLight { public static classname = 'light_environment'; }
 
+class point_template extends BaseEntity {
+    public static classname = 'point_template';
+
+    public templateEntities: BaseEntity[] = [];
+
+    public spawn(entitySystem: EntitySystem): void {
+        for (let i = 1; i <= 16; i++) {
+            const templateKeyName = `template${leftPad('' + i, 2)}`;
+            const templateEntityName = this.entity[templateKeyName];
+            if (templateEntityName === undefined)
+                continue;
+
+            const entity = entitySystem.findEntityByTargetName(templateEntityName);
+            if (entity === null)
+                continue;
+
+            this.templateEntities.push(entity);
+        }
+    }
+}
+
+class env_entity_maker extends BaseEntity {
+    public static classname = 'env_entity_maker';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('forcespawn', this.input_forcespawn.bind(this));
+    }
+
+    private spawnEntities(entitySystem: EntitySystem): void {
+        const template = entitySystem.findEntityByTargetName(this.entity.entitytemplate) as point_template;
+        if (template === null)
+            return;
+
+        const mapDatas = template.templateEntities.map((entity) => entity.cloneMapData());
+        const targetMapDatas: BSPEntity[] = [];
+
+        // Pick new target names.
+        for (let i = 0; i < mapDatas.length; i++) {
+            const mapData = mapDatas[i];
+            if (mapData.targetname === undefined)
+                continue;
+
+            const index = entitySystem.nextDynamicTemplateSpawnIndex++;
+            mapData.targetname = `${mapData.targetname}&${leftPad('' + index, 4)}`;
+            targetMapDatas.push(mapData);
+        }
+
+        for (let i = 0; i < mapDatas.length; i++) {
+            const mapData = mapDatas[i];
+
+            for (let j = 0; j < targetMapDatas.length; j++) {
+                if (mapData === targetMapDatas[j])
+                    continue;
+
+                const newTargetName = targetMapDatas[j].targetname;
+                assert(newTargetName.includes('&'));
+                const oldTargetName = newTargetName.slice(0, -5);
+
+                for (const k in mapData) {
+                    if (k === 'targetname')
+                        continue;
+
+                    let v: string[] | string = mapData[k];
+                    if (Array.isArray(v)) {
+                        v = v.map((s) => {
+                            return s.replace(oldTargetName, newTargetName);
+                        });
+                    } else {
+                        v = v.replace(oldTargetName, newTargetName);
+                    }
+
+                    mapData[k] = v as string;
+                }
+            }
+        }
+
+        // Have our new map datas. Spawn them, and then move them relative to our matrix.
+
+        let startIndex = entitySystem.entities.length;
+        for (let i = 0; i < mapDatas.length; i++)
+            entitySystem.createEntity(mapDatas[i]);
+
+        const worldFromThis = this.updateModelMatrix();
+        const worldFromTemplate = template.updateModelMatrix();
+
+        for (let i = startIndex; i < entitySystem.entities.length; i++) {
+            const entity = entitySystem.entities[i];
+
+            // Position entity in world.
+            const worldFromEntity = entity.updateModelMatrix();
+            mat4.invert(scratchMat4a, worldFromTemplate); // templateFromWorld
+            mat4.mul(scratchMat4a, scratchMat4a, worldFromEntity); // templateFromEntity
+            mat4.mul(scratchMat4a, worldFromThis, scratchMat4a); // worldFromEntity
+            computePosQAngleModelMatrix(scratchVec3a, scratchVec3b, scratchMat4a);
+            entity.setAbsOriginAndAngles(scratchVec3a, scratchVec3b);
+
+            entity.spawn(entitySystem);
+        }
+    }
+
+    private input_forcespawn(entitySystem: EntitySystem): void {
+        this.spawnEntities(entitySystem);
+    }
+}
+
+class SteamJetParticle {
+    public position = vec3.create();
+    public velocity = vec3.create();
+    public life = 0;
+    public roll = 0;
+    public rollDelta = 0;
+}
+
+class env_steam extends BaseEntity {
+    public static classname = 'env_steam';
+
+    private startSize = 0;
+    private endSize = 0;
+    private rollSpeed = 0;
+    private spreadSpeed = 0;
+    private speed = 0;
+    private invRate = 0;
+    private particleLifetime = 0;
+    private lightingRamp: Color[] = nArray(5, () => colorNewCopy(White));
+
+    // Emit state.
+    private shouldEmit = false;
+    private emitTimer = 0;
+
+    private particlePool: SteamJetParticle[] = [];
+
+    private materialInstance: BaseMaterial | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.startSize = Number(fallbackUndefined(this.entity.startsize, '0'));
+        this.endSize = Number(fallbackUndefined(this.entity.endsize, '0'));
+        this.spreadSpeed = Number(fallbackUndefined(this.entity.spreadspeed, '0'));
+        this.speed = Number(fallbackUndefined(this.entity.speed, '0'));
+        const rate = Number(fallbackUndefined(this.entity.rate, '0'));
+        this.invRate = 1.0 / rate;
+        this.rollSpeed = Number(fallbackUndefined(this.entity.rollspeed, '0'));
+
+        const jetLength = Number(fallbackUndefined(this.entity.jetlength, '0'));
+        this.particleLifetime = jetLength / this.speed;
+
+        const initialstate = Number(fallbackUndefined(this.entity.initialstate, '0'));
+        if (initialstate !== 0)
+            this.shouldEmit = true;
+
+        const enum Type {
+            HEATWAVE = 0x01,
+        };
+        const type: Type = Number(fallbackUndefined(this.entity.type, '0'));
+
+        if (type === Type.HEATWAVE) {
+            this.bindMaterial(renderContext, `sprites/heatwave`);
+        } else {
+            this.bindMaterial(renderContext, `particle/particle_smokegrenade`);
+        }
+
+        this.registerInput('turnon', this.input_turnon.bind(this));
+        this.registerInput('turnoff', this.input_turnoff.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+    }
+
+    private newParticle(): SteamJetParticle {
+        const p = new SteamJetParticle();
+        this.particlePool.push(p);
+        return p;
+    }
+
+    private calcLightingRamp(entitySystem: EntitySystem): void {
+        const modelMatrix = this.updateModelMatrix();
+        // Forward axis.
+        getMatrixAxisX(scratchVec3b, modelMatrix);
+
+        for (let i = 0; i < this.lightingRamp.length; i++) {
+            const t = i / (this.lightingRamp.length - 1);
+
+            getMatrixTranslation(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, t);
+
+            worldLightingCalcColorForPoint(this.lightingRamp[i], entitySystem.bspRenderer, scratchVec3a);
+        }
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        this.calcLightingRamp(entitySystem);
+    }
+
+    private emit(renderContext: SourceRenderContext): void {
+        if (!this.shouldEmit)
+            return;
+
+        this.emitTimer += renderContext.globalDeltaTime;
+
+        let numParticlesToEmit = 0;
+        while (this.emitTimer >= this.invRate) {
+            numParticlesToEmit++;
+            this.emitTimer -= this.invRate;
+        }
+
+        if (numParticlesToEmit <= 0)
+            return;
+
+        const modelMatrix = this.updateModelMatrix();
+
+        for (let i = 0; i < numParticlesToEmit; i++) {
+            const p = this.newParticle();
+            getMatrixTranslation(p.position, modelMatrix);
+
+            // Forward axis
+            getMatrixAxisX(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, this.speed);
+
+            // Spread axes
+            getMatrixAxisY(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, getRandomFloat(-this.spreadSpeed, this.spreadSpeed));
+            getMatrixAxisZ(scratchVec3a, modelMatrix);
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, getRandomFloat(-this.spreadSpeed, this.spreadSpeed));
+
+            p.roll = getRandomFloat(0, 360);
+            p.rollDelta = getRandomFloat(-this.rollSpeed, this.rollSpeed);
+
+            p.life = 0.0;
+        }
+    }
+
+    private simulate(renderContext: SourceRenderContext): void {
+        const deltaTime = renderContext.globalDeltaTime;
+
+        for (let i = 0; i < this.particlePool.length; i++) {
+            const p = this.particlePool[i];
+
+            p.life += renderContext.globalDeltaTime;
+            if (p.life >= this.particleLifetime) {
+                this.particlePool.splice(i--, 1);
+                continue;
+            }
+
+            p.roll += p.rollDelta * deltaTime;
+            vec3.scaleAndAdd(p.position, p.position, p.velocity, deltaTime);
+        }
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        this.emit(renderContext);
+        this.simulate(renderContext);
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext, materialName: string) {
+        const materialCache = renderContext.materialCache;
+        const materialInstance = await materialCache.createMaterialInstance(materialName);
+        materialInstance.entityParams = this.ensureMaterialParams();
+        await materialInstance.init(renderContext);
+        this.materialInstance = materialInstance;
+    }
+
+    private calcLightingColor(dst: Color, lifeT: number): void {
+        const tt = (lifeT * (this.lightingRamp.length - 1));
+        const i0 = Math.floor(tt), i1 = Math.ceil(tt), t = tt - i0;
+        colorLerp(dst, this.lightingRamp[i0], this.lightingRamp[i1], t);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.shouldDraw())
+            return;
+
+        if (this.materialInstance === null)
+            return;
+
+        const particleStaticRes = renderContext.particleStaticRes;
+        for (let i = 0; i < this.particlePool.length; i++) {
+            const p = this.particlePool[i];
+            const lifeT = (p.life / this.particleLifetime);
+
+            this.calcLightingColor(scratchColor, lifeT);
+            const alpha = Math.sin(lifeT * (MathConstants.TAU / 2));
+
+            const size = lerp(this.startSize, this.endSize, lifeT);
+
+            const renderInst = renderInstManager.newRenderInst();
+            particleStaticRes.setQuadOnRenderInst(renderInst);
+
+            // This is a bit hacky -- set the color/alpha per-particle. Blergh.
+            const colorParam = (this.materialInstance.param['$color'] as any);
+            colorParam.setFromColor(scratchColor);
+
+            const alphaParam = (this.materialInstance.param['$alpha'] as any);
+            alphaParam.value = this.renderamt * alpha;
+
+            this.materialInstance.setOnRenderInst(renderContext, renderInst);
+
+            computeModelMatrixR(scratchMat4a, p.roll * MathConstants.DEG_TO_RAD, 0, 0);
+
+            getMatrixAxisZ(scratchVec3a, view.worldFromViewMatrix);
+            computeMatrixForForwardDir(scratchMat4b, scratchVec3a, Vec3Zero);
+
+            mat4.mul(scratchMat4a, scratchMat4b, scratchMat4a);
+            scaleMatrix(scratchMat4a, scratchMat4a, size);
+            setMatrixTranslation(scratchMat4a, p.position);
+
+            this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
+
+            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, p.position);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+
+            this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
+        }
+    }
+
+    private input_turnon(entitySystem: EntitySystem): void {
+        this.shouldEmit = true;
+    }
+
+    private input_turnoff(entitySystem: EntitySystem): void {
+        this.shouldEmit = false;
+    }
+    
+    private input_toggle(entitySystem: EntitySystem): void {
+        this.shouldEmit = !this.shouldEmit;
+    }
+}
 
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
@@ -1459,7 +2404,8 @@ interface EntityFactory<T extends BaseEntity = BaseEntity> {
 }
 
 interface QueuedOutputEvent {
-    activator: BaseEntity;
+    sender: BaseEntity;
+    activator: BaseEntity | null;
     triggerTime: number;
     action: EntityOutputAction;
     value: EntityMessageValue;
@@ -1477,10 +2423,14 @@ export class EntityFactoryRegistry {
         this.registerFactory(water_lod_control);
         this.registerFactory(func_movelinear);
         this.registerFactory(func_door);
+        this.registerFactory(func_door_rotating);
+        this.registerFactory(func_rotating);
         this.registerFactory(func_areaportalwindow);
         this.registerFactory(func_instance_io_proxy);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
+        this.registerFactory(logic_branch);
+        this.registerFactory(logic_case);
         this.registerFactory(logic_timer);
         this.registerFactory(math_counter);
         this.registerFactory(math_remap);
@@ -1497,6 +2447,9 @@ export class EntityFactoryRegistry {
         this.registerFactory(light_spot);
         this.registerFactory(light_glspot);
         this.registerFactory(light_environment);
+        this.registerFactory(point_template);
+        this.registerFactory(env_entity_maker);
+        this.registerFactory(env_steam);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -1518,26 +2471,41 @@ export class EntityFactoryRegistry {
 export class EntitySystem {
     public entities: BaseEntity[] = [];
     public currentTime = 0;
+    public nextDynamicTemplateSpawnIndex = 0;
     public debugger = new EntityMessageDebugger();
     private outputQueue: QueuedOutputEvent[] = [];
+    private needsSpawn = true;
+    private currentActivator: BaseEntity | null = null;
 
-    constructor(private registry: EntityFactoryRegistry) {
+    constructor(public renderContext: SourceRenderContext, public bspRenderer: BSPRenderer) {
+        // Create our hardcoded entities first.
+        this.entities.push(new player(this, this.renderContext, this.bspRenderer));
     }
 
     public entityMatchesTargetName(entity: BaseEntity, targetName: string): boolean {
+        if (!entity.targetName)
+            return false;
+
         if (entity.targetName === targetName)
             return true;
 
-        // TODO(jstpierre): Support multicast / wildcard target names
+        if (targetName.endsWith('*')) {
+            if (entity.targetName.startsWith(targetName.slice(0, -1)))
+                return true;
+        } else if (targetName.includes('*')) {
+            debugger;
+        }
+
         return false;
     }
 
-    public queueEntityOutputAction(action: EntityOutputAction, activator: BaseEntity, value: EntityMessageValue): void {
+    public queueEntityOutputAction(action: EntityOutputAction, sender: BaseEntity, value: EntityMessageValue): void {
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
         const triggerTime = this.currentTime + action.delay;
-        this.outputQueue.push({ activator, action, triggerTime, value });
+        const activator = this.currentActivator;
+        this.outputQueue.push({ sender, activator, action, triggerTime, value });
     }
 
     public findEntityByType<T extends BaseEntity>(type: EntityFactory<T>, start: T | null = null): T | null {
@@ -1558,7 +2526,17 @@ export class EntitySystem {
     private fireInput(target: BaseEntity, event: QueuedOutputEvent): void {
         this.debugger.fireInput(target, event, this.currentTime);
 
+        this.currentActivator = event.sender;
         target.fireInput(this, event.action.inputName, event.value);
+        this.currentActivator = null;
+    }
+
+    private entityMatchesEventTarget(entity: BaseEntity, event: QueuedOutputEvent): boolean {
+        if (event.action.targetName === '!activator')
+            return entity === event.activator;
+        if (this.entityMatchesTargetName(entity, event.action.targetName))
+            return true;
+        return false;
     }
 
     private fireEntityOutputAction(event: QueuedOutputEvent): boolean {
@@ -1567,7 +2545,7 @@ export class EntitySystem {
 
         for (let i = 0; i < this.entities.length; i++) {
             const target = this.entities[i];
-            if (!this.entityMatchesTargetName(target, event.action.targetName))
+            if (!this.entityMatchesEventTarget(target, event))
                 continue;
             this.fireInput(target, event);
         }
@@ -1581,34 +2559,42 @@ export class EntitySystem {
                 this.outputQueue.splice(i--, 1);
     }
 
+    private isReady(): boolean {
+        for (let i = 0; i < this.entities.length; i++)
+            if (!this.entities[i].ready)
+                return false;
+        return true;
+    }
+
     public movement(renderContext: SourceRenderContext): void {
+        if (this.needsSpawn && this.isReady()) {
+            for (let i = 0; i < this.entities.length; i++)
+                this.entities[i].spawn(this);
+            this.needsSpawn = false;
+        } else if (this.needsSpawn) {
+            return;
+        }
+
         this.processOutputQueue();
         this.debugger.movement(renderContext);
+
+        this.currentTime = renderContext.globalTime;
 
         for (let i = 0; i < this.entities.length; i++)
             if (this.entities[i].alive)
                 this.entities[i].movement(this, renderContext);
-
-        this.currentTime = renderContext.globalTime;
     }
 
-    private spawn(): void {
-        for (let i = 0; i < this.entities.length; i++)
-            this.entities[i].spawn(this);
-    }
-
-    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, bspEntity: BSPEntity): void {
-        const entity = this.registry.createEntity(this, renderContext, renderer, bspEntity);
+    public createEntity(bspEntity: BSPEntity): void {
+        const registry = this.renderContext.entityFactoryRegistry;
+        const entity = registry.createEntity(this, this.renderContext, this.bspRenderer, bspEntity);
         this.entities.push(entity);
     }
 
-    public createEntities(renderContext: SourceRenderContext, renderer: BSPRenderer, entities: BSPEntity[]): void {
-        // Create our hardcoded entities like the player entity.
-        this.entities.push(new player(this, renderContext, renderer));
-
+    public createAndSpawnEntities(entities: BSPEntity[]): void {
         for (let i = 0; i < entities.length; i++)
-            this.createEntity(renderContext, renderer, entities[i]);
-        this.spawn();
+            this.createEntity(entities[i]);
+        this.needsSpawn = true;
     }
 
     public getLocalPlayer(): player {
@@ -1661,10 +2647,10 @@ class EntityMessageDebugger {
             targetColor.a = alpha;
             lineColor.a = alpha;
 
-            const activator = message.event.activator, target = message.target;
+            const sender = message.event.sender, target = message.target;
             const ctx = getDebugOverlayCanvas2D();
 
-            activator.getAbsOrigin(scratchVec3a);
+            sender.getAbsOrigin(scratchVec3a);
             target.getAbsOrigin(scratchVec3b);
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, activatorColor, 6);
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, targetColor, 6);

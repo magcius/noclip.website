@@ -56,4 +56,4 @@ const sceneDescs = [
     new HalfLife2Ep2SceneDesc("ep2_outland_12a"),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

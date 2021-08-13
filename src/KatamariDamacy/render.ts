@@ -47,7 +47,7 @@ layout(std140) uniform ub_ModelParams {
 
 uniform sampler2D u_Texture[1];
 
-varying vec3 v_Normal;
+varying vec3 v_DiffuseLighting;
 varying vec2 v_TexCoord;
 `;
 
@@ -60,8 +60,16 @@ layout(location = 2) in vec2 a_TexCoord;
 void main() {
     int t_SkinningIndex = int(a_Position.w);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_SkinningIndex]), vec4(a_Position.xyz, 1.0)));
-    v_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[t_SkinningIndex]), vec4(a_Normal, 0.0)).xyz);
     v_TexCoord = Mul(_Mat4x4(u_TextureMatrix[0]), vec4(a_TexCoord, 0.0, 1.0)).xy;
+
+#ifdef LIGHTING
+    vec3 t_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[t_SkinningIndex]), vec4(a_Normal, 0.0)).xyz);
+    v_DiffuseLighting = u_LightColors[2].rgb;
+    for (int i = 0; i < 2; i++)
+        v_DiffuseLighting += max(dot(t_Normal, u_LightDirs[i].xyz), 0.0) * u_LightColors[i].rgb;
+#else
+    v_DiffuseLighting = vec3(1.0);
+#endif
 }
 `;
 
@@ -118,16 +126,7 @@ void main() {
 
     t_Color = texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
-
-#ifdef LIGHTING
-    vec3 t_CombinedIntensity = u_LightColors[2].rgb;
-
-    t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[0].xyz), 0.0) * u_LightColors[0].rgb;
-    t_CombinedIntensity += max(dot(v_Normal, u_LightDirs[1].xyz), 0.0) * u_LightColors[1].rgb;
-
-    t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
-#endif
-
+    t_Color.rgb *= clamp(v_DiffuseLighting, 0.0, 1.0);
     t_Color.a *= u_Alpha;
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}

@@ -14,7 +14,7 @@ import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
-import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
+import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8, White, TransparentBlack } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
 import { quatFromEulerRadians } from '../../../MathHelpers';
 
@@ -631,10 +631,10 @@ export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotat
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
+    dst[4]  = scaleS *  sinR;
     dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
 
-    dst[4]  = scaleS *  sinR;
+    dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
     dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
@@ -711,26 +711,26 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const colorMatRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
-            const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
-            const matColorReg = readColorU8(view, matColorOffs);
-            colorMatRegs[j] = matColorReg;
+            if (matColorIndex !== 0xFFFF)
+                colorMatRegs.push(readColorU8(view, materialColorTableOffs + matColorIndex * 0x04));
+            else
+                colorMatRegs.push(White);
         }
 
         const colorAmbRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
-            const ambColorOffs = ambientColorTableOffs + ambColorIndex * 0x04;
-            const ambColorReg = readColorU8(view, ambColorOffs);
-            colorAmbRegs[j] = ambColorReg;
+            if (ambColorIndex !== 0xFFFF)
+                colorAmbRegs.push(readColorU8(view, ambientColorTableOffs + ambColorIndex * 0x04));
+            else
+                colorAmbRegs.push(White);
         }
 
         const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanNumIndex);
         const lightChannels: GX_Material.LightChannelControl[] = [];
         for (let j = 0; j < lightChannelCount; j++) {
-            const colorChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 0) * 0x02));
-            const colorChannel = readColorChannel(colorChanTableOffs, colorChannelIndex);
-            const alphaChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 1) * 0x02));
-            const alphaChannel = readColorChannel(colorChanTableOffs, alphaChannelIndex);
+            const colorChannel = readColorChannel(view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 0) * 0x02));
+            const alphaChannel = readColorChannel(view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 1) * 0x02));
             lightChannels.push({ colorChannel, alphaChannel });
         }
 
@@ -788,31 +788,31 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         }
         */
 
-       let textureIndexTableIdx = materialEntryIdx + 0x84;
        const textureIndexes = [];
        for (let j = 0; j < 8; j++) {
-           const textureTableIndex = view.getInt16(textureIndexTableIdx);
-           if (textureTableIndex >= 0) {
-               const textureIndex = view.getUint16(textureTableOffs + textureTableIndex * 0x02);
-               textureIndexes.push(textureIndex);
-           } else {
+           const textureTableIndex = view.getUint16(materialEntryIdx + 0x84 + j * 0x02);
+           if (textureTableIndex !== 0xFFFF)
+               textureIndexes.push(view.getUint16(textureTableOffs + textureTableIndex * 0x02));
+           else
                textureIndexes.push(-1);
-           }
-           textureIndexTableIdx += 0x02;
        }
 
         const colorConstants: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
-            const color = readColorU8(view, colorConstantTableOffs + colorIndex * 0x04);
-            colorConstants.push(color);
+            if (colorIndex !== 0xFFFF)
+                colorConstants.push(readColorU8(view, colorConstantTableOffs + colorIndex * 0x04));
+            else
+                colorConstants.push(White);
         }
 
         const colorRegisters: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
-            const color = readColorS16(view, colorRegisterTableOffs + colorIndex * 0x08);
-            colorRegisters.push(color);
+            if (colorIndex !== 0xFFFF)
+                colorRegisters.push(readColorS16(view, colorRegisterTableOffs + colorIndex * 0x08));
+            else
+                colorRegisters.push(TransparentBlack);
         }
 
         const indTexStages: GX_Material.IndTexStage[] = [];
@@ -883,7 +883,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const alphaScale: GX.TevScale = view.getUint8(tevStageOffs + 0x10);
             const alphaClamp: boolean = !!view.getUint8(tevStageOffs + 0x11);
             const alphaRegId: GX.Register = view.getUint8(tevStageOffs + 0x12);
-            // const unknown1 = view.getUint8(tevStageOffs + 0x13);
 
             // TevOrder
             const tevOrderIndex = view.getUint16(materialEntryIdx + 0xBC + j * 0x02);
@@ -1040,25 +1039,34 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         });
     }
 
-    function readColorChannel(tableOffs: number, colorChanIndex: number): GX_Material.ColorChannelControl {
-        const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
-        const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
-        assert(view.getUint8(colorChanOffs + 0x00) < 2);
-        const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
-        const litMask = view.getUint8(colorChanOffs + 0x02);
-        const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
-        const attnFn = view.getUint8(colorChanOffs + 0x04);
-        const attenuationFunction: GX.AttenuationFunction = (
-            attnFn === 0 ? GX.AttenuationFunction.NONE :
-            attnFn === 1 ? GX.AttenuationFunction.SPEC :
-            attnFn === 2 ? GX.AttenuationFunction.NONE :
-            attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
-        );
-        assert((attenuationFunction as number) !== -1);
-        const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
+    function readColorChannel(colorChanIndex: number): GX_Material.ColorChannelControl {
+        if (colorChanIndex !== 0xFFFF) {
+            const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
+            const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
+            assert(view.getUint8(colorChanOffs + 0x00) < 2);
+            const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
+            const litMask = view.getUint8(colorChanOffs + 0x02);
+            const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
+            const attnFn = view.getUint8(colorChanOffs + 0x04);
+            const attenuationFunction: GX.AttenuationFunction = (
+                attnFn === 0 ? GX.AttenuationFunction.NONE :
+                attnFn === 1 ? GX.AttenuationFunction.SPEC :
+                attnFn === 2 ? GX.AttenuationFunction.NONE :
+                attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
+            );
+            assert((attenuationFunction as number) !== -1);
+            const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
 
-        const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
-        return colorChan;
+            return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+        } else {
+            const lightingEnabled = false;
+            const matColorSource: GX.ColorSrc = GX.ColorSrc.REG;
+            const litMask = 0;
+            const diffuseFunction: GX.DiffuseFunction = GX.DiffuseFunction.CLAMP;
+            const attenuationFunction: GX.AttenuationFunction = GX.AttenuationFunction.NONE;
+            const ambColorSource: GX.ColorSrc = GX.ColorSrc.REG;
+            return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+        }
     }
 
     function readTexMatrix(tableOffs: number, texMtxIndex: number): TexMtx {

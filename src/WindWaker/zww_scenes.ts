@@ -465,7 +465,7 @@ export class ZWWExtraTextures {
         this.textureMapping[0].gfxTexture = this.dynToonTex.gfxTexture;
         this.textureMapping[1].gfxTexture = this.dynToonTex.gfxTexture;
 
-        window.main.ui.debugFloaterHolder.bindSliders(this);
+        window.main.ui.debugFloaterHolder.bindPanel(this);
     }
 
     public prepareToRender(device: GfxDevice): void {

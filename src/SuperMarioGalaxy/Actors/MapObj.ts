@@ -961,7 +961,7 @@ export class DriftWood extends MapObjActor<DriftWoodNrv> {
         if (currentNerve === DriftWoodNrv.Wait) {
             if (isFirstStep(this) && !isEffectValid(this, 'Ripple'))
                 emitEffect(sceneObjHolder, this, 'Ripple');
-            moveCoordAndFollowTrans(this, 3.0);
+            moveCoordAndFollowTrans(this, 3.0 * deltaTimeFrames);
             rotateVecDegree(this.front, this.gravityVector, 0.05);
             // this.tryVibrate();
         }
@@ -1377,7 +1377,7 @@ class Rock extends LiveActor<RockNrv> {
             }
 
             if (isLessStep(this, this.appearStep))
-                this.moveOnRail(sceneObjHolder, 7.0, rotateSpeed, false);
+                this.moveOnRail(sceneObjHolder, 7.0 * deltaTimeFrames, rotateSpeed, false);
 
             if (isGreaterEqualStep(this, this.appearStep) && isLessStep(this, this.appearStep + 15)) {
                 const t = this.getNerveStep() - this.appearStep;
@@ -1401,7 +1401,7 @@ class Rock extends LiveActor<RockNrv> {
 
             if (!this.tryFreeze(RockNrv.AppearMoveInvalidBind)) {
                 const forceInvalidBind = this.isForceInvalidBindSection();
-                this.moveOnRail(sceneObjHolder, this.speed, this.rotateSpeed, forceInvalidBind);
+                this.moveOnRail(sceneObjHolder, this.speed * deltaTimeFrames, this.rotateSpeed, forceInvalidBind);
                 if (!forceInvalidBind && isGreaterEqualStep(this, 45)) {
                     this.calcBinderFlag = true;
                     this.setNerve(RockNrv.Move);
@@ -1478,7 +1478,7 @@ class Rock extends LiveActor<RockNrv> {
             // startRollLevelSound
             // startSoundWanwanVoice
             if (!this.tryBreakReachedGoal(sceneObjHolder))
-                this.moveOnRail(sceneObjHolder, this.speed, this.rotateSpeed, false);
+                this.moveOnRail(sceneObjHolder, this.speed * deltaTimeFrames, this.rotateSpeed, false);
         } else if (currentNerve === RockNrv.Break) {
             if (isFirstStep(this)) {
                 // isInClippingRange
@@ -3720,7 +3720,7 @@ export class ItemBubble extends LiveActor<ItemBubbleNrv> {
                 const railMoveSpeed = getCurrentRailPointArg0(this);
                 if (railMoveSpeed !== null)
                     this.railMoveSpeed = railMoveSpeed;
-                moveCoordAndFollowTrans(this, this.railMoveSpeed);
+                moveCoordAndFollowTrans(this, this.railMoveSpeed * deltaTimeFrames);
             }
 
             vec3.scaleAndAdd(this.translation, this.initPosition, Vec3UnitY, wave * 30.0);

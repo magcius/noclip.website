@@ -1,8 +1,9 @@
 
-import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4 } from "gl-matrix";
+import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
 import { nArray } from "./util";
 
 const scratchVec4 = vec4.create();
+const scratchMatrix = mat4.create();
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
     public n = vec3.create();
@@ -69,10 +70,10 @@ export class Plane {
     }
 
     public transform(mtx: ReadonlyMat4): void {
-        // You might have to retrieve the adjugate / inverse here if you're doing scaling. I'm using this
-        // with view matrices which shouldn't ever have non-homogenous scaling.
         this.getVec4v(scratchVec4);
-        vec4.transformMat4(scratchVec4, scratchVec4, mtx);
+        mat4.invert(scratchMatrix, mtx);
+        mat4.transpose(scratchMatrix, scratchMatrix);
+        vec4.transformMat4(scratchVec4, scratchVec4, scratchMatrix);
         this.setVec4v(scratchVec4);
     }
 }

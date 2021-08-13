@@ -20,7 +20,8 @@ export async function createScene(context: SceneContext, filesystem: SourceFileS
     if (bspFile.pakfile !== null)
         filesystem.pakfiles.push(bspFile.pakfile);
 
-    await renderContext.materialCache.bindLocalCubemap(bspFile.cubemaps[0]);
+    if (bspFile.cubemaps[0] !== undefined)
+        await renderContext.materialCache.bindLocalCubemap(bspFile.cubemaps[0]);
 
     // Build skybox from worldname.
     const worldspawn = bspFile.entities[0];

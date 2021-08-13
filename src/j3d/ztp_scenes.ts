@@ -143,15 +143,6 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         return [layers, renderHacksPanel];
     }
 
-    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-    }
-
     private setIndirectTextureOverride(): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
             const m = this.modelInstances[i].getTextureMappingReference('fbtex_dummy');
@@ -169,6 +160,12 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         this.setIndirectTextureOverride();
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -223,7 +220,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.prepareToRender(device, viewerInput);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }

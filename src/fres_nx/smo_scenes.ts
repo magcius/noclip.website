@@ -5,7 +5,7 @@ import * as BYML from '../byml';
 import { DataFetcher } from '../DataFetcher';
 import * as SARC from './sarc';
 import * as BFRES from './bfres';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
