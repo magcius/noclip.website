@@ -2093,7 +2093,8 @@ used under Creative Commons CC-BY:</p>
 <li> Overlap <span>by</span> Zach Bogart
 <li> VR <span>by</span> Fauzan Adaiima
 <li> Play Clapboard <span>by</span> Yoyon Pujiyono
-<li> Popout <span>by</span> Satisfactory
+<li> Undo <span>by</span> Numero Uno
+<li> Redo <span>by</span> Numero Uno
 </ul>
 `;
 
