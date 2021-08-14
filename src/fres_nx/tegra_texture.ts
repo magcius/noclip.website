@@ -295,7 +295,7 @@ export async function decompress_bcn_deswizzle(textureEntry: BRTI, pixels: Uint8
             pixels: wasm.decompress_tegra_unsigned(
                 channelFormat === ChannelFormat.Bc1 ? wasm.BCNType.BC1 :
                 channelFormat === ChannelFormat.Bc2 ? wasm.BCNType.BC2 : wasm.BCNType.BC3,
-                typeFormat === TypeFormat.Unorm ? wasm.SurfaceFlag.UNorm : wasm.SurfaceFlag.Srgb,
+                typeFormat === TypeFormat.UnormSrgb,
                 width,
                 height,
                 depth,
@@ -313,7 +313,7 @@ export async function decompress_bcn_deswizzle(textureEntry: BRTI, pixels: Uint8
                 type: 'RGBA',
                 pixels: wasm.decompress_tegra_unsigned(
                     channelFormat === ChannelFormat.Bc4 ? wasm.BCNType.BC4 : wasm.BCNType.BC5,
-                    wasm.SurfaceFlag.UNorm,
+                    false,
                     width,
                     height,
                     depth,
@@ -329,7 +329,6 @@ export async function decompress_bcn_deswizzle(textureEntry: BRTI, pixels: Uint8
                 type: 'RGBA',
                 pixels: wasm.decompress_tegra_signed(
                     channelFormat === ChannelFormat.Bc4 ? wasm.BCNType.BC4 : wasm.BCNType.BC5,
-                    wasm.SurfaceFlag.SNorm,
                     width,
                     height,
                     depth,

@@ -24,26 +24,43 @@ pub fn next_pow2(value: usize) -> usize {
     }
 }
 
-pub fn halfblend(a: u8, b: u8) -> u8 {
-    let a = a as u32;
-    let b = b as u32;
-    let ret = (a + b) >> 1;
-    ret as u8
-}
-
-// Use the fast GX approximation.
-pub fn s3tcblend(a: u8, b: u8) -> u8 {
-    // return (a*3 + b*5) / 8;
-    let a = a as u32;
-    let b = b as u32;
-    let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
-    ret as u8
-}
-
 pub unsafe fn unitialized_vec<T>(size: usize) -> Vec<T> {
     let mut vec = Vec::with_capacity(size);
     vec.set_len(size);
     vec
+}
+
+pub fn srgb_to_linear(value: f32) -> f32 {
+    if value <= 0.0404482362771082 {
+        value / 12.92
+    } else {
+        ((value + 0.055)/1.055).powf(2.4)
+    }
+}
+
+pub fn linear_to_srgb(value: f32) -> f32 {
+    if value < 0.00313066844250063 {
+        value * 12.92
+    } else {
+        value.powf(1.0/2.4) * 1.055 - 0.055
+    }
+}
+
+pub type BlendFunction<T, U> = fn(T, T, U, U) -> T;
+
+pub fn blend_srgb_u8(a: u8, b: u8, weight_a: u32, weight_b: u32) -> u8 {
+    let a = srgb_to_linear((a as f32) / 255.0);
+    let b = srgb_to_linear((b as f32) / 255.0);
+    let v = (a * (weight_a as f32) + b * (weight_b as f32)) / ((weight_a as f32) + (weight_b as f32));
+    (linear_to_srgb(v) * 255.0) as u8
+}
+
+pub fn blend_linear_u8(a: u8, b: u8, weight_a: u32, weight_b: u32) -> u8 {
+    (((a as u32) * weight_a + (b as u32) * weight_b) / (weight_a + weight_b)) as u8
+}
+
+pub fn blend_linear_i8(a: i8, b: i8, weight_a: i32, weight_b: i32) -> i8 {
+    (((a as i32) * weight_a + (b as i32) * weight_b) / (weight_a + weight_b)) as i8
 }
 
 #[cfg(target_endian="little")]

@@ -49,7 +49,7 @@ fn calc_required_unswizzled_buffer_len(w: usize, h: usize, bpp: usize, block_hei
     width * height
 }
 
-fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16) {
+fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16, blend: util::BlendFunction<u8, u32>) {
     // Fill in first two colors in color table.
     // TODO(jstpierre): SRGB-correct blending.
     color_table[0] = [
@@ -67,15 +67,15 @@ fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16) {
     if color1 > color2 {
         // Predict gradients.
         color_table[2] = [
-            util::s3tcblend(color_table[1][0], color_table[0][0]),
-            util::s3tcblend(color_table[1][1], color_table[0][1]),
-            util::s3tcblend(color_table[1][2], color_table[0][2]),
+            blend(color_table[1][0], color_table[0][0], 1, 2),
+            blend(color_table[1][1], color_table[0][1], 1, 2),
+            blend(color_table[1][2], color_table[0][2], 1, 2),
             0xFF,
         ];
         color_table[3] = [
-            util::s3tcblend(color_table[0][0], color_table[1][0]),
-            util::s3tcblend(color_table[0][1], color_table[1][1]),
-            util::s3tcblend(color_table[0][2], color_table[1][2]),
+            blend(color_table[0][0], color_table[1][0], 2, 1),
+            blend(color_table[0][1], color_table[1][1], 2, 1),
+            blend(color_table[0][2], color_table[1][2], 2, 1),
             0xFF
         ];
     } else {
@@ -94,17 +94,8 @@ fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16) {
     }
 }
 
-#[wasm_bindgen]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum SurfaceFlag {
-    Srgb,
-    UNorm,
-    SNorm,
-}
-
 #[derive(Clone)]
 pub struct SurfaceMetaData {
-    flag: SurfaceFlag,
     width: usize,
     height: usize,
     depth: usize,
@@ -161,7 +152,7 @@ impl OutputType for OutputUnsigned {
 }
 
 // Software decompresses from standard BC1 (DXT1) to RGBA.
-fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Vec<u8> {
+fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend: util::BlendFunction<u8, u32>) -> Vec<u8> {
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
     const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc1);
@@ -186,7 +177,7 @@ fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Ve
             let src_offs = get_addr_block_linear(block_x, block_y, width_in_blocks, INPUT_BYTES_PER_CHUNK, block_height, 0);
             let color1 = util::get_uint16_le(src, src_offs);
             let color2 = util::get_uint16_le(src, src_offs + 2);
-            color_table_bc1(&mut color_table, color1, color2);
+            color_table_bc1(&mut color_table, color1, color2, blend);
             let mut colorbits = util::get_uint32_le(src, src_offs + 4);
             for iy in 0..usize::min(4, tall-block_y*4) {
                 for ix in 0..usize::min(4, width-block_x*4) {
@@ -206,7 +197,7 @@ fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Ve
 }
 
 // Software decompresses from standard BC2 (DXT3) to RGBA.
-fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Vec<u8> {
+fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend: util::BlendFunction<u8, u32>) -> Vec<u8> {
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
     const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc2);
@@ -233,7 +224,7 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Ve
             let alphabits2 = util::get_uint32_le(src, src_offs + 4);
             let color1 = util::get_uint16_le(src, src_offs + 8);
             let color2 = util::get_uint16_le(src, src_offs + 10);
-            color_table_bc1(&mut color_table, color1, color2);
+            color_table_bc1(&mut color_table, color1, color2, blend);
             let mut colorbits = util::get_uint32_le(src, src_offs + 12);
             for iy in 0..usize::min(2, tall-block_y*4) {
                 for ix in 0..usize::min(4, width-block_x*4) {
@@ -269,7 +260,7 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Ve
 }
 
 // Software decompresses from standard BC3 (DXT5) to RGBA.
-fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Vec<u8> {
+fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend: util::BlendFunction<u8, u32>) -> Vec<u8> {
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
     const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc3);
@@ -316,7 +307,7 @@ fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Ve
             let alphabits2 = util::get_uint24_le(src, src_offs + 5);
             let color1 = util::get_uint16_le(src, src_offs + 8);
             let color2 = util::get_uint16_le(src, src_offs + 10);
-            color_table_bc1(&mut color_table, color1, color2);
+            color_table_bc1(&mut color_table, color1, color2, blend);
             let mut colorbits = util::get_uint32_le(src, src_offs + 12);
             for iy in 0..usize::min(2, tall-block_y*4) {
                 for ix in 0..usize::min(4, width-block_x*4) {
@@ -357,7 +348,7 @@ pub enum BC45DecompressType {
     BC5,
 }
 
-fn decompress_tegra_bc45<T>(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType) -> Vec<T::Type>
+fn decompress_tegra_bc45<T>(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType, blend: util::BlendFunction<T::Type, T::BigType>) -> Vec<T::Type>
 where T: OutputType
 {
     let channel_format = if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 };
@@ -387,23 +378,23 @@ where T: OutputType
             for ch in 0..input_num_channels {
                 let src_offs = src_offs + ch * 8;
 
-                let red1 = T::BigType::from(T::read(src[src_offs]));
-                let red2 = T::BigType::from(T::read(src[src_offs + 1]));
+                let red1 = T::Type::from(T::read(src[src_offs]));
+                let red2 = T::Type::from(T::read(src[src_offs + 1]));
 
-                color_table[0] = T::narrow(red1);
-                color_table[1] = T::narrow(red2);
+                color_table[0] = red1;
+                color_table[1] = red2;
                 if red1 > red2 {
-                    color_table[2] = T::narrow((red1 * 6.into() + red2 * 1.into()) / 7.into());
-                    color_table[3] = T::narrow((red1 * 5.into() + red2 * 2.into()) / 7.into());
-                    color_table[4] = T::narrow((red1 * 4.into() + red2 * 3.into()) / 7.into());
-                    color_table[5] = T::narrow((red1 * 3.into() + red2 * 4.into()) / 7.into());
-                    color_table[6] = T::narrow((red1 * 2.into() + red2 * 5.into()) / 7.into());
-                    color_table[7] = T::narrow((red1 * 1.into() + red2 * 6.into()) / 7.into());
+                    color_table[2] = blend(red1, red2, 6.into(), 1.into());
+                    color_table[3] = blend(red1, red2, 5.into(), 2.into());
+                    color_table[4] = blend(red1, red2, 4.into(), 3.into());
+                    color_table[5] = blend(red1, red2, 3.into(), 4.into());
+                    color_table[6] = blend(red1, red2, 2.into(), 5.into());
+                    color_table[7] = blend(red1, red2, 1.into(), 6.into());
                 } else {
-                    color_table[2] = T::narrow((red1 * 4.into() + red2 * 1.into()) / 5.into());
-                    color_table[3] = T::narrow((red1 * 3.into() + red2 * 2.into()) / 5.into());
-                    color_table[4] = T::narrow((red1 * 2.into() + red2 * 3.into()) / 5.into());
-                    color_table[5] = T::narrow((red1 * 1.into() + red2 * 4.into()) / 5.into());
+                    color_table[2] = blend(red1, red2, 4.into(), 1.into());
+                    color_table[3] = blend(red1, red2, 3.into(), 2.into());
+                    color_table[4] = blend(red1, red2, 2.into(), 3.into());
+                    color_table[5] = blend(red1, red2, 1.into(), 4.into());
                     color_table[6] = T::MIN;
                     color_table[7] = T::MAX;
                 }
@@ -462,7 +453,7 @@ where T: OutputType
 #[wasm_bindgen]
 pub fn decompress_tegra_unsigned(
     bcntype: BCNType,
-    flag: SurfaceFlag,
+    srgb: bool,
     width: usize,
     height: usize,
     depth: usize,
@@ -470,25 +461,27 @@ pub fn decompress_tegra_unsigned(
     block_height_log2: usize,
 ) -> Vec<u8> {
     let meta = SurfaceMetaData {
-        flag,
         width,
         height,
         depth,
         block_height_log2,
     };
+    let blend = match srgb {
+        true => util::blend_srgb_u8,
+        false => util::blend_linear_u8,
+    };
     match bcntype {
-        BCNType::BC1 => decompress_bc1_surface_deswizzle(&meta, src),
-        BCNType::BC2 => decompress_bc2_surface_deswizzle(&meta, src),
-        BCNType::BC3 => decompress_bc3_surface_deswizzle(&meta, src),
-        BCNType::BC4 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC4),
-        BCNType::BC5 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC5),
+        BCNType::BC1 => decompress_bc1_surface_deswizzle(&meta, src, blend),
+        BCNType::BC2 => decompress_bc2_surface_deswizzle(&meta, src, blend),
+        BCNType::BC3 => decompress_bc3_surface_deswizzle(&meta, src, blend),
+        BCNType::BC4 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC4, blend),
+        BCNType::BC5 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC5, blend),
     }
 }
 
 #[wasm_bindgen]
 pub fn decompress_tegra_signed(
     bcntype: BCNType,
-    flag: SurfaceFlag,
     width: usize,
     height: usize,
     depth: usize,
@@ -496,15 +489,15 @@ pub fn decompress_tegra_signed(
     block_height_log2: usize,
 ) -> Vec<i8> {
     let meta = SurfaceMetaData {
-        flag,
         width,
         height,
         depth,
         block_height_log2,
     };
+    let blend = util::blend_linear_i8;
     match bcntype {
-        BCNType::BC4 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC4),
-        BCNType::BC5 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC5),
+        BCNType::BC4 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC4, blend),
+        BCNType::BC5 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC5, blend),
         _ => panic!(),
     }
 }

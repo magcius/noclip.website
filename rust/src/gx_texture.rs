@@ -24,6 +24,22 @@ fn decode_rgb565_to_rgba8(dst: &mut[u8], p: u16) {
     dst[3] = 0xFF;
 }
 
+pub fn halfblend(a: u8, b: u8) -> u8 {
+    let a = a as u32;
+    let b = b as u32;
+    let ret = (a + b) >> 1;
+    ret as u8
+}
+
+// Use the fast GX approximation.
+pub fn s3tcblend(a: u8, b: u8) -> u8 {
+    // return (a*3 + b*5) / 8;
+    let a = a as u32;
+    let b = b as u32;
+    let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
+    ret as u8
+}
+
 trait TiledDecoder {
     fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]);
     fn block_width() -> usize;
@@ -212,19 +228,19 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
 
                     if color1 > color2 {
                         // Predict gradients.
-                        color_table[8]  = util::s3tcblend(color_table[4], color_table[0]);
-                        color_table[9]  = util::s3tcblend(color_table[5], color_table[1]);
-                        color_table[10] = util::s3tcblend(color_table[6], color_table[2]);
+                        color_table[8]  = s3tcblend(color_table[4], color_table[0]);
+                        color_table[9]  = s3tcblend(color_table[5], color_table[1]);
+                        color_table[10] = s3tcblend(color_table[6], color_table[2]);
                         color_table[11] = 0xFF;
 
-                        color_table[12] = util::s3tcblend(color_table[0], color_table[4]);
-                        color_table[13] = util::s3tcblend(color_table[1], color_table[5]);
-                        color_table[14] = util::s3tcblend(color_table[2], color_table[6]);
+                        color_table[12] = s3tcblend(color_table[0], color_table[4]);
+                        color_table[13] = s3tcblend(color_table[1], color_table[5]);
+                        color_table[14] = s3tcblend(color_table[2], color_table[6]);
                         color_table[15] = 0xFF;
                     } else {
-                        color_table[8] =  util::halfblend(color_table[0], color_table[4]);
-                        color_table[9] =  util::halfblend(color_table[1], color_table[5]);
-                        color_table[10] = util::halfblend(color_table[2], color_table[6]);
+                        color_table[8] =  halfblend(color_table[0], color_table[4]);
+                        color_table[9] =  halfblend(color_table[1], color_table[5]);
+                        color_table[10] = halfblend(color_table[2], color_table[6]);
                         color_table[11] = 0xFF;
 
                         // CMPR difference: GX fills with an alpha 0 midway point here.
