@@ -123,7 +123,7 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
         let pixelFormat: GfxFormat;
         if (textureEntry.format === 'RGB')
             pixelFormat = GfxFormat.U8_RGB_SRGB;
-        else if (textureEntry.format === 'DXT1' && device.queryTextureFormatSupported(GfxFormat.BC1_SRGB))
+        else if (textureEntry.format === 'DXT1' && device.queryTextureFormatSupported(GfxFormat.BC1_SRGB, textureEntry.width, textureEntry.height))
             pixelFormat = GfxFormat.BC1_SRGB;
         // TODO(jstpierre): Support native BC3. Seems like texture sizes are too goofy right now?
         // else if (textureEntry.format === 'DXT5' && device.queryTextureFormatSupported(GfxFormat.BC3_SRGB))

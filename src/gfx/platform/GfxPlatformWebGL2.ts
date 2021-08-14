@@ -318,6 +318,14 @@ function isBlendStateNone(blendState: GfxChannelBlendState): boolean {
     );
 }
 
+function isBlockCompressSized(w: number, h: number, bw: number, bh: number): boolean {
+    if ((w % bw) !== 0)
+        return false;
+    if ((h % bh) !== 0)
+        return false;
+    return true;
+}
+
 class ResourceCreationTracker {
     public liveObjects = new Set<GfxResource>();
     public creationStacks = new Map<GfxResource, string>();
@@ -1288,21 +1296,27 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return this;
     }
 
-    public queryTextureFormatSupported(format: GfxFormat): boolean {
+    public queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean {
         switch (format) {
         case GfxFormat.BC1_SRGB:
         case GfxFormat.BC2_SRGB:
         case GfxFormat.BC3_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb !== null;
+            if (this._WEBGL_compressed_texture_s3tc_srgb !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
         case GfxFormat.BC1:
         case GfxFormat.BC2:
         case GfxFormat.BC3:
-            return this._WEBGL_compressed_texture_s3tc !== null;
+            if (this._WEBGL_compressed_texture_s3tc !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
         case GfxFormat.BC4_UNORM:
         case GfxFormat.BC4_SNORM:
         case GfxFormat.BC5_UNORM:
         case GfxFormat.BC5_SNORM:
-            return this._EXT_texture_compression_rgtc !== null;
+            if (this._EXT_texture_compression_rgtc !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
         default:
             return true;
         }

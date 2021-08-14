@@ -1125,9 +1125,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
     }
 
-    public queryTextureFormatSupported(format: GfxFormat): boolean {
-        if (isFormatTextureCompressionBC(format))
+    public queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean {
+        if (isFormatTextureCompressionBC(format)) {
+            if (!this._featureTextureCompressionBC)
+                return false;
+
+            const bb = getFormatBlockSize(format);
+            if ((width % bb) !== 0 || (height % bb) !== 0)
+                return false;
             return this._featureTextureCompressionBC;
+        }
         return true;
     }
 

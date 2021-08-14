@@ -383,7 +383,7 @@ export interface GfxDevice {
 
     // Information queries.
     queryLimits(): GfxDeviceLimits;
-    queryTextureFormatSupported(format: GfxFormat): boolean;
+    queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
