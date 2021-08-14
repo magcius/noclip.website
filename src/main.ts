@@ -292,7 +292,6 @@ class Main {
 
         
         if(navigator.userAgent.includes('Android') || navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad') || navigator.userAgent.includes('Windows Phone') || navigator.userAgent.includes('iPod touch')) {
-        //if(window.innerWidth <= 600) { // Debugging and preview ONLY!
             //Make the background all dark
             const popupBackground = document.createElement('div');
             document.body.appendChild(popupBackground);
