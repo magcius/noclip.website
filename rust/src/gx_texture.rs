@@ -1,6 +1,22 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::util;
 
+// Use the fast GX approximation.
+pub fn s3tcblend(a: u8, b: u8) -> u8 {
+    // return (a*3 + b*5) / 8;
+    let a = a as u32;
+    let b = b as u32;
+    let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
+    ret as u8
+}
+
+pub fn halfblend(a: u8, b: u8) -> u8 {
+    let a = a as u32;
+    let b = b as u32;
+    let ret = (a + b) >> 1;
+    ret as u8
+}
+
 fn decode_rgb5a3_to_rgba8(dst: &mut[u8], p: u16) {
     if (p & 0x8000) != 0 {
         // RGB5
@@ -22,22 +38,6 @@ fn decode_rgb565_to_rgba8(dst: &mut[u8], p: u16) {
     dst[1] = util::expand_n_to_8(6, ((p >>  5) & 0x3F) as u8);
     dst[2] = util::expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
     dst[3] = 0xFF;
-}
-
-pub fn halfblend(a: u8, b: u8) -> u8 {
-    let a = a as u32;
-    let b = b as u32;
-    let ret = (a + b) >> 1;
-    ret as u8
-}
-
-// Use the fast GX approximation.
-pub fn s3tcblend(a: u8, b: u8) -> u8 {
-    // return (a*3 + b*5) / 8;
-    let a = a as u32;
-    let b = b as u32;
-    let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
-    ret as u8
 }
 
 trait TiledDecoder {

@@ -1,5 +1,3 @@
-use std::mem;
-
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 pub fn expand_n_to_8(v: u8, n: u8) -> u8 {
     match v {
