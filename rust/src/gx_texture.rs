@@ -1,4 +1,4 @@
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::wasm_bindgen;
 use crate::util;
 
 fn decode_rgb5a3_to_rgba8(dst: &mut[u8], p: u16) {
