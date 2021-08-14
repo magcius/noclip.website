@@ -6,7 +6,7 @@ import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
 
 import * as BNTX from '../fres_nx/bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
-import { translateImageFormat, getImageFormatString, decompress_bcn_deswizzle } from '../fres_nx/tegra_texture';
+import { translateImageFormat, getImageFormatString, decompress } from '../fres_nx/tegra_texture';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2 } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat, TypeFormat, ChannelFormat } from '../fres_nx/nngfx_enum';
@@ -57,7 +57,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const depth = 1;
             const src = new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength);
             const canvas = document.createElement('canvas');
-            decompress_bcn_deswizzle({ ...textureEntry, width, height, depth }, src).then(rgbaTexture => {
+            decompress({ ...textureEntry, width, height, depth }, src).then(rgbaTexture => {
                 const rgbaPixels = rgbaTexture.pixels;
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
                 surfaceToCanvas(canvas, rgbaTexture);
