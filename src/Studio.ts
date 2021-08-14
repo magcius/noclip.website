@@ -1310,6 +1310,9 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private saveState() {
+        if (!this.animation || !this.timeline) {
+            return;
+        }
         if (this.currentStateIndex > -1 && this.currentStateIndex < this.studioStates.length - 1) {
             this.studioStates.length = this.currentStateIndex + 1;
             this.redoBtn.setAttribute('disabled', '');
@@ -1899,7 +1902,7 @@ export class StudioPanel extends FloatingPanel {
         const jsonAnim = window.localStorage.getItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
         if (jsonAnim) {
             const obj: any = JSON.parse(jsonAnim);
-            if (this.isAnimation(obj)) {
+            if (this.isValidAnimationObj(obj)) {
                 this.loadState(obj.studioState);
                 this.displayMessage('Loaded animation from local storage.');
                 this.saveState();
@@ -1912,7 +1915,7 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    private isAnimation(obj: any): boolean {
+    private isValidAnimationObj(obj: any): boolean {
         if (!obj || !obj.version)
             return false;
 
@@ -1948,6 +1951,10 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private exportAnimation() {
+        if (!this.animation || !this.timeline) {
+            this.displayError('Export failed - No animation is currently loaded.');
+            return;
+        }
         const a = document.createElement('a');
         const anim = new Blob([this.serializeAnimation()], { type: 'application/json' });
         a.href = URL.createObjectURL(anim);
@@ -1965,7 +1972,7 @@ export class StudioPanel extends FloatingPanel {
             try {
                 const fileContents = await this.loadFile(input.files.item(0) as File);
                 const obj = JSON.parse(fileContents);
-                if (this.isAnimation(obj)) {
+                if (this.isValidAnimationObj(obj)) {
                     this.loadState(obj.studioState);
                     this.displayMessage('Successfully loaded animation from file.');
                     this.saveState();
