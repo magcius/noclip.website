@@ -63,62 +63,26 @@ pub fn blend_linear_i8(a: i8, b: i8, weight_a: i32, weight_b: i32) -> i8 {
     (((a as i32) * weight_a + (b as i32) * weight_b) / (weight_a + weight_b)) as i8
 }
 
-#[cfg(target_endian="little")]
-pub fn get_uint16_le(src: &[u8], offs: usize) -> u16 {
-    unsafe { *mem::transmute::<&u8, &u16>(&src[offs]) }
-}
-
-#[cfg(target_endian="little")]
-pub fn get_uint24_le(src: &[u8], offs: usize) -> u32 {
-    unsafe { *mem::transmute::<&u8, &u32>(&src[offs]) & 0x00FFFFFF }
-}
-
-#[cfg(target_endian="little")]
-pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
-    unsafe { *mem::transmute::<&u8, &u32>(&src[offs]) }
-}
-
-#[cfg(target_endian="big")]
 pub fn get_uint16_le(src: &[u8], offs: usize) -> u16 {
     (src[offs] as u16) | ((src[offs+1] as u16) << 8)
 }
 
-#[cfg(target_endian="big")]
 pub fn get_uint24_le(src: &[u8], offs: usize) -> u32 {
     (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+1] as u32) << 16)
 }
 
-#[cfg(target_endian="big")]
 pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
     (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 24)
 }
 
-#[cfg(target_endian="big")]
-pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
-    unsafe { *mem::transmute::<&u8, &u16>(&src[offs]) }
-}
-
-#[cfg(target_endian="big")]
-pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
-    unsafe { *mem::transmute::<&u8, &u32>(&src[offs]) & 0x00FFFFFF }
-}
-
-#[cfg(target_endian="big")]
-pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
-    unsafe { *mem::transmute::<&u8, &u32>(&src[offs]) }
-}
-
-#[cfg(target_endian="little")]
 pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
     ((src[offs] as u16) << 8) | (src[offs+1] as u16)
 }
 
-#[cfg(target_endian="little")]
 pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
     ((src[offs] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
 }
 
-#[cfg(target_endian="little")]
 pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
     ((src[offs] as u32) << 24) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
 }
