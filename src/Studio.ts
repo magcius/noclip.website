@@ -641,6 +641,19 @@ export class StudioPanel extends FloatingPanel {
         super();
         // Closing the panel will be done by disabling studio mode
         this.closeButton.style.display = 'none';
+        this.header.ondblclick = null;
+
+        this.onMotion = (dx: number, dy: number) => {
+            this.elem.style.left = clamp((parseFloat(this.elem.style.left!) + dx), 0, window.innerWidth - this.elem.offsetWidth) + 'px';
+            this.elem.style.top = clamp((parseFloat(this.elem.style.top!) + dy), 0, window.innerHeight - this.elem.offsetHeight) + 'px';
+        }
+        this.elem.onmouseover = () => {
+            this.elem.style.opacity = '1';
+        };
+        this.elem.onmouseout = () => {
+            this.elem.style.opacity = '0.8';
+        };
+
         this.setWidth(650);
         this.elem.id = 'studioPanel';
         this.elem.style.display = 'none';
@@ -659,6 +672,7 @@ export class StudioPanel extends FloatingPanel {
         `);
         this.contents.style.lineHeight = '36px';
         this.studioPanelContents = this.contents.querySelector('#studioPanelContents') as HTMLElement;
+
     }
 
     public show(): void {
