@@ -6,8 +6,8 @@ const GOB_SIZE_X: usize = 64;
 const GOB_SIZE_Y: usize = 8;
 
 #[wasm_bindgen]
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum ChannelFormat {
+#[derive(Copy, Clone)]
+pub enum CompressionType {
     Bc1,
     Bc2,
     Bc3,
@@ -15,8 +15,8 @@ pub enum ChannelFormat {
     Bc5,
 }
 
-const fn get_format_bytes_per_block(channel_format: ChannelFormat) -> usize {
-    use ChannelFormat::*;
+const fn get_format_bytes_per_block(channel_format: CompressionType) -> usize {
+    use CompressionType::*;
     match channel_format {
         Bc1 | Bc4 => 8,
         Bc2 | Bc3 | Bc5 => 16,
@@ -102,16 +102,6 @@ pub struct SurfaceMetaData {
     block_height_log2: usize,
 }
 
-#[wasm_bindgen]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum BCNType {
-    BC1,
-    BC2,
-    BC3,
-    BC4,
-    BC5,
-}
-
 pub trait OutputType
 {
     type Type: Ord + Copy + Clone;
@@ -155,7 +145,7 @@ impl OutputType for OutputUnsigned {
 fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend: util::BlendFunction<u8, u32>) -> Vec<u8> {
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
-    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc1);
+    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(CompressionType::Bc1);
     const OUTPUT_BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
@@ -200,7 +190,7 @@ fn decompress_bc1_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend
 fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend: util::BlendFunction<u8, u32>) -> Vec<u8> {
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
-    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc2);
+    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(CompressionType::Bc2);
     const OUTPUT_BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
@@ -263,7 +253,7 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend
 fn decompress_bc3_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8], blend: util::BlendFunction<u8, u32>) -> Vec<u8> {
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
-    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(ChannelFormat::Bc3);
+    const INPUT_BYTES_PER_CHUNK: usize = get_format_bytes_per_block(CompressionType::Bc3);
     const OUTPUT_BYTES_PER_PIXEL: usize = 4;
     let width = surface.width;
     let height = surface.height;
@@ -351,7 +341,7 @@ pub enum BC45DecompressType {
 fn decompress_tegra_bc45<T>(surface: &SurfaceMetaData, src: &[u8], bctype: BC45DecompressType, blend: util::BlendFunction<T::Type, T::BigType>) -> Vec<T::Type>
 where T: OutputType
 {
-    let channel_format = if bctype == BC45DecompressType::BC4 { ChannelFormat::Bc4 } else { ChannelFormat::Bc5 };
+    let channel_format = if bctype == BC45DecompressType::BC4 { CompressionType::Bc4 } else { CompressionType::Bc5 };
     const BLOCK_W: usize = 4;
     const BLOCK_H: usize = 4;
     let input_bytes_per_chunk = get_format_bytes_per_block(channel_format);
@@ -452,7 +442,7 @@ where T: OutputType
 
 #[wasm_bindgen]
 pub fn decompress_tegra_unsigned(
-    bcntype: BCNType,
+    bcntype: CompressionType,
     srgb: bool,
     width: usize,
     height: usize,
@@ -471,17 +461,17 @@ pub fn decompress_tegra_unsigned(
         false => util::blend_linear_u8,
     };
     match bcntype {
-        BCNType::BC1 => decompress_bc1_surface_deswizzle(&meta, src, blend),
-        BCNType::BC2 => decompress_bc2_surface_deswizzle(&meta, src, blend),
-        BCNType::BC3 => decompress_bc3_surface_deswizzle(&meta, src, blend),
-        BCNType::BC4 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC4, blend),
-        BCNType::BC5 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC5, blend),
+        CompressionType::Bc1 => decompress_bc1_surface_deswizzle(&meta, src, blend),
+        CompressionType::Bc2 => decompress_bc2_surface_deswizzle(&meta, src, blend),
+        CompressionType::Bc3 => decompress_bc3_surface_deswizzle(&meta, src, blend),
+        CompressionType::Bc4 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC4, blend),
+        CompressionType::Bc5 => decompress_tegra_bc45::<OutputUnsigned>(&meta, src, BC45DecompressType::BC5, blend),
     }
 }
 
 #[wasm_bindgen]
 pub fn decompress_tegra_signed(
-    bcntype: BCNType,
+    bcntype: CompressionType,
     width: usize,
     height: usize,
     depth: usize,
@@ -496,8 +486,8 @@ pub fn decompress_tegra_signed(
     };
     let blend = util::blend_linear_i8;
     match bcntype {
-        BCNType::BC4 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC4, blend),
-        BCNType::BC5 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC5, blend),
+        CompressionType::Bc4 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC4, blend),
+        CompressionType::Bc5 => decompress_tegra_bc45::<OutputSigned>(&meta, src, BC45DecompressType::BC5, blend),
         _ => panic!(),
     }
 }
