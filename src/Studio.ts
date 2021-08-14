@@ -353,7 +353,7 @@ class Timeline {
     }
 
     public addKeyframeIcon(kfs: Map<KeyframeTrackEnum, Keyframe>, t: number, y: number, type: KeyframeIconType, selectAfterAdd: boolean) {
-        const xPos = (t / MILLISECONDS_IN_SECOND) * this.pixelsPerSecond * this.timelineScaleFactor;
+        const xPos = (t / MILLISECONDS_IN_SECOND) * (this.pixelsPerSecond / this.timelineScaleFactor);
         const kfIcon = new KeyframeIcon(kfs, xPos, y, type);
         this.keyframeIcons.push(kfIcon);
         this.keyframeIcons.sort((a, b) => a.getX() - b.getX());
@@ -889,7 +889,7 @@ export class StudioPanel extends FloatingPanel {
                                     <div><span>LookAt Z:</span> <input id="lookAtZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
                                 </div>
                                 <div>
-                                    <span>Bank rotation:</span> <input id="bankTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0">
+                                    <span>Bank rotation:</span> <input id="bankTangentInput" class="StudioNumericInput" type="number" step="0.01" value="0">
                                 </div>
                             </div>
                         </div>
