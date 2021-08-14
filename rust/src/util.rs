@@ -9,27 +9,19 @@ pub fn expand_n_to_8(v: u8, n: u8) -> u8 {
     }
 }
 
-pub fn next_pow2(mut v: usize) -> usize {
-    v -= 1;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    v + 1
-}
-
-// #region Texture Decode
-pub fn expand4to8(n: u8) -> u8 {
-    (n << (8 - 4)) | (n >> (8 - 8))
-}
-
-pub fn expand5to8(n: u8) -> u8 {
-    (n << (8 - 5)) | (n >> (10 - 8))
-}
-
-pub fn expand6to8(n: u8) -> u8 {
-    (n << (8 - 6)) | (n >> (12 - 8))
+pub fn next_pow2(value: usize) -> usize {
+    match value {
+        0 => 1,
+        mut v => {
+            v -= 1;
+            v |= v >> 1;
+            v |= v >> 2;
+            v |= v >> 4;
+            v |= v >> 8;
+            v |= v >> 16;
+            v + 1
+        }
+    }
 }
 
 pub fn halfblend(a: u8, b: u8) -> u8 {

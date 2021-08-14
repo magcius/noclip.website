@@ -162,15 +162,15 @@ fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16) {
     // Fill in first two colors in color table.
     // TODO(jstpierre): SRGB-correct blending.
     color_table[0] = [
-        util::expand5to8(((color1 >> 11) & 0x1F) as u8),
-        util::expand6to8(((color1 >> 5) & 0x3F) as u8),
-        util::expand5to8((color1 & 0x1F) as u8),
+        util::expand_n_to_8(5, ((color1 >> 11) & 0x1F) as u8),
+        util::expand_n_to_8(6, ((color1 >> 5) & 0x3F) as u8),
+        util::expand_n_to_8(5, (color1 & 0x1F) as u8),
         0xFF,
     ];
     color_table[1] = [
-        util::expand5to8(((color2 >> 11) & 0x1F) as u8),
-        util::expand6to8(((color2 >> 5) & 0x3F) as u8),
-        util::expand5to8((color2 & 0x1F) as u8),
+        util::expand_n_to_8(5, ((color2 >> 11) & 0x1F) as u8),
+        util::expand_n_to_8(6, ((color2 >> 5) & 0x3F) as u8),
+        util::expand_n_to_8(5, (color2 & 0x1F) as u8),
         0xFF
     ];
     if color1 > color2 {
@@ -327,7 +327,7 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     dst[dst_offs + 0] = color_table[color_idx][0];
                     dst[dst_offs + 1] = color_table[color_idx][1];
                     dst[dst_offs + 2] = color_table[color_idx][2];
-                    dst[dst_offs + 3] = util::expand4to8(alpha);
+                    dst[dst_offs + 3] = util::expand_n_to_8(4, alpha);
                     colorbits >>= 2;
                 }
             }
@@ -341,7 +341,7 @@ fn decompress_bc2_surface_deswizzle(surface: &SurfaceMetaData, src: &[u8]) -> Su
                     dst[dst_offs + 0] = color_table[color_idx][0];
                     dst[dst_offs + 1] = color_table[color_idx][1];
                     dst[dst_offs + 2] = color_table[color_idx][2];
-                    dst[dst_offs + 3] = util::expand4to8(alpha);
+                    dst[dst_offs + 3] = util::expand_n_to_8(4, alpha);
                     colorbits >>= 2;
                 }
             }
