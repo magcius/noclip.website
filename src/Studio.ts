@@ -558,6 +558,14 @@ class Timeline {
     public getLastKeyframeTimeSeconds(): string {
         return (this.getLastKeyframeTimeMs() * MILLISECONDS_IN_SECOND).toFixed(2);
     }
+
+    public playheadIsOnIcon(): boolean {
+        for (const kfIcon of this.keyframeIcons) {
+            if (this.playhead.getX() === kfIcon.getX())
+                return true;
+        }
+        return false;
+    }
 }
 
 interface StudioState {
@@ -1629,6 +1637,9 @@ export class StudioPanel extends FloatingPanel {
             this.initTimeline();
 
         if (this.timeline.selectedKeyframeIcon && !this.editingKeyframe)
+            return;
+
+        if (!this.timeline.selectedKeyframeIcon && this.timeline.playheadIsOnIcon())
             return;
 
         const time = this.timeline.getPlayheadTimeMs();
