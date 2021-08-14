@@ -4,7 +4,7 @@ import { FloatingPanel } from './DebugFloaters';
 import { CameraAnimationManager, InterpolationStep, PREVIEW_STEP_TIME_MS } from './CameraAnimationManager';
 import { StudioCameraController } from './Camera';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, Vec3UnitY, Vec3Zero } from './MathHelpers';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
 
 export const MILLISECONDS_IN_SECOND = 1000.0;
@@ -276,7 +276,7 @@ class Timeline {
     public playheadGrabbed: boolean = false;
     public keyframeIconGrabbed: boolean = false;
     private grabbedIconInitialXPos: number = -1;
-    public snappingEnabled: boolean = true;
+    public snappingEnabled: boolean = false;
     public livePreview: boolean = false;
 
     // Calculates the scale and redraws the time markers when changing the width of the canvas, or the max time value on the timeline.
@@ -358,7 +358,7 @@ class Timeline {
         this.keyframeIcons.push(kfIcon);
         this.keyframeIcons.sort((a, b) => a.getX() - b.getX());
         if (selectAfterAdd)
-            this.selectKeyframeIcon(kfIcon)
+            this.selectKeyframeIcon(kfIcon);
     }
 
     public deleteSelectedKeyframeIcon() {
@@ -433,11 +433,13 @@ class Timeline {
         targetX = clamp(targetX, Playhead.HALF_WIDTH, this.width - Playhead.HALF_WIDTH);
         targetX -= Playhead.HALF_WIDTH;
 
+        const snappingEnabled = this.snappingEnabled || e.shiftKey;
+
         if (this.playheadGrabbed) {
             const snapKfIndex = this.getClosestSnappingIconIndex(targetX);
             this.deselectKeyframeIcon();
             if (snapKfIndex > -1) {
-                if (this.snappingEnabled)
+                if (snappingEnabled)
                     targetX = this.keyframeIcons[snapKfIndex].getX();
 
                 // If the playhead is directly on a keyframe, highlight it.
@@ -450,7 +452,7 @@ class Timeline {
             // Don't allow a loop keyframe icon to be moved before any other keyframes.
             if (this.selectedKeyframeIcon.type === KeyframeIconType.End)
                 targetX = clamp(targetX, this.keyframeIcons[this.keyframeIcons.length - 2].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
-            if (this.snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+            if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
                 this.updateKeyframeIconPosition(this.selectedKeyframeIcon, this.playhead.getX());
             else
                 this.updateKeyframeIconPosition(this.selectedKeyframeIcon, targetX);
@@ -600,7 +602,7 @@ export class StudioPanel extends FloatingPanel {
     private studioControlsContainer: HTMLElement;
 
     private timelineControlsContainer: HTMLElement;
-    private snappingCheckbox: Checkbox;
+    private snapBtn: HTMLButtonElement;
     private playheadTimePositionInput: HTMLInputElement;
     private timelineLengthInput: HTMLInputElement;
 
@@ -628,10 +630,6 @@ export class StudioPanel extends FloatingPanel {
     public timeline: Timeline;
     private selectedTracks: number = KeyframeTrackEnum.allTracks;
 
-    private autoAdvancePlayhead: boolean = true;
-    private autoAdvancePlayheadContainer: HTMLElement;
-    private autoAdvancePlayheadCheckbox: Checkbox;
-
     private previewOptionsContainer: HTMLElement;
     private showPreviewLineCheckbox: Checkbox;
     private livePreviewCheckbox: Checkbox;
@@ -639,7 +637,7 @@ export class StudioPanel extends FloatingPanel {
     private playbackControls: HTMLElement;
     private hideUiCheckbox: Checkbox;
     private delayStartCheckbox: Checkbox;
-    private loopAnimationCheckbox: Checkbox;
+    private loopAnimationBtn: HTMLButtonElement;
     private playBtn: HTMLButtonElement;
     private stopAnimationBtn: HTMLButtonElement;
 
@@ -845,11 +843,14 @@ export class StudioPanel extends FloatingPanel {
         </div>
         <div id="studioHelpText"></div>
         <div id="studioControlsContainer" hidden>
-            <div id="timelineControlsContainer" style="display: flex;margin: 0 25px 5px;align-items: center;justify-content: flex-end;">
-                <input id="playheadTimePositionInput" class="StudioNumericInput" type="number" min="0" max="300" step="0.1" value="0">
-                <span>/</span>
-                <input id="timelineLengthInput" class="StudioNumericInput" type="number" min="1" max="300" step="0.1" value="${Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND}">
-                <span>s</span>
+            <div id="timelineControlsContainer" style="display: grid; grid-gap: 12px; grid-auto-flow: column; justify-content: end; margin: 0 12px;">
+                <div>
+                    <input id="playheadTimePositionInput" class="StudioNumericInput" type="number" min="0" max="300" step="0.1" value="0"><span>/</span>
+                    <input id="timelineLengthInput" class="StudioNumericInput" type="number" min="1" max="300" step="0.1" value="${Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND}"><span>s</span>
+                </div>
+
+                <button type="button" id="loopAnimationBtn" title="Loop" class="SettingsButton">🔁</button>
+                <button type="button" id="snapBtn" title="Snap" class="SettingsButton">🧲</button>
             </div>
             <div style="display: flex;">
                 <div id="trackLabels">
@@ -889,7 +890,6 @@ export class StudioPanel extends FloatingPanel {
                     <canvas id="timelineElementsCanvas" width="600" height="${Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT}" tabindex="-1"></canvas>
                 </div>
             </div>
-            <div id="autoAdvancePlayheadContainer" style="line-height: 1;"></div>
             <div style="display: grid;grid-template-columns: 1.25fr 1fr;">
                 <div>
                     <div style="text-align: center;">Keyframe Settings</div>
@@ -964,12 +964,15 @@ export class StudioPanel extends FloatingPanel {
 
         this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
 
-        this.snappingCheckbox = new Checkbox('Snapping', true);
-        this.snappingCheckbox.onchanged = () => { this.timeline.snappingEnabled = this.snappingCheckbox.checked; };
-        this.snappingCheckbox.elem.style.marginRight = '1rem';
-        this.snappingCheckbox.elem.dataset.helpText = 'Snap keyframes to the playhead, and vice-versa.'
-
-        this.timelineControlsContainer.insertAdjacentElement('afterbegin', this.snappingCheckbox.elem);
+        this.snapBtn = this.contents.querySelector('#snapBtn') as HTMLButtonElement;
+        this.snapBtn.onclick = () => {
+            this.timeline.snappingEnabled = !this.timeline.snappingEnabled;
+            setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
+        };
+        this.snapBtn.dataset.helpText = 'Snap keyframes to the playhead, and vice-versa.';
+        // TODO(jstpierre): always create the timeline
+        // setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
+        setElementHighlighted(this.snapBtn, false);
 
         this.timelineMarkersCanvas = this.contents.querySelector('#timelineMarkersCanvas') as HTMLCanvasElement;
         this.timelineElementsCanvas = this.contents.querySelector('#timelineElementsCanvas') as HTMLCanvasElement;
@@ -1024,19 +1027,29 @@ export class StudioPanel extends FloatingPanel {
                 this.playheadTimePositionInput.dataset.prevValue = lengthVal.toString();
             }
             this.timeline.setPlayheadTimeSeconds(playheadTimePosValue, false);
-        }
+        };
 
-        this.autoAdvancePlayheadContainer = this.contents.querySelector('#autoAdvancePlayheadContainer') as HTMLElement;
-        this.autoAdvancePlayheadCheckbox = new Checkbox('Advance playhead on keyframe placement', true);
-        this.autoAdvancePlayheadCheckbox.elem.style.display = 'flex';
-        this.autoAdvancePlayheadCheckbox.elem.style.justifyContent = 'center';
-        this.autoAdvancePlayheadCheckbox.elem.style.alignItems = 'center';
-        this.autoAdvancePlayheadCheckbox.elem.style.gridTemplateColumns = '';
-        this.autoAdvancePlayheadCheckbox.elem.dataset.helpText = 'Automatically advance the playhead when placing keyframes.';
-        this.autoAdvancePlayheadCheckbox.onchanged = () => {
-            this.autoAdvancePlayhead = this.autoAdvancePlayheadCheckbox.checked;
-        }
-        this.autoAdvancePlayheadContainer.insertAdjacentElement('afterbegin', this.autoAdvancePlayheadCheckbox.elem);
+        this.loopAnimationBtn = this.contents.querySelector('#loopAnimationBtn') as HTMLButtonElement;
+        this.loopAnimationBtn.dataset.helpText = 'Loop the animation until manually stopped.';
+        this.loopAnimationBtn.onclick = () => {
+            this.animation.loop = !this.animation.loop;
+            setElementHighlighted(this.loopAnimationBtn, this.animation.loop);
+            if (this.animation.loop) {
+                this.addLoopEndFrames();
+            } else {
+                this.animation.posXTrack.keyframes.pop();
+                this.animation.posYTrack.keyframes.pop();
+                this.animation.posZTrack.keyframes.pop();
+                this.animation.lookAtXTrack.keyframes.pop();
+                this.animation.lookAtYTrack.keyframes.pop();
+                this.animation.lookAtZTrack.keyframes.pop();
+                this.animation.bankTrack.keyframes.pop();
+                this.timeline.deleteEndframeIcons();
+            }
+            this.updatePreviewSteps();
+            this.timeline.draw();
+        };
+        setElementHighlighted(this.loopAnimationBtn, false);
 
         this.keyframeControls = this.contents.querySelector('#keyframeControls') as HTMLElement;
         this.selectKeyframeMsg = this.contents.querySelector('#selectKeyframeMsg') as HTMLElement;
@@ -1099,13 +1112,10 @@ export class StudioPanel extends FloatingPanel {
         this.playbackControls = this.contents.querySelector('#playbackControls') as HTMLElement;
 
         this.delayStartCheckbox = new Checkbox('Delay animation playback');
-        this.loopAnimationCheckbox = new Checkbox('Loop animation');
         this.hideUiCheckbox = new Checkbox('Hide UI during playback');
         this.delayStartCheckbox.elem.dataset.helpText = 'Delay the start of the animation by 2s. Useful for avoiding capture of the mouse cursor.';
-        this.loopAnimationCheckbox.elem.dataset.helpText = 'Loop the animation until manually stopped.'
         this.hideUiCheckbox.elem.dataset.helpText = 'Hide the noclip UI during playback. (Press Escape to stop playback.)';
         this.playbackControls.insertAdjacentElement('afterbegin', this.delayStartCheckbox.elem);
-        this.playbackControls.insertAdjacentElement('afterbegin', this.loopAnimationCheckbox.elem);
         this.playbackControls.insertAdjacentElement('afterbegin', this.hideUiCheckbox.elem);
 
         this.playBtn = this.contents.querySelector('#playAnimationBtn') as HTMLButtonElement;
@@ -1129,24 +1139,6 @@ export class StudioPanel extends FloatingPanel {
         this.lookAtZTangentInput.onchange = () => this.onChangeTangentInput(this.lookAtZTangentInput);
         this.bankTangentInput.onchange = () => this.onChangeTangentInput(this.bankTangentInput);
 
-        this.loopAnimationCheckbox.onchanged = () => {
-            this.animation.loop = this.loopAnimationCheckbox.checked;
-            if (this.loopAnimationCheckbox.checked)
-                this.addLoopEndFrames();
-            else {
-                this.animation.posXTrack.keyframes.pop();
-                this.animation.posYTrack.keyframes.pop();
-                this.animation.posZTrack.keyframes.pop();
-                this.animation.lookAtXTrack.keyframes.pop();
-                this.animation.lookAtYTrack.keyframes.pop();
-                this.animation.lookAtZTrack.keyframes.pop();
-                this.animation.bankTrack.keyframes.pop();
-                this.timeline.deleteEndframeIcons();
-            }
-            this.updatePreviewSteps();
-            this.timeline.draw();
-        }
-
         this.playBtn.onclick = (e) => {
             if (this.timeline.keyframeIcons.length > 1) {
                 e.stopPropagation();
@@ -1159,13 +1151,18 @@ export class StudioPanel extends FloatingPanel {
                     this.ui.toggleUI(false);
                     this.elem.style.display = 'none';
                 }
+
+                let startTime = this.timeline.getPlayheadTimeMs();
+                if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
+                    startTime = 0;
+
                 if (this.delayStartCheckbox.checked) {
                     setTimeout(() => {
-                        this.animationManager.initAnimationPlayback(this.animation, this.timeline.getPlayheadTimeMs());
+                        this.animationManager.initAnimationPlayback(this.animation, startTime);
                         this.studioCameraController.playAnimation();
                     }, 2000);
                 } else {
-                    this.animationManager.initAnimationPlayback(this.animation, this.timeline.getPlayheadTimeMs());
+                    this.animationManager.initAnimationPlayback(this.animation, startTime);
                     this.studioCameraController.playAnimation();
                 }
             }
@@ -1381,7 +1378,7 @@ export class StudioPanel extends FloatingPanel {
         this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
         this.timelineLengthInput.value = this.timeline.getTimelineLengthSeconds();
         this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
-        this.loopAnimationCheckbox.setChecked(this.animation.loop);
+        setElementHighlighted(this.loopAnimationBtn, this.animation.loop);
         this.timeline.draw();
         this.updatePreviewSteps();
     }
@@ -1635,7 +1632,7 @@ export class StudioPanel extends FloatingPanel {
     private scratchVecLook: vec3 = vec3.create();
     private scratchVecZAxis: vec3 = vec3.create();
 
-    public addKeyframesFromMat4(worldMatrix: mat4) {
+    public addKeyframesFromMat4(worldMatrix: ReadonlyMat4): void {
         if (!this.timeline || this.timeline.keyframeIcons.length === 0)
             this.initTimeline();
 
@@ -1747,11 +1744,15 @@ export class StudioPanel extends FloatingPanel {
         kfMap.set(KeyframeTrackEnum.lookAtYTrack, lookAtYKf);
         kfMap.set(KeyframeTrackEnum.lookAtZTrack, lookAtZKf);
         kfMap.set(KeyframeTrackEnum.bankTrack, bankKf);
-        this.timeline.addKeyframeIcon(kfMap, time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, kfType, !this.autoAdvancePlayhead);
+
+        // If we're past the time of the last keyframe, advance.
+        const advancePlayhead = time > this.timeline.getLastKeyframeTimeMs();
+
+        this.timeline.addKeyframeIcon(kfMap, time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, kfType, !advancePlayhead);
 
         this.updatePreviewSteps();
 
-        if (this.autoAdvancePlayhead) {
+        if (advancePlayhead) {
             const duration = parseFloat(this.timelineLengthInput.value) / 10;
             const curTime = parseFloat(this.timeline.getPlayheadTimeSeconds());
             this.playheadTimePositionInput.value = (curTime + duration).toFixed(2);
