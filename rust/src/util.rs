@@ -28,7 +28,8 @@ pub unsafe fn unitialized_vec<T>(size: usize) -> Vec<T> {
     vec
 }
 
-pub fn srgb_to_linear(value: f32) -> f32 {
+pub fn srgb_to_linear(value: u8) -> f32 {
+    let value = (value as f32) / 255.0;
     if value <= 0.0404482362771082 {
         value / 12.92
     } else {
@@ -36,21 +37,29 @@ pub fn srgb_to_linear(value: f32) -> f32 {
     }
 }
 
-pub fn linear_to_srgb(value: f32) -> f32 {
-    if value < 0.00313066844250063 {
-        value * 12.92
+pub fn linear_to_srgb(value: f32) -> u8 {
+    if value.is_nan() || value <= 0.0 {
+        0
+    } else if value >= 1.0 {
+        255
     } else {
-        value.powf(1.0/2.4) * 1.055 - 0.055
+        let value = if value < 0.00313066844250063 {
+            value * 12.92
+        } else {
+            value.powf(1.0/2.4) * 1.055 - 0.055
+        };
+        let value = value / 255.0;
+        (value + 0.5) as u8
     }
 }
 
 pub type BlendFunction<T, U> = fn(T, T, U, U) -> T;
 
 pub fn blend_srgb_u8(a: u8, b: u8, weight_a: u32, weight_b: u32) -> u8 {
-    let a = srgb_to_linear((a as f32) / 255.0);
-    let b = srgb_to_linear((b as f32) / 255.0);
+    let a = srgb_to_linear(a);
+    let b = srgb_to_linear(b);
     let v = (a * (weight_a as f32) + b * (weight_b as f32)) / ((weight_a as f32) + (weight_b as f32));
-    (linear_to_srgb(v) * 255.0) as u8
+    linear_to_srgb(v)
 }
 
 pub fn blend_linear_u8(a: u8, b: u8, weight_a: u32, weight_b: u32) -> u8 {
