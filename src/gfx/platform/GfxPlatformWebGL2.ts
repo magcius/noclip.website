@@ -1943,15 +1943,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
-            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;\s*$/gm);
+            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+);\s*$/gm);
             let samplerIndex = 0;
             for (let i = 0; i < samplers.length; i++) {
-                const [m, name, arraySizeStr] = samplers[i];
-                const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
+                const [m, name] = samplers[i];
                 // Assign identities in order.
                 const samplerUniformLocation = gl.getUniformLocation(prog, name);
-                gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
-                samplerIndex += arraySize;
+                gl.uniform1i(samplerUniformLocation, samplerIndex++);
             }
 
             program.compileState = GfxProgramCompileStateP_GL.ReadyToUse;

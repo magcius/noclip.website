@@ -366,7 +366,14 @@ ${materialUsePnMtxIdx(material) ? `
 `}
 };
 
-uniform sampler2D u_Texture[8];
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
+uniform sampler2D u_Texture2;
+uniform sampler2D u_Texture3;
+uniform sampler2D u_Texture4;
+uniform sampler2D u_Texture5;
+uniform sampler2D u_Texture6;
+uniform sampler2D u_Texture7;
 `;
 }
 
@@ -727,7 +734,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTextureSample(index: number, coord: string): string {
-        return `texture(SAMPLER_2D(u_Texture[${index}]), ${coord}, TextureLODBias(${index}))`;
+        return `texture(SAMPLER_2D(u_Texture${index}), ${coord}, TextureLODBias(${index}))`;
     }
 
     private generateIndTexStage(indTexStageIndex: number): string {

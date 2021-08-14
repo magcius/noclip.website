@@ -256,7 +256,14 @@ layout(std140) uniform ub_MeshFragParams {
 
 #define u_SpecularPower (u_Misc[0].x)
 
-uniform sampler2D u_Texture[8];
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
+uniform sampler2D u_Texture2;
+uniform sampler2D u_Texture3;
+uniform sampler2D u_Texture4;
+uniform sampler2D u_Texture5;
+uniform sampler2D u_Texture6;
+uniform sampler2D u_Texture7;
 `;
 
     public both = `
@@ -338,7 +345,7 @@ void main() {
     private buildTexAccess(texParam: MTDTexture): string {
         const texAssign = getTexAssign(this.mtd, texParam.name);
         assert(texAssign > -1);
-        return `texture(SAMPLER_2D(u_Texture[${texAssign}]), v_TexCoord[${texParam.uvNumber}])`;
+        return `texture(SAMPLER_2D(u_Texture${texAssign}), v_TexCoord[${texParam.uvNumber}])`;
     }
 
     private genDiffuse(): string {
