@@ -1824,6 +1824,11 @@ export class StudioPanel extends FloatingPanel {
         if (this.timeline) {
             this.timeline.deselectKeyframeIcon();
             this.timeline.keyframeIcons = [];
+            this.playheadTimePositionInput.value = '0';
+            this.timelineLengthInput.value = (Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND).toFixed(2);
+            this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
+            this.livePreviewCheckbox.setChecked(false);
+            this.showPreviewLineCheckbox.setChecked(true);
         }
         this.animationPreviewSteps = [];
         this.selectedTracks |= KeyframeTrackEnum.allTracks;
