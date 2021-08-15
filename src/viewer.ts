@@ -205,14 +205,9 @@ export class Viewer {
         if (baseLayer === undefined)
             return;
 
-        const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
-        const fbw: number = baseLayer.framebufferWidth;
-        const fbh: number = baseLayer.framebufferHeight;
-
-        this.viewerRenderInput.camera = this.camera;
         this.viewerRenderInput.time = this.sceneTime;
-        this.gfxSwapChain.configureSwapChain(fbw, fbh, framebuffer);
-        const onscreenTex = this.gfxSwapChain.getOnscreenTexture();
+        this.gfxSwapChain.configureSwapChain(baseLayer.framebufferWidth, baseLayer.framebufferHeight, baseLayer.framebuffer);
+        const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
 
         this.renderStatisticsTracker.beginFrame();
 
@@ -229,11 +224,12 @@ export class Viewer {
             // Render the viewport to our temp RT.
             this.viewerRenderInput.backbufferWidth = viewport.width;
             this.viewerRenderInput.backbufferHeight = viewport.height;
-            this.viewerRenderInput.onscreenTexture = this.getXRTempRT(viewport.width, viewport.height);
+            const tempRT = this.getXRTempRT(viewport.width, viewport.height);
+            this.viewerRenderInput.onscreenTexture = tempRT;
             this.renderViewport();
 
             // Now composite into the backbuffer.
-            this.gfxDevice.copySubTexture2D(onscreenTex, viewport.x, viewport.y, this.viewerRenderInput.onscreenTexture, 0, 0);
+            this.gfxDevice.copySubTexture2D(swapChainTex, viewport.x, viewport.y, tempRT, 0, 0);
 
             // Reset the delta time so we don't advance time next render.
             this.viewerRenderInput.deltaTime = 0;

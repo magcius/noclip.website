@@ -52,11 +52,6 @@ export class Camera {
 
     private forceInfiniteFarPlane: boolean = false;
 
-    private webXROverrideCameraProperties: boolean = false;
-    public setWebXROverrideEnabled(enabled: boolean): void {
-        this.webXROverrideCameraProperties = enabled;
-    }
-
     public identity(): void {
         mat4.identity(this.worldMatrix);
         mat4.identity(this.viewMatrix);
@@ -89,9 +84,6 @@ export class Camera {
     }
 
     public setClipPlanes(n: number, f: number = Infinity): void {
-        if (this.webXROverrideCameraProperties) {
-            return;
-        }
         if (this.isOrthographic) {
             // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
         } else {
@@ -607,7 +599,6 @@ export class StudioCameraController extends FPSCameraController {
         this.isAnimationPlaying = false;
         this.studioPanel.onAnimationStopped();
     }
-
 }
 
 export class XRCameraController {
@@ -618,19 +609,18 @@ export class XRCameraController {
     public worldScale: number = 70; // Roughly the size of Banjo in Banjo Kazooie
 
     public update(webXRContext: WebXRContext): boolean {
-        let updated = false;
-
         if (!webXRContext.xrSession)
             return false;
 
         const inputSources = webXRContext.xrSession.inputSources;
 
         const cameraMoveSpeed = this.worldScale;
-        const keyMovement = vec3.create();
+        const keyMovement = scratchVec3a;
+        vec3.zero(keyMovement);
         if (inputSources.length > 0) {
             for (let i = 0; i < inputSources.length; i++) {
                 const gamepad = inputSources[i].gamepad;
-                if (gamepad && gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
+                if (gamepad && gamepad.axes.length >= 4 && gamepad.buttons.length >= 2) {
                     keyMovement[0] = gamepad.axes[2] * cameraMoveSpeed;
                     keyMovement[1] = (gamepad.buttons[0].value - gamepad.buttons[1].value) * cameraMoveSpeed;
                     keyMovement[2] = gamepad.axes[3] * cameraMoveSpeed;
@@ -638,6 +628,7 @@ export class XRCameraController {
             }
         }
 
+        let updated = false;
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {            
             const viewMovementSpace = webXRContext.xrViewerSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
@@ -698,14 +689,10 @@ export class XRCameraController {
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
 
             // Extract camera properties
+            // TODO(jstpierre): Just trust the original projection matrix
             camera.fovY = fov;
             camera.aspect = aspect;
-            camera.setWebXROverrideEnabled(false);
-            camera.setClipPlanes(5);
-            camera.setWebXROverrideEnabled(true);
 
-            // TODO WebXR: We do this to restore the components removed by setClipPlanes.
-            // The camera class ideally should generate the projection matrix taking these components into account
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
             reverseDepthForProjectionMatrix(camera.projectionMatrix);
 
