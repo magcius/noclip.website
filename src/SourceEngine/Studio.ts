@@ -1628,13 +1628,14 @@ export class HardwareVertData {
     }
 }
 
-function remapIncludeModelSkeleton(from: StudioModelData, to: StudioModelData): number[] {
-    assert(from.bone.length === to.bone.length);
+function remapIncludeModelSkeleton(animData: StudioModelData, modelData: StudioModelData): number[] {
+    assert(animData.bone.length <= modelData.bone.length);
 
-    const remapTable: number[] = nArray(from.bone.length, () => -1);
-    for (let i = 0; i < remapTable.length; i++) {
-        const origBone = from.bone[i];
-        const newIndex = to.bone.findIndex((bone) => bone.name === origBone.name);
+    // Construct a remap table going from the model bone index to the animation track index.
+    const remapTable: number[] = nArray(modelData.bone.length, () => -1);
+    for (let i = 0; i < animData.bone.length; i++) {
+        const origBone = animData.bone[i];
+        const newIndex = modelData.bone.findIndex((bone) => bone.name === origBone.name);
         remapTable[newIndex] = i;
     }
 
@@ -1895,16 +1896,16 @@ export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, fr
     for (let i = 0; i < modelData.bone.length; i++) {
         const dst = dstBoneMatrix[i];
         const trackIndex = anim.boneRemapTable !== null ? anim.boneRemapTable[i] : i;
-        const track = data.tracks[trackIndex];
-        const bone = modelData.bone[i];
+        const track = trackIndex >= 0 ? data.tracks[trackIndex] : null;
+        const modelBone = modelData.bone[i];
         if (track !== null) {
             const trackBone = track.bone;
-            assert(trackBone.name === bone.name);
+            assert(trackBone.name === modelBone.name);
             track.getPosRot(scratchVec3, scratchQuatb, trackBone, frame);
             mat4.fromQuat(dst, scratchQuatb);
             setMatrixTranslation(dst, scratchVec3);
         } else {
-            computeModelMatrixPosRadianEuler(dst, bone.pos, bone.rot);
+            computeModelMatrixPosRadianEuler(dst, modelBone.pos, modelBone.rot);
         }
     }
 }
