@@ -6,9 +6,9 @@ import { CameraAnimation, KeyframeTrack, Keyframe, MILLISECONDS_IN_SECOND } from
 // TODO(jstpierre): Merge this file into Studio
 
 export class InterpolationStep {
-    pos: vec3 = vec3.create();
-    lookAtPos: vec3 = vec3.create();
-    bank: number = 0;
+    public pos: vec3 = vec3.create();
+    public lookAtPos: vec3 = vec3.create();
+    public bank: number = 0;
 }
 
 function findKeyframe(frames: Readonly<Keyframe[]>, time: number): number {
@@ -28,13 +28,13 @@ function calcTrackDuration(track: Readonly<KeyframeTrack>): number {
 
 function calcAnimationDuration(animation: Readonly<CameraAnimation>): number {
     let duration = 0;
-    duration = Math.max(calcTrackDuration(animation.posXTrack));
-    duration = Math.max(calcTrackDuration(animation.posYTrack));
-    duration = Math.max(calcTrackDuration(animation.posZTrack));
-    duration = Math.max(calcTrackDuration(animation.lookAtXTrack));
-    duration = Math.max(calcTrackDuration(animation.lookAtYTrack));
-    duration = Math.max(calcTrackDuration(animation.lookAtZTrack));
-    duration = Math.max(calcTrackDuration(animation.bankTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.posXTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.posYTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.posZTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.lookAtXTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.lookAtYTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.lookAtZTrack));
+    duration = Math.max(duration, calcTrackDuration(animation.bankTrack));
     return duration;
 }
 
@@ -101,5 +101,4 @@ export class CameraAnimationManager {
     public getElapsedTimeSeconds(): number {
         return this.elapsedTimeMs / MILLISECONDS_IN_SECOND;
     }
-
 }
