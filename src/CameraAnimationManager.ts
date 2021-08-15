@@ -1,9 +1,9 @@
 import { vec3 } from 'gl-matrix';
-import { angleDist } from './MathHelpers';
+import { invlerp } from './MathHelpers';
 import { getPointHermite } from './Spline';
-import { CameraAnimation, KeyframeTrack, MILLISECONDS_IN_SECOND } from './Studio';
+import { CameraAnimation, KeyframeTrack, Keyframe, MILLISECONDS_IN_SECOND } from './Studio';
 
-export const PREVIEW_STEP_TIME_MS = 16;
+// TODO(jstpierre): Merge this file into Studio
 
 export class InterpolationStep {
     pos: vec3 = vec3.create();
@@ -11,109 +11,91 @@ export class InterpolationStep {
     bank: number = 0;
 }
 
+function findKeyframe(frames: Readonly<Keyframe[]>, time: number): number {
+    for (let i = 0; i < frames.length; i++)
+        if (time < frames[i].time)
+            return i;
+    return -1;
+}
+
+function calcTrackDuration(track: Readonly<KeyframeTrack>): number {
+    // Assume it's sorted.
+    if (track.keyframes.length > 0)
+        return track.keyframes[track.keyframes.length - 1].time;
+    else
+        return 0;
+}
+
+function calcAnimationDuration(animation: Readonly<CameraAnimation>): number {
+    let duration = 0;
+    duration = Math.max(calcTrackDuration(animation.posXTrack));
+    duration = Math.max(calcTrackDuration(animation.posYTrack));
+    duration = Math.max(calcTrackDuration(animation.posZTrack));
+    duration = Math.max(calcTrackDuration(animation.lookAtXTrack));
+    duration = Math.max(calcTrackDuration(animation.lookAtYTrack));
+    duration = Math.max(calcTrackDuration(animation.lookAtZTrack));
+    duration = Math.max(calcTrackDuration(animation.bankTrack));
+    return duration;
+}
+
+function getCurrentTrackValue(track: KeyframeTrack, time: number): number {
+    const idx1 = findKeyframe(track.keyframes, time);
+    if (idx1 === 0)
+        return track.keyframes[0].value;
+    if (idx1 < 0)
+        return track.keyframes[track.keyframes.length - 1].value;
+
+    const idx0 = idx1 - 1;
+    const k0 = track.keyframes[idx0], k1 = track.keyframes[idx1];
+
+    const t = invlerp(k0.time, k1.time, time);
+    return getPointHermite(k0.value, k1.value, k0.tangentOut, k1.tangentIn, t);
+}
+
+function calcAnimationPose(dst: InterpolationStep, animation: Readonly<CameraAnimation>, time: number): void {
+    const posX = getCurrentTrackValue(animation.posXTrack, time);
+    const posY = getCurrentTrackValue(animation.posYTrack, time);
+    const posZ = getCurrentTrackValue(animation.posZTrack, time);
+    const lookAtX = getCurrentTrackValue(animation.lookAtXTrack, time);
+    const lookAtY = getCurrentTrackValue(animation.lookAtYTrack, time);
+    const lookAtZ = getCurrentTrackValue(animation.lookAtZTrack, time);
+    vec3.set(dst.pos, posX, posY, posZ);
+    vec3.set(dst.lookAtPos, lookAtX, lookAtY, lookAtZ);
+    dst.bank = getCurrentTrackValue(animation.bankTrack, time);
+}
+
 export class CameraAnimationManager {
     // The animation to play back.
     private animation: Readonly<CameraAnimation>;
     // A map to store and retrieve the current keyframe index for each animation track.
-    private currentKeyframeIndices: Map<KeyframeTrack, number>;
     private elapsedTimeMs: number;
-    private lastKeyframeTimeMs: number;
 
-    // Normalized bank rotation values, calculated at runtime to keep the logic of the animations simpler
-    private bankFrom: number;
-    private bankTo: number;
+    // The animation's duration.
+    public durationMs: number;
 
     public initAnimationPlayback(animation: Readonly<CameraAnimation>, startTimeMs: number) {
         this.animation = animation;
         this.elapsedTimeMs = startTimeMs;
-        this.currentKeyframeIndices = new Map();
-        this.currentKeyframeIndices.set(animation.posXTrack, animation.posXTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.posYTrack, animation.posYTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.posZTrack, animation.posZTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.lookAtXTrack, animation.lookAtXTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.lookAtYTrack, animation.lookAtYTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.lookAtZTrack, animation.lookAtZTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.currentKeyframeIndices.set(animation.bankTrack, animation.bankTrack.getNextKeyframeIndexAtTime(startTimeMs));
-        this.lastKeyframeTimeMs = Math.max(animation.posXTrack.keyframes[animation.posXTrack.keyframes.length - 1].time,
-            animation.posYTrack.keyframes[animation.posYTrack.keyframes.length - 1].time,
-            animation.posZTrack.keyframes[animation.posZTrack.keyframes.length - 1].time,
-            animation.lookAtXTrack.keyframes[animation.lookAtXTrack.keyframes.length - 1].time,
-            animation.lookAtYTrack.keyframes[animation.lookAtYTrack.keyframes.length - 1].time,
-            animation.lookAtZTrack.keyframes[animation.lookAtZTrack.keyframes.length - 1].time,
-            animation.bankTrack.keyframes[animation.bankTrack.keyframes.length - 1].time);
-        this.bankFrom = this.animation.bankTrack.keyframes[0].value;
-        this.bankTo = this.bankFrom;
-        const bankTrackStartIndex = this.currentKeyframeIndices.get(animation.bankTrack);
-        for (let i = 1; bankTrackStartIndex && i <= bankTrackStartIndex; i++) {
-            this.bankFrom = this.bankTo;
-            this.bankTo = this.bankTo + angleDist(this.bankTo, this.animation.bankTrack.keyframes[i].value);
-        }
+        this.durationMs = calcAnimationDuration(animation);
+    }
+
+    public setElapsedTime(t: number): void {
+        this.elapsedTimeMs = t;
+
+        if (this.animation.loop)
+            this.elapsedTimeMs = this.elapsedTimeMs % this.durationMs;
     }
 
     public updateElapsedTime(dt: number): void {
-        this.elapsedTimeMs += dt;
-        if (this.animation.loop && this.elapsedTimeMs >= this.lastKeyframeTimeMs) {
-            this.currentKeyframeIndices.set(this.animation.posXTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.posYTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.posZTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.lookAtXTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.lookAtYTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.lookAtZTrack, 0);
-            this.currentKeyframeIndices.set(this.animation.bankTrack, 0);
-            this.elapsedTimeMs -= this.lastKeyframeTimeMs;
-        }
+        this.setElapsedTime(this.elapsedTimeMs + dt);
     }
 
-    public getAnimFrame(outInterpStep: InterpolationStep) {
-        vec3.set(outInterpStep.pos, this.getCurrentTrackValue(this.animation.posXTrack), this.getCurrentTrackValue(this.animation.posYTrack), this.getCurrentTrackValue(this.animation.posZTrack));
-        vec3.set(outInterpStep.lookAtPos, this.getCurrentTrackValue(this.animation.lookAtXTrack), this.getCurrentTrackValue(this.animation.lookAtYTrack), this.getCurrentTrackValue(this.animation.lookAtZTrack));
-        outInterpStep.bank = this.getCurrentTrackValue(this.animation.bankTrack);
-    }
-
-    public getPreviewSteps(animation: CameraAnimation): InterpolationStep[] {
-        const steps: InterpolationStep[] = [];
-        this.initAnimationPlayback(animation, 0);
-        for (let t = 0; t <= this.lastKeyframeTimeMs; t += PREVIEW_STEP_TIME_MS) {
-            const step = new InterpolationStep();
-            this.getAnimFrame(step);
-            steps.push(step);
-            this.updateElapsedTime(PREVIEW_STEP_TIME_MS);
-        }
-        return steps;
-    }
-
-    public getCurrentTrackValue(track: KeyframeTrack): number {
-        let kfIndex = this.currentKeyframeIndices.get(track);
-        if (kfIndex === undefined || kfIndex === -1)
-            return track.keyframes[track.keyframes.length - 1].value;
-        else if (this.elapsedTimeMs >= track.keyframes[kfIndex].time) {
-            if (kfIndex === track.keyframes.length - 1) {
-                kfIndex = -1;
-                this.currentKeyframeIndices.set(track, kfIndex);
-                return track.keyframes[track.keyframes.length - 1].value;
-            } else {
-                kfIndex++;
-                this.currentKeyframeIndices.set(track, kfIndex);
-                if (track === this.animation.bankTrack) {
-                    this.bankFrom = this.bankTo;
-                    this.bankTo = this.bankTo + angleDist(this.bankTo, track.keyframes[kfIndex].value);
-                }
-            }
-        }
-        const prevKf = track.keyframes[kfIndex - 1];
-        const curKf = track.keyframes[kfIndex];
-        if (prevKf.value === curKf.value)
-            return curKf.value;
-
-        if (track !== this.animation.bankTrack) {
-            return getPointHermite(prevKf.value, curKf.value, curKf.tangentIn, curKf.tangentOut, (this.elapsedTimeMs - prevKf.time) / (curKf.time - prevKf.time));
-        } else {
-            return getPointHermite(this.bankFrom, this.bankTo, curKf.tangentIn, curKf.tangentOut, (this.elapsedTimeMs - prevKf.time) / (curKf.time - prevKf.time));
-        }
+    public getAnimFrame(outInterpStep: InterpolationStep, time: number = this.elapsedTimeMs) {
+        calcAnimationPose(outInterpStep, this.animation, time);
     }
 
     public isAnimationFinished(): boolean {
-        return !this.animation.loop && this.elapsedTimeMs >= this.lastKeyframeTimeMs;
+        return !this.animation.loop && this.elapsedTimeMs >= this.durationMs;
     }
 
     public getElapsedTimeSeconds(): number {

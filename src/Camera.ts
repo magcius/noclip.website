@@ -525,6 +525,7 @@ export class StudioCameraController extends FPSCameraController {
 
     public update(inputManager: InputManager, dt: number): CameraUpdateResult {
         let result;
+
         if (this.isAnimationPlaying) {
             result = this.updateAnimation(dt);
             if (result === CameraUpdateResult.Changed) {
@@ -536,6 +537,8 @@ export class StudioCameraController extends FPSCameraController {
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
+            // TODO(jstpierre): Move these controls / path drawing to Studio.
+
             if (inputManager.isKeyDownEventTriggered('Enter'))
                 this.studioPanel.addKeyframesFromMat4(mat4.clone(this.camera.worldMatrix));
 

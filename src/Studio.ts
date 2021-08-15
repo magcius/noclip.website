@@ -1,7 +1,7 @@
 import * as Viewer from './viewer';
 import { UI, Checkbox, setElementHighlighted, createDOMFromString } from './ui';
 import { FloatingPanel } from './DebugFloaters';
-import { CameraAnimationManager, InterpolationStep, PREVIEW_STEP_TIME_MS } from './CameraAnimationManager';
+import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 import { StudioCameraController } from './Camera';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, Vec3UnitY, Vec3Zero } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
@@ -125,16 +125,35 @@ export interface CameraAnimation {
     loop: boolean;
 }
 
-export const enum KeyframeTrackEnum {
-    posXTrack = 0b0000001,
-    posYTrack = 0b0000010,
-    posZTrack = 0b0000100,
+export const enum KeyframeTrackType {
+    posXTrack    = 0b0000001,
+    posYTrack    = 0b0000010,
+    posZTrack    = 0b0000100,
     lookAtXTrack = 0b0001000,
     lookAtYTrack = 0b0010000,
     lookAtZTrack = 0b0100000,
-    bankTrack = 0b1000000,
-    allTracks = 0b1111111,
-};
+    bankTrack    = 0b1000000,
+    allTracks    = 0b1111111,
+}
+
+function getTrackByType(animation: CameraAnimation, trackType: KeyframeTrackType): KeyframeTrack {
+    if (trackType === KeyframeTrackType.posXTrack)
+        return animation.posXTrack;
+    else if (trackType === KeyframeTrackType.posYTrack)
+        return animation.posYTrack;
+    else if (trackType === KeyframeTrackType.posZTrack)
+        return animation.posZTrack;
+    else if (trackType === KeyframeTrackType.lookAtXTrack)
+        return animation.lookAtXTrack;
+    else if (trackType === KeyframeTrackType.lookAtYTrack)
+        return animation.lookAtYTrack;
+    else if (trackType === KeyframeTrackType.lookAtZTrack)
+        return animation.lookAtZTrack;
+    else if (trackType === KeyframeTrackType.bankTrack)
+        return animation.bankTrack;
+    else
+        throw "whoops";
+}
 
 /**
  * Enumeration describing keyframe icon types. Start keyframe icons are immovable. End keyframe icons only exist
@@ -204,7 +223,7 @@ class KeyframeIcon {
     static readonly SELECTED_COLOR: string = '#FF500B';
     static readonly ENDFRAME_COLOR: string = '#4EB0FF';
 
-    constructor(public keyframesMap: Map<KeyframeTrackEnum, Keyframe>, private x: number, public y: number, public type: KeyframeIconType) {
+    constructor(public keyframesMap: Map<KeyframeTrackType, Keyframe>, private x: number, public y: number, public type: KeyframeIconType) {
         this.updatePath();
     }
 
@@ -352,7 +371,7 @@ class Timeline {
         this.playhead.drawLine(this.elementsCtx);
     }
 
-    public addKeyframeIcon(kfs: Map<KeyframeTrackEnum, Keyframe>, t: number, y: number, type: KeyframeIconType, selectAfterAdd: boolean) {
+    public addKeyframeIcon(kfs: Map<KeyframeTrackType, Keyframe>, t: number, y: number, type: KeyframeIconType, selectAfterAdd: boolean) {
         const xPos = (t / MILLISECONDS_IN_SECOND) * (this.pixelsPerSecond / this.timelineScaleFactor);
         const kfIcon = new KeyframeIcon(kfs, xPos, y, type);
         this.keyframeIcons.push(kfIcon);
@@ -628,7 +647,7 @@ export class StudioPanel extends FloatingPanel {
     private persistHelpText: boolean = false;
 
     public timeline: Timeline;
-    private selectedTracks: number = KeyframeTrackEnum.allTracks;
+    private selectedTracks: number = KeyframeTrackType.allTracks;
 
     private previewOptionsContainer: HTMLElement;
     private showPreviewLineCheckbox: Checkbox;
@@ -997,7 +1016,7 @@ export class StudioPanel extends FloatingPanel {
             this.timeline.setPlayheadTimeSeconds(timePosValue, this.studioCameraController.isAnimationPlaying);
             this.playheadTimePositionInput.dataset.prevValue = timePosValue.toString();
 
-            if (!this.studioCameraController.isAnimationPlaying && this.timeline.livePreview && this.animationPreviewSteps.length)
+            if (!this.studioCameraController.isAnimationPlaying && this.timeline.livePreview)
                 this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
         }
 
@@ -1063,19 +1082,19 @@ export class StudioPanel extends FloatingPanel {
 
         this.customTangentsContainer = this.contents.querySelector('#customTangentsContainer') as HTMLElement;
         this.posXTangentInput = this.contents.querySelector('#posXTangentInput') as HTMLInputElement;
-        this.posXTangentInput.dataset.track = KeyframeTrackEnum.posXTrack.toString();
+        this.posXTangentInput.dataset.track = KeyframeTrackType.posXTrack.toString();
         this.posYTangentInput = this.contents.querySelector('#posYTangentInput') as HTMLInputElement;
-        this.posYTangentInput.dataset.track = KeyframeTrackEnum.posYTrack.toString();
+        this.posYTangentInput.dataset.track = KeyframeTrackType.posYTrack.toString();
         this.posZTangentInput = this.contents.querySelector('#posZTangentInput') as HTMLInputElement;
-        this.posZTangentInput.dataset.track = KeyframeTrackEnum.posZTrack.toString();
+        this.posZTangentInput.dataset.track = KeyframeTrackType.posZTrack.toString();
         this.lookAtXTangentInput = this.contents.querySelector('#lookAtXTangentInput') as HTMLInputElement;
-        this.lookAtXTangentInput.dataset.track = KeyframeTrackEnum.lookAtXTrack.toString();
+        this.lookAtXTangentInput.dataset.track = KeyframeTrackType.lookAtXTrack.toString();
         this.lookAtYTangentInput = this.contents.querySelector('#lookAtYTangentInput') as HTMLInputElement;
-        this.lookAtYTangentInput.dataset.track = KeyframeTrackEnum.lookAtYTrack.toString();
+        this.lookAtYTangentInput.dataset.track = KeyframeTrackType.lookAtYTrack.toString();
         this.lookAtZTangentInput = this.contents.querySelector('#lookAtZTangentInput') as HTMLInputElement;
-        this.lookAtZTangentInput.dataset.track = KeyframeTrackEnum.lookAtZTrack.toString();
+        this.lookAtZTangentInput.dataset.track = KeyframeTrackType.lookAtZTrack.toString();
         this.bankTangentInput = this.contents.querySelector('#bankTangentInput') as HTMLInputElement;
-        this.bankTangentInput.dataset.track = KeyframeTrackEnum.bankTrack.toString();
+        this.bankTangentInput.dataset.track = KeyframeTrackType.bankTrack.toString();
 
         this.useAutoTangentValuesCheckbox = new Checkbox('Auto-Calculate Tangents');
         this.useAutoTangentValuesCheckbox.elem.style.display = 'flex';
@@ -1228,30 +1247,8 @@ export class StudioPanel extends FloatingPanel {
         this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => { this.displayKeyframeControls(); });
         this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => { this.hideKeyframeControls(); });
         this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
-            this.timeline.selectedKeyframeIcon!.keyframesMap.forEach((v, track) => {
-                switch (track) {
-                    case KeyframeTrackEnum.posXTrack:
-                        this.animation.posXTrack.reSort();
-                        break;
-                    case KeyframeTrackEnum.posYTrack:
-                        this.animation.posYTrack.reSort();
-                        break;
-                    case KeyframeTrackEnum.posZTrack:
-                        this.animation.posZTrack.reSort();
-                        break;
-                    case KeyframeTrackEnum.lookAtXTrack:
-                        this.animation.lookAtXTrack.reSort();
-                        break;
-                    case KeyframeTrackEnum.lookAtYTrack:
-                        this.animation.lookAtYTrack.reSort();
-                        break;
-                    case KeyframeTrackEnum.lookAtZTrack:
-                        this.animation.lookAtZTrack.reSort();
-                        break;
-                    case KeyframeTrackEnum.bankTrack:
-                        this.animation.bankTrack.reSort();
-                        break;
-                }
+            this.timeline.selectedKeyframeIcon!.keyframesMap.forEach((v, trackType) => {
+                getTrackByType(this.animation, trackType).reSort();
             });
         });
 
@@ -1364,14 +1361,14 @@ export class StudioPanel extends FloatingPanel {
             else if (this.animation.loop && i === this.animation.posXTrack.keyframes.length - 1)
                 kfType = KeyframeIconType.End;
 
-            const kfMap = new Map<KeyframeTrackEnum, Keyframe>();
-            kfMap.set(KeyframeTrackEnum.posXTrack, this.animation.posXTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackEnum.posYTrack, this.animation.posYTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackEnum.posZTrack, this.animation.posZTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackEnum.lookAtXTrack, this.animation.lookAtXTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackEnum.lookAtYTrack, this.animation.lookAtYTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackEnum.lookAtZTrack, this.animation.lookAtZTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackEnum.bankTrack, this.animation.bankTrack.keyframes[i]);
+            const kfMap = new Map<KeyframeTrackType, Keyframe>();
+            kfMap.set(KeyframeTrackType.posXTrack, this.animation.posXTrack.keyframes[i]);
+            kfMap.set(KeyframeTrackType.posYTrack, this.animation.posYTrack.keyframes[i]);
+            kfMap.set(KeyframeTrackType.posZTrack, this.animation.posZTrack.keyframes[i]);
+            kfMap.set(KeyframeTrackType.lookAtXTrack, this.animation.lookAtXTrack.keyframes[i]);
+            kfMap.set(KeyframeTrackType.lookAtYTrack, this.animation.lookAtYTrack.keyframes[i]);
+            kfMap.set(KeyframeTrackType.lookAtZTrack, this.animation.lookAtZTrack.keyframes[i]);
+            kfMap.set(KeyframeTrackType.bankTrack, this.animation.bankTrack.keyframes[i]);
             this.timeline.addKeyframeIcon(kfMap, this.animation.posXTrack.keyframes[i].time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, kfType, false);
         }
         this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
@@ -1423,35 +1420,13 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    private onChangeTangentInput(input: HTMLInputElement): any {
+    private onChangeTangentInput(input: HTMLInputElement): void {
         if (this.timeline.selectedKeyframeIcon && input.value) {
             const val = parseFloat(input.value);
             if (!Number.isNaN(val)) {
-                const track = parseInt(input.dataset.track!, 10);
-                const kf = this.timeline.selectedKeyframeIcon.keyframesMap.get(track)!;
-                switch (track) {
-                    case KeyframeTrackEnum.posXTrack:
-                        this.animation.posXTrack.setCustomTangent(kf, val);
-                        break;
-                    case KeyframeTrackEnum.posYTrack:
-                        this.animation.posYTrack.setCustomTangent(kf, val);
-                        break;
-                    case KeyframeTrackEnum.posZTrack:
-                        this.animation.posZTrack.setCustomTangent(kf, val);
-                        break;
-                    case KeyframeTrackEnum.lookAtXTrack:
-                        this.animation.lookAtXTrack.setCustomTangent(kf, val);
-                        break;
-                    case KeyframeTrackEnum.lookAtYTrack:
-                        this.animation.lookAtYTrack.setCustomTangent(kf, val);
-                        break;
-                    case KeyframeTrackEnum.lookAtZTrack:
-                        this.animation.lookAtZTrack.setCustomTangent(kf, val);
-                        break;
-                    case KeyframeTrackEnum.bankTrack:
-                        this.animation.bankTrack.setCustomTangent(kf, val);
-                        break;
-                }
+                const trackType = parseInt(input.dataset.track!, 10);
+                const kf = this.timeline.selectedKeyframeIcon.keyframesMap.get(trackType)!;
+                getTrackByType(this.animation, trackType).setCustomTangent(kf, val);
                 this.updatePreviewSteps();
             }
         }
@@ -1464,25 +1439,25 @@ export class StudioPanel extends FloatingPanel {
             kfIcon.keyframesMap.forEach((kf, track) => {
                 autoTangents = kf.useAutoTangent;
                 switch (track) {
-                    case KeyframeTrackEnum.posXTrack:
+                    case KeyframeTrackType.posXTrack:
                         this.posXTangentInput.value = kf.tangentOut.toString();
                         break;
-                    case KeyframeTrackEnum.posYTrack:
+                    case KeyframeTrackType.posYTrack:
                         this.posYTangentInput.value = kf.tangentOut.toString();
                         break;
-                    case KeyframeTrackEnum.posZTrack:
+                    case KeyframeTrackType.posZTrack:
                         this.posZTangentInput.value = kf.tangentOut.toString();
                         break;
-                    case KeyframeTrackEnum.lookAtXTrack:
+                    case KeyframeTrackType.lookAtXTrack:
                         this.lookAtXTangentInput.value = kf.tangentOut.toString();
                         break;
-                    case KeyframeTrackEnum.lookAtYTrack:
+                    case KeyframeTrackType.lookAtYTrack:
                         this.lookAtYTangentInput.value = kf.tangentOut.toString();
                         break;
-                    case KeyframeTrackEnum.lookAtZTrack:
+                    case KeyframeTrackType.lookAtZTrack:
                         this.lookAtZTangentInput.value = kf.tangentOut.toString();
                         break;
-                    case KeyframeTrackEnum.bankTrack:
+                    case KeyframeTrackType.bankTrack:
                         this.bankTangentInput.value = kf.tangentOut.toString();
                         break;
                 }
@@ -1518,9 +1493,25 @@ export class StudioPanel extends FloatingPanel {
         this.timeline.draw();
     }
 
+    private getPreviewSteps(): InterpolationStep[] {
+        const steps: InterpolationStep[] = [];
+
+        // TODO(jstpierre): Don't rely on animationManager for this.
+        const PREVIEW_STEP_TIME_MS = 16;
+        for (let time = 0; time <= this.animationManager.durationMs; time += PREVIEW_STEP_TIME_MS) {
+            const step = new InterpolationStep();
+            this.animationManager.getAnimFrame(step, time);
+            steps.push(step);
+        }
+
+        return steps;
+    }
+
     private updatePreviewSteps() {
+        this.animationManager.initAnimationPlayback(this.animation, 0);
         this.updateAutoTangents();
-        this.animationPreviewSteps = this.animationManager.getPreviewSteps(this.animation);
+
+        this.animationPreviewSteps = this.getPreviewSteps();
     }
 
     private updateAutoTangents() {
@@ -1534,13 +1525,12 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private goToPreviewStepAtTime(t: number) {
-        if (!this.animationPreviewSteps)
-            this.updatePreviewSteps();
-        const index = Math.trunc(t / PREVIEW_STEP_TIME_MS);
-        if (index > this.animationPreviewSteps.length - 1)
-            this.studioCameraController.setToPosition(this.animationPreviewSteps[this.animationPreviewSteps.length - 1]);
-        else
-            this.studioCameraController.setToPosition(this.animationPreviewSteps[index]);
+        this.animationManager.setElapsedTime(t);
+
+        // TODO(jstpierre): Have this driven by CameraAnimationManager.
+        const interpStep = new InterpolationStep();
+        this.animationManager.getAnimFrame(interpStep);
+        this.studioCameraController.setToPosition(interpStep);
     }
 
     public onAnimationAdvance(t: number) {
@@ -1578,13 +1568,13 @@ export class StudioPanel extends FloatingPanel {
         if (this.timeline.selectedKeyframeIcon) {
             const type = this.timeline.selectedKeyframeIcon.type;
             if (type === KeyframeIconType.Default) {
-                const posXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.posXTrack);
-                const posYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.posYTrack);
-                const posZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.posZTrack);
-                const lookAtXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.lookAtXTrack);
-                const lookAtYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.lookAtYTrack);
-                const lookAtZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.lookAtZTrack);
-                const bankTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.bankTrack);
+                const posXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
+                const posYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
+                const posZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
+                const lookAtXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
+                const lookAtYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
+                const lookAtZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
+                const bankTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
                 if (posXTrackKf) {
                     const index = this.animation.posXTrack.keyframes.indexOf(posXTrackKf);
                     if (index > 0)
@@ -1691,13 +1681,13 @@ export class StudioPanel extends FloatingPanel {
                         this.animation.bankTrack.keyframes[this.animation.bankTrack.keyframes.length - 1].value = bankKf.value;
                     }
                 } else {
-                    const currentPosXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.posXTrack);
-                    const currentPosYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.posYTrack);
-                    const currentPosZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.posZTrack);
-                    const currentLookAtXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.lookAtXTrack);
-                    const currentLookAtYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.lookAtYTrack);
-                    const currentLookAtZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.lookAtZTrack);
-                    const currentBankTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackEnum.bankTrack);
+                    const currentPosXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
+                    const currentPosYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
+                    const currentPosZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
+                    const currentLookAtXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
+                    const currentLookAtYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
+                    const currentLookAtZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
+                    const currentBankTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
                     if (currentPosXTrackKf)
                         currentPosXTrackKf.value = posXKf.value;
                     if (currentPosYTrackKf)
@@ -1719,31 +1709,31 @@ export class StudioPanel extends FloatingPanel {
             return;
         }
 
-        if (tracks & KeyframeTrackEnum.posXTrack)
+        if (tracks & KeyframeTrackType.posXTrack)
             this.animation.posXTrack.addKeyframe(posXKf);
-        if (tracks & KeyframeTrackEnum.posYTrack)
+        if (tracks & KeyframeTrackType.posYTrack)
             this.animation.posYTrack.addKeyframe(posYKf);
-        if (tracks & KeyframeTrackEnum.posZTrack)
+        if (tracks & KeyframeTrackType.posZTrack)
             this.animation.posZTrack.addKeyframe(posZKf);
-        if (tracks & KeyframeTrackEnum.lookAtXTrack)
+        if (tracks & KeyframeTrackType.lookAtXTrack)
             this.animation.lookAtXTrack.addKeyframe(lookAtXKf);
-        if (tracks & KeyframeTrackEnum.lookAtYTrack)
+        if (tracks & KeyframeTrackType.lookAtYTrack)
             this.animation.lookAtYTrack.addKeyframe(lookAtYKf);
-        if (tracks & KeyframeTrackEnum.lookAtZTrack)
+        if (tracks & KeyframeTrackType.lookAtZTrack)
             this.animation.lookAtZTrack.addKeyframe(lookAtZKf);
-        if (tracks & KeyframeTrackEnum.bankTrack)
+        if (tracks & KeyframeTrackType.bankTrack)
             this.animation.bankTrack.addKeyframe(bankKf);
 
         const kfType = this.timeline.keyframeIcons.length === 0 ? KeyframeIconType.Start : KeyframeIconType.Default;
         // TODO - Update for multi-track editor.
-        const kfMap = new Map<KeyframeTrackEnum, Keyframe>();
-        kfMap.set(KeyframeTrackEnum.posXTrack, posXKf);
-        kfMap.set(KeyframeTrackEnum.posYTrack, posYKf);
-        kfMap.set(KeyframeTrackEnum.posZTrack, posZKf);
-        kfMap.set(KeyframeTrackEnum.lookAtXTrack, lookAtXKf);
-        kfMap.set(KeyframeTrackEnum.lookAtYTrack, lookAtYKf);
-        kfMap.set(KeyframeTrackEnum.lookAtZTrack, lookAtZKf);
-        kfMap.set(KeyframeTrackEnum.bankTrack, bankKf);
+        const kfMap = new Map<KeyframeTrackType, Keyframe>();
+        kfMap.set(KeyframeTrackType.posXTrack, posXKf);
+        kfMap.set(KeyframeTrackType.posYTrack, posYKf);
+        kfMap.set(KeyframeTrackType.posZTrack, posZKf);
+        kfMap.set(KeyframeTrackType.lookAtXTrack, lookAtXKf);
+        kfMap.set(KeyframeTrackType.lookAtYTrack, lookAtYKf);
+        kfMap.set(KeyframeTrackType.lookAtZTrack, lookAtZKf);
+        kfMap.set(KeyframeTrackType.bankTrack, bankKf);
 
         // If we're past the time of the last keyframe, advance.
         const advancePlayhead = time > this.timeline.getLastKeyframeTimeMs();
@@ -1823,14 +1813,14 @@ export class StudioPanel extends FloatingPanel {
         this.animation.bankTrack.addKeyframe(bankKf);
 
         // TODO - Handle multi-track animations
-        const kfMap = new Map<KeyframeTrackEnum, Keyframe>();
-        kfMap.set(KeyframeTrackEnum.posXTrack, posXKf);
-        kfMap.set(KeyframeTrackEnum.posYTrack, posYKf);
-        kfMap.set(KeyframeTrackEnum.posZTrack, posZKf);
-        kfMap.set(KeyframeTrackEnum.lookAtXTrack, lookAtXKf);
-        kfMap.set(KeyframeTrackEnum.lookAtYTrack, lookAtYKf);
-        kfMap.set(KeyframeTrackEnum.lookAtZTrack, lookAtZKf);
-        kfMap.set(KeyframeTrackEnum.bankTrack, bankKf);
+        const kfMap = new Map<KeyframeTrackType, Keyframe>();
+        kfMap.set(KeyframeTrackType.posXTrack, posXKf);
+        kfMap.set(KeyframeTrackType.posYTrack, posYKf);
+        kfMap.set(KeyframeTrackType.posZTrack, posZKf);
+        kfMap.set(KeyframeTrackType.lookAtXTrack, lookAtXKf);
+        kfMap.set(KeyframeTrackType.lookAtYTrack, lookAtYKf);
+        kfMap.set(KeyframeTrackType.lookAtZTrack, lookAtZKf);
+        kfMap.set(KeyframeTrackType.bankTrack, bankKf);
         this.timeline.addKeyframeIcon(kfMap, time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, KeyframeIconType.End, false);
 
         if (time > this.timeline.getTimelineLengthMs()) {
@@ -1848,8 +1838,8 @@ export class StudioPanel extends FloatingPanel {
             lookAtYTrack: new KeyframeTrack(),
             lookAtZTrack: new KeyframeTrack(),
             bankTrack: new KeyframeTrack(),
-            loop: false
-        }
+            loop: false,
+        };
         if (this.timeline) {
             this.timeline.deselectKeyframeIcon();
             this.timeline.keyframeIcons = [];
@@ -1859,8 +1849,7 @@ export class StudioPanel extends FloatingPanel {
             this.livePreviewCheckbox.setChecked(false);
             this.showPreviewLineCheckbox.setChecked(true);
         }
-        this.animationPreviewSteps = [];
-        this.selectedTracks |= KeyframeTrackEnum.allTracks;
+        this.selectedTracks |= KeyframeTrackType.allTracks;
         this.saveAnimationBtn.setAttribute('hidden', '');
         this.studioControlsContainer.setAttribute('hidden', '');
         this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
