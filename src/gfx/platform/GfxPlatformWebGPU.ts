@@ -1064,6 +1064,20 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
     }
 
+    public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
+        const cmd = this.device.createCommandEncoder();
+
+        const dst = dst_ as GfxTextureP_WebGPU;
+        const src = src_ as GfxTextureP_WebGPU;
+        const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture, origin: [srcX, srcY, 0] };
+        const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture, origin: [dstX, dstY, 0] };
+        assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
+        assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
+        cmd.copyTextureToTexture(srcCopy, dstCopy, [src.width, src.height, 1]);
+
+        this.device.queue.submit([cmd.finish()]);
+    }
+
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void {
         if (byteCount === undefined)
             byteCount = data.byteLength;
