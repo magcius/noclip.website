@@ -1629,8 +1629,6 @@ export class HardwareVertData {
 }
 
 function remapIncludeModelSkeleton(animData: StudioModelData, modelData: StudioModelData): number[] {
-    assert(animData.bone.length <= modelData.bone.length);
-
     // Construct a remap table going from the model bone index to the animation track index.
     const remapTable: number[] = nArray(modelData.bone.length, () => -1);
     for (let i = 0; i < animData.bone.length; i++) {
