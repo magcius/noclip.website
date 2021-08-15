@@ -75,20 +75,20 @@ export class KeyframeTrack {
 
         for (let i = 1; i < this.keyframes.length - 1; i++)
             this.setCatmullRomTangent(this.keyframes[i - 1], this.keyframes[i], this.keyframes[i + 1]);
-
     }
 
     // Speed scaling calculated as per Nils Pipenbrinck:
     // https://www.cubic.org/docs/hermite.htm - section "Speed Control".
-    private setCatmullRomTangent(previous: Keyframe, current: Keyframe, next: Keyframe) {
-        if (!current.useAutoTangent)
+    private setCatmullRomTangent(k0: Keyframe, k1: Keyframe, k2: Keyframe) {
+        if (!k1.useAutoTangent)
             return;
 
-        const val = (next.value - previous.value) * 0.5;
-        const thisDuration = current.time - previous.time;
-        const nextDuration = next.time - current.time;
-        current.tangentOut = val * (2 * thisDuration) / (thisDuration + nextDuration);
-        next.tangentIn = val * (2 * nextDuration) / (thisDuration + nextDuration);
+        // Catmull-Rom tangent
+        const val = (k2.value - k0.value) * 0.5;
+        const thisDuration = k1.time - k0.time;
+        const nextDuration = k2.time - k1.time;
+        k1.tangentIn  = val * (2 * thisDuration) / (thisDuration + nextDuration);
+        k1.tangentOut = val * (2 * nextDuration) / (thisDuration + nextDuration);
     }
 
     public setCustomTangent(kf: Keyframe, v: number) {
