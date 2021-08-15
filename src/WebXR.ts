@@ -21,7 +21,7 @@ import { assertExists } from "./util";
 
 export class WebXRContext {
     public xrSession: XRSession | null = null;
-    public xrViewSpace: XRReferenceSpace;
+    public xrViewerSpace: XRReferenceSpace;
     public xrLocalSpace: XRReferenceSpace;
 
     public views: XRView[];
@@ -52,23 +52,21 @@ export class WebXRContext {
     }
 
     public async start() {
-        const navigator = window.navigator as any;
-        const xr = assertExists(navigator.xr);
+        const xr = (window.navigator as any).xr as XRSystem;
 
         this.xrSession = await xr.requestSession('immersive-vr', {
             requiredFeatures: [],
-            optionalFeatures: ['viewer', 'local']
+            optionalFeatures: ['viewer', 'local'],
         });
 
-        // TODO(jstpierre): I think we should just error here instead?
-        if (!this.xrSession)
-            return;
+        this.xrSession.onend = () => { this.sessionEnded(); };
+        [this.xrViewerSpace, this.xrLocalSpace] = await Promise.all([
+            this.xrSession.requestReferenceSpace('viewer'),
+            this.xrSession.requestReferenceSpace('local'),
+        ]);
 
-        this.xrViewSpace = await this.xrSession.requestReferenceSpace('viewer');
-        this.xrLocalSpace = await this.xrSession.requestReferenceSpace('local');
-
-        const glLayer = this.swapChain.createWebXRLayer(this.xrSession);
-        this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
+        const layer = this.swapChain.createWebXRLayer(this.xrSession);
+        this.xrSession.updateRenderState({ baseLayer: layer, depthNear: 5, depthFar: 1000000.0 });
 
         if (this.onstart !== null)
             this.onstart();
@@ -76,13 +74,16 @@ export class WebXRContext {
         this.xrSession.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 
-    public end() {
-        if (this.xrSession)
-            this.xrSession.end();
+    private sessionEnded(): void {
         this.xrSession = null;
 
         if (this.onend !== null)
             this.onend();
+    }
+
+    public end() {
+        if (this.xrSession !== null)
+            this.xrSession.end();
     }
 
     private _onRequestAnimationFrame = (time: number, frame: XRFrame): void => {

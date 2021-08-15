@@ -639,7 +639,7 @@ export class XRCameraController {
         }
 
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {            
-            const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
+            const viewMovementSpace = webXRContext.xrViewerSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
                     new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
             const pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
