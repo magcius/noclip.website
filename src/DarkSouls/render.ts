@@ -9,7 +9,7 @@ import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
@@ -244,17 +244,19 @@ struct DirectionalLight {
 
 layout(std140) uniform ub_MeshFragParams {
     Mat4x3 u_WorldFromLocal[1];
-    // Fourth element has g_DiffuseMapColorPower
     vec4 u_DiffuseMapColor;
-    // Fourth element has g_SpecularMapColorPower
+    // Fourth element has g_SpecularPower
     vec4 u_SpecularMapColor;
-    vec4 u_TexScroll[3];
     DirectionalLight u_DirectionalLight;
-    // g_SpecularPower
-    vec4 u_Misc[1];
+    // g_TexScroll0, g_TexScroll1
+    // g_TexScroll2,
+    vec4 u_Misc[2];
 };
 
-#define u_SpecularPower (u_Misc[0].x)
+#define u_SpecularPower (u_SpecularMapColor.w)
+#define u_TexScroll0    (u_Misc[0].xy)
+#define u_TexScroll1    (u_Misc[0].zw)
+#define u_TexScroll2    (u_Misc[1].xy)
 
 uniform sampler2D u_Texture0;
 uniform sampler2D u_Texture1;
@@ -323,9 +325,9 @@ void main() {
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_Color = a_Color;
-    v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll[0].xy;
-    v_TexCoord[1] = ((a_TexCoord0.zw) / 1024.0) + u_TexScroll[1].xy;
-    v_TexCoord[2] = ((a_TexCoord1.xy) / 1024.0) + u_TexScroll[2].xy;
+    v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll0.xy;
+    v_TexCoord[1] = ((a_TexCoord0.zw) / 1024.0) + u_TexScroll1.xy;
+    v_TexCoord[2] = ((a_TexCoord1.xy) / 1024.0) + u_TexScroll2.xy;
 }
 `;
 
@@ -353,7 +355,7 @@ void main() {
         const diffuse2 = this.getTexture('g_Diffuse_2');
 
         const diffuseEpi = `
-    t_Diffuse.rgb = t_Diffuse.rgb * u_DiffuseMapColor.rgb * u_DiffuseMapColor.w;
+    t_Diffuse.rgb *= u_DiffuseMapColor.rgb;
 `;
 
         if (diffuse1 !== null && diffuse2 !== null) {
@@ -381,7 +383,7 @@ ${diffuseEpi}
         const specular2 = this.getTexture('g_Specular_2');
 
         const specularEpi = `
-    t_Specular.rgb = t_Specular.rgb * u_SpecularMapColor.rgb * u_SpecularMapColor.w;
+    t_Specular.rgb *= u_SpecularMapColor.rgb;
 `;
 
         if (specular1 !== null && specular2 !== null) {
@@ -623,13 +625,11 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
-const scratchVec4 = vec4.create();
 class BatchInstance {
     private visible = true;
-    private diffuseColor = vec4.fromValues(1, 1, 1, 1);
+    private diffuseColor = vec3.fromValues(1, 1, 1);
     private specularColor = vec4.fromValues(0, 0, 0, 0);
-    private specularPower = 1.0;
-    private texScroll = nArray(3, () => vec4.create());
+    private texScroll = nArray(3, () => vec2.create());
     private textureMapping = nArray(8, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
     private program: DKSProgram;
@@ -707,24 +707,23 @@ class BatchInstance {
         const diffuseMapColor = getMaterialParam(mtd, 'g_DiffuseMapColor');
         if (diffuseMapColor !== null) {
             const diffuseMapColorPower = assertExists(getMaterialParam(mtd, `g_DiffuseMapColorPower`))[0];
-            vec4.set(this.diffuseColor, diffuseMapColor[0], diffuseMapColor[1], diffuseMapColor[2], diffuseMapColorPower);
+            vec3.set(this.diffuseColor, diffuseMapColor[0] * diffuseMapColorPower, diffuseMapColor[1] * diffuseMapColorPower, diffuseMapColor[2] * diffuseMapColorPower);
         }
 
         const specularMapColor = getMaterialParam(mtd, 'g_SpecularMapColor');
         if (specularMapColor !== null) {
             const specularMapColorPower = assertExists(getMaterialParam(mtd, `g_SpecularMapColorPower`))[0];
-            vec4.set(this.specularColor, specularMapColor[0], specularMapColor[1], specularMapColor[2], specularMapColorPower);
+            vec4.set(this.specularColor, specularMapColor[0] * specularMapColorPower, specularMapColor[1] * specularMapColorPower, specularMapColor[2] * specularMapColorPower, 0);
         }
 
         const specularPower = getMaterialParam(mtd, 'g_SpecularPower');
-        if (specularPower !== null) {
-            this.specularPower = specularPower[0];
-        }
+        if (specularPower !== null)
+            this.specularColor[3] = specularPower[0];
 
         for (let i = 0; i < 3; i++) {
             const param = getMaterialParam(mtd, `g_TexScroll_${i}`);
             if (param)
-                vec4.set(this.texScroll[i], param[0], param[1], 0, 0);
+                vec2.set(this.texScroll[i], param[0], param[1]);
         }
 
         this.program.ensurePreprocessed(device.queryVendorInfo());
@@ -744,22 +743,24 @@ class BatchInstance {
         template.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputState);
         template.setMegaStateFlags(this.megaState);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*8);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*6);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
-        offs += fillVec4v(d, offs, this.diffuseColor);
+        offs += fillVec3v(d, offs, this.diffuseColor);
         offs += fillVec4v(d, offs, this.specularColor);
-
-        const scrollTime = viewerInput.time / 240;
-        offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[0], scrollTime));
-        offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[1], scrollTime));
-        offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
 
         offs += renderContext.directionalLight.fill(d, offs);
 
-        offs += fillVec4(d, offs, this.specularPower);
+        const scrollTime = viewerInput.time / 240;
+        offs += fillVec4(d, offs,
+            scrollTime * this.texScroll[0][0], scrollTime * this.texScroll[0][1],
+            scrollTime * this.texScroll[1][0], scrollTime * this.texScroll[1][1],
+        );
+        offs += fillVec4(d, offs,
+            scrollTime * this.texScroll[2][0], scrollTime * this.texScroll[2][1],
+        );
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
 
