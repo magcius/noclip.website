@@ -482,7 +482,7 @@ export class BaseEntity {
     }
 
     private input_setparent(entitySystem: EntitySystem, value: string): void {
-        const parentEntity = entitySystem.findEntityByTargetName(this.entity.parentname);
+        const parentEntity = entitySystem.findEntityByTargetName(value);
         if (parentEntity !== null)
             this.setParentEntity(parentEntity);
     }
