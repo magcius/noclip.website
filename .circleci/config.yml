@@ -39,7 +39,7 @@ jobs:
       - run:
           command: yarn run build
           environment:
-            CARGO_TERM_VERBOSE: true
+            CARGO_TERM_VERBOSE: "true"
 
       - save_cache:
           paths:
