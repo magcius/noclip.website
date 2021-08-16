@@ -1,5 +1,5 @@
 
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin } from "../platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform";
 import { assert } from "../platform/GfxPlatformUtil";
 import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
 
@@ -31,7 +31,9 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     let extraDefines = '';
 
     if (vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft)
-        extraDefines += `${defineStr(`VIEWPORT_ORIGIN_TL`, `1`)}\n`;
+        extraDefines += `${defineStr(`GFX_VIEWPORT_ORIGIN_TL`, `1`)}\n`;
+    if (vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero)
+        extraDefines += `${defineStr(`GFX_CLIPSPACE_NEAR_ZERO`, `1`)}\n`;
 
     let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
