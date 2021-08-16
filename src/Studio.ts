@@ -69,6 +69,7 @@ export class KeyframeTrack {
             this.keyframes[1].time = origTime;
         } else {
             this.setCatmullRomTangent(this.keyframes[0], this.keyframes[0], this.keyframes[1]);
+            this.setCatmullRomTangent(this.keyframes[this.keyframes.length - 2], this.keyframes[this.keyframes.length - 1], this.keyframes[this.keyframes.length - 1]);
             this.keyframes[this.keyframes.length - 1].tangentOut = 0;
             this.keyframes[0].tangentIn = 0;
         }
@@ -85,10 +86,10 @@ export class KeyframeTrack {
 
         // Catmull-Rom tangent
         const val = (k2.value - k0.value) * 0.5;
-        const thisDuration = k1.time - k0.time;
+        const prevDuration = k1.time - k0.time;
         const nextDuration = k2.time - k1.time;
-        k1.tangentIn  = val * (2 * thisDuration) / (thisDuration + nextDuration);
-        k1.tangentOut = val * (2 * nextDuration) / (thisDuration + nextDuration);
+        k1.tangentIn  = val * (2 * prevDuration) / (prevDuration + nextDuration);
+        k1.tangentOut = val * (2 * nextDuration) / (prevDuration + nextDuration);
     }
 
     public setCustomTangent(kf: Keyframe, v: number) {
@@ -1432,35 +1433,33 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
+    private getTangentInput(trackType: KeyframeTrackType): HTMLInputElement {
+        if (trackType === KeyframeTrackType.posXTrack)
+            return this.posXTangentInput;
+        else if (trackType === KeyframeTrackType.posYTrack)
+            return this.posYTangentInput;
+        else if (trackType === KeyframeTrackType.posZTrack)
+            return this.posZTangentInput;
+        else if (trackType === KeyframeTrackType.lookAtXTrack)
+            return this.lookAtXTangentInput;
+        else if (trackType === KeyframeTrackType.lookAtYTrack)
+            return this.lookAtYTangentInput;
+        else if (trackType === KeyframeTrackType.lookAtZTrack)
+            return this.lookAtZTangentInput;
+        else if (trackType === KeyframeTrackType.bankTrack)
+            return this.bankTangentInput;
+        else
+            throw "whoops";
+    }
+
     private displayKeyframeControls() {
         const kfIcon = this.timeline.selectedKeyframeIcon;
         if (kfIcon) {
             let autoTangents = true;
-            kfIcon.keyframesMap.forEach((kf, track) => {
+            kfIcon.keyframesMap.forEach((kf, trackType) => {
                 autoTangents = kf.useAutoTangent;
-                switch (track) {
-                    case KeyframeTrackType.posXTrack:
-                        this.posXTangentInput.value = kf.tangentOut.toString();
-                        break;
-                    case KeyframeTrackType.posYTrack:
-                        this.posYTangentInput.value = kf.tangentOut.toString();
-                        break;
-                    case KeyframeTrackType.posZTrack:
-                        this.posZTangentInput.value = kf.tangentOut.toString();
-                        break;
-                    case KeyframeTrackType.lookAtXTrack:
-                        this.lookAtXTangentInput.value = kf.tangentOut.toString();
-                        break;
-                    case KeyframeTrackType.lookAtYTrack:
-                        this.lookAtYTangentInput.value = kf.tangentOut.toString();
-                        break;
-                    case KeyframeTrackType.lookAtZTrack:
-                        this.lookAtZTangentInput.value = kf.tangentOut.toString();
-                        break;
-                    case KeyframeTrackType.bankTrack:
-                        this.bankTangentInput.value = kf.tangentOut.toString();
-                        break;
-                }
+                const input = this.getTangentInput(trackType);
+                input.value = kf.tangentOut.toString();
             });
             this.useAutoTangentValuesCheckbox.setChecked(autoTangents);
             this.autoTangentCheckBoxOnChanged();
@@ -1755,72 +1754,30 @@ export class StudioPanel extends FloatingPanel {
 
     private addLoopEndFrames() {
         const time = this.timeline.getLastKeyframeTimeMs() + 5000;
-        const posXKf: Keyframe = {
-            time,
-            value: this.animation.posXTrack.keyframes[0].value,
-            tangentIn: this.animation.posXTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.posXTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.posXTrack.keyframes[0].useAutoTangent
+
+        function makeLoopKeyframe(track: KeyframeTrack): Keyframe {
+            const { value, tangentIn, tangentOut, useAutoTangent } = track.keyframes[0];
+            return { time, value, tangentIn, tangentOut, useAutoTangent };
+        }
+
+        const kfMap = new Map<KeyframeTrackType, Keyframe>();
+
+        const addLoopKeyframe = (trackType: KeyframeTrackType): void => {
+            const track = getTrackByType(this.animation, trackType);
+            const loopKeyframe = makeLoopKeyframe(track);
+            track.addKeyframe(loopKeyframe);
+            kfMap.set(trackType, loopKeyframe);
         };
-        const posYKf: Keyframe = {
-            time,
-            value: this.animation.posYTrack.keyframes[0].value,
-            tangentIn: this.animation.posYTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.posYTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.posYTrack.keyframes[0].useAutoTangent
-        };
-        const posZKf: Keyframe = {
-            time,
-            value: this.animation.posZTrack.keyframes[0].value,
-            tangentIn: this.animation.posZTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.posZTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.posZTrack.keyframes[0].useAutoTangent
-        };
-        const lookAtXKf: Keyframe = {
-            time,
-            value: this.animation.lookAtXTrack.keyframes[0].value,
-            tangentIn: this.animation.lookAtXTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.lookAtXTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.lookAtXTrack.keyframes[0].useAutoTangent
-        };
-        const lookAtYKf: Keyframe = {
-            time,
-            value: this.animation.lookAtYTrack.keyframes[0].value,
-            tangentIn: this.animation.lookAtYTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.lookAtYTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.lookAtYTrack.keyframes[0].useAutoTangent
-        };
-        const lookAtZKf: Keyframe = {
-            time,
-            value: this.animation.lookAtZTrack.keyframes[0].value,
-            tangentIn: this.animation.lookAtZTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.lookAtZTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.lookAtZTrack.keyframes[0].useAutoTangent
-        };
-        const bankKf: Keyframe = {
-            time,
-            value: this.animation.bankTrack.keyframes[0].value,
-            tangentIn: this.animation.bankTrack.keyframes[0].tangentIn,
-            tangentOut: this.animation.bankTrack.keyframes[0].tangentOut,
-            useAutoTangent: this.animation.bankTrack.keyframes[0].useAutoTangent
-        };
-        this.animation.posXTrack.addKeyframe(posXKf);
-        this.animation.posYTrack.addKeyframe(posYKf);
-        this.animation.posZTrack.addKeyframe(posZKf);
-        this.animation.lookAtXTrack.addKeyframe(lookAtXKf);
-        this.animation.lookAtYTrack.addKeyframe(lookAtYKf);
-        this.animation.lookAtZTrack.addKeyframe(lookAtZKf);
-        this.animation.bankTrack.addKeyframe(bankKf);
 
         // TODO - Handle multi-track animations
-        const kfMap = new Map<KeyframeTrackType, Keyframe>();
-        kfMap.set(KeyframeTrackType.posXTrack, posXKf);
-        kfMap.set(KeyframeTrackType.posYTrack, posYKf);
-        kfMap.set(KeyframeTrackType.posZTrack, posZKf);
-        kfMap.set(KeyframeTrackType.lookAtXTrack, lookAtXKf);
-        kfMap.set(KeyframeTrackType.lookAtYTrack, lookAtYKf);
-        kfMap.set(KeyframeTrackType.lookAtZTrack, lookAtZKf);
-        kfMap.set(KeyframeTrackType.bankTrack, bankKf);
+        addLoopKeyframe(KeyframeTrackType.posXTrack);
+        addLoopKeyframe(KeyframeTrackType.posYTrack);
+        addLoopKeyframe(KeyframeTrackType.posZTrack);
+        addLoopKeyframe(KeyframeTrackType.lookAtXTrack);
+        addLoopKeyframe(KeyframeTrackType.lookAtYTrack);
+        addLoopKeyframe(KeyframeTrackType.lookAtZTrack);
+        addLoopKeyframe(KeyframeTrackType.bankTrack);
+
         this.timeline.addKeyframeIcon(kfMap, time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, KeyframeIconType.End, false);
 
         if (time > this.timeline.getTimelineLengthMs()) {
