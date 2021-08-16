@@ -36,7 +36,10 @@ jobs:
       # an 'upgrade'.
       - run: yarn upgrade wasm-pack
 
-      - run: yarn run build
+      - run:
+          command: yarn run build
+          environment:
+            CARGO_TERM_VERBOSE: true
 
       - save_cache:
           paths:
