@@ -116,7 +116,6 @@ dependencies = [
 name = "noclip-support"
 version = "0.0.0"
 dependencies = [
- "js-sys",
  "naga",
  "wasm-bindgen",
  "web-sys",
