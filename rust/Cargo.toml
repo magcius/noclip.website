@@ -19,3 +19,6 @@ wee_alloc = { version = "0.4.2", optional = true }
 naga = { git = "https://github.com/gfx-rs/naga/", features = ["glsl-in", "wgsl-out"] }
 web-sys = { version = "0.3.48", features = ["console"] }
 js-sys = "0.3.51"
+
+[net]
+git-fetch-with-cli = true
