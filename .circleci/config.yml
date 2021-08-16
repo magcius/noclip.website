@@ -27,19 +27,12 @@ jobs:
 
       - run: yarn install
 
-      # https://andelf.github.io/blog/2016/11/18/circleci-meets-rust/
-      # https://github.com/rust-lang/cargo/issues/2078
-      - run: sed -i 's/github/git-non-exist-hub/g' ~/.gitconfig
-
       # wasm-pack is amazingly ridiculous and puts a binary in .config/, which
       # won't get cached even when node_modules does. Force it to reinstall with
       # an 'upgrade'.
       - run: yarn upgrade wasm-pack
 
-      - run:
-          command: yarn run build
-          environment:
-            CARGO_TERM_VERBOSE: "true"
+      - run: yarn run build
 
       - save_cache:
           paths:
