@@ -2518,6 +2518,7 @@ export class EntitySystem {
     }
 
     public findEntityByTargetName(targetName: string): BaseEntity | null {
+        targetName = targetName.toLowerCase();
         for (let i = 0; i < this.entities.length; i++)
             if (this.entities[i].targetName === targetName)
                 return this.entities[i];
