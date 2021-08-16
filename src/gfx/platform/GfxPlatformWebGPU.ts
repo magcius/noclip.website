@@ -125,8 +125,12 @@ function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
 function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
     if (format === GfxFormat.U8_RGBA_RT)
         return 'bgra8unorm';
+    else if (format === GfxFormat.U8_RGBA_RT_SRGB)
+        return 'bgra8unorm-srgb';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'rgba8unorm';
+    else if (format === GfxFormat.U8_RGBA_SRGB)
+        return 'rgba8unorm-srgb';
     else if (format === GfxFormat.U8_RG_NORM)
         return 'rg8unorm';
     else if (format === GfxFormat.U32_R)
@@ -167,9 +171,9 @@ function translateTextureDimension(dimension: GfxTextureDimension): GPUTextureDi
     if (dimension === GfxTextureDimension.n2D)
         return '2d';
     else if (dimension === GfxTextureDimension.Cube)
-        return '3d';
+        return '2d';
     else if (dimension === GfxTextureDimension.n2DArray)
-        return '3d';
+        return '2d';
     else if (dimension === GfxTextureDimension.n3D)
         return '3d';
     else
@@ -644,8 +648,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glslang: Glslang) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
-            wrapS: GfxWrapMode.Clamp,
-            wrapT: GfxWrapMode.Clamp,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.NoMip,
