@@ -7,22 +7,22 @@ import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleInde
 import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
-import { nArray, assert, assertExists } from "../util";
+import { nArray, assert, assertExists, leftPad } from "../util";
 import { TextureMapping } from "../TextureHolder";
-import { mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
-import { ModelHolder, MaterialDataHolder } from "./scenes";
+import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes";
 import { MSB, Part } from "./msb";
-import { getMatrixAxisZ, getMatrixTranslation, MathConstants } from "../MathHelpers";
+import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D, interactiveVizSliderSelect } from '../DebugJunk';
+import { interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { dfRange, dfShow } from "../DebugFloaters";
-import { colorNewFromRGBA } from "../Color";
+import { colorNewCopy, White } from "../Color";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -37,10 +37,12 @@ function isLODModel(name: string): boolean {
 
     const lodModels = [
         // Undead Burg / Parish
-        "m2000B1",
+        "m2340B1",
         "m2380B1",
-        "m2430B1",
+        "m2390B1",
         "m2410B1",
+        "m2430B1",
+        "m2500B1",
         "m3301B1",
         // Anor Londo
         "m8000B1_0000",
@@ -159,14 +161,14 @@ export class FLVERData {
     private indexBuffer: GfxBuffer;
     private vertexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public flver: FLVER) {
+    constructor(cache: GfxRenderCache, public flver: FLVER) {
         const vertexBufferDatas: ArrayBufferSlice[] = [];
         const indexBufferDatas: ArrayBufferSlice[] = [];
         for (let i = 0; i < flver.inputStates.length; i++) {
             vertexBufferDatas.push(flver.inputStates[i].vertexData);
             flver.inputStates[i].vertexData = null as unknown as ArrayBufferSlice;
         }
-        const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, vertexBufferDatas);
+        const vertexBuffers = coalesceBuffer(cache.device, GfxBufferUsage.Vertex, vertexBufferDatas);
         this.vertexBuffer = vertexBuffers[0].buffer;
 
         const triangleIndexCounts: number[] = [];
@@ -183,17 +185,17 @@ export class FLVERData {
             }
         }
 
-        const indexBuffers = coalesceBuffer(device, GfxBufferUsage.Index, indexBufferDatas);
+        const indexBuffers = coalesceBuffer(cache.device, GfxBufferUsage.Index, indexBufferDatas);
         this.indexBuffer = indexBuffers[0].buffer;
 
         for (let i = 0; i < flver.batches.length; i++) {
             const batch = flver.batches[i];
             const coaVertexBuffer = vertexBuffers[batch.inputStateIndex];
-            const batchData = new BatchData(device, cache, this, batch, coaVertexBuffer, indexBuffers, triangleIndexCounts);
+            const batchData = new BatchData(cache.device, cache, this, batch, coaVertexBuffer, indexBuffers, triangleIndexCounts);
             this.batchData.push(batchData);
         }
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,
@@ -207,7 +209,6 @@ export class FLVERData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroySampler(this.gfxSampler);
 
         for (let i = 0; i < this.batchData.length; i++)
             this.batchData[i].destroy(device);
@@ -237,8 +238,25 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_CameraPosWorld;
 };
 
-struct DirectionalLight {
-    vec4 DirWorld;
+struct HemisphereLight {
+    vec4 ColorU;
+    vec4 ColorD;
+};
+
+struct PointLight {
+    vec4 PositionAttenStart;
+    vec4 ColorAttenEnd;
+};
+
+struct ToneCorrectParams {
+    vec4 BrightnessSaturation;
+    vec4 ContrastHue;
+};
+
+struct FogParams {
+    // BeginZ, EndZ
+    vec4 Misc;
+    // R, G, B, MaxDensity
     vec4 Color;
 };
 
@@ -247,7 +265,12 @@ layout(std140) uniform ub_MeshFragParams {
     vec4 u_DiffuseMapColor;
     // Fourth element has g_SpecularPower
     vec4 u_SpecularMapColor;
-    DirectionalLight u_DirectionalLight;
+    vec4 u_EnvDifColor;
+    vec4 u_EnvSpcColor;
+    HemisphereLight u_HemisphereLight;
+    PointLight u_PointLights[1];
+    ToneCorrectParams u_ToneCorrectParams;
+    FogParams u_FogParams;
     // g_TexScroll0, g_TexScroll1
     // g_TexScroll2,
     vec4 u_Misc[2];
@@ -266,6 +289,9 @@ uniform sampler2D u_Texture4;
 uniform sampler2D u_Texture5;
 uniform sampler2D u_Texture6;
 uniform sampler2D u_Texture7;
+
+uniform samplerCube u_TextureEnvDif;
+uniform samplerCube u_TextureEnvSpc;
 `;
 
     public both = `
@@ -314,14 +340,17 @@ void main() {
     vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0));
     vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0));
 
+    t_NormalWorld.x *= -1.0;
+    t_TangentSWorld.x *= -1.0;
+
 #ifdef HAS_BITANGENT
-    vec3 t_TangentTWorld = UNORM_TO_SNORM(a_Bitangent.xyz);
+    vec3 t_TangentTWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0));
 #else
     vec3 t_TangentTWorld = normalize(cross(t_NormalWorld, t_TangentSWorld));
 #endif
 
-    v_TangentSpaceBasis0 = t_TangentSWorld;
-    v_TangentSpaceBasis1 = t_TangentTWorld * sign(UNORM_TO_SNORM(a_Tangent.w));
+    v_TangentSpaceBasis0 = t_TangentTWorld * sign(UNORM_TO_SNORM(a_Tangent.w));
+    v_TangentSpaceBasis1 = t_TangentSWorld;
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_Color = a_Color;
@@ -355,6 +384,8 @@ void main() {
         const diffuse2 = this.getTexture('g_Diffuse_2');
 
         const diffuseEpi = `
+    if (!t_DiffuseMapEnabled)
+        t_Diffuse.rgb = vec3(1.0);
     t_Diffuse.rgb *= u_DiffuseMapColor.rgb;
 `;
 
@@ -374,6 +405,7 @@ ${diffuseEpi}
         } else {
             return `
     vec4 t_Diffuse = vec4(1.0);
+${diffuseEpi}
 `;
         }
     }
@@ -440,7 +472,8 @@ ${bumpmapEpi}
 
         if (lightmap !== null) {
             return `
-    t_IncomingDiffuseRadiance += ${this.buildTexAccess(lightmap)}.rgb;
+    if (t_LightmapEnabled)
+        t_IncomingDiffuseRadiance *= ${this.buildTexAccess(lightmap)}.rgb;
 `;
         } else {
             return '';
@@ -462,6 +495,9 @@ ${bumpmapEpi}
 
     private genFrag(): string {
         return `
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
 vec3 DecodeNormalMap(vec3 t_NormalMapIn) {
     // Decode two-channel normal map
     vec3 t_NormalMap;
@@ -474,11 +510,81 @@ vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in
     return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 + t_MapNormal.zzz * t_Basis2;
 }
 
+// https://gamedev.stackexchange.com/a/59808
+vec3 RGBtoHSV(in vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 HSVtoRGB(in vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+void CalcToneCorrect(inout vec3 t_Color, in ToneCorrectParams t_Params) {
+    vec3  t_Brightness = t_Params.BrightnessSaturation.xyz;
+    float t_Saturation = t_Params.BrightnessSaturation.w;
+    vec3  t_Contrast   = t_Params.ContrastHue.xyz;
+    float t_Hue        = t_Params.ContrastHue.w;
+
+    // Apply Brightness and Contrast
+    t_Color.rgb = ((t_Color.rgb * t_Brightness.rgb) - vec3(0.5)) * t_Contrast.rgb + vec3(0.5);
+
+    vec3 t_HSV = RGBtoHSV(t_Color);
+    t_HSV.x += (t_Hue / 360.0);
+    t_HSV.y *= t_Saturation;
+    t_Color = HSVtoRGB(t_HSV);
+}
+
+void CalcToneMap(inout vec3 t_Color) {
+    // Some form of crummy tone mapping to brighten up the image.
+    t_Color = t_Color * vec3(1.2) + vec3(0.05);
+}
+
+void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWorld) {
+    float t_FogBeginZ = t_FogParams.Misc.x;
+    float t_FogEndZ = t_FogParams.Misc.y;
+    vec3 t_FogColor = t_FogParams.Color.rgb;
+    float t_FogMaxDensity = t_FogParams.Color.a;
+
+    float t_DistanceWorld = distance(t_PositionWorld.xyz, u_CameraPosWorld.xyz);
+    float t_FogFactor = saturate(invlerp(t_FogBeginZ, t_FogEndZ, t_DistanceWorld));
+    t_FogFactor = min(t_FogFactor, t_FogMaxDensity);
+
+    t_FogFactor *= t_FogFactor;
+
+    t_Color.rgb = mix(t_Color.rgb, t_FogColor.rgb, t_FogFactor);
+}
+
+vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
+    return (2.0 * (dot(t_NormalWorld, t_PositionToEye)) * t_NormalWorld) - (dot(t_NormalWorld, t_NormalWorld) * t_PositionToEye);
+}
+
+vec3 CalcPointLightDiffuse(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
+    vec3 t_LightPosition = t_PointLight.PositionAttenStart.xyz;
+    vec3 t_LightColor = t_PointLight.ColorAttenEnd.rgb;
+    float t_AttenStart = t_PointLight.PositionAttenStart.w;
+    float t_AttenEnd = t_PointLight.ColorAttenEnd.w;
+
+    vec3 t_Delta = t_LightPosition - t_PositionWorld.xyz;
+    float t_DistAtten = saturate(invlerp(t_AttenEnd, t_AttenStart, length(t_Delta)));
+    float t_DotAtten = saturate(dot(normalize(t_Delta), t_NormalWorld));
+
+    return t_LightColor * t_DistAtten * t_DotAtten;
+}
+
 void main() {
+    bool t_DiffuseMapEnabled = true;
+    bool t_LightmapEnabled = true;
+
     vec4 t_Color = vec4(1.0);
     float t_Blend = v_Color.a;
-
-    t_Color *= v_Color;
 
     ${this.genDiffuse()}
 
@@ -487,36 +593,40 @@ void main() {
 
     vec3 t_IncomingDiffuseRadiance = vec3(0.0);
     vec3 t_IncomingSpecularRadiance = vec3(0.0);
-    vec3 t_IncomingIndirectRadiance = vec3(0.0);
 
     ${this.genNormalDir()}
     t_NormalDirWorld *= gl_FrontFacing ? 1.0 : -1.0;
 
-    // Basic directional light.
-    // TODO(jstpierre): Read environment maps.
-    vec3 t_LightDirWorld = -u_DirectionalLight.DirWorld.xyz;
-    vec3 t_LightColor = u_DirectionalLight.Color.rgb;
+    // Environment light.
+    t_IncomingDiffuseRadiance += texture(SAMPLER_Cube(u_TextureEnvDif), t_NormalDirWorld).rgb * u_EnvDifColor.rgb;
+    // Light map only applies to the environment light.
+    ${this.genLightMap()}
 
-    float t_DiffuseIntensity = max(dot(t_NormalDirWorld, t_LightDirWorld), 0.0);
-    t_IncomingDiffuseRadiance += t_LightColor * t_DiffuseIntensity;
+    for (int i = 0; i < 1; i++)
+        t_IncomingDiffuseRadiance += CalcPointLightDiffuse(u_PointLights[i], v_PositionWorld.xyz, t_NormalDirWorld.xyz);
 
+    // Hemisphere light for ambient.
+    float t_DiffuseIntensity = dot(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
+    t_IncomingDiffuseRadiance += mix(u_HemisphereLight.ColorD.rgb, u_HemisphereLight.ColorU.rgb, t_DiffuseIntensity * 0.5 + 0.5);
+
+    /*
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
 
-    // Fake ambient with a sun color.
-    t_IncomingIndirectRadiance += vec3(0.92, 0.95, 0.85) * 0.4;
+    vec3 t_Reflection = CalcReflection(t_NormalDirWorld.xyz, t_WorldDirectionToEye);
+    // t_IncomingSpecularRadiance += texture(SAMPLER_Cube(u_TextureEnvSpc), t_NormalDirWorld).rgb * u_
 
     if (t_DiffuseIntensity > 0.0) {
-        vec3 t_ReflectanceDir = reflect(-t_LightDirWorld, t_NormalDirWorld);
+        vec3 t_ReflectanceDir = CalcReflection(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
         float t_SpecularIntensity = pow(max(dot(t_ReflectanceDir, t_WorldDirectionToEye), 0.0), u_SpecularPower);
-        t_IncomingSpecularRadiance += t_LightColor * t_SpecularIntensity;
+        vec3 t_LightColor = vec3(u_HemisphereLight.ColorU.rgb);
+        t_IncomingSpecularRadiance += t_LightColor.rgb * t_SpecularIntensity;
     }
-
-    ${this.genLightMap()}
+    */
 
     ${this.genSpecular()}
 
-    t_OutgoingLight += t_Diffuse.rgb * (t_IncomingDiffuseRadiance + t_IncomingIndirectRadiance);
+    t_OutgoingLight += t_Diffuse.rgb * t_IncomingDiffuseRadiance;
     t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
 
     t_Color.rgb *= t_OutgoingLight;
@@ -526,26 +636,11 @@ void main() {
 #endif
 
     t_Color *= v_Color;
-
     ${this.genAlphaTest()}
 
-#ifdef USE_LIGHTING
-    int t_Debug = 0;
-
-    if (t_Debug == 1)
-        t_Color.rgba = vec4(t_NormalDirWorld.xyz * 0.5 + 0.5, 1.0);
-    else if (t_Debug == 2)
-        t_Color.rgba = vec4(v_TangentSpaceBasis0 * 0.5 + 0.5, 1.0); // TangentS
-    else if (t_Debug == 3)
-        t_Color.rgba = vec4(v_TangentSpaceBasis1 * 0.5 + 0.5, 1.0); // TangentT
-    else if (t_Debug == 4)
-        t_Color.rgba = vec4(v_TangentSpaceBasis2 * 0.5 + 0.5, 1.0); // Normal
-    else if (t_Debug == 5)
-        t_Color.rgba = vec4(t_IncomingDiffuseRadiance, 1.0);
-#endif
-
-    // Convert to gamma-space
-    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
+    CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
+    CalcToneMap(t_Color.rgb);
+    CalcFog(t_Color.rgb, u_FogParams, v_PositionWorld.xyz);
 
     gl_FragColor = t_Color;
 }
@@ -627,10 +722,10 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 class BatchInstance {
     private visible = true;
-    private diffuseColor = vec3.fromValues(1, 1, 1);
-    private specularColor = vec4.fromValues(0, 0, 0, 0);
+    private diffuseMapColor = vec3.fromValues(1, 1, 1);
+    private specularMapColor = vec4.fromValues(0, 0, 0, 0);
     private texScroll = nArray(3, () => vec2.create());
-    private textureMapping = nArray(8, () => new TextureMapping());
+    private textureMapping = nArray(10, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
     private program: DKSProgram;
     private gfxProgram: GfxProgram;
@@ -707,18 +802,18 @@ class BatchInstance {
         const diffuseMapColor = getMaterialParam(mtd, 'g_DiffuseMapColor');
         if (diffuseMapColor !== null) {
             const diffuseMapColorPower = assertExists(getMaterialParam(mtd, `g_DiffuseMapColorPower`))[0];
-            vec3.set(this.diffuseColor, diffuseMapColor[0] * diffuseMapColorPower, diffuseMapColor[1] * diffuseMapColorPower, diffuseMapColor[2] * diffuseMapColorPower);
+            vec3.set(this.diffuseMapColor, diffuseMapColor[0] * diffuseMapColorPower, diffuseMapColor[1] * diffuseMapColorPower, diffuseMapColor[2] * diffuseMapColorPower);
         }
 
         const specularMapColor = getMaterialParam(mtd, 'g_SpecularMapColor');
         if (specularMapColor !== null) {
             const specularMapColorPower = assertExists(getMaterialParam(mtd, `g_SpecularMapColorPower`))[0];
-            vec4.set(this.specularColor, specularMapColor[0] * specularMapColorPower, specularMapColor[1] * specularMapColorPower, specularMapColor[2] * specularMapColorPower, 0);
+            vec4.set(this.specularMapColor, specularMapColor[0] * specularMapColorPower, specularMapColor[1] * specularMapColorPower, specularMapColor[2] * specularMapColorPower, 0);
         }
 
         const specularPower = getMaterialParam(mtd, 'g_SpecularPower');
         if (specularPower !== null)
-            this.specularColor[3] = specularPower[0];
+            this.specularMapColor[3] = specularPower[0];
 
         for (let i = 0; i < 3; i++) {
             const param = getMaterialParam(mtd, `g_TexScroll_${i}`);
@@ -733,9 +828,12 @@ class BatchInstance {
         this.sortKey = makeSortKey(layer, 0);
     }
 
-    public prepareToRender(renderContext: RenderContext, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: ReadonlyMat4, materialDrawConfig: MaterialDrawConfig): void {
         if (!this.visible)
             return;
+
+        this.textureMapping[8].gfxTexture = materialDrawConfig.envDifTexture.gfxTexture;
+        this.textureMapping[9].gfxTexture = materialDrawConfig.envSpc0Texture.gfxTexture;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -743,15 +841,21 @@ class BatchInstance {
         template.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputState);
         template.setMegaStateFlags(this.megaState);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*6);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*14);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
-        offs += fillVec3v(d, offs, this.diffuseColor);
-        offs += fillVec4v(d, offs, this.specularColor);
+        offs += fillVec3v(d, offs, this.diffuseMapColor);
+        offs += fillVec4v(d, offs, this.specularMapColor);
+        offs += fillColor(d, offs, materialDrawConfig.envDifColor);
+        offs += fillColor(d, offs, materialDrawConfig.envSpcColor);
 
-        offs += renderContext.directionalLight.fill(d, offs);
+        offs += materialDrawConfig.hemisphereLight.fill(d, offs);
+        for (let i = 0; i < materialDrawConfig.pointLight.length; i++)
+            offs += materialDrawConfig.pointLight[i].fill(d, offs);
+        offs += materialDrawConfig.toneCorrectParams.fill(d, offs);
+        offs += materialDrawConfig.fogParams.fill(d, offs);
 
         const scrollTime = viewerInput.time / 240;
         offs += fillVec4(d, offs,
@@ -781,14 +885,142 @@ class BatchInstance {
     }
 }
 
+class HemisphereLight {
+    public colorU = colorNewCopy(White);
+    public colorD = colorNewCopy(White);
+
+    public fill(d: Float32Array, offs: number): number {
+        const baseOffs = offs;
+        offs += fillColor(d, offs, this.colorU);
+        offs += fillColor(d, offs, this.colorD);
+        return offs - baseOffs;
+    }
+}
+
+class PointLight {
+    public attenStart = 0;
+    public attenEnd = 0;
+    public position = vec3.create();
+    public color = colorNewCopy(White);
+
+    public fill(d: Float32Array, offs: number): number {
+        const baseOffs = offs;
+        offs += fillVec3v(d, offs, this.position, this.attenStart);
+        this.color.a = this.attenEnd;
+        offs += fillColor(d, offs, this.color);
+        return offs - baseOffs;
+    }
+}
+
+class ToneCorrectParams {
+    public brightnessSaturation = vec4.create();
+    public contrastHue = vec4.create();
+
+    public fill(d: Float32Array, offs: number): number {
+        const baseOffs = offs;
+        offs += fillVec4v(d, offs, this.brightnessSaturation);
+        offs += fillVec4v(d, offs, this.contrastHue);
+        return offs - baseOffs;
+    }
+}
+
+class FogParams {
+    public fogBeginZ = 0;
+    public fogEndZ = 0;
+    public color = colorNewCopy(White);
+
+    public fill(d: Float32Array, offs: number): number {
+        const baseOffs = offs;
+        offs += fillVec4(d, offs, this.fogBeginZ, this.fogEndZ);
+        offs += fillColor(d, offs, this.color);
+        return offs - baseOffs;
+    }
+}
+
+class MaterialDrawConfig {
+    public envDifTexture = new TextureMapping();
+    public envSpc0Texture = new TextureMapping();
+    public envDifColor = colorNewCopy(White);
+    public envSpcColor = colorNewCopy(White);
+
+    public hemisphereLight = new HemisphereLight();
+    public pointLight = nArray(1, () => new PointLight());
+    public toneCorrectParams = new ToneCorrectParams();
+    public fogParams = new FogParams();
+}
+
+function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: DrawParamBank, textureHolder: DDSTextureHolder): void {
+    const lightBank = bank.lightBank;
+    const lightID = part.lightID;
+
+    const envDifTexName = `envdif_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envDif`), 3)}`;
+    textureHolder.fillTextureMapping(dst.envDifTexture, envDifTexName);
+    const envDifColorMul = lightBank.getS16(lightID, 'envDif_colA') / 100;
+    dst.envDifColor.r = (lightBank.getS16(lightID, 'envDif_colR') / 255) * envDifColorMul;
+    dst.envDifColor.g = (lightBank.getS16(lightID, 'envDif_colG') / 255) * envDifColorMul;
+    dst.envDifColor.b = (lightBank.getS16(lightID, 'envDif_colB') / 255) * envDifColorMul;
+    const envSpc0TexName = `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_0`), 3)}`;
+    textureHolder.fillTextureMapping(dst.envSpc0Texture, envSpc0TexName);
+    const envSpcColorMul = lightBank.getS16(lightID, 'envSpc_colA') / 100;
+    dst.envSpcColor.r = (lightBank.getS16(lightID, 'envSpc_colR') / 255) * envSpcColorMul;
+    dst.envSpcColor.g = (lightBank.getS16(lightID, 'envSpc_colG') / 255) * envSpcColorMul;
+    dst.envSpcColor.b = (lightBank.getS16(lightID, 'envSpc_colB') / 255) * envSpcColorMul;
+
+    const dstHemi = dst.hemisphereLight;
+    const colorUMul = lightBank.getS16(lightID, 'colA_u') / 100;
+    dstHemi.colorU.r = (lightBank.getS16(lightID, 'colR_u') / 255) * colorUMul;
+    dstHemi.colorU.g = (lightBank.getS16(lightID, 'colG_u') / 255) * colorUMul;
+    dstHemi.colorU.b = (lightBank.getS16(lightID, 'colB_u') / 255) * colorUMul;
+    const colorDMul = lightBank.getS16(lightID, 'colA_d') / 100;
+    dstHemi.colorD.r = (lightBank.getS16(lightID, 'colR_d') / 255) * colorDMul;
+    dstHemi.colorD.g = (lightBank.getS16(lightID, 'colG_d') / 255) * colorDMul;
+    dstHemi.colorD.b = (lightBank.getS16(lightID, 'colB_d') / 255) * colorDMul;
+
+    const toneCorrectBank = bank.toneCorrectBank;
+    const toneCorrectID = part.toneCorrectID;
+    const dstTone = dst.toneCorrectParams;
+    dstTone.brightnessSaturation[0] = toneCorrectBank.getF32(toneCorrectID, 'brightnessR');
+    dstTone.brightnessSaturation[1] = toneCorrectBank.getF32(toneCorrectID, 'brightnessG');
+    dstTone.brightnessSaturation[2] = toneCorrectBank.getF32(toneCorrectID, 'brightnessB');
+    dstTone.brightnessSaturation[3] = toneCorrectBank.getF32(toneCorrectID, 'saturation');
+    dstTone.contrastHue[0] = toneCorrectBank.getF32(toneCorrectID, 'contrastR');
+    dstTone.contrastHue[1] = toneCorrectBank.getF32(toneCorrectID, 'contrastG');
+    dstTone.contrastHue[2] = toneCorrectBank.getF32(toneCorrectID, 'contrastB');
+    dstTone.contrastHue[3] = toneCorrectBank.getF32(toneCorrectID, 'hue');
+
+    const fogBank = bank.fogBank;
+    const fogID = part.fogID;
+    const dstFog = dst.fogParams;
+    dstFog.fogBeginZ = fogBank.getS16(fogID, `fogBeginZ`);
+    dstFog.fogEndZ = fogBank.getS16(fogID, `fogEndZ`);
+    const fogColorMul = fogBank.getS16(fogID, `colA`) / 100;
+    dstFog.color.r = (fogBank.getS16(fogID, `colR`) / 255) * fogColorMul;
+    dstFog.color.g = (fogBank.getS16(fogID, `colG`) / 255) * fogColorMul;
+    dstFog.color.b = (fogBank.getS16(fogID, `colB`) / 255) * fogColorMul;
+    dstFog.color.a = saturate(fogBank.getS16(fogID, `degRotW`) / 100);
+
+    const pointLightBank = bank.pointLightBank;
+    const lanternID = part.lanternID;
+    const dstLantern = dst.pointLight[0];
+    dstLantern.attenStart = pointLightBank.getF32(lanternID, `dwindleBegin`);
+    dstLantern.attenEnd = pointLightBank.getF32(lanternID, `dwindleEnd`);
+    const lanternColorMul = pointLightBank.getS16(lanternID, `colA`) / 100;
+    dstLantern.color.r = (pointLightBank.getS16(lanternID, `colR`) / 255) * lanternColorMul;
+    dstLantern.color.g = (pointLightBank.getS16(lanternID, `colG`) / 255) * lanternColorMul;
+    dstLantern.color.b = (pointLightBank.getS16(lanternID, `colB`) / 255) * lanternColorMul;
+}
+
 const bboxScratch = new AABB();
-export class FLVERInstance {
+export class PartInstance {
     private batchInstances: BatchInstance[] = [];
     public modelMatrix = mat4.create();
     public visible = true;
     public name: string;
+    public materialDrawConfig = new MaterialDrawConfig();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, drawParamBank: DrawParamBank, public flverData: FLVERData, public part: Part) {
+        drawParamBankCalcConfig(this.materialDrawConfig, this.part, drawParamBank, textureHolder);
+
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
             const batchData = this.flverData.batchData[i];
             const batch = batchData.batch;
@@ -806,7 +1038,7 @@ export class FLVERInstance {
         this.visible = v;
     }
 
-    public prepareToRender(renderContext: RenderContext, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
@@ -814,8 +1046,12 @@ export class FLVERInstance {
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
 
+        getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+        getMatrixAxisZ(scratchVec3b, viewerInput.camera.worldMatrix);
+        vec3.scaleAndAdd(this.materialDrawConfig.pointLight[0].position, scratchVec3a, scratchVec3b, -2);
+
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(renderContext, device, renderInstManager, viewerInput, this.modelMatrix);
+            this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, this.materialDrawConfig);
     }
 }
 
@@ -826,14 +1062,12 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 8 },
+    { numUniformBuffers: 2, numSamplers: 10 },
 ];
 
 function modelMatrixFromPart(m: mat4, part: Part): void {
-    const modelScale = 100;
-
     // Game uses +x = left convention for some reason.
-    mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
+    mat4.scale(m, m, [-1, 1, 1]);
 
     mat4.translate(m, m, part.translation);
     mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
@@ -842,43 +1076,10 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
     mat4.scale(m, m, part.scale);
 }
 
-class DirectionalLight {
-    @dfShow()
-    @dfRange(-1, 1, 0.01)
-    public dirWorld = vec3.fromValues(-0.4, -0.8, -0.4);
-    @dfRange(0, 2, 0.01)
-    public color = colorNewFromRGBA(0.90 * 2.0, 0.95 * 2.0, 0.95 * 2.0);
-
-    public debugDraw(camera: Camera): void {
-        getMatrixTranslation(scratchVec3a, camera.worldMatrix);
-        getMatrixAxisZ(scratchVec3b, camera.worldMatrix);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -100);
-        const mag = 100;
-        vec3.normalize(scratchVec3b, this.dirWorld);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -mag);
-        drawWorldSpaceVector(getDebugOverlayCanvas2D(), camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, mag * 2, this.color, 8);
-    }
-
-    public fill(d: Float32Array, offs: number): number {
-        vec3.normalize(scratchVec3b, this.dirWorld);
-        offs += fillVec3v(d, offs, scratchVec3b);
-        offs += fillColor(d, offs, this.color);
-        return 8;
-    }
-}
-
-export class RenderContext {
-    public directionalLight = new DirectionalLight();
-
-    public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
-        // this.directionalLight.debugDraw(viewerInput.camera);
-    }
-}
-
 export class MSBRenderer {
-    public flverInstances: FLVERInstance[] = [];
+    public flverInstances: PartInstance[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private msb: MSB) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private drawParamBank: DrawParamBank, private msb: MSB) {
         for (let i = 0; i < msb.parts.length; i++) {
             const part = msb.parts[i];
             if (part.type === 0) {
@@ -886,7 +1087,7 @@ export class MSBRenderer {
                 if (flverData === undefined)
                     continue;
 
-                const instance = new FLVERInstance(device, cache, this.textureHolder, this.materialDataHolder, flverData);
+                const instance = new PartInstance(device, cache, this.textureHolder, this.materialDataHolder, this.drawParamBank, flverData, part);
                 instance.visible = !isLODModel(part.name);
                 instance.name = part.name;
                 modelMatrixFromPart(instance.modelMatrix, part);
@@ -895,14 +1096,9 @@ export class MSBRenderer {
         }
     }
 
-    public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(20/60);
-    }
-
     private lodModels: string[] = [];
     public chooseLODModel(): void {
-        interactiveVizSliderSelect(this.flverInstances, 'visible', (index) => {
-            const instance = this.flverInstances[index];
+        interactiveVizSliderSelect(this.flverInstances, 'visible', (instance) => {
             this.lodModels.push(instance.name);
             setTimeout(() => { instance.visible = false; }, 2000);
 
@@ -910,7 +1106,7 @@ export class MSBRenderer {
         });
     }
 
-    public prepareToRender(renderContext: RenderContext, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
@@ -919,7 +1115,7 @@ export class MSBRenderer {
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].prepareToRender(renderContext, device, renderInstManager, viewerInput);
+            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
     }
