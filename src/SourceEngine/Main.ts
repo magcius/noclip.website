@@ -510,6 +510,8 @@ export class SourceEngineView {
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
 
+    public clipSpaceNearZ: GfxClipSpaceNearZ;
+
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
     public lookAtPos = vec3.create();
@@ -527,7 +529,7 @@ export class SourceEngineView {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
-        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
         this.frustum.newFrame();
     }
 
@@ -538,6 +540,7 @@ export class SourceEngineView {
     }
 
     public setupFromCamera(camera: Camera): void {
+        this.clipSpaceNearZ = camera.clipSpaceNearZ;
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();
