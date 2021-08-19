@@ -160,8 +160,10 @@ class DKSRenderer implements Viewer.SceneGfx {
 export class DrawParamBank {
     public fogBank: ParamFile;
     public lightBank: ParamFile;
+    public lightScatteringBank: ParamFile;
     public pointLightBank: ParamFile;
     public toneCorrectBank: ParamFile;
+    public toneMapBank: ParamFile;
 
     constructor(resourceSystem: ResourceSystem, areaID: string, bankID: number = 0) {
         const aid = `a${areaID.slice(1, 3)}`;
@@ -179,8 +181,10 @@ export class DrawParamBank {
 
         this.fogBank = createParamFile(`FogBank`);
         this.lightBank = createParamFile(`LightBank`);
-        this.toneCorrectBank = createParamFile(`ToneCorrectBank`);
+        this.lightScatteringBank = createParamFile(`LightScatteringBank`);
         this.pointLightBank = createParamFile(`PointLightBank`);
+        this.toneCorrectBank = createParamFile(`ToneCorrectBank`);
+        this.toneMapBank = createParamFile(`ToneMapBank`);
     }
 
     public static fetchResources(resourceSystem: ResourceSystem, areaID: string): void {

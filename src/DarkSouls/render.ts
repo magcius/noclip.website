@@ -998,6 +998,8 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     const dstLantern = dst.pointLight[0];
     dstLantern.attenStart = pointLightBank.getF32(lanternID, `dwindleBegin`);
     dstLantern.attenEnd = pointLightBank.getF32(lanternID, `dwindleEnd`);
+    // noclip modification: to aid large-scale exploration, we up the attenEnd quite a bit
+    dstLantern.attenEnd *= 3;
     const lanternColorMul = pointLightBank.getS16(lanternID, `colA`) / 100;
     dstLantern.color.r = (pointLightBank.getS16(lanternID, `colR`) / 255) * lanternColorMul;
     dstLantern.color.g = (pointLightBank.getS16(lanternID, `colG`) / 255) * lanternColorMul;
