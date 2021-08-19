@@ -514,7 +514,6 @@ export class SourceEngineView {
 
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
-    public lookAtPos = vec3.create();
 
     // Frustum is stored in Source engine world space.
     public frustum = new Frustum();

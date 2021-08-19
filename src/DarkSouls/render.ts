@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
@@ -11,9 +11,9 @@ import { nArray, assert, assertExists, leftPad } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
-import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
+import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { AABB } from "../Geometry";
+import { AABB, Frustum } from "../Geometry";
 import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes";
 import { MSB, Part } from "./msb";
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers";
@@ -340,9 +340,6 @@ void main() {
     vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0));
     vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0));
 
-    t_NormalWorld.x *= -1.0;
-    t_TangentSWorld.x *= -1.0;
-
 #ifdef HAS_BITANGENT
     vec3 t_TangentTWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0));
 #else
@@ -472,8 +469,10 @@ ${bumpmapEpi}
 
         if (lightmap !== null) {
             return `
-    if (t_LightmapEnabled)
-        t_IncomingDiffuseRadiance *= ${this.buildTexAccess(lightmap)}.rgb;
+    if (t_LightmapEnabled) {
+        t_IncomingDiffuseRadiance.rgb *= ${this.buildTexAccess(lightmap)}.rgb;
+        t_IncomingSpecularRadiance.rgb *= ${this.buildTexAccess(lightmap)}.rgb;
+    }
 `;
         } else {
             return '';
@@ -562,10 +561,6 @@ void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWor
     t_Color.rgb = mix(t_Color.rgb, t_FogColor.rgb, t_FogFactor);
 }
 
-vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
-    return (2.0 * (dot(t_NormalWorld, t_PositionToEye)) * t_NormalWorld) - (dot(t_NormalWorld, t_NormalWorld) * t_PositionToEye);
-}
-
 vec3 CalcPointLightDiffuse(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
     vec3 t_LightPosition = t_PointLight.PositionAttenStart.xyz;
     vec3 t_LightColor = t_PointLight.ColorAttenEnd.rgb;
@@ -598,31 +593,25 @@ void main() {
     t_NormalDirWorld *= gl_FrontFacing ? 1.0 : -1.0;
 
     // Environment light.
-    t_IncomingDiffuseRadiance += texture(SAMPLER_Cube(u_TextureEnvDif), t_NormalDirWorld).rgb * u_EnvDifColor.rgb;
-    // Light map only applies to the environment light.
+    t_IncomingDiffuseRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvDif), t_NormalDirWorld).rgb * u_EnvDifColor.rgb;
+
+    // TODO(jstpierre): This reflection calculation isn't 100% correct.
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
+    vec3 t_Reflection = reflect(-t_WorldDirectionToEye.xyz, t_NormalDirWorld.xyz);
+    t_IncomingSpecularRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvSpc), t_Reflection.xyz).rgb * u_EnvSpcColor.rgb;
+
+    // Light map (really a baked indirect shadow map...) only applies to the environment light.
     ${this.genLightMap()}
 
-    for (int i = 0; i < 1; i++)
-        t_IncomingDiffuseRadiance += CalcPointLightDiffuse(u_PointLights[i], v_PositionWorld.xyz, t_NormalDirWorld.xyz);
+    for (int i = 0; i < 1; i++) {
+        t_IncomingDiffuseRadiance.rgb += CalcPointLightDiffuse(u_PointLights[i], v_PositionWorld.xyz, t_NormalDirWorld.xyz);
+        // TODO(jstpierre): Point light specular
+    }
 
     // Hemisphere light for ambient.
     float t_DiffuseIntensity = dot(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
     t_IncomingDiffuseRadiance += mix(u_HemisphereLight.ColorD.rgb, u_HemisphereLight.ColorU.rgb, t_DiffuseIntensity * 0.5 + 0.5);
-
-    /*
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-
-    vec3 t_Reflection = CalcReflection(t_NormalDirWorld.xyz, t_WorldDirectionToEye);
-    // t_IncomingSpecularRadiance += texture(SAMPLER_Cube(u_TextureEnvSpc), t_NormalDirWorld).rgb * u_
-
-    if (t_DiffuseIntensity > 0.0) {
-        vec3 t_ReflectanceDir = CalcReflection(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
-        float t_SpecularIntensity = pow(max(dot(t_ReflectanceDir, t_WorldDirectionToEye), 0.0), u_SpecularPower);
-        vec3 t_LightColor = vec3(u_HemisphereLight.ColorU.rgb);
-        t_IncomingSpecularRadiance += t_LightColor.rgb * t_SpecularIntensity;
-    }
-    */
 
     ${this.genSpecular()}
 
@@ -828,12 +817,15 @@ class BatchInstance {
         this.sortKey = makeSortKey(layer, 0);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: ReadonlyMat4, materialDrawConfig: MaterialDrawConfig): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, view: CameraView, modelMatrix: ReadonlyMat4, materialDrawConfig: MaterialDrawConfig): void {
         if (!this.visible)
             return;
 
         this.textureMapping[8].gfxTexture = materialDrawConfig.envDifTexture.gfxTexture;
-        this.textureMapping[9].gfxTexture = materialDrawConfig.envSpc0Texture.gfxTexture;
+
+        const envSpcSlotNo = getMaterialParam(this.mtd, `g_EnvSpcSlotNo`);
+        if (envSpcSlotNo !== null)
+            this.textureMapping[9].gfxTexture = materialDrawConfig.envSpcTexture[envSpcSlotNo[0]].gfxTexture;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -866,7 +858,8 @@ class BatchInstance {
             scrollTime * this.texScroll[2][0], scrollTime * this.texScroll[2][1],
         );
 
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+        bboxScratch.centerPoint(scratchVec3a);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, scratchVec3a);
 
         for (let j = 0; j < this.batchData.batch.primitiveIndexes.length; j++) {
             const primitive = this.flverData.flver.primitives[this.batchData.batch.primitiveIndexes[j]];
@@ -939,7 +932,7 @@ class FogParams {
 
 class MaterialDrawConfig {
     public envDifTexture = new TextureMapping();
-    public envSpc0Texture = new TextureMapping();
+    public envSpcTexture = nArray(4, () => new TextureMapping());
     public envDifColor = colorNewCopy(White);
     public envSpcColor = colorNewCopy(White);
 
@@ -953,14 +946,16 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     const lightBank = bank.lightBank;
     const lightID = part.lightID;
 
-    const envDifTexName = `envdif_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envDif`), 3)}`;
-    textureHolder.fillTextureMapping(dst.envDifTexture, envDifTexName);
+    textureHolder.fillTextureMapping(dst.envDifTexture, `envdif_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envDif`), 3)}`);
     const envDifColorMul = lightBank.getS16(lightID, 'envDif_colA') / 100;
     dst.envDifColor.r = (lightBank.getS16(lightID, 'envDif_colR') / 255) * envDifColorMul;
     dst.envDifColor.g = (lightBank.getS16(lightID, 'envDif_colG') / 255) * envDifColorMul;
     dst.envDifColor.b = (lightBank.getS16(lightID, 'envDif_colB') / 255) * envDifColorMul;
-    const envSpc0TexName = `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_0`), 3)}`;
-    textureHolder.fillTextureMapping(dst.envSpc0Texture, envSpc0TexName);
+
+    textureHolder.fillTextureMapping(dst.envSpcTexture[0], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_0`), 3)}`);
+    textureHolder.fillTextureMapping(dst.envSpcTexture[1], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_1`), 3)}`);
+    textureHolder.fillTextureMapping(dst.envSpcTexture[2], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_2`), 3)}`);
+    textureHolder.fillTextureMapping(dst.envSpcTexture[3], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_3`), 3)}`);
     const envSpcColorMul = lightBank.getS16(lightID, 'envSpc_colA') / 100;
     dst.envSpcColor.r = (lightBank.getS16(lightID, 'envSpc_colR') / 255) * envSpcColorMul;
     dst.envSpcColor.g = (lightBank.getS16(lightID, 'envSpc_colG') / 255) * envSpcColorMul;
@@ -1038,26 +1033,28 @@ export class PartInstance {
         this.visible = v;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, view: CameraView): void {
         if (!this.visible)
             return;
 
         bboxScratch.transform(this.flverData.flver.bbox, this.modelMatrix);
-        if (!viewerInput.camera.frustum.contains(bboxScratch))
+        if (!view.frustum.contains(bboxScratch))
             return;
 
-        getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
-        getMatrixAxisZ(scratchVec3b, viewerInput.camera.worldMatrix);
+        getMatrixTranslation(scratchVec3a, view.worldFromViewMatrix);
+        getMatrixAxisZ(scratchVec3b, view.worldFromViewMatrix);
         vec3.scaleAndAdd(this.materialDrawConfig.pointLight[0].position, scratchVec3a, scratchVec3b, -2);
 
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, this.materialDrawConfig);
+            this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, view, this.modelMatrix, this.materialDrawConfig);
     }
 }
 
-function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
-    offs += fillMatrix4x4(d, offs, camera.clipFromWorldMatrix);
-    getMatrixTranslation(scratchVec3a, camera.worldMatrix);
+const scratchMat4a = mat4.create();
+
+function fillSceneParamsData(d: Float32Array, view: CameraView, offs: number = 0): void {
+    offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
+    getMatrixTranslation(scratchVec3a, view.worldFromViewMatrix);
     offs += fillVec3v(d, offs, scratchVec3a);
 }
 
@@ -1066,9 +1063,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 function modelMatrixFromPart(m: mat4, part: Part): void {
-    // Game uses +x = left convention for some reason.
-    mat4.scale(m, m, [-1, 1, 1]);
-
     mat4.translate(m, m, part.translation);
     mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
     mat4.rotateY(m, m, part.rotation[1] * MathConstants.DEG_TO_RAD);
@@ -1076,8 +1070,49 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
     mat4.scale(m, m, part.scale);
 }
 
+const noclipSpaceFromDarkSoulsSpace = mat4.fromValues(
+    -1, 0, 0, 0,
+    0,  1, 0, 0,
+    0,  0, 1, 0,
+    0,  0, 0, 1,
+);
+
+class CameraView {
+    // aka viewMatrix
+    public viewFromWorldMatrix = mat4.create();
+    // aka worldMatrix
+    public worldFromViewMatrix = mat4.create();
+    public clipFromWorldMatrix = mat4.create();
+    // aka projectionMatrix
+    public clipFromViewMatrix = mat4.create();
+
+    public clipSpaceNearZ: GfxClipSpaceNearZ;
+
+    // The current camera position, in Dark Souls engine world space.
+    public cameraPos = vec3.create();
+
+    // Frustum is stored in Dark Souls world space.
+    public frustum = new Frustum();
+
+    public finishSetup(): void {
+        mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
+        mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
+        getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
+        this.frustum.newFrame();
+    }
+
+    public setupFromCamera(camera: Camera): void {
+        this.clipSpaceNearZ = camera.clipSpaceNearZ;
+        mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromDarkSoulsSpace);
+        mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
+        this.finishSetup();
+    }
+}
+
 export class MSBRenderer {
     public flverInstances: PartInstance[] = [];
+    private cameraView = new CameraView();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private drawParamBank: DrawParamBank, private msb: MSB) {
         for (let i = 0; i < msb.parts.length; i++) {
@@ -1101,7 +1136,6 @@ export class MSBRenderer {
         interactiveVizSliderSelect(this.flverInstances, 'visible', (instance) => {
             this.lodModels.push(instance.name);
             setTimeout(() => { instance.visible = false; }, 2000);
-
             this.chooseLODModel();
         });
     }
@@ -1112,10 +1146,11 @@ export class MSBRenderer {
 
         const offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16+4);
         const sceneParamsMapped = template.mapUniformBufferF32(DKSProgram.ub_SceneParams);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
+        this.cameraView.setupFromCamera(viewerInput.camera);
+        fillSceneParamsData(sceneParamsMapped, this.cameraView, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput);
+            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput, this.cameraView);
 
         renderInstManager.popTemplateRenderInst();
     }

@@ -190,6 +190,7 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
             usage: GfxTextureUsage.Sampled,
         };
         const gfxTexture = device.createTexture(descriptor);
+        device.setResourceName(gfxTexture, textureEntry.name);
         device.uploadTextureData(gfxTexture, 0, levelDatas);
 
         const extraInfo = new Map<string, string>();
