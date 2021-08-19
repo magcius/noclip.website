@@ -16,13 +16,14 @@ import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor
 import { AABB, Frustum } from "../Geometry";
 import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes";
 import { MSB, Part } from "./msb";
-import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers";
+import { computeUnitSphericalCoordinates, getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
 import { interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { colorNewCopy, White } from "../Color";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { dfRange, dfShow } from "../DebugFloaters";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -238,8 +239,11 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_CameraPosWorld;
 };
 
+// Light Scattering is also packed in here
 struct HemisphereLight {
+    // R, G, B, LS BetaRay
     vec4 ColorU;
+    // R, G, B, LS BetaMie
     vec4 ColorD;
 };
 
@@ -253,11 +257,15 @@ struct ToneCorrectParams {
     vec4 ContrastHue;
 };
 
+// Light Scattering is also packed in here
 struct FogParams {
-    // BeginZ, EndZ
-    vec4 Misc;
-    // R, G, B, MaxDensity
-    vec4 Color;
+    // Fog BeginZ, Fog EndZ, LS HGg, LS DistanceMul
+    // SunDirX, SunDirY, SunDirZ
+    vec4 Misc[2];
+    // R, G, B, Fog MaxDensity
+    vec4 FogColor;
+    // R, G, B, LS BlendCoeff
+    vec4 SunColor;
 };
 
 layout(std140) uniform ub_MeshFragParams {
@@ -547,10 +555,10 @@ void CalcToneMap(inout vec3 t_Color) {
 }
 
 void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWorld) {
-    float t_FogBeginZ = t_FogParams.Misc.x;
-    float t_FogEndZ = t_FogParams.Misc.y;
-    vec3 t_FogColor = t_FogParams.Color.rgb;
-    float t_FogMaxDensity = t_FogParams.Color.a;
+    float t_FogBeginZ = t_FogParams.Misc[0].x;
+    float t_FogEndZ = t_FogParams.Misc[0].y;
+    vec3 t_FogColor = t_FogParams.FogColor.rgb;
+    float t_FogMaxDensity = t_FogParams.FogColor.a;
 
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_CameraPosWorld.xyz);
     float t_FogFactor = saturate(invlerp(t_FogBeginZ, t_FogEndZ, t_DistanceWorld));
@@ -559,6 +567,47 @@ void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWor
     t_FogFactor *= t_FogFactor;
 
     t_Color.rgb = mix(t_Color.rgb, t_FogColor.rgb, t_FogFactor);
+}
+
+const float M_PI = ${Math.PI};
+
+struct LightScatteringParams {
+    float BetaRay, BetaMie, HGg, DistanceMul, BlendCoeff;
+    vec3 SunDirection, SunColor;
+};
+
+void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightScatteringParams, in vec3 t_PositionWorld, in float t_Distance) {
+    // https://developer.amd.com/wordpress/media/2012/10/ATI-LightScattering.pdf
+    float t_BetaRay     = t_LightScatteringParams.BetaRay;
+    float t_BetaMie     = t_LightScatteringParams.BetaMie;
+    float t_HGg         = t_LightScatteringParams.HGg;
+    float t_DistanceMul = t_LightScatteringParams.DistanceMul;
+    float t_BlendCoeff  = t_LightScatteringParams.BlendCoeff;
+    vec3 t_SunColor     = t_LightScatteringParams.SunColor;
+    vec3 t_SunDirection = t_LightScatteringParams.SunDirection;
+
+    t_Distance *= t_DistanceMul;
+
+    // TODO(jstpierre): Per-wavelength extinction. The game seems to scatter blue/green more than red,
+    // which is somewhat correct, but how do they do that? This is a crummy empirical model
+    vec3 t_ExtinctionCoeff = vec3(0.2, 0.3, 1.0);
+    vec3 t_Extinction = exp(t_ExtinctionCoeff * vec3(-(t_BetaRay + t_BetaMie) * t_Distance));
+
+    // TODO(jstpierre): The blot from mie scattering seems a lot larger in game. Might just be HDR,
+    // might also just be some maths I did incorrectly. For now, spam up the sun color.
+    t_SunColor *= vec3(3.0);
+
+    float t_Cos = dot(normalize(t_PositionWorld), t_SunDirection);
+
+    float t_BetaRayCos = (3.0 / (16.0 * M_PI)) * t_BetaRay * (1.0 + t_Cos * t_Cos);
+    float t_BetaMieCos = (1.0 / ( 4.0 * M_PI)) * t_BetaMie * \
+        ((1.0 - t_HGg) * (1.0 - t_HGg)) / pow(1.0 + t_HGg * t_HGg - 2.0 * t_HGg * t_Cos, 3.0 / 2.0);
+
+    float t_InScatterCoeff = (t_BetaRayCos + t_BetaMieCos) / (t_BetaRay + t_BetaMie);
+    vec3 t_InScatterColor = vec3(t_InScatterCoeff) * t_SunColor.rgb * (vec3(1.0) - t_Extinction.rgb);
+
+    vec3 t_ScatteredColor = t_Color.rgb * t_Extinction.rgb + t_InScatterColor.rgb;
+    t_Color.rgb = mix(t_Color.rgb, t_ScatteredColor.rgb, t_BlendCoeff);
 }
 
 vec3 CalcPointLightDiffuse(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
@@ -583,6 +632,8 @@ void main() {
 
     ${this.genDiffuse()}
 
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+
 #ifdef USE_LIGHTING
     vec3 t_OutgoingLight = vec3(0.0);
 
@@ -595,8 +646,6 @@ void main() {
     // Environment light.
     t_IncomingDiffuseRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvDif), t_NormalDirWorld).rgb * u_EnvDifColor.rgb;
 
-    // TODO(jstpierre): This reflection calculation isn't 100% correct.
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
     vec3 t_Reflection = reflect(-t_WorldDirectionToEye.xyz, t_NormalDirWorld.xyz);
     t_IncomingSpecularRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvSpc), t_Reflection.xyz).rgb * u_EnvSpcColor.rgb;
@@ -630,6 +679,16 @@ void main() {
     CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
     CalcToneMap(t_Color.rgb);
     CalcFog(t_Color.rgb, u_FogParams, v_PositionWorld.xyz);
+
+    LightScatteringParams t_LightScatteringParams;
+    t_LightScatteringParams.BetaRay = u_HemisphereLight.ColorU.a;
+    t_LightScatteringParams.BetaMie = u_HemisphereLight.ColorD.a;
+    t_LightScatteringParams.HGg = u_FogParams.Misc[0].z;
+    t_LightScatteringParams.DistanceMul = u_FogParams.Misc[0].w;
+    t_LightScatteringParams.BlendCoeff = u_FogParams.SunColor.a;
+    t_LightScatteringParams.SunDirection = u_FogParams.Misc[1].xyz;
+    t_LightScatteringParams.SunColor = u_FogParams.SunColor.rgb;
+    CalcLightScattering(t_Color.rgb, t_LightScatteringParams, v_PositionWorld.xyz, length(t_PositionToEye));
 
     gl_FragColor = t_Color;
 }
@@ -833,7 +892,7 @@ class BatchInstance {
         template.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputState);
         template.setMegaStateFlags(this.megaState);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*14);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*16);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
         offs += fillMatrix4x3(d, offs, modelMatrix);
@@ -843,11 +902,24 @@ class BatchInstance {
         offs += fillColor(d, offs, materialDrawConfig.envDifColor);
         offs += fillColor(d, offs, materialDrawConfig.envSpcColor);
 
-        offs += materialDrawConfig.hemisphereLight.fill(d, offs);
+        offs += fillColor(d, offs, materialDrawConfig.hemisphereLight.colorU, materialDrawConfig.lightScatteringParams.betaRay);
+        offs += fillColor(d, offs, materialDrawConfig.hemisphereLight.colorD, materialDrawConfig.lightScatteringParams.betaMie);
         for (let i = 0; i < materialDrawConfig.pointLight.length; i++)
             offs += materialDrawConfig.pointLight[i].fill(d, offs);
         offs += materialDrawConfig.toneCorrectParams.fill(d, offs);
-        offs += materialDrawConfig.fogParams.fill(d, offs);
+
+        offs += fillVec4(d, offs,
+            materialDrawConfig.fogParams.fogBeginZ,
+            materialDrawConfig.fogParams.fogEndZ,
+            materialDrawConfig.lightScatteringParams.HGg,
+            materialDrawConfig.lightScatteringParams.distanceMul,
+        );
+
+        computeUnitSphericalCoordinates(scratchVec3a, (90 - materialDrawConfig.lightScatteringParams.sunRotY) * MathConstants.DEG_TO_RAD, (90 + materialDrawConfig.lightScatteringParams.sunRotX) * MathConstants.DEG_TO_RAD);
+        vec3.negate(scratchVec3a, scratchVec3a);
+        offs += fillVec3v(d, offs, scratchVec3a);
+        offs += fillColor(d, offs, materialDrawConfig.fogParams.color);
+        offs += fillColor(d, offs, materialDrawConfig.lightScatteringParams.sunColor, materialDrawConfig.lightScatteringParams.blendCoeff);
 
         const scrollTime = viewerInput.time / 240;
         offs += fillVec4(d, offs,
@@ -880,13 +952,6 @@ class BatchInstance {
 class HemisphereLight {
     public colorU = colorNewCopy(White);
     public colorD = colorNewCopy(White);
-
-    public fill(d: Float32Array, offs: number): number {
-        const baseOffs = offs;
-        offs += fillColor(d, offs, this.colorU);
-        offs += fillColor(d, offs, this.colorD);
-        return offs - baseOffs;
-    }
 }
 
 class PointLight {
@@ -920,13 +985,33 @@ class FogParams {
     public fogBeginZ = 0;
     public fogEndZ = 0;
     public color = colorNewCopy(White);
+}
 
-    public fill(d: Float32Array, offs: number): number {
-        const baseOffs = offs;
-        offs += fillVec4(d, offs, this.fogBeginZ, this.fogEndZ);
-        offs += fillColor(d, offs, this.color);
-        return offs - baseOffs;
-    }
+class LightScatteringParams {
+    @dfShow()
+    @dfRange(0, 1)
+    public betaRay = 0;
+    @dfShow()
+    @dfRange(0, 1)
+    public betaMie = 0;
+    @dfShow()
+    @dfRange(-1, 1, 0.01)
+    public HGg = 0;
+    @dfShow()
+    @dfRange(0, 10.0, 0.01)
+    public distanceMul = 0;
+    @dfShow()
+    @dfRange(0, 1)
+    public blendCoeff = 0;
+    @dfShow()
+    @dfRange(-90, 90)
+    public sunRotX = 0;
+    @dfShow()
+    @dfRange(-180, 180)
+    public sunRotY = 0;
+    @dfShow()
+    @dfRange(0, 5)
+    public sunColor = colorNewCopy(White);
 }
 
 class MaterialDrawConfig {
@@ -939,6 +1024,7 @@ class MaterialDrawConfig {
     public pointLight = nArray(1, () => new PointLight());
     public toneCorrectParams = new ToneCorrectParams();
     public fogParams = new FogParams();
+    public lightScatteringParams = new LightScatteringParams();
 }
 
 function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: DrawParamBank, textureHolder: DDSTextureHolder): void {
@@ -1004,6 +1090,21 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstLantern.color.r = (pointLightBank.getS16(lanternID, `colR`) / 255) * lanternColorMul;
     dstLantern.color.g = (pointLightBank.getS16(lanternID, `colG`) / 255) * lanternColorMul;
     dstLantern.color.b = (pointLightBank.getS16(lanternID, `colB`) / 255) * lanternColorMul;
+
+    const dstScatter = dst.lightScatteringParams;
+    const scatterBank = bank.lightScatteringBank;
+    const scatterID = part.scatterID;
+    dstScatter.sunRotX = scatterBank.getS16(scatterID, `sunRotX`);
+    dstScatter.sunRotY = scatterBank.getS16(scatterID, `sunRotY`);
+    dstScatter.distanceMul = scatterBank.getS16(scatterID, `distanceMul`) / 100;
+    const sunColorMul = scatterBank.getS16(scatterID, `sunA`) / 100;
+    dstScatter.sunColor.r = (scatterBank.getS16(scatterID, `sunR`) / 255) * sunColorMul;
+    dstScatter.sunColor.g = (scatterBank.getS16(scatterID, `sunG`) / 255) * sunColorMul;
+    dstScatter.sunColor.b = (scatterBank.getS16(scatterID, `sunB`) / 255) * sunColorMul;
+    dstScatter.HGg = scatterBank.getF32(scatterID, `lsHGg`);
+    dstScatter.betaRay = scatterBank.getF32(scatterID, `lsBetaRay`);
+    dstScatter.betaMie = scatterBank.getF32(scatterID, `lsBetaMie`);
+    dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
 }
 
 const bboxScratch = new AABB();
