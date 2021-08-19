@@ -13,7 +13,7 @@ import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLigh
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -2043,7 +2043,7 @@ export class StudioModelInstance {
             return;
 
         scratchAABB.centerPoint(scratchVec3);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
 
         const lodIndex = this.getLODModelIndex(renderContext);
         this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix, depth);

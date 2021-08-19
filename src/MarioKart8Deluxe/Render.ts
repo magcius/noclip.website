@@ -14,7 +14,7 @@ import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from 'gl-matrix';
-import { computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { DeviceProgram } from '../Program';
@@ -1336,7 +1336,7 @@ class FSHPMeshInstance {
         renderInst.drawIndexes(this.meshData.mesh.count);
         renderInst.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
 
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.meshData.mesh.bbox);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
     }

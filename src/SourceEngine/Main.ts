@@ -2,7 +2,7 @@
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
-import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum, Plane } from "../Geometry";
@@ -355,7 +355,7 @@ export class BSPSurfaceRenderer {
         renderInst.debug = this;
 
         if (this.surface.center !== null) {
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.surface.center);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, this.surface.center);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 

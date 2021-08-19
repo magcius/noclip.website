@@ -15,7 +15,7 @@ import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
@@ -312,7 +312,7 @@ class NodeInstance {
             this.children[i].updateModelMatrix(scratchMatrix);
 
         scratchAABB.transform(this.node.bbox, scratchMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, scratchAABB);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, scratchAABB);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = setSortKeyDepth(template.sortKey, depth);

@@ -29,7 +29,7 @@ import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normTo
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../../Camera";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../TextureHolder";
@@ -1815,7 +1815,7 @@ export class JPABaseEmitter {
 
         if (!SORT_PARTICLES) {
             this.calcEmitterGlobalPosition(scratchVec3a);
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, scratchVec3a);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(workData.posCamMtx, scratchVec3a);
             workData.particleSortKey = setSortKeyDepth(workData.particleSortKey, depth);
         }
     }
@@ -3193,7 +3193,7 @@ export class JPABaseParticle {
         renderInst.sortKey = workData.particleSortKey;
 
         if (SORT_PARTICLES) {
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(workData.posCamMtx, this.position);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 

@@ -11,7 +11,7 @@ import { nArray, assert, assertExists, leftPad } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
-import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB, Frustum } from "../Geometry";
 import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes";
@@ -858,8 +858,7 @@ class BatchInstance {
             scrollTime * this.texScroll[2][0], scrollTime * this.texScroll[2][1],
         );
 
-        bboxScratch.centerPoint(scratchVec3a);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, scratchVec3a);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(view.viewFromWorldMatrix, bboxScratch);
 
         for (let j = 0; j < this.batchData.batch.primitiveIndexes.length; j++) {
             const primitive = this.flverData.flver.primitives[this.batchData.batch.primitiveIndexes[j]];

@@ -5,7 +5,7 @@ import * as GX_Material from '../gx/gx_material';
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render";
-import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, texProjCameraSceneTex, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
@@ -664,7 +664,7 @@ export class MDL0ModelInstance {
             const rootJoint = mdl0.nodes[0];
             if (rootJoint.bbox != null) {
                 bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-                depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
+                depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch), 0);
             } else {
                 depth = Math.max(depth, 0);
             }

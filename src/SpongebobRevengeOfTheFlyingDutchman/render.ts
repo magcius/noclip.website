@@ -2,7 +2,7 @@
 import program_glsl from './program.glsl';
 import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import { Color, colorCopy, colorLerp, colorNewCopy } from "../Color";
+import { colorCopy, colorLerp, colorNewCopy } from "../Color";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
@@ -394,7 +394,7 @@ class MeshRenderer {
             this.megaStateFlags.attachmentsState = undefined;
         }
         if (isTranslucent) {
-            const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+            const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
         renderInst.setMegaStateFlags(this.megaStateFlags);

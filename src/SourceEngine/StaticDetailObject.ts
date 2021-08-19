@@ -8,7 +8,7 @@ import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
@@ -280,7 +280,7 @@ export class DetailPropLeafRenderer {
             if (!view.frustum.containsSphere(entry.origin, entry.radius))
                 continue;
             // compute distance from camera
-            entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, entry.origin);
+            entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, entry.origin);
             sortList.push(entry);
         }
         sortList.sort((a, b) => b.cameraDepth - a.cameraDepth);
@@ -346,7 +346,7 @@ export class DetailPropLeafRenderer {
         this.materialInstance.setOnRenderInst(renderContext, renderInst);
         this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMatrix);
 
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.centerPoint);
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, this.centerPoint);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
         const indexCount = sortList.length * 6;

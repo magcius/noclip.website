@@ -301,7 +301,7 @@ class MeshFragInstance {
 
         renderInst.sortKey = this.sortKey;
         scratchAABB.transform(this.meshFragData.meshFrag.bbox, modelMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, scratchAABB);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, scratchAABB);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
         let offs = renderInst.allocateUniformBuffer(PsychonautsProgram.ub_MeshFragParams, 16);

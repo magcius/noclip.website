@@ -2,7 +2,7 @@
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
@@ -2379,7 +2379,7 @@ class env_steam extends BaseEntity {
 
             this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
 
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, p.position);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, p.position);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
             this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
