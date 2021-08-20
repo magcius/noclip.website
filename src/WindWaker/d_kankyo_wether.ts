@@ -45,6 +45,7 @@ export function dKyw_rain_set(envLight: dScnKy_env_light_c, count: number): void
 export const enum ThunderMode {
     Off     = 0,
     On      = 1,
+    Two     = 2,
     FarOnly = 10,
 }
 

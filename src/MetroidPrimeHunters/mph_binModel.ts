@@ -446,7 +446,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     }
     computeNodeMatrices(0);
 
-    models.push({ name, nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
+    models.push({ name: '', nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
 
     return { models, tex0, mphTex, meshs, mtx_shmat };
 }
