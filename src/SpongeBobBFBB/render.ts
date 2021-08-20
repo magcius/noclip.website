@@ -16,7 +16,7 @@ import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from '../Camera';
+import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -696,8 +696,7 @@ export class FragRenderer extends BaseRenderer {
         super.prepareToRender(renderState);
         if (this.isCulled) return;
 
-        //const depth = this.frag.distanceToCamera(renderState.cameraPosition, this.modelMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(renderState.viewerInput.camera, this.bboxModel);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(renderState.viewerInput.camera.viewMatrix, this.bboxModel);
         this.prepareRenderInst(renderState.instManager, depth, false);
 
         if (this.dualCull || this.dualZWrite)

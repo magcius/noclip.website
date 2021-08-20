@@ -178,7 +178,6 @@ export class GTA3SceneDesc implements SceneDesc {
         const txdPath = (txdName === 'generic' || txdName === 'particle')
                       ? `models/${txdName}.txd`
                       : `models/gta3/${txdName}.txd`;
-        const useDXT = device.queryTextureFormatSupported(GfxFormat.BC1) && !(txdName === 'generic' || txdName === 'particle');
         const buffer = await this.fetch(dataFetcher, txdPath);
         if (buffer === null) return;
         const stream = new rw.StreamMemory(buffer.createTypedArray(Uint8Array));
@@ -186,7 +185,11 @@ export class GTA3SceneDesc implements SceneDesc {
         assert(header.type === rw.PluginID.ID_TEXDICTIONARY);
         const txd = new rw.TexDictionary(stream);
         for (let lnk = txd.textures.begin; !lnk.is(txd.textures.end); lnk = lnk.next) {
-            const texture = rwTexture(rw.Texture.fromDict(lnk), txdName, useDXT);
+            const rwtex = rw.Texture.fromDict(lnk);
+            const { width, height } = rwtex.raster.toImage();
+            // TODO(jstpierre): Pass actual texture format through here.
+            const useDXT = device.queryTextureFormatSupported(GfxFormat.BC1, width, height) && !(txdName === 'generic' || txdName === 'particle');
+            const texture = rwTexture(rwtex, txdName, useDXT);
             cb(texture);
         }
         txd.delete();
@@ -216,8 +219,6 @@ export class GTA3SceneDesc implements SceneDesc {
     }
 
     private async fetchBasisTextures(device: GfxDevice, dataFetcher: DataFetcher, texturesUsed: Set<string>, cb: (texture: Texture) => void): Promise<void> {
-        const useDXT = device.queryTextureFormatSupported(GfxFormat.BC1);
-        if (!useDXT) console.warn('DXT not supported');
         for (const transparent of [false, true]) {
             const group = transparent ? 'transparent' : 'opaque';
             const textures = await this.fetchText(dataFetcher, `textures/${group}.txt`).then(s => s.trim().split('\n'));
@@ -239,6 +240,7 @@ export class GTA3SceneDesc implements SceneDesc {
 
                     const width = basis.getImageWidth(i, 0);
                     const height = basis.getImageHeight(i, 0);
+                    const useDXT = device.queryTextureFormatSupported(GfxFormat.BC1, width, height);
                     const pixelFormat = !useDXT ? GfxFormat.U8_RGBA_NORM
                                       : transparent ? GfxFormat.BC3 : GfxFormat.BC1;
                     const format = transparent ? BasisFormat.cTFBC3 : BasisFormat.cTFBC1;

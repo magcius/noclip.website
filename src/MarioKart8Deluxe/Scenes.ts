@@ -1,9 +1,10 @@
 
 import * as Yaz0 from "../Common/Compression/Yaz0";
 import * as BFRES from "../fres_nx/bfres";
+import * as SARC from "../fres_nx/sarc";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { TurboRenderer, BRTITextureHolder, FMDLData, FMDLRenderer, TurboRenderGlobals, TurboLightEnv } from "./Render";
+import { TurboRenderer, BRTITextureHolder, FMDLData, FMDLRenderer, TurboRenderGlobals, TurboLightEnv, TurboCommonRes } from "./Render";
 
 const pathBase = `MarioKart8Deluxe`;
 
@@ -12,6 +13,12 @@ class MarioKart8SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<TurboRenderer> {
+        const commonRes = await context.dataShare.ensureObject(`${pathBase}/TurboCommonRes`, async () => {
+            const common = new TurboCommonRes();
+            common.commonGEnv = SARC.parse(await context.dataFetcher.fetchData(`${pathBase}/Common/GEnv/Turbo_cmn.bgenv`));;
+            return common;
+        });
+
         const dataFetcher = context.dataFetcher;
         const courseDir = `${pathBase}/Course/${this.id}`;
 
@@ -23,7 +30,7 @@ class MarioKart8SceneDesc implements SceneDesc {
         textureHolder.addBNTXFile(device, texturesFile!.buffer);
 
         const renderGlobals = new TurboRenderGlobals();
-        renderGlobals.lightEnv = new TurboLightEnv(await dataFetcher.fetchData(`${courseDir}/course.bgenv`));
+        renderGlobals.lightEnv = new TurboLightEnv(await dataFetcher.fetchData(`${courseDir}/course.bgenv`), commonRes);
         renderGlobals.textureHolder = textureHolder;
 
         const renderer = new TurboRenderer(device, renderGlobals);
@@ -104,4 +111,4 @@ const sceneDescs = [
     new MarioKart8SceneDesc('Gwii_GrumbleVolcano'),
     new MarioKart8SceneDesc('Gwii_MooMooMeadows'),
 ];
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

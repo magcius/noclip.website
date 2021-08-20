@@ -9,12 +9,11 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
-import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
+import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
-import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
@@ -211,6 +210,16 @@ function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEng
     return offs - baseOffs;
 }
 
+function fillScaleBias(d: Float32Array, offs: number, m: ReadonlyMat4): number {
+    // Make sure there's no rotation. We should definitely handle this eventually, though.
+    assert(m[1] === 0.0 && m[2] === 0.0);
+    const scaleS = m[0];
+    const scaleT = m[5];
+    const transS = m[12];
+    const transT = m[13];
+    return fillVec4(d, offs, scaleS, scaleT, transS, transT);
+}
+
 export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>, fogParams: Readonly<FogParams> = view.fogParams): void {
     let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
     const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
@@ -247,12 +256,20 @@ class ParameterTexture {
         if (this.ref !== null) {
             // Special case env_cubemap if we have a local override.
             let filename = this.ref;
+
             if (this.isEnvmap) {
-                if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null)
+                // Dynamic cubemaps.
+                if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null && entityParams.lightCache.envCubemap !== null) {
                     filename = entityParams.lightCache.envCubemap.filename;
-                else if (materialCache.isUsingHDR())
-                    filename = `${filename}.hdr`;
+                } else if (materialCache.isUsingHDR()) {
+                    const hdrFilename = `${filename}.hdr`;
+                    if (materialCache.checkVTFExists(hdrFilename))
+                        filename = hdrFilename;
+                    else if (!materialCache.checkVTFExists(filename))
+                        debugger;
+                }
             }
+
             this.texture = await materialCache.fetchVTF(filename, this.isSRGB);
         }
     }
@@ -659,6 +676,10 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterVector);
     }
 
+    protected paramGetMatrix(name: string): ReadonlyMat4 {
+        return (this.param[name] as ParameterMatrix).matrix;
+    }
+
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
@@ -697,7 +718,15 @@ export abstract class BaseMaterial {
     }
 
     protected vtfIsIndirect(vtf: VTF): boolean {
-        return vtf.lateBinding === LateBindingTexture.FramebufferColor;
+        // These bindings only get resolved in indirect passes...
+        if (vtf.lateBinding === LateBindingTexture.FramebufferColor)
+            return true;
+        if (vtf.lateBinding === LateBindingTexture.FramebufferDepth)
+            return true;
+        if (vtf.lateBinding === LateBindingTexture.WaterReflection)
+            return true;
+
+        return false;
     }
 
     protected textureIsIndirect(name: string): boolean {
@@ -1008,6 +1037,9 @@ layout(std140) uniform ub_ObjectParams {
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
+#ifdef USE_DETAIL
+    vec4 u_DetailScaleBias;
+#endif
 #ifdef USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
 #endif
@@ -1030,7 +1062,6 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
-#define u_DetailScale        (u_Misc[0].z)
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1099,10 +1130,10 @@ float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWo
             float t_Stopdot2 = t_WorldLight.Direction.w;
 
             vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
-            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
+            float t_AngleDot = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
 
             // invlerp
-            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
+            float t_AngleAttenuation = max(invlerp(t_Stopdot2, t_Stopdot, t_AngleDot), 0.01);
             t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
 
             t_Attenuation *= t_AngleAttenuation;
@@ -1378,7 +1409,7 @@ SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in Wor
 
     t_Result.SpecularLight += vec3(pow(t_RoL, t_Input.SpecularExponent));
     // TODO(jstpierre): Specular Warp
-    t_Result.SpecularLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation;
+    t_Result.SpecularLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation * t_Input.Fresnel;
 
     t_Result.RimLight += vec3(pow(t_RoL, t_Input.RimExponent));
     t_Result.RimLight *= t_NoL * t_WorldLight.Color.rgb * t_Attenuation;
@@ -1433,7 +1464,7 @@ void mainPS() {
 #endif
 
 #ifdef USE_DETAIL
-    vec2 t_DetailTexCoord = v_TexCoord0.xy * u_DetailScale;
+    vec2 t_DetailTexCoord = CalcScaleBias(v_TexCoord0.xy, u_DetailScaleBias);
     vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail, t_DetailTexCoord)));
     t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
@@ -1616,7 +1647,7 @@ void mainPS() {
     // TODO(jstpierre): Support $phongexponentfactor override
     vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
     t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
-    t_SpecularLightInput.RimExponent = 1.0;
+    t_SpecularLightInput.RimExponent = 4.0;
 
     // Specular mask is either in base map or normal map alpha.
     float t_SpecularMask;
@@ -1642,8 +1673,9 @@ void mainPS() {
 
     t_FinalColor.rgb += t_SpecularLighting.rgb;
 
+    t_FinalColor.a = t_Albedo.a;
 #ifndef USE_BASE_ALPHA_ENVMAP_MASK
-    t_FinalColor.a = t_BaseTexture.a;
+    t_FinalColor.a *= t_BaseTexture.a;
 #endif
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
@@ -1737,6 +1769,7 @@ class Material_Generic extends BaseMaterial {
         p['$detailblendfactor']            = new ParameterNumber(1);
         p['$detailtint']                   = new ParameterColor(1, 1, 1);
         p['$detailscale']                  = new ParameterNumber(4);
+        p['$detailtexturetransform']       = new ParameterMatrix();
         p['$bumpmap']                      = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
@@ -1761,8 +1794,10 @@ class Material_Generic extends BaseMaterial {
         p['$basemapalphaphongmask']        = new ParameterBoolean(false, false);
         p['$invertphongmask']              = new ParameterBoolean(false, false);
 
-        // SolidEnergy (probably doesn't make sense on this..., basically only to get Portal 2 to load...)
+        // SolidEnergy (doesn't make sense on this..., basically only to get Portal 2 to load...)
         p['$flow_color_intensity']         = new ParameterNumber(0.0);
+        p['$detail1texturetransform']      = new ParameterMatrix();
+        p['$detail2texturetransform']      = new ParameterMatrix();
     }
 
     private recacheProgram(cache: GfxRenderCache): void {
@@ -1958,7 +1993,7 @@ class Material_Generic extends BaseMaterial {
 
         this.setupFogParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 124);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
 
         if (this.wantsAmbientCube) {
@@ -1975,6 +2010,13 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
+
+        if (this.wantsDetail) {
+            const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
+            const detailScale = this.paramGetNumber('$detailscale');
+            scaleMatrix(scratchMatrix, detailTextureTransform, detailScale, detailScale);
+            offs += fillScaleBias(d, offs, scratchMatrix);
+        }
 
         if (this.wantsEnvmapMask)
             offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
@@ -2018,8 +2060,7 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        const detailScale = this.paramGetNumber('$detailscale');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, detailScale);
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2254,8 +2295,6 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 //#endregion
 
 //#region Water
-const enum WaterShaderType { Normal, Flow }
-
 class WaterMaterialProgram extends MaterialProgramBase {
     public static ub_ObjectParams = 2;
 
@@ -2273,28 +2312,54 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_ReflectTint;
     vec4 u_WaterFogColor;
     Mat4x4 u_ProjectedDepthToWorld;
+
+#ifdef USE_FLOWMAP
+    vec4 u_BaseTextureScaleBias;
+    vec4 u_Misc[3];
+#endif
 };
 
 #define u_RefractAmount (u_RefractTint.a)
 #define u_ReflectAmount (u_ReflectTint.a)
 #define u_WaterFogRange (u_WaterFogColor.a)
 
+#ifdef USE_FLOWMAP
+
+#define u_FlowTexCoordScale                (u_Misc[0].x)
+#define u_FlowNormalTexCoordScale          (u_Misc[0].y)
+#define u_FlowNoiseTexCoordScale           (u_Misc[0].z)
+#define u_FlowColorTexCoordScale           (u_Misc[0].w)
+
+#define u_FlowTimeInIntervals              (u_Misc[1].x)
+#define u_FlowColorTimeInIntervals         (u_Misc[1].y)
+#define u_FlowNormalTexCoordScrollDistance (u_Misc[1].z)
+#define u_FlowColorTexCoordScrollDistance  (u_Misc[1].w)
+
+#define u_FlowBumpStrength                 (u_Misc[2].x)
+#define u_FlowColorDisplacementStrength    (u_Misc[2].y)
+#define u_FlowColorLerpExp                 (u_Misc[2].z)
+#define u_WaterBlendFactor                 (u_Misc[2].w)
+
+#endif
+
 // Refract Coordinates
 varying vec3 v_TexCoord0;
-// Normal Map Coordinates
-varying vec2 v_TexCoord1;
+// Normal Map / Base Texture, Lightmap
+varying vec4 v_TexCoord1;
 varying vec4 v_PositionWorld;
-
-// 3x3 matrix for our tangent space basis.
-varying vec3 v_TangentSpaceBasis0;
-varying vec3 v_TangentSpaceBasis1;
-varying vec3 v_TangentSpaceBasis2;
 
 // Refract Texture, Normalmap, Framebuffer Depth Texture, Reflect Texture (Expensive Water)
 uniform sampler2D u_TextureRefract;
 uniform sampler2D u_TextureNormalmap;
 uniform sampler2D u_TextureFramebufferDepth;
 uniform sampler2D u_TextureReflect;
+
+// Flow -- BaseTexture, Lightmap, Flow Map, Flow Noise
+uniform sampler2D u_TextureBase;
+uniform sampler2D u_TextureLightmap;
+uniform sampler2D u_TextureFlowmap;
+uniform sampler2D u_TextureFlowNoise;
+
 // Envmap ("Cheap" Water)
 uniform samplerCube u_TextureEnvmap;
 
@@ -2306,20 +2371,13 @@ void mainVS() {
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     v_PositionWorld.w = gl_Position.z; // Clip-space Z
-    vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
-
-    vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
-    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
-
-    v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
-    v_TangentSpaceBasis1 = t_TangentTWorld;
-    v_TangentSpaceBasis2 = t_NormalWorld;
 
     // Convert from projected position to texture space.
     vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
+    v_TexCoord1.zw = a_TexCoord.zw;
 }
 #endif
 
@@ -2356,151 +2414,6 @@ float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord, float t_DepthSample) {
     return t_FogAmount;
 }
 
-void mainPS() {
-    // Sample our normal map with scroll offsets.
-    vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
-    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord0));
-#ifdef USE_TEXSCROLL
-    vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
-    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord1));
-    vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
-    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord2));
-    vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
-#else
-    vec4 t_BumpmapSample = t_BumpmapSample0;
-#endif
-    vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
-    float t_BumpmapStrength = t_BumpmapSample.a;
-
-    vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
-
-    vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
-
-    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(t_ProjTexCoord));
-    float t_RefractAmount = u_RefractAmount * t_RefractFogBendAmount;
-    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractAmount);
-
-    float t_RefractFogAmount;
-    float t_RefractDepthSample = SampleFramebufferDepth(t_RefractTexCoord);
-    if (IsSomethingInFront(t_RefractDepthSample)) {
-        // Something's in front, just use the original...
-        t_RefractTexCoord = t_ProjTexCoord;
-        t_RefractFogAmount = t_RefractFogBendAmount;
-    } else {
-        t_RefractFogAmount = CalcFogAmountFromScreenPos(t_RefractTexCoord, t_RefractDepthSample);
-    }
-
-    vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract, t_RefractTexCoord));
-    vec3 t_RefractColor = t_RefractSample.rgb * u_RefractTint.rgb;
-
-    t_RefractColor.rgb = mix(t_RefractColor.rgb, u_WaterFogColor.rgb, t_RefractFogAmount);
-
-    vec3 t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
-
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
-
-    vec3 t_ReflectColor = vec3(0.0);
-#ifdef USE_EXPENSIVE_REFLECT
-    float t_ReflectAmount = u_ReflectAmount * 0.25;
-    vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
-    // Reflection texture is stored upside down
-    t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
-
-    vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
-    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-#else
-    vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
-    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-#endif
-
-    vec4 t_FinalColor;
-
-    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-    float t_Fresnel = CalcFresnelTerm5(dot(t_NormalWorld, t_WorldDirectionToEye));
-    t_FinalColor.rgb = mix(t_RefractColor, t_ReflectColor, t_Fresnel);
-
-    CalcFog(t_FinalColor, v_PositionWorld.xyz);
-    OutputLinearColor(t_FinalColor);
-}
-#endif
-`;
-}
-
-class WaterFlowMaterialProgram extends MaterialProgramBase {
-    public static ub_ObjectParams = 2;
-
-    public both = `
-precision mediump float;
-
-${MaterialProgramBase.Common}
-
-layout(std140) uniform ub_ObjectParams {
-    vec4 u_BaseTextureScaleBias;
-    vec4 u_WaterFogColor;
-    vec4 u_Misc[3];
-};
-
-#define u_FlowTexCoordScale                (u_Misc[0].x)
-#define u_FlowNormalTexCoordScale          (u_Misc[0].y)
-#define u_FlowNoiseTexCoordScale           (u_Misc[0].z)
-#define u_FlowColorTexCoordScale           (u_Misc[0].w)
-
-#define u_FlowTimeInIntervals              (u_Misc[1].x)
-#define u_FlowColorTimeInIntervals         (u_Misc[1].y)
-#define u_FlowNormalTexCoordScrollDistance (u_Misc[1].z)
-#define u_FlowColorTexCoordScrollDistance  (u_Misc[1].w)
-
-#define u_FlowBumpStrength                 (u_Misc[2].x)
-#define u_FlowColorDisplacementStrength    (u_Misc[2].y)
-#define u_FlowColorLerpExp                 (u_Misc[2].z)
-#define u_WaterBlendFactor                 (u_Misc[2].w)
-
-// Base Texture, Lightmap
-varying vec4 v_TexCoord0;
-varying vec3 v_PositionWorld;
-
-// 3x3 matrix for our tangent space basis.
-varying vec3 v_TangentSpaceBasis0;
-varying vec3 v_TangentSpaceBasis1;
-varying vec3 v_TangentSpaceBasis2;
-
-// BaseTexture, Lightmap, Normal Map, Flow Map, Flow Noise
-uniform sampler2D u_TextureBase;
-uniform sampler2D u_TextureLightmap;
-uniform sampler2D u_TextureNormalmap;
-uniform sampler2D u_TextureFlowmap;
-uniform sampler2D u_TextureFlowNoise;
-// Envmap
-uniform samplerCube u_TextureEnvmap;
-
-#ifdef VERT
-void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
-    v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
-
-    vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
-
-    vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
-    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
-
-    v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
-    v_TangentSpaceBasis1 = t_TangentTWorld;
-    v_TangentSpaceBasis2 = t_NormalWorld;
-
-    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias);
-    v_TexCoord0.zw = a_TexCoord.zw;
-}
-#endif
-
-#ifdef FRAG
-vec3 ReconstructNormal(in vec2 t_NormalXY) {
-    float t_NormalZ = sqrt(saturate(1.0 - dot(t_NormalXY, t_NormalXY.xy)));
-    return vec3(t_NormalXY.xy, t_NormalZ);
-}
-
 vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp) {
     float t_ScrollTime1 = fract(t_FlowTimeInIntervals + 0.0);
     float t_ScrollTime2 = fract(t_FlowTimeInIntervals + 0.5);
@@ -2522,10 +2435,16 @@ vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t
     return t_FlowMapSample;
 }
 
-void mainPS() {
-    vec4 t_FinalColor;
+vec3 ReconstructNormal(in vec2 t_NormalXY) {
+    float t_NormalZ = sqrt(saturate(1.0 - dot(t_NormalXY.xy, t_NormalXY.xy)));
+    return vec3(t_NormalXY.xy, t_NormalZ);
+}
 
-    vec2 t_FlowTexCoord = v_TexCoord0.xy * u_FlowTexCoordScale;
+void mainPS() {
+
+#ifdef USE_FLOWMAP
+
+    vec2 t_FlowTexCoord = v_TexCoord1.xy * u_FlowTexCoordScale;
 
     vec2 t_TexCoordWorldBase = vec2(v_PositionWorld.x, -v_PositionWorld.y);
     vec2 t_FlowNoiseTexCoord = t_TexCoordWorldBase * u_FlowNoiseTexCoordScale;
@@ -2540,42 +2459,110 @@ void mainPS() {
     vec4 t_FlowNormalSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureNormalmap), t_FlowNormalTexCoordBase.xy, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, t_FlowNormalLerpExp);
 
     vec2 t_FlowNormalXY = UnpackUnsignedNormalMap(t_FlowNormalSample).xy * (length(t_FlowVectorTangent.xy) + 0.1) * u_FlowBumpStrength;
-    vec4 t_NormalWorld = vec4(ReconstructNormal(t_FlowNormalXY), 1.0);
+    vec3 t_BumpmapNormal = ReconstructNormal(t_FlowNormalXY);
+    float t_BumpmapStrength = 1.0;
+
+#else
+
+    // Sample our normal map with scroll offsets.
+    vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
+    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord0));
+#ifdef USE_TEXSCROLL
+    vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
+    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord1));
+    vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
+    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_TextureNormalmap, t_BumpmapCoord2));
+    vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
+#else
+    vec4 t_BumpmapSample = t_BumpmapSample0;
+#endif
+    vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
+    float t_BumpmapStrength = t_BumpmapSample.a;
+
+#endif
+
+    // It's assumed the surface normal is facing up, so this is roughly correct.
+    vec3 t_NormalWorld = t_BumpmapNormal.xyz;
+
+    vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    vec3 t_LookDir = normalize(t_PositionToEye.xyz);
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
 
-    float t_NoV = saturate(dot(t_LookDir.xyz, t_NormalWorld.xyz));
+    float t_NoV = saturate(dot(t_WorldDirectionToEye.xyz, t_NormalWorld.xyz));
     float t_Reflectance = 0.2;
     float t_Fresnel = mix(CalcFresnelTerm5(t_NoV), 1.0, t_Reflectance);
 
-    // Compute reflection and refraction colors...
-    vec4 t_ReflectColor = vec4(0.0);
-    vec4 t_RefractColor = vec4(0.0);
+    // Compute reflection and refraction colors.
 
-    vec3 t_DiffuseLight = vec3(1.0, 1.0, 1.0);
-    vec3 t_WaterFogColor = u_WaterFogColor.rgb;
-
+    vec3 t_DiffuseLight = vec3(1.0);
 #ifdef USE_LIGHTMAP_WATER_FOG
-    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord0.zw).rgb;
+    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.zw).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
-    t_LightmapColor *= t_LightmapScale;
+    t_LightmapColor.rgb *= t_LightmapScale;
+    t_DiffuseLight.rgb *= t_LightmapColor;
+#endif
+    vec3 t_WaterFogColor = u_WaterFogColor.rgb * t_DiffuseLight.rgb;
 
-    t_DiffuseLight *= t_LightmapColor;
+    // Compute a 2D offset vector in view space.
+    // TODO(jstpierre): Rotate bumpmap normal to be in camera space.
+    vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
+
+    vec3 t_RefractColor;
+#ifdef USE_REFRACT
+    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(t_ProjTexCoord));
+    float t_RefractStrength = u_RefractAmount * t_RefractFogBendAmount;
+    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractStrength);
+
+    float t_RefractFogAmount;
+    float t_RefractDepthSample = SampleFramebufferDepth(t_RefractTexCoord);
+    if (IsSomethingInFront(t_RefractDepthSample)) {
+        // Something's in front, just use the original...
+        t_RefractTexCoord = t_ProjTexCoord;
+        t_RefractFogAmount = t_RefractFogBendAmount;
+    } else {
+        t_RefractFogAmount = CalcFogAmountFromScreenPos(t_RefractTexCoord, t_RefractDepthSample);
+    }
+
+    vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract, t_RefractTexCoord));
+    t_RefractColor.rgb = t_RefractSample.rgb * u_RefractTint.rgb;
+
+    t_RefractColor.rgb = mix(t_RefractColor.rgb, t_WaterFogColor.rgb, t_RefractFogAmount);
+#else
+    t_RefractColor.rgb = t_WaterFogColor.rgb;
 #endif
 
-    t_WaterFogColor *= t_DiffuseLight;
-    t_RefractColor.rgb += t_WaterFogColor;
+    vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
-    vec3 t_Reflection = CalcReflection(t_NormalWorld.xyz, t_PositionToEye.xyz);
-    t_ReflectColor += texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgba;
+    vec3 t_ReflectColor = vec3(0.0);
+#ifdef USE_EXPENSIVE_REFLECT
+    float t_ReflectAmount = u_ReflectAmount;
+
+#ifndef USE_FLOWMAP
+    // not sure why, but it's super distorted otherwise... see d2_coast_01
+    // guessing something about my distortion math isn't 100%
+    t_ReflectAmount *= 0.25;
+#endif
+
+    vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
+    // Reflection texture is stored upside down
+    t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
+
+    vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
+    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+#else
+    vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
+    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+#endif
+
+    vec4 t_FinalColor;
 
     float t_RefractAmount = t_Fresnel;
 
-#ifdef USE_BASETEXTURE
+#ifdef USE_FLOWMAP_BASETEXTURE
     // Parallax scum layer
     float t_ParallaxStrength = t_FlowNormalSample.a * u_FlowColorDisplacementStrength;
-    vec3 t_InteriorDirection = t_ParallaxStrength * (t_LookDir.xyz - t_NormalWorld.xyz);
+    vec3 t_InteriorDirection = t_ParallaxStrength * (t_WorldDirectionToEye.xyz - t_NormalWorld.xyz);
     vec2 t_FlowColorTexCoordBase = t_TexCoordWorldBase.xy * u_FlowColorTexCoordScale + t_InteriorDirection.xy;
     float t_FlowColorTimeInIntervals = u_FlowColorTimeInIntervals + t_FlowNoiseSample.g;
     vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureBase), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
@@ -2588,7 +2575,6 @@ void mainPS() {
 
     // Sludge can either be below or on top of the water, according to base texture alpha.
     //   0.0 - 0.5 = translucency, and 0.5 - 1.0 = above water
-    // Compute transparency from 
     t_RefractColor.rgb = mix(t_RefractColor.rgb, t_FlowColor.rgb, saturate(invlerp(0.0, 0.5, t_FlowColor.a)));
 
     // Now compute above water
@@ -2597,7 +2583,10 @@ void mainPS() {
 #endif
 
     t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_RefractAmount);
+
+#ifdef USE_FLOWMAP
     t_FinalColor.a = u_WaterBlendFactor;
+#endif
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -2607,14 +2596,14 @@ void mainPS() {
 }
 
 class Material_Water extends BaseMaterial {
-    private shaderType: WaterShaderType;
-    private program: MaterialProgramBase;
+    private program: WaterMaterialProgram;
     private gfxProgram: GfxProgram | null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
-    private textureMapping: TextureMapping[] = nArray(6, () => new TextureMapping());
+    private textureMapping: TextureMapping[] = nArray(9, () => new TextureMapping());
 
     private wantsTexScroll = false;
+    private wantsFlowmap = false;
 
     protected initParameters(): void {
         super.initParameters();
@@ -2636,6 +2625,8 @@ class Material_Water extends BaseMaterial {
         p['$scroll2']                      = new ParameterVector(3);
         p['$cheapwaterstartdistance']      = new ParameterNumber(500.0);
         p['$cheapwaterenddistance']        = new ParameterNumber(1000.0);
+
+        p['$forceenvmap']                  = new ParameterBoolean(false, false);
 
         p['$flowmap']                      = new ParameterTexture(false, false);
         p['$flowmapframe']                 = new ParameterNumber(0);
@@ -2673,12 +2664,14 @@ class Material_Water extends BaseMaterial {
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         super.initStatic(device, cache);
 
+        this.program = new WaterMaterialProgram();
+
         if (this.paramGetVTF('$flowmap') !== null) {
-            this.shaderType = WaterShaderType.Flow;
-            this.program = new WaterFlowMaterialProgram();
+            this.wantsFlowmap = true;
+            this.program.setDefineBool('USE_FLOWMAP', true);
 
             if (this.paramGetVTF('$basetexture') !== null)
-                this.program.setDefineBool('USE_BASETEXTURE', true);
+                this.program.setDefineBool('USE_FLOWMAP_BASETEXTURE', true);
 
             if (this.paramGetBoolean('$lightmapwaterfog')) {
                 this.program.setDefineBool('USE_LIGHTMAP_WATER_FOG', true);
@@ -2687,16 +2680,16 @@ class Material_Water extends BaseMaterial {
 
             this.isTranslucent = false;
         } else {
-            this.shaderType = WaterShaderType.Normal;
-            this.program = new WaterMaterialProgram();
-
             if (this.paramGetVector('$scroll1').get(0) !== 0) {
                 this.wantsTexScroll = true;
                 this.program.setDefineBool('USE_TEXSCROLL', true);
             }
-
-            this.isIndirect = this.textureIsIndirect('$refracttexture');
         }
+
+        if (this.paramGetVTF('$refracttexture') !== null)
+            this.program.setDefineBool('USE_REFRACT', true);
+
+        this.isIndirect = this.textureIsIndirect('$refracttexture') || this.textureIsIndirect('$reflecttexture');
 
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
@@ -2714,19 +2707,52 @@ class Material_Water extends BaseMaterial {
 
         this.setupFogParams(renderContext, renderInst);
 
-        if (this.shaderType === WaterShaderType.Flow) {
-            this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
-            renderContext.lightmapManager.fillTextureMapping(this.textureMapping[1], lightmapPageIndex);
-            this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
-            this.paramGetTexture('$flowmap').fillTextureMapping(this.textureMapping[3], this.paramGetInt('$flowmapframe'));
-            this.paramGetTexture('$flow_noise_texture').fillTextureMapping(this.textureMapping[4], 0);
-            this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$refracttexture').fillTextureMapping(this.textureMapping[0], 0);
+        this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
+        this.paramGetTexture('$depthtexture').fillTextureMapping(this.textureMapping[2], 0);
+        this.paramGetTexture('$reflecttexture').fillTextureMapping(this.textureMapping[3], 0);
 
-            let offs = renderInst.allocateUniformBuffer(WaterFlowMaterialProgram.ub_ObjectParams, 20);
-            const d = renderInst.mapUniformBufferF32(WaterFlowMaterialProgram.ub_ObjectParams);
+        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$frame'));
+        renderContext.lightmapManager.fillTextureMapping(this.textureMapping[5], lightmapPageIndex);
+        this.paramGetTexture('$flowmap').fillTextureMapping(this.textureMapping[6], this.paramGetInt('$flowmapframe'));
+        this.paramGetTexture('$flow_noise_texture').fillTextureMapping(this.textureMapping[7], 0);
 
+        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[8], this.paramGetInt('$envmapframe'));
+
+        let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
+        offs += this.paramFillScaleBias(d, offs, '$bumptransform');
+
+        if (this.wantsTexScroll) {
+            const scroll1x = this.paramGetVector('$scroll1').get(0) * renderContext.globalTime;
+            const scroll1y = this.paramGetVector('$scroll1').get(1) * renderContext.globalTime;
+            const scroll2x = this.paramGetVector('$scroll2').get(0) * renderContext.globalTime;
+            const scroll2y = this.paramGetVector('$scroll2').get(1) * renderContext.globalTime;
+            offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
+        }
+
+        const forceEnvMap = this.paramGetBoolean('$forceenvmap');
+        const useExpensiveReflect = renderContext.currentView.useExpensiveWater && !forceEnvMap;
+        if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
+            this.gfxProgram = null;
+
+        offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
+        offs += this.paramFillGammaColor(d, offs, '$reflecttint', '$reflectamount');
+
+        const fogStart = this.paramGetNumber('$fogstart');
+        const fogEnd = this.paramGetNumber('$fogend');
+        // The start is actually unused, only the range is used...
+        const fogRange = fogEnd - fogStart;
+
+        this.paramGetVector('$fogcolor').fillColor(scratchColor, fogRange);
+        offs += fillGammaColor(d, offs, scratchColor);
+
+        // This will take us from -1...1 to world space position.
+        mat4.invert(scratchMatrix, renderContext.currentView.clipFromWorldMatrix);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+
+        if (this.wantsFlowmap) {
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
-            offs += this.paramFillGammaColor(d, offs, '$fogcolor');
 
             // Texture coordinate scales
             offs += fillVec4(d, offs,
@@ -2749,43 +2775,6 @@ class Material_Water extends BaseMaterial {
                 this.paramGetNumber('$color_flow_displacebynormalstrength'),
                 this.paramGetNumber('$color_flow_lerpexp'),
                 this.paramGetNumber('$waterblendfactor'));
-        } else if (this.shaderType === WaterShaderType.Normal) {
-            this.paramGetTexture('$refracttexture').fillTextureMapping(this.textureMapping[0], 0);
-            this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
-            this.paramGetTexture('$depthtexture').fillTextureMapping(this.textureMapping[2], 0);
-            this.paramGetTexture('$reflecttexture').fillTextureMapping(this.textureMapping[3], 0);
-            this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapframe'));
-
-            let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 36);
-            const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
-            offs += this.paramFillScaleBias(d, offs, '$bumptransform');
-
-            if (this.wantsTexScroll) {
-                const scroll1x = this.paramGetVector('$scroll1').get(0) * renderContext.globalTime;
-                const scroll1y = this.paramGetVector('$scroll1').get(1) * renderContext.globalTime;
-                const scroll2x = this.paramGetVector('$scroll2').get(0) * renderContext.globalTime;
-                const scroll2y = this.paramGetVector('$scroll2').get(1) * renderContext.globalTime;
-                offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
-            }
-
-            const useExpensiveReflect = renderContext.currentView.useExpensiveWater;
-            if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
-                this.gfxProgram = null;
-
-            offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
-            offs += this.paramFillGammaColor(d, offs, '$reflecttint', '$reflectamount');
-
-            const fogStart = this.paramGetNumber('$fogstart');
-            const fogEnd = this.paramGetNumber('$fogend');
-            // The start is actually unused, only the range is used...
-            const fogRange = fogEnd - fogStart;
-
-            this.paramGetVector('$fogcolor').fillColor(scratchColor, fogRange);
-            offs += fillGammaColor(d, offs, scratchColor);
-
-            // This will take us from -1...1 to world space position.
-            mat4.invert(scratchMatrix, renderContext.currentView.clipFromWorldMatrix);
-            offs += fillMatrix4x4(d, offs, scratchMatrix);
         }
 
         this.recacheProgram(renderContext.renderCache);
@@ -3163,6 +3152,11 @@ export class MaterialCache {
         return materialInstance;
     }
 
+    public checkVTFExists(name: string): boolean {
+        const path = this.filesystem.resolvePath(this.resolvePath(name), '.vtf');
+        return this.filesystem.hasEntry(path);
+    }
+
     private async fetchVTFInternal(name: string, srgb: boolean, cacheKey: string): Promise<VTF> {
         const path = this.filesystem.resolvePath(this.resolvePath(name), '.vtf');
         const data = await this.filesystem.fetchFileData(path);
@@ -3199,7 +3193,7 @@ export class MaterialCache {
 //#endregion
 
 //#region Runtime Lighting / LightCache
-function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap {
+function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap | null {
     let bestDistance = Infinity;
     let bestIndex = -1;
 
@@ -3211,7 +3205,9 @@ function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap {
         }
     }
 
-    assert(bestIndex >= 0);
+    if (bestIndex < 0)
+        return null;
+
     return bspfile.cubemaps[bestIndex];
 }
 
@@ -3241,6 +3237,46 @@ function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): numb
         return 0.0;
     } else if (light.type === WorldLightType.QuakeLight) {
         return Math.max(0.0, light.distAttenuation[1] - vec3.length(delta));
+    } else {
+        throw "whoops";
+    }
+}
+
+function worldLightAngleFalloff(light: WorldLight, surfaceNormal: ReadonlyVec3, delta: ReadonlyVec3): number {
+    if (light.type === WorldLightType.Surface) {
+        const dot1 = vec3.dot(surfaceNormal, delta);
+        if (dot1 <= 0.0)
+            return 0.0;
+        const dot2 = -vec3.dot(delta, light.normal);
+        if (dot2 <= 0.0)
+            return 0.0;
+        return dot1 * dot2;
+    } else if (light.type === WorldLightType.Point || light.type === WorldLightType.QuakeLight) {
+        const dot = vec3.dot(surfaceNormal, delta);
+        if (dot <= 0.0)
+            return 0.0;
+        return dot;
+    } else if (light.type === WorldLightType.Spotlight) {
+        const visDot = vec3.dot(surfaceNormal, delta);
+        if (visDot <= 0.0)
+            return 0.0;
+
+        const angleDot = -vec3.dot(delta, light.normal);
+        if (angleDot <= light.stopdot2) // Outside outer cone.
+            return 0.0;
+
+        if (angleDot >= light.stopdot) // Inside inner cone.
+            return visDot;
+
+        const ratio = Math.pow(invlerp(light.stopdot2, light.stopdot, angleDot), light.exponent);
+        return visDot * ratio;
+    } else if (light.type === WorldLightType.SkyLight) {
+        const dot = -vec3.dot(delta, light.normal);
+        if (dot <= 0.0)
+            return 0.0;
+        return dot;
+    } else if (light.type === WorldLightType.SkyAmbient) {
+        return 1.0;
     } else {
         throw "whoops";
     }
@@ -3363,16 +3399,36 @@ function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: Readon
     }
 }
 
+export function worldLightingCalcColorForPoint(dst: Color, bspRenderer: BSPRenderer, pos: ReadonlyVec3): void {
+    dst.r = 0;
+    dst.g = 0;
+    dst.b = 0;
+
+    const bspfile = bspRenderer.bsp;
+    for (let i = 0; i < bspfile.worldlights.length; i++) {
+        const light = bspfile.worldlights[i];
+
+        vec3.sub(scratchVec3, light.pos, pos);
+        const ratio = worldLightDistanceFalloff(light, scratchVec3);
+        vec3.normalize(scratchVec3, scratchVec3);
+        const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
+
+        dst.r += light.intensity[0] * ratio * angularRatio;
+        dst.g += light.intensity[1] * ratio * angularRatio;
+        dst.b += light.intensity[2] * ratio * angularRatio;
+    }
+}
+
 const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ ] as const;
 export class LightCache {
     private leaf: number = -1;
-    public envCubemap: Cubemap;
+    public envCubemap: Cubemap | null;
     public debug: boolean = false;
 
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
     private ambientCube: AmbientCube = newAmbientCube();
 
-    constructor(bspfile: BSPFile, private pos: ReadonlyVec3, bbox: AABB) {
+    constructor(bspfile: BSPFile, private pos: ReadonlyVec3) {
         this.leaf = bspfile.findLeafIdxForPoint(pos);
         assert(this.leaf >= 0);
 
@@ -3403,11 +3459,11 @@ export class LightCache {
         vec3.sub(scratchVec3, light.pos, this.pos);
         const ratio = worldLightDistanceFalloff(light, scratchVec3);
         vec3.normalize(scratchVec3, scratchVec3);
-        // TODO(jstpierre): Angle attenuation
+        const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
 
         for (let i = 0; i < ambientCubeDirections.length; i++) {
             const dst = this.ambientCube[i];
-            const mul = vec3.dot(scratchVec3, ambientCubeDirections[i]) * ratio;
+            const mul = vec3.dot(scratchVec3, ambientCubeDirections[i]) * ratio * angularRatio;
             if (mul <= 0)
                 continue;
             dst.r += light.intensity[0] * mul;
@@ -3428,7 +3484,9 @@ export class LightCache {
 
             vec3.sub(scratchVec3, light.pos, this.pos);
             const ratio = worldLightDistanceFalloff(light, scratchVec3);
-            const intensity = ratio * vec3.dot(light.intensity, ntscGrayscale);
+            vec3.normalize(scratchVec3, scratchVec3);
+            const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
+            const intensity = ratio * angularRatio * vec3.dot(light.intensity, ntscGrayscale);
 
             if (intensity <= 0.0)
                 continue;

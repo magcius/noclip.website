@@ -2,7 +2,6 @@
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { assertExists, assert, leftPad, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
-import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
 
@@ -125,8 +124,12 @@ function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
 function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
     if (format === GfxFormat.U8_RGBA_RT)
         return 'bgra8unorm';
+    else if (format === GfxFormat.U8_RGBA_RT_SRGB)
+        return 'bgra8unorm-srgb';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'rgba8unorm';
+    else if (format === GfxFormat.U8_RGBA_SRGB)
+        return 'rgba8unorm-srgb';
     else if (format === GfxFormat.U8_RG_NORM)
         return 'rg8unorm';
     else if (format === GfxFormat.U32_R)
@@ -167,9 +170,9 @@ function translateTextureDimension(dimension: GfxTextureDimension): GPUTextureDi
     if (dimension === GfxTextureDimension.n2D)
         return '2d';
     else if (dimension === GfxTextureDimension.Cube)
-        return '3d';
+        return '2d';
     else if (dimension === GfxTextureDimension.n2DArray)
-        return '3d';
+        return '2d';
     else if (dimension === GfxTextureDimension.n3D)
         return '3d';
     else
@@ -551,11 +554,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 }
 
-function prependLineNo(str: string, lineStart: number = 1) {
-    const lines = str.split('\n');
-    return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
-}
-
 function isFormatTextureCompressionBC(format: GfxFormat): boolean {
     const formatTypeFlags = getFormatTypeFlags(format);
 
@@ -641,11 +639,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
     public readonly supportsSyncPipelineCompilation: boolean = false;
 
-    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glslang: Glslang) {
+    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: (src: string, shaderStage: string) => string) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
-            wrapS: GfxWrapMode.Clamp,
-            wrapT: GfxWrapMode.Clamp,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.NoMip,
@@ -801,12 +799,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return attachment;
     }
 
-    private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStage> {
-        let res: Uint32Array;
+    private async _createShaderStage(sourceText: string, shaderStage: 'vertex' | 'fragment'): Promise<GPUProgrammableStage> {
+        let res: string;
         try {
-            res = this.glslang.compileGLSL(sourceText, shaderStage, true);
+            res = this.glsl_compile(sourceText, shaderStage);
         } catch(e) {
-            console.error(prependLineNo(sourceText));
+            console.error(sourceText);
             throw "whoops";
         }
 
@@ -1064,6 +1062,20 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
     }
 
+    public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
+        const cmd = this.device.createCommandEncoder();
+
+        const dst = dst_ as GfxTextureP_WebGPU;
+        const src = src_ as GfxTextureP_WebGPU;
+        const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture, origin: [srcX, srcY, 0] };
+        const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture, origin: [dstX, dstY, 0] };
+        assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
+        assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
+        cmd.copyTextureToTexture(srcCopy, dstCopy, [src.width, src.height, 1]);
+
+        this.device.queue.submit([cmd.finish()]);
+    }
+
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void {
         if (byteCount === undefined)
             byteCount = data.byteLength;
@@ -1125,9 +1137,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
     }
 
-    public queryTextureFormatSupported(format: GfxFormat): boolean {
-        if (isFormatTextureCompressionBC(format))
+    public queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean {
+        if (isFormatTextureCompressionBC(format)) {
+            if (!this._featureTextureCompressionBC)
+                return false;
+
+            const bb = getFormatBlockSize(format);
+            if ((width % bb) !== 0 || (height % bb) !== 0)
+                return false;
             return this._featureTextureCompressionBC;
+        }
         return true;
     }
 
@@ -1213,7 +1232,6 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (!context)
         return null;
 
-    const _glslang = await glslang('glslang.wasm');
-
-    return new GfxImplP_WebGPU(adapter, device, canvas, context, _glslang);
+    const { glsl_compile } = await import('../../../rust/pkg/index');
+    return new GfxImplP_WebGPU(adapter, device, canvas, context, glsl_compile);
 }

@@ -99,7 +99,9 @@ layout(std140) uniform ub_PrmParams {
 #define u_BoneDimension   (u_PrmMisc[1].y)
 #define u_UseVertexColor  (u_PrmMisc[1].z)
 
-uniform sampler2D u_Texture[3];
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
+uniform sampler2D u_Texture2;
 `;
 
     constructor(public material: CMB.Material, private materialHacks: DMPMaterialHacks) {
@@ -139,11 +141,11 @@ uniform sampler2D u_Texture[3];
 
         switch (which) {
         case 0: // Texture 0 has TexCoord 0
-            return `texture(SAMPLER_2D(u_Texture[0]), v_TexCoord0)`;
+            return `texture(SAMPLER_2D(u_Texture0), v_TexCoord0)`;
         case 1: // Texture 1 has TexCoord 1
-            return `texture(SAMPLER_2D(u_Texture[1]), v_TexCoord1)`;
+            return `texture(SAMPLER_2D(u_Texture1), v_TexCoord1)`;
         case 2: // Texture 2 has either TexCoord 1 or 2 as input. TODO(jstpierre): Add a material setting for this.
-            return `texture(SAMPLER_2D(u_Texture[2]), v_TexCoord2)`;
+            return `texture(SAMPLER_2D(u_Texture2), v_TexCoord2)`;
         case 3: // Texture 3 is the procedural texture unit. We don't support this yet; return white.
             console.warn("Accessing procedural texture slot");
             return `vec4(1.0)`;

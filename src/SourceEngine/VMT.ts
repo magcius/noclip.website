@@ -1,10 +1,9 @@
 
 // Valve Material Type
 
-import { arrayRemove, assert, assertExists } from "../util";
+import { arrayRemove, assertExists } from "../util";
 import { SourceFileSystem } from "./Main";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorFromRGBA } from "../Color";
+import { Color } from "../Color";
 
 export type VKFParamMap = { [k: string]: string };
 export type VKFPairUnit = string | number | VKFPair[];
@@ -261,6 +260,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const base = await parseVMT(filesystem, vmt['include'], depth++);
         patch(base, vmt.replace, true);
         patch(base, vmt.insert, false);
+        base._Patch = base._Filename;
         base._Filename = vmt._Filename;
         return base;
     } else {

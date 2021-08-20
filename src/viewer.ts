@@ -4,7 +4,7 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor, makeTextureDescriptor2D, GfxFormat, GfxProgram } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
@@ -180,6 +180,23 @@ export class Viewer {
         this.onstatistics(renderStatistics);
     }
 
+    private xrTempRT: GfxTexture | null = null;
+    private xrTempWidth: number = -1;
+    private xrTempHeight: number = -1;
+
+    private getXRTempRT(width: number, height: number): GfxTexture {
+        if (this.xrTempWidth !== width || this.xrTempHeight !== height) {
+            if (this.xrTempRT !== null)
+                this.gfxDevice.destroyTexture(this.xrTempRT);
+
+            this.xrTempRT = this.gfxDevice.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_RT, width, height, 1));
+            this.xrTempWidth = width;
+            this.xrTempHeight = height;
+        }
+
+        return this.xrTempRT!;
+    }
+
     private renderWebXR(webXRContext: WebXRContext) {
         if (webXRContext.xrSession === null)
             return;
@@ -188,46 +205,37 @@ export class Viewer {
         if (baseLayer === undefined)
             return;
 
-        const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
-        const fbw: number = baseLayer.framebufferWidth;
-        const fbh: number = baseLayer.framebufferHeight;
-
-        this.viewerRenderInput.camera = this.camera;
         this.viewerRenderInput.time = this.sceneTime;
-        this.viewerRenderInput.backbufferWidth = fbw;
-        this.viewerRenderInput.backbufferHeight = fbh;
-        this.gfxSwapChain.configureSwapChain(fbw, fbh, framebuffer);
+        this.gfxSwapChain.configureSwapChain(baseLayer.framebufferWidth, baseLayer.framebufferHeight, baseLayer.framebuffer);
+        const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
 
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
-        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
             const xrView: XRView = webXRContext.views[i];
-            const xrViewPort: XRViewport = baseLayer.getViewport(xrView);
-
-            if (!xrViewPort) {
+            const viewport: XRViewport = baseLayer.getViewport(xrView);
+            if (!viewport)
                 continue;
-            }
 
-            const widthRatio: number = xrViewPort.width / fbw;
-            const heightRatio: number = xrViewPort.height / fbh;
-            this.viewerRenderInput.viewport = {
-                x: xrViewPort.x / xrViewPort.width * widthRatio,
-                y: xrViewPort.y / xrViewPort.height * heightRatio,
-                w: widthRatio,
-                h: heightRatio
-            };
-
+            // Render the viewport to our temp RT.
+            this.viewerRenderInput.backbufferWidth = viewport.width;
+            this.viewerRenderInput.backbufferHeight = viewport.height;
+            const tempRT = this.getXRTempRT(viewport.width, viewport.height);
+            this.viewerRenderInput.onscreenTexture = tempRT;
             this.renderViewport();
 
-            this.gfxSwapChain.present();
+            // Now composite into the backbuffer.
+            this.gfxDevice.copySubTexture2D(swapChainTex, viewport.x, viewport.y, tempRT, 0, 0);
+
+            // Reset the delta time so we don't advance time next render.
+            this.viewerRenderInput.deltaTime = 0;
         }
 
+        this.gfxSwapChain.present();
         this.gfxDevice.popDebugGroup();
         const renderStatistics = this.renderStatisticsTracker.endFrame();
         this.finishRenderStatistics(renderStatistics, this.debugGroup);

@@ -11,7 +11,7 @@ layout(std140) uniform ub_MeshFragParams {
     vec4 u_TexCoordOffs;
 };
 
-uniform sampler2D u_Texture[1];
+uniform sampler2D u_Texture;
 
 varying vec4 v_Color;
 varying vec2 v_TexCoord;
@@ -33,7 +33,7 @@ void main() {
     vec4 t_Color = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Color *= texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
+    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
 #ifdef USE_VERTEX_COLOR

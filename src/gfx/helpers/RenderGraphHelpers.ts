@@ -1,5 +1,5 @@
 
-import { GfxRenderPassDescriptor, GfxColor, GfxFormat } from "../platform/GfxPlatform";
+import { GfxColor, GfxFormat } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../render/GfxRenderGraph";
@@ -31,7 +31,7 @@ function selectFormatSimple(slot: GfxrAttachmentSlot): GfxFormat {
     if (slot === GfxrAttachmentSlot.Color0)
         return GfxFormat.U8_RGBA_RT;
     else if (slot === GfxrAttachmentSlot.DepthStencil)
-        return GfxFormat.D32F;
+        return GfxFormat.D24;
     else
         throw "whoops";
 }

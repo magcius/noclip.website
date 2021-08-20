@@ -11,7 +11,7 @@ import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, quat, vec3, vec2 } from "gl-matrix";
-import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
+import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { assert, mod } from "../util";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -567,7 +567,7 @@ export class SceneRenderer extends BaseRenderer {
             if (timeOff < timeOn && (hour < timeOn && timeOff < hour)) return;
         }
 
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.bbox);
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
@@ -586,7 +586,7 @@ export class AreaRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         if (!viewerInput.camera.frustum.contains(this.bbox)) return;
 
-        const depth = (computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox) - this.bbox.boundingSphereRadius()) / DRAW_DISTANCE_FACTOR;
+        const depth = (computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.bbox) - this.bbox.boundingSphereRadius()) / DRAW_DISTANCE_FACTOR;
         for (let i = 0; i < this.renderers.length; i++) {
             const renderer = this.renderers[i];
             if (renderer.params.minDistance <= depth && depth < renderer.params.maxDistance)

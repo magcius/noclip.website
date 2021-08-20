@@ -629,7 +629,7 @@ class AnimGroupInstance_Shape {
         const template = renderInstManager.pushTemplateRenderInst();
 
         getMatrixTranslation(scratchVec3a, modelMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, scratchVec3a);
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, scratchVec3a);
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
     
         for (let i = 0; i < this.shape.draws.length; i++) {

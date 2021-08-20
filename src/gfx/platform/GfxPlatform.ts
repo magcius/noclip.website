@@ -372,6 +372,9 @@ export interface GfxDevice {
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
 
+    // Copying.
+    copySubTexture2D(dst: GfxTexture, dstX: number, dstY: number, src: GfxTexture, srcX: number, srcY: number): void;
+
     // Data submission
     uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
@@ -383,7 +386,7 @@ export interface GfxDevice {
 
     // Information queries.
     queryLimits(): GfxDeviceLimits;
-    queryTextureFormatSupported(format: GfxFormat): boolean;
+    queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;

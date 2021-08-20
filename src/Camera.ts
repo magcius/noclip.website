@@ -2,13 +2,16 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis, getMatrixAxisX } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
+import { StudioPanel } from './Studio';
+import { Blue, Color, Green, Magenta } from './Color';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -49,11 +52,6 @@ export class Camera {
 
     private forceInfiniteFarPlane: boolean = false;
 
-    private webXROverrideCameraProperties: boolean = false;
-    public setWebXROverrideEnabled(enabled: boolean): void {
-        this.webXROverrideCameraProperties = enabled;
-    }
-
     public identity(): void {
         mat4.identity(this.worldMatrix);
         mat4.identity(this.viewMatrix);
@@ -86,9 +84,6 @@ export class Camera {
     }
 
     public setClipPlanes(n: number, f: number = Infinity): void {
-        if (this.webXROverrideCameraProperties) {
-            return;
-        }
         if (this.isOrthographic) {
             // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
         } else {
@@ -98,7 +93,7 @@ export class Camera {
 
     private updateClipFromWorld(): void {
         mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
-        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
     }
 
     public updateProjectionMatrix(): void {
@@ -149,13 +144,21 @@ const scratchMat4 = mat4.create();
 const scratchQuat = quat.create();
 
 /**
- * Computes a view-space depth given @param camera and @param aabb in world-space.
+ * Computes a view-space depth given @param viewMatrix and @param aabb in world-space.
  * 
- * This is computed by taking the depth of the world-space depth of @param aabb.
+ * This is computed by taking the depth of the center of the passed-in @param aabb.
+ * 
+ * The convention of "view-space depth" is that 0 is near plane, +z is further away.
+ *
+ * The returned value is not clamped to the near or far planes -- that is, the depth
+ * value is less than zero if the camera is behind the point.
+ *
+ * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
+ * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AABB, v: vec3 = scratchVec3a): number {
+ export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4, aabb: AABB, v: vec3 = scratchVec3a): number {
     aabb.centerPoint(v);
-    return computeViewSpaceDepthFromWorldSpacePoint(camera, v);
+    return computeViewSpaceDepthFromWorldSpacePoint(viewMatrix, v);
 }
 
 /**
@@ -169,24 +172,9 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
- export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
+ export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
     transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
-}
-
-/**
- * Computes a view-space depth given @param camera and @param v in world-space.
- * 
- * The convention of "view-space depth" is that 0 is near plane, +z is further away.
- *
- * The returned value is not clamped to the near or far planes -- that is, the depth
- * value is less than zero if the camera is behind the point.
- *
- * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
- * which will clamp if the value is below 0.
- */
-export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: ReadonlyVec3, v_ = scratchVec3a): number {
-    return computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(camera.viewMatrix, v);
 }
 
 export function divideByW(dst: vec4, src: ReadonlyVec4): void {
@@ -513,41 +501,65 @@ export class FPSCameraController implements CameraController {
 }
 
 export class StudioCameraController extends FPSCameraController {
-    private isAnimationPlaying: boolean = false;
+    public isAnimationPlaying: boolean = false;
     private interpStep: InterpolationStep = new InterpolationStep();
-    /**
-     * Indicates if the camera is currently positioned on a keyframe's end position.
-     */
-    private isOnKeyframe: boolean = false;
+    private scratchVec: vec3 = vec3.create();
+    private scratchVecUp: vec3 = vec3.create();
+    private scratchMat: mat4 = mat4.create();
 
-    constructor(private animationManager: CameraAnimationManager) {
+    public previewPath: boolean = true;
+    public previewLineColor: Color = Magenta;
+    public previewLineLookAtColor: Color = Blue;
+    public previewLineYAxisColor: Color = Green;
+
+    constructor(private animationManager: CameraAnimationManager, private studioPanel: StudioPanel) {
         super();
     }
 
     public update(inputManager: InputManager, dt: number): CameraUpdateResult {
         let result;
+
         if (this.isAnimationPlaying) {
             result = this.updateAnimation(dt);
             if (result === CameraUpdateResult.Changed) {
                 mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
                 this.camera.worldMatrixUpdated();
             }
-            if (inputManager.isKeyDownEventTriggered('Escape')) {
+            if (inputManager.isKeyDownEventTriggered('Escape'))
                 this.stopAnimation();
-            }
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
-            if (!this.isOnKeyframe && inputManager.isKeyDownEventTriggered('Enter')) {
-                this.animationManager.addNextKeyframe(mat4.clone(this.camera.worldMatrix));
-                this.isOnKeyframe = true;
-            }
-            if (inputManager.isKeyDownEventTriggered('Escape')) {
-                this.animationManager.endEditKeyframePosition();
-            }
+            // TODO(jstpierre): Move these controls / path drawing to Studio.
+
+            if (inputManager.isKeyDownEventTriggered('Enter'))
+                this.studioPanel.addKeyframesFromMat4(mat4.clone(this.camera.worldMatrix));
+
+            if (inputManager.isKeyDownEventTriggered('Escape'))
+                this.studioPanel.endEditKeyframePosition();
+
             result = super.update(inputManager, dt);
-            if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged) {
-                this.isOnKeyframe = false;
+
+            if (this.previewPath) {
+                for (let i = 0; i <= this.studioPanel.animationPreviewSteps.length - 2; i++) {
+                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i + 1].pos, this.previewLineColor);
+                    if (i % 30 === 0) {
+                        drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i].lookAtPos, this.previewLineLookAtColor);
+
+                        mat4.targetTo(this.scratchMat, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i].lookAtPos, Vec3UnitY);
+                        mat4.rotateZ(this.scratchMat, this.scratchMat, -this.studioPanel.animationPreviewSteps[i].bank);
+                        computeEulerAngleRotationFromSRTMatrix(this.scratchVec, this.scratchMat);
+                        vec3.copy(this.scratchVecUp, Vec3UnitY);
+                        vec3.rotateZ(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[2]);
+                        vec3.rotateY(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[1]);
+                        vec3.rotateX(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[0]);
+                        this.scratchVecUp[2] = 0;
+                        vec3.normalize(this.scratchVecUp, this.scratchVecUp);
+                        vec3.scaleAndAdd(this.scratchVecUp, this.studioPanel.animationPreviewSteps[i].pos, this.scratchVecUp, 100);
+                        drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.scratchVecUp, this.previewLineYAxisColor);
+                        // TODO - draw arrow head lines or cone to better communicate direction?
+                    }
+                }
             }
         }
 
@@ -555,25 +567,17 @@ export class StudioCameraController extends FPSCameraController {
     }
 
     public updateAnimation(dt: number): CameraUpdateResult {
-        if (this.animationManager.isKeyframeFinished()) {
-            if (this.animationManager.playbackHasNextKeyframe())
-                this.animationManager.playbackAdvanceKeyframe();
-            else
-                this.stopAnimation();
+        if (this.animationManager.isAnimationFinished()) {
+            this.stopAnimation();
             return CameraUpdateResult.Unchanged;
         }
 
-        if (this.animationManager.interpFinished()) {
-            // The interpolation is finished, but this keyframe still has a hold duration to complete.
-            this.animationManager.update(dt);
-            return CameraUpdateResult.Unchanged;
-        } else {
-            this.animationManager.update(dt);
-            this.animationManager.playbackInterpolationStep(this.interpStep);
-            mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
-            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
-            return CameraUpdateResult.Changed;
-        }
+        this.animationManager.updateElapsedTime(dt);
+        this.animationManager.getAnimFrame(this.interpStep);
+        mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
+        mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
+        this.studioPanel.onAnimationAdvance(this.animationManager.getElapsedTimeSeconds());
+        return CameraUpdateResult.Changed;
     }
 
     public setToPosition(setStep: InterpolationStep): void {
@@ -581,19 +585,16 @@ export class StudioCameraController extends FPSCameraController {
         mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, setStep.bank);
         mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
         this.camera.worldMatrixUpdated();
-        this.isOnKeyframe = true;
     }
 
-    public playAnimation(startStep: InterpolationStep) {
+    public playAnimation() {
         this.isAnimationPlaying = true;
-        this.setToPosition(startStep);
     }
 
     public stopAnimation() {
         this.isAnimationPlaying = false;
-        this.animationManager.fireStoppedEvent();
+        this.studioPanel.onAnimationStopped();
     }
-
 }
 
 export class XRCameraController {
@@ -604,19 +605,18 @@ export class XRCameraController {
     public worldScale: number = 70; // Roughly the size of Banjo in Banjo Kazooie
 
     public update(webXRContext: WebXRContext): boolean {
-        let updated = false;
-
         if (!webXRContext.xrSession)
             return false;
 
         const inputSources = webXRContext.xrSession.inputSources;
 
         const cameraMoveSpeed = this.worldScale;
-        const keyMovement = vec3.create();
+        const keyMovement = scratchVec3a;
+        vec3.zero(keyMovement);
         if (inputSources.length > 0) {
             for (let i = 0; i < inputSources.length; i++) {
                 const gamepad = inputSources[i].gamepad;
-                if (gamepad && gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
+                if (gamepad && gamepad.axes.length >= 4 && gamepad.buttons.length >= 2) {
                     keyMovement[0] = gamepad.axes[2] * cameraMoveSpeed;
                     keyMovement[1] = (gamepad.buttons[0].value - gamepad.buttons[1].value) * cameraMoveSpeed;
                     keyMovement[2] = gamepad.axes[3] * cameraMoveSpeed;
@@ -624,8 +624,9 @@ export class XRCameraController {
             }
         }
 
+        let updated = false;
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {            
-            const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
+            const viewMovementSpace = webXRContext.xrViewerSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
                     new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
             const pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
@@ -684,14 +685,10 @@ export class XRCameraController {
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
 
             // Extract camera properties
+            // TODO(jstpierre): Just trust the original projection matrix
             camera.fovY = fov;
             camera.aspect = aspect;
-            camera.setWebXROverrideEnabled(false);
-            camera.setClipPlanes(5);
-            camera.setWebXROverrideEnabled(true);
 
-            // TODO WebXR: We do this to restore the components removed by setClipPlanes.
-            // The camera class ideally should generate the projection matrix taking these components into account
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
             reverseDepthForProjectionMatrix(camera.projectionMatrix);
 

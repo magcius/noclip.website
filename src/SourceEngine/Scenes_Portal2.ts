@@ -15,7 +15,7 @@ class prop_button extends BaseEntity {
     }
 }
 
-class prop_under_button extends prop_button {
+class prop_under_button extends BaseEntity {
     public static classname = 'prop_under_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
@@ -24,12 +24,21 @@ class prop_under_button extends prop_button {
     }
 }
 
-class prop_under_floor_button extends prop_button {
+class prop_under_floor_button extends BaseEntity {
     public static classname = 'prop_under_floor_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
         this.setModelName(renderContext, 'models/props_underground/underground_floor_button.mdl');
+    }
+}
+
+class prop_testchamber_door extends BaseEntity {
+    public static classname = 'prop_testchamber_door';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props/portal_door_combined.mdl');
     }
 }
 
@@ -41,6 +50,7 @@ class Portal2SceneDesc implements SceneDesc {
         registry.registerFactory(prop_button);
         registry.registerFactory(prop_under_button);
         registry.registerFactory(prop_under_floor_button);
+        registry.registerFactory(prop_testchamber_door);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
