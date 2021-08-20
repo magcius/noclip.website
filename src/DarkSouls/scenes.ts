@@ -23,10 +23,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { ParamFile, parseParamDef } from "./param";
-import { Camera, CameraController, deserializeCamera, serializeCamera } from "../Camera";
-import { SaveStateLocation } from "../SaveManager";
-import { atob, btoa } from "../Ascii85";
-import { mat4 } from "gl-matrix";
+import { CameraController } from "../Camera";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -312,32 +309,3 @@ const sceneDescs = [
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
-
-/*
-(window as any).convert = () => {
-    for (const d of sceneDescs) {
-        const sm = window.main.saveManager;
-        const descKey = `${id}/${d.id}`;
-        for (let i = 0; i <= 9; i++) {
-            const k = sm.getSaveStateSlotKey(descKey, i);
-            const state = sm.loadStateFromLocation(k, SaveStateLocation.Defaults);
-            console.log(k, state);
-            if (state === null)
-                continue;
-
-            assert(state.startsWith('ZNCA8'));
-            const tmp = new Uint8Array(512);
-            const len = atob(tmp, 0, state.slice(0, -1));
-            const view = new DataView(tmp.buffer);
-            const c = new Camera();
-            deserializeCamera(c, view, 0x08);
-            c.worldMatrix[12] *= 1/100;
-            c.worldMatrix[13] *= 1/100;
-            c.worldMatrix[14] *= 1/100;
-            serializeCamera(view, 0x08, c);
-            const news = btoa(tmp, len) + '=';
-            sm.saveState(k, news);
-        }
-    }
-};
-*/
