@@ -1,4 +1,6 @@
+
 const webpack = require('webpack');
+const path = require('path');
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
@@ -8,6 +10,13 @@ module.exports = merge(common, {
   devtool: 'eval-cheap-module-source-map',
   cache: {
     type: 'filesystem',
+  },
+  devServer: {
+    static: {
+      directory: path.join(__dirname, `data`),
+      publicPath: `/data/`,
+    },
+    compress: true,
   },
   module: {
     rules: [

@@ -617,7 +617,6 @@ function translateImageLayout(layout: GPUImageDataLayout, format: GfxFormat, mip
 }
 
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
-    private _swapChain: GPUSwapChain;
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
     private readonly _swapChainTextureUsage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
@@ -664,12 +663,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             return;
         this._swapChainWidth = width;
         this._swapChainHeight = height;
-        this._swapChain = this.canvasContext.configureSwapChain({ device: this.device, format: 'bgra8unorm', usage: this._swapChainTextureUsage });
+        const size = { width, height };
+        this.canvasContext.configure({ device: this.device, format: 'bgra8unorm', usage: this._swapChainTextureUsage, size });
     }
 
     public getOnscreenTexture(): GfxTexture {
         // TODO(jstpierre): Figure out how to wrap more efficiently.
-        const gpuTexture = this._swapChain.getCurrentTexture();
+        const gpuTexture = this.canvasContext.getCurrentTexture();
         const gpuTextureView = gpuTexture.createView();
         const texture: GfxTextureP_WebGPU = { _T: _T.Texture, ResourceUniqueId: 0,
             gpuTexture, gpuTextureView,
