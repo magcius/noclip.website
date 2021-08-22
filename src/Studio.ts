@@ -1327,8 +1327,6 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private loadState(state: StudioState) {
-        this.initTimeline();
-
         this.timeline.deselectKeyframeIcon();
         const loadedAnimation = JSON.parse(JSON.stringify(state.animation));
         if (loadedAnimation.loop === undefined)
