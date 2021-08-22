@@ -984,18 +984,21 @@ export class StudioPanel extends FloatingPanel {
 
         this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
 
+        this.timelineMarkersCanvas = this.contents.querySelector('#timelineMarkersCanvas') as HTMLCanvasElement;
+        this.timelineElementsCanvas = this.contents.querySelector('#timelineElementsCanvas') as HTMLCanvasElement;
+
+        const markersCtx = this.timelineMarkersCanvas.getContext('2d') as CanvasRenderingContext2D;
+        const elementsCtx = this.timelineElementsCanvas.getContext('2d') as CanvasRenderingContext2D;
+        this.timeline = new Timeline(markersCtx, elementsCtx, Timeline.DEFAULT_LENGTH_MS);
+
         this.snapBtn = this.contents.querySelector('#snapBtn') as HTMLButtonElement;
         this.snapBtn.onclick = () => {
             this.timeline.snappingEnabled = !this.timeline.snappingEnabled;
             setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
         };
         this.snapBtn.dataset.helpText = 'Snap keyframes to the playhead, and vice-versa.';
-        // TODO(jstpierre): always create the timeline
-        // setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
+        setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
         setElementHighlighted(this.snapBtn, false);
-
-        this.timelineMarkersCanvas = this.contents.querySelector('#timelineMarkersCanvas') as HTMLCanvasElement;
-        this.timelineElementsCanvas = this.contents.querySelector('#timelineElementsCanvas') as HTMLCanvasElement;
 
         this.playheadTimePositionInput = this.contents.querySelector('#playheadTimePositionInput') as HTMLInputElement;
         this.playheadTimePositionInput.dataset.prevValue = this.playheadTimePositionInput.value;
@@ -1323,12 +1326,10 @@ export class StudioPanel extends FloatingPanel {
             this.undoBtn.removeAttribute('disabled');
             this.undoBtn.classList.remove('disabled');
         }
-        console.log(`State ${this.currentStateIndex} saved`); // TODO Remove
     }
 
     private loadState(state: StudioState) {
-        if (!this.timeline)
-            this.initTimeline();
+        this.initTimeline();
 
         this.timeline.deselectKeyframeIcon();
         const loadedAnimation = JSON.parse(JSON.stringify(state.animation));
@@ -1797,15 +1798,13 @@ export class StudioPanel extends FloatingPanel {
             bankTrack: new KeyframeTrack(),
             loop: false,
         };
-        if (this.timeline) {
-            this.timeline.deselectKeyframeIcon();
-            this.timeline.keyframeIcons = [];
-            this.playheadTimePositionInput.value = '0';
-            this.timelineLengthInput.value = (Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND).toFixed(2);
-            this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
-            this.livePreviewCheckbox.setChecked(false);
-            this.showPreviewLineCheckbox.setChecked(true);
-        }
+        this.timeline.deselectKeyframeIcon();
+        this.timeline.keyframeIcons = [];
+        this.playheadTimePositionInput.value = '0';
+        this.timelineLengthInput.value = (Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND).toFixed(2);
+        this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
+        this.livePreviewCheckbox.setChecked(false);
+        this.showPreviewLineCheckbox.setChecked(true);
         this.selectedTracks |= KeyframeTrackType.allTracks;
         this.saveAnimationBtn.setAttribute('hidden', '');
         this.studioControlsContainer.setAttribute('hidden', '');
