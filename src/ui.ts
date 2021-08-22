@@ -1804,6 +1804,7 @@ class StudioSidePanel extends Panel {
                 ui.enableStudioMode();
                 setElementHighlighted(this.enableStudioBtn, true);
                 setElementHighlighted(this.disableStudioBtn, false);
+                this.setExpanded(false);
             }
         }
         this.disableStudioBtn.onclick = () => {
