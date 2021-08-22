@@ -1283,7 +1283,6 @@ export class StudioPanel extends FloatingPanel {
         if (this.currentStateIndex < this.studioStates.length - 1) {
             this.currentStateIndex++;
             this.loadState(this.studioStates[this.currentStateIndex]);
-            console.log(`State ${this.currentStateIndex} loaded`); // TODO Remove
             this.undoBtn.removeAttribute('disabled');
             this.undoBtn.classList.remove('disabled');
             if (this.currentStateIndex === this.studioStates.length - 1) {
@@ -1297,7 +1296,6 @@ export class StudioPanel extends FloatingPanel {
         if (this.currentStateIndex > 0) {
             this.currentStateIndex--;
             this.loadState(this.studioStates[this.currentStateIndex]);
-            console.log(`State ${this.currentStateIndex} loaded`); // TODO Remove
             this.redoBtn.removeAttribute('disabled');
             this.redoBtn.classList.remove('disabled');
             if (this.currentStateIndex === 0) {
