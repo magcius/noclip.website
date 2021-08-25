@@ -9,7 +9,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
-import { clamp } from './MathHelpers';
+import { clamp, invlerp, lerp } from './MathHelpers';
 import { DebugFloaterHolder } from './DebugFloaters';
 import { DraggingMode } from './InputManager';
 import { CLAPBOARD_ICON, StudioPanel } from './Studio';
@@ -1425,11 +1425,11 @@ export class Slider implements Widget {
     }
 
     public getT(): number {
-        return (+this.sliderInput.value - +this.sliderInput.min) / (+this.sliderInput.max - +this.sliderInput.min);
+        return invlerp(+this.sliderInput.min, +this.sliderInput.max, +this.sliderInput.value);
     }
 
     public setT(t: number): void {
-        const v = (t * (+this.sliderInput.max - +this.sliderInput.min)) + +this.sliderInput.min;
+        const v = lerp(+this.sliderInput.min, +this.sliderInput.max, t);
         this.setValue(v);
     }
 }

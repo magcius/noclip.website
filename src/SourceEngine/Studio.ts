@@ -1224,8 +1224,10 @@ export class StudioModelData {
                 // mstudio_modelvertexdata_t
                 // const mdlSubmodelVertexDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x6C, true); junk pointer
                 // const mdlSubmodelTangentsDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x70, true); junk pointer
-                const vvdSubmodelVertexDataOffs = vvdVertexDataStart + mdlSubmodelVertexindex;
-                const vvdSubmodelTangentDataOffs = vvdTangentDataStart + mdlSubmodelTangentsindex;
+                assert(mdlSubmodelVertexindex % 0x30 === 0);
+                assert(mdlSubmodelTangentsindex % 0x10 === 0);
+                const mdlSubmodelFirstVertex = (mdlSubmodelVertexindex / 0x30) | 0;
+                const mdlSubmodelFirstTangent = (mdlSubmodelTangentsindex / 0x30) | 0;
 
                 // int unused[8];
 
@@ -1361,9 +1363,10 @@ export class StudioModelData {
 
                                 // Pull out VVD vertex data.
                                 const modelVertIndex = (mdlMeshVertexoffset + vtxOrigMeshVertID);
-                                const vvdVertIndex = fixupRemappingSearch(fixupRemappings, modelVertIndex);
-                                const vvdVertexOffs = vvdSubmodelVertexDataOffs + 0x30 * vvdVertIndex;
-                                const vvdTangentOffs = vvdSubmodelTangentDataOffs + 0x10 * vvdVertIndex;
+                                const vvdVertIndex = fixupRemappingSearch(fixupRemappings, mdlSubmodelFirstVertex + modelVertIndex);
+                                const vvdTangentIndex = fixupRemappingSearch(fixupRemappings, mdlSubmodelFirstTangent + modelVertIndex);
+                                const vvdVertexOffs = vvdVertexDataStart + 0x30 * vvdVertIndex;
+                                const vvdTangentOffs = vvdTangentDataStart + 0x10 * vvdTangentIndex;
 
                                 const vvdBoneWeight = [
                                     vvdView.getFloat32(vvdVertexOffs + 0x00, true),
@@ -1518,23 +1521,14 @@ export class StudioModelData {
                     }
 
                     vtxLODIdx += 0x0C;
-
-                    // TODO(jstpierre): Support multiple model LODs. For now, we only support the first LOD.
-                    break;
                 }
 
                 mdlSubmodelIdx += 0x94;
                 vtxSubmodelIdx += 0x08;
-
-                // TODO(jstpierre): Reading models with multiple submodels seems to break right now... not sure why.
-                break;
             }
 
             mdlBodyPartIdx += 0x10;
             vtxBodyPartIdx += 0x08;
-
-            // TODO(jstpierre): Reading models with multiple body parts seems to break right now... not sure why.
-            break;
         }
     }
 
