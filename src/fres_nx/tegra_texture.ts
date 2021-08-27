@@ -192,27 +192,71 @@ export function deswizzle(swizzledSurface: SwizzledSurface): Uint8Array {
     return dst;
 }
 
-export function decompress(textureEntry: BRTI, pixels: Uint8Array): DecodedSurfaceSW {
+export async function decompress(textureEntry: BRTI, pixels: Uint8Array): Promise<DecodedSurfaceSW> {
+    const wasm = await import("../../rust/pkg/index");
+    const width = textureEntry.width;
+    const height = textureEntry.height;
+    const depth = textureEntry.depth;
     const channelFormat = getChannelFormat(textureEntry.imageFormat);
     const typeFormat = getTypeFormat(textureEntry.imageFormat);
-
-    switch (channelFormat) {
-    case ChannelFormat.Bc1:
+    const info = {
+        width,
+        height,
+        depth,
+    }
+    if (channelFormat === ChannelFormat.Bc1 || channelFormat === ChannelFormat.Bc2 || channelFormat === ChannelFormat.Bc3) {
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
-        return decompressBC({ ...textureEntry, type: 'BC1', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels });
-    case ChannelFormat.Bc3:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
-        return decompressBC({ ...textureEntry, type: 'BC3', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels });
-    case ChannelFormat.Bc4:
+        return {
+            ...info,
+            flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB',
+            type: 'RGBA',
+            pixels: wasm.decompress_tegra_unsigned(
+                channelFormat === ChannelFormat.Bc1 ? wasm.CompressionType.Bc1 :
+                channelFormat === ChannelFormat.Bc2 ? wasm.CompressionType.Bc2 : wasm.CompressionType.Bc3,
+                typeFormat === TypeFormat.UnormSrgb,
+                width,
+                height,
+                depth,
+                pixels,
+                textureEntry.blockHeightLog2
+            )
+        };
+    } else if (channelFormat === ChannelFormat.Bc4 || channelFormat === ChannelFormat.Bc5) {
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
-        return decompressBC({ ...textureEntry, type: 'BC4', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SNORM', pixels } as DecodedSurfaceBC);
-    case ChannelFormat.Bc5:
-        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
-        return decompressBC({ ...textureEntry, type: 'BC5', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SNORM', pixels } as DecodedSurfaceBC);
-    case ChannelFormat.R8_G8_B8_A8:
+        if (typeFormat === TypeFormat.Unorm) {
+            return {
+                ...info,
+                flag: 'UNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_tegra_unsigned(
+                    channelFormat === ChannelFormat.Bc4 ? wasm.CompressionType.Bc4 : wasm.CompressionType.Bc5,
+                    false,
+                    width,
+                    height,
+                    depth,
+                    pixels,
+                    textureEntry.blockHeightLog2
+                ),
+            };
+        } else {
+            return {
+                ...info,
+                flag: 'SNORM',
+                type: 'RGBA',
+                pixels: wasm.decompress_tegra_signed(
+                    channelFormat === ChannelFormat.Bc4 ? wasm.CompressionType.Bc4 : wasm.CompressionType.Bc5,
+                    width,
+                    height,
+                    depth,
+                    pixels,
+                    textureEntry.blockHeightLog2
+                ),
+            };
+        }
+    } else if (channelFormat === ChannelFormat.R8_G8_B8_A8) {
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
         return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
-    default:
+    } else {
         console.error(channelFormat.toString(16));
         throw "whoops";
     }
