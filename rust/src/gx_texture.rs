@@ -1,18 +1,18 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::util;
 
-// Use the fast GX approximation.
-pub fn s3tcblend(a: u8, b: u8) -> u8 {
+fn s3tcblend(a_: u8, b_: u8) -> u8 {
+    // GX uses a different approximation.
     // return (a*3 + b*5) / 8;
-    let a = a as u32;
-    let b = b as u32;
+    let a = a_ as u32;
+    let b = b_ as u32;
     let ret = (((a << 1) + a) + ((b << 2) + b)) >> 3;
     ret as u8
 }
 
-pub fn halfblend(a: u8, b: u8) -> u8 {
-    let a = a as u32;
-    let b = b as u32;
+fn halfblend(a_: u8, b_: u8) -> u8 {
+    let a = a_ as u32;
+    let b = b_ as u32;
     let ret = (a + b) >> 1;
     ret as u8
 }
