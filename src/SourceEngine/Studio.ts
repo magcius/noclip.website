@@ -13,7 +13,7 @@ import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLigh
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -1224,8 +1224,10 @@ export class StudioModelData {
                 // mstudio_modelvertexdata_t
                 // const mdlSubmodelVertexDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x6C, true); junk pointer
                 // const mdlSubmodelTangentsDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x70, true); junk pointer
-                const vvdSubmodelVertexDataOffs = vvdVertexDataStart + mdlSubmodelVertexindex;
-                const vvdSubmodelTangentDataOffs = vvdTangentDataStart + mdlSubmodelTangentsindex;
+                assert(mdlSubmodelVertexindex % 0x30 === 0);
+                assert(mdlSubmodelTangentsindex % 0x10 === 0);
+                const mdlSubmodelFirstVertex = (mdlSubmodelVertexindex / 0x30) | 0;
+                const mdlSubmodelFirstTangent = (mdlSubmodelTangentsindex / 0x30) | 0;
 
                 // int unused[8];
 
@@ -1361,9 +1363,10 @@ export class StudioModelData {
 
                                 // Pull out VVD vertex data.
                                 const modelVertIndex = (mdlMeshVertexoffset + vtxOrigMeshVertID);
-                                const vvdVertIndex = fixupRemappingSearch(fixupRemappings, modelVertIndex);
-                                const vvdVertexOffs = vvdSubmodelVertexDataOffs + 0x30 * vvdVertIndex;
-                                const vvdTangentOffs = vvdSubmodelTangentDataOffs + 0x10 * vvdVertIndex;
+                                const vvdVertIndex = fixupRemappingSearch(fixupRemappings, mdlSubmodelFirstVertex + modelVertIndex);
+                                const vvdTangentIndex = fixupRemappingSearch(fixupRemappings, mdlSubmodelFirstTangent + modelVertIndex);
+                                const vvdVertexOffs = vvdVertexDataStart + 0x30 * vvdVertIndex;
+                                const vvdTangentOffs = vvdTangentDataStart + 0x10 * vvdTangentIndex;
 
                                 const vvdBoneWeight = [
                                     vvdView.getFloat32(vvdVertexOffs + 0x00, true),
@@ -1518,23 +1521,14 @@ export class StudioModelData {
                     }
 
                     vtxLODIdx += 0x0C;
-
-                    // TODO(jstpierre): Support multiple model LODs. For now, we only support the first LOD.
-                    break;
                 }
 
                 mdlSubmodelIdx += 0x94;
                 vtxSubmodelIdx += 0x08;
-
-                // TODO(jstpierre): Reading models with multiple submodels seems to break right now... not sure why.
-                break;
             }
 
             mdlBodyPartIdx += 0x10;
             vtxBodyPartIdx += 0x08;
-
-            // TODO(jstpierre): Reading models with multiple body parts seems to break right now... not sure why.
-            break;
         }
     }
 
@@ -1628,13 +1622,12 @@ export class HardwareVertData {
     }
 }
 
-function remapIncludeModelSkeleton(from: StudioModelData, to: StudioModelData): number[] {
-    assert(from.bone.length === to.bone.length);
-
-    const remapTable: number[] = nArray(from.bone.length, () => -1);
-    for (let i = 0; i < remapTable.length; i++) {
-        const origBone = from.bone[i];
-        const newIndex = to.bone.findIndex((bone) => bone.name === origBone.name);
+function remapIncludeModelSkeleton(animData: StudioModelData, modelData: StudioModelData): number[] {
+    // Construct a remap table going from the model bone index to the animation track index.
+    const remapTable: number[] = nArray(modelData.bone.length, () => -1);
+    for (let i = 0; i < animData.bone.length; i++) {
+        const origBone = animData.bone[i];
+        const newIndex = modelData.bone.findIndex((bone) => bone.name === origBone.name);
         remapTable[newIndex] = i;
     }
 
@@ -1895,16 +1888,16 @@ export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, fr
     for (let i = 0; i < modelData.bone.length; i++) {
         const dst = dstBoneMatrix[i];
         const trackIndex = anim.boneRemapTable !== null ? anim.boneRemapTable[i] : i;
-        const track = data.tracks[trackIndex];
-        const bone = modelData.bone[i];
+        const track = trackIndex >= 0 ? data.tracks[trackIndex] : null;
+        const modelBone = modelData.bone[i];
         if (track !== null) {
             const trackBone = track.bone;
-            assert(trackBone.name === bone.name);
+            assert(trackBone.name === modelBone.name);
             track.getPosRot(scratchVec3, scratchQuatb, trackBone, frame);
             mat4.fromQuat(dst, scratchQuatb);
             setMatrixTranslation(dst, scratchVec3);
         } else {
-            computeModelMatrixPosRadianEuler(dst, bone.pos, bone.rot);
+            computeModelMatrixPosRadianEuler(dst, modelBone.pos, modelBone.rot);
         }
     }
 }
@@ -2044,7 +2037,7 @@ export class StudioModelInstance {
             return;
 
         scratchAABB.centerPoint(scratchVec3);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
 
         const lodIndex = this.getLODModelIndex(renderContext);
         this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix, depth);

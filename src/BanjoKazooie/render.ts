@@ -57,7 +57,8 @@ layout(std140) uniform ub_CombineParameters {
 #endif
 };
 
-uniform sampler2D u_Texture[2];
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
 
 varying vec4 v_Color;
 varying vec4 v_TexCoord;
@@ -264,9 +265,9 @@ void main() {
     vec4 t_Tex0 = t_One, t_Tex1 = t_One;
 
 #ifdef USE_TEXTURE
-    t_Tex0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[0]), v_TexCoord.xy);
+    t_Tex0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture0), v_TexCoord.xy);
     #ifdef TWO_CYCLE
-        t_Tex1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[1]), v_TexCoord.zw);
+        t_Tex1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture1), v_TexCoord.zw);
     #else
         t_Tex1 = t_Tex0;
     #endif

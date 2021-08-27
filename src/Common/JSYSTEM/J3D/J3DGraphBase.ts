@@ -1188,7 +1188,7 @@ export class J3DModelInstance {
         // Use the root joint to calculate depth.
         const rootJoint = this.modelData.bmd.jnt1.joints[0];
         bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-        const depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch), 0);
+        const depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(camera.viewMatrix, bboxScratch), 0);
         return depth;
     }
 

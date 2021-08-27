@@ -1,5 +1,7 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
+import { IS_DEPTH_REVERSED } from "./gfx/helpers/ReversedDepthHelpers";
+import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform";
 import { nArray } from "./util";
 
 const scratchVec4 = vec4.create();
@@ -10,6 +12,15 @@ export class Plane {
 
     constructor(x: number = 0, y: number = 0, z: number = 0, public d: number = 0) {
         vec3.set(this.n, x, y, z);
+    }
+
+    public set(n: ReadonlyVec3, d: number): void {
+        vec3.copy(this.n, n);
+        this.d = d;
+    }
+
+    public copy(o: Plane): void {
+        this.set(o.n, o.d);
     }
 
     public negate(): void {
@@ -25,11 +36,6 @@ export class Plane {
 
     public distanceVec3(p: ReadonlyVec3): number {
         return vec3.dot(p, this.n) + this.d;
-    }
-
-    public set(n: ReadonlyVec3, d: number): void {
-        vec3.copy(this.n, n);
-        this.d = d;
     }
 
     // Assumes input normal is not normalized.
@@ -389,7 +395,7 @@ export class Frustum {
         }
     }
 
-    public updateClipFrustum(m: ReadonlyMat4): void {
+    public updateClipFrustum(m: ReadonlyMat4, clipSpaceNearZ: GfxClipSpaceNearZ): void {
         // http://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
         // Note that we look down the -Z axis, rather than the +Z axis, so we have to invert all of our planes...
 
@@ -397,8 +403,21 @@ export class Frustum {
         this.planes[1].set4Unnormalized(-(m[3] - m[0]), -(m[7] - m[4]), -(m[11] - m[8]) , -(m[15] - m[12])); // Right
         this.planes[2].set4Unnormalized(-(m[3] + m[1]), -(m[7] + m[5]), -(m[11] + m[9]) , -(m[15] + m[13])); // Top
         this.planes[3].set4Unnormalized(-(m[3] - m[1]), -(m[7] - m[5]), -(m[11] - m[9]) , -(m[15] - m[13])); // Bottom
-        this.planes[4].set4Unnormalized(-(m[3] - m[2]), -(m[7] - m[6]), -(m[11] - m[10]), -(m[15] - m[14])); // Near
-        this.planes[5].set4Unnormalized(-(m[3] + m[2]), -(m[7] + m[6]), -(m[11] + m[10]), -(m[15] + m[14])); // Far
+
+        if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne) {
+            this.planes[4].set4Unnormalized(-(m[3] + m[2]), -(m[7] + m[6]), -(m[11] + m[10]), -(m[15] + m[14])); // Near
+        } else if (clipSpaceNearZ === GfxClipSpaceNearZ.Zero) {
+            this.planes[4].set4Unnormalized(-(m[2]), -(m[6]), -(m[10]), -(m[14])); // Near
+        }
+
+        this.planes[5].set4Unnormalized(-(m[3] - m[2]), -(m[7] - m[6]), -(m[11] - m[10]), -(m[15] - m[14])); // Far
+
+        if (IS_DEPTH_REVERSED) {
+            // swap
+            this.planes[4].getVec4v(scratchVec4);
+            this.planes[4].copy(this.planes[5]);
+            this.planes[5].setVec4v(scratchVec4);
+        }
 
         this.vizp(this.planes, 'green');
     }

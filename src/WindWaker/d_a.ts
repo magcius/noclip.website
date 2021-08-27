@@ -949,15 +949,15 @@ class d_a_kytag00 extends fopAc_ac_c {
             if (this.effectMode === Kytag00EffectMode.Rain) {
                 this.raincnt_set(globals, target);
             } else if (this.effectMode === Kytag00EffectMode.Thunder) {
-                if (envLight.thunderMode === 0)
+                if (envLight.thunderMode === ThunderMode.Off)
                     envLight.thunderMode = 2;
             } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
-                if (envLight.thunderMode === 0)
+                if (envLight.thunderMode === ThunderMode.Off)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
             } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                 // TODO(jstpierre): moya
-                if (envLight.thunderMode === 0)
+                if (envLight.thunderMode === ThunderMode.Off)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
             } else {
@@ -979,15 +979,15 @@ class d_a_kytag00 extends fopAc_ac_c {
                     this.raincnt_cut(globals);
                 } else if (this.effectMode === Kytag00EffectMode.Thunder) {
                     if (envLight.thunderMode === 2)
-                        envLight.thunderMode = 0;
+                        envLight.thunderMode = ThunderMode.Off;
                 } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
                     if (envLight.thunderMode === 2)
-                        envLight.thunderMode = 0;
+                        envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
                 } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                     // TODO(jstpierre): moya
                     if (envLight.thunderMode === 2)
-                        envLight.thunderMode = 0;
+                        envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
                 }
             }

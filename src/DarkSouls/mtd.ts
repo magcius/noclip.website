@@ -162,15 +162,23 @@ export function parse(buffer: ArrayBufferSlice): MTD {
     const textureCount = reader.readUint32();
     const textures: MTDTexture[] = [];
 
+    const uvNumberMap = new Map<number, number>();
+
     for (let i = 0; i < textureCount; i++) {
         const version = reader.assertBlock(0x2000, null, 0xA3);
         assert(version === 3 || version === 5);
 
         const name = reader.readMarkedString(0x35);
-        const uvNumber = reader.readUint32() - 1;
-        assert(uvNumber >= 0);
+        const uvNumber_ = reader.readUint32() - 1;
+        assert(uvNumber_ >= 0);
         reader.assertMarker(0x35);
         const shaderDataIndex = reader.readUint32();
+
+        let uvNumber = uvNumberMap.get(uvNumber_);
+        if (uvNumber === undefined) {
+            uvNumber = uvNumberMap.size;
+            uvNumberMap.set(uvNumber_, uvNumber);
+        }
 
         if (version === 5) {
             reader.assertUint32(0xA3);

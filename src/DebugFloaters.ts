@@ -361,6 +361,10 @@ export class DebugFloaterHolder {
         const panel = new FloatingPanel();
         panel.setWidth(600);
         panel.setTitle(icon, title);
+        panel.onclose = () => {
+            if (this.debugFloater === panel)
+                this.debugFloater = null;
+        };
         this.elem.appendChild(panel.elem);
         this.floatingPanels.push(panel);
         return panel;

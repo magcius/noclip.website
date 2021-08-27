@@ -59,7 +59,7 @@ void main() {
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
     gl_Position.zw = vec2(${z}, ${w});
 
-#ifdef VIEWPORT_ORIGIN_TL
+#ifdef GFX_VIEWPORT_ORIGIN_TL
     v_TexCoord.y = 1.0 - v_TexCoord.y;
 #endif
 }

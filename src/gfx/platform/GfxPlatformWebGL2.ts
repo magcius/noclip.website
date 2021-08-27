@@ -3,7 +3,7 @@ import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, Gfx
 import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
 
-import { gfxColorEqual, range, assert, assertExists, leftPad, gfxColorCopy, nullify } from './GfxPlatformUtil';
+import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify } from './GfxPlatformUtil';
 import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
@@ -316,6 +316,14 @@ function isBlendStateNone(blendState: GfxChannelBlendState): boolean {
         blendState.blendSrcFactor == GfxBlendFactor.One &&
         blendState.blendDstFactor === GfxBlendFactor.Zero
     );
+}
+
+function isBlockCompressSized(w: number, h: number, bw: number, bh: number): boolean {
+    if ((w % bw) !== 0)
+        return false;
+    if ((h % bh) !== 0)
+        return false;
+    return true;
 }
 
 class ResourceCreationTracker {
@@ -1155,6 +1163,30 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentRenderPassDescriptor = null;
     }
 
+    public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
+        const gl = this.gl;
+
+        const dst = dst_ as GfxTextureP_GL;
+        const src = src_ as GfxTextureP_GL;
+        assert(src.numLevels === 1);
+        assert(dst.numLevels === 1);
+
+        if (dst === this._scTexture) {
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._scPlatformFramebuffer);
+        } else {
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
+            this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, dst);
+        }
+
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
+        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, src);
+
+        gl.blitFramebuffer(srcX, srcY, srcX + src.width, srcY + src.height, dstX, dstY, dstX + src.width, dstY + src.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    }
+
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
         const gl = this.gl;
         const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
@@ -1288,21 +1320,27 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return this;
     }
 
-    public queryTextureFormatSupported(format: GfxFormat): boolean {
+    public queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean {
         switch (format) {
         case GfxFormat.BC1_SRGB:
         case GfxFormat.BC2_SRGB:
         case GfxFormat.BC3_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb !== null;
+            if (this._WEBGL_compressed_texture_s3tc_srgb !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
         case GfxFormat.BC1:
         case GfxFormat.BC2:
         case GfxFormat.BC3:
-            return this._WEBGL_compressed_texture_s3tc !== null;
+            if (this._WEBGL_compressed_texture_s3tc !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
         case GfxFormat.BC4_UNORM:
         case GfxFormat.BC4_SNORM:
         case GfxFormat.BC5_UNORM:
         case GfxFormat.BC5_SNORM:
-            return this._EXT_texture_compression_rgtc !== null;
+            if (this._EXT_texture_compression_rgtc !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
         default:
             return true;
         }
@@ -1943,15 +1981,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
-            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;\s*$/gm);
+            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+);\s*$/gm);
             let samplerIndex = 0;
             for (let i = 0; i < samplers.length; i++) {
-                const [m, name, arraySizeStr] = samplers[i];
-                const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
+                const [m, name] = samplers[i];
                 // Assign identities in order.
                 const samplerUniformLocation = gl.getUniformLocation(prog, name);
-                gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
-                samplerIndex += arraySize;
+                gl.uniform1i(samplerUniformLocation, samplerIndex++);
             }
 
             program.compileState = GfxProgramCompileStateP_GL.ReadyToUse;

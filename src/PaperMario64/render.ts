@@ -368,7 +368,7 @@ class ModelTreeLeafInstance {
         let depth = -1;
         bboxScratch.transform(this.modelTreeLeaf.bbox, modelMatrix);
         if (viewerInput.camera.frustum.contains(bboxScratch))
-            depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch));
+            depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch));
         else
             return;
 

@@ -1305,7 +1305,7 @@ class Entity_Type_Machine_Panel extends Portable_Type {
         m.add_float('gesture_finished_t_target', { minimum_revision_number: 0x23 });
         m.add_float('gesture_finished_time', { minimum_revision_number: 0x23 });
         m.add_integer('id_to_power', { minimum_revision_number: 0x19, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
-        m.add_integer('power_off_on_fai;', { minimum_revision_number: 0x1a, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
+        m.add_integer('power_off_on_fail', { minimum_revision_number: 0x1a, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
         m.add_integer('powered_by', { minimum_revision_number: 0x23, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('my_multipanel', { minimum_revision_number: 0x1c, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('my_bridge', { minimum_revision_number: 0x5d, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });

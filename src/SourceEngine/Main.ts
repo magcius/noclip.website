@@ -2,7 +2,7 @@
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
-import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum, Plane } from "../Geometry";
@@ -67,7 +67,6 @@ export class SourceFileSystem {
 
     public resolvePath(path: string, ext: string): string {
         path = path.toLowerCase().replace(/\\/g, '/');
-        path = path.replace(/\.\//g, '');
         if (!path.endsWith(ext))
             path = `${path}${ext}`;
 
@@ -83,6 +82,7 @@ export class SourceFileSystem {
             path = parts.join('/');
         }
 
+        path = path.replace(/\.\//g, '');
         return path;
     }
 
@@ -355,7 +355,7 @@ export class BSPSurfaceRenderer {
         renderInst.debug = this;
 
         if (this.surface.center !== null) {
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, this.surface.center);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, this.surface.center);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
@@ -510,9 +510,10 @@ export class SourceEngineView {
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
 
+    public clipSpaceNearZ: GfxClipSpaceNearZ;
+
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
-    public lookAtPos = vec3.create();
 
     // Frustum is stored in Source engine world space.
     public frustum = new Frustum();
@@ -527,7 +528,7 @@ export class SourceEngineView {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
-        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
         this.frustum.newFrame();
     }
 
@@ -538,6 +539,7 @@ export class SourceEngineView {
     }
 
     public setupFromCamera(camera: Camera): void {
+        this.clipSpaceNearZ = camera.clipSpaceNearZ;
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();

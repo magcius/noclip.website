@@ -2,7 +2,7 @@
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
@@ -37,7 +37,8 @@ function parseEntityOutputAction(S: string): EntityOutputAction {
     else
         parts = S.split(',');
     assert(parts.length === 5);
-    const [targetName, inputNameStr, parameterOverride, delayStr, timesToFireStr] = parts;
+    const [targetNameStr, inputNameStr, parameterOverride, delayStr, timesToFireStr] = parts;
+    const targetName = targetNameStr.toLowerCase();
     const inputName = inputNameStr.toLowerCase();
     const delay = Number(delayStr);
     const timesToFire = Number(timesToFireStr);
@@ -119,7 +120,7 @@ export class BaseEntity {
         this.rendermode = vmtParseNumber(entity.rendermode, 0);
 
         if (entity.targetname)
-            this.targetName = '' + entity.targetname;
+            this.targetName = ('' + entity.targetname).toLowerCase();
 
         this.skin = vmtParseNumber(entity.skin, 0);
 
@@ -481,7 +482,7 @@ export class BaseEntity {
     }
 
     private input_setparent(entitySystem: EntitySystem, value: string): void {
-        const parentEntity = entitySystem.findEntityByTargetName(this.entity.parentname);
+        const parentEntity = entitySystem.findEntityByTargetName(value);
         if (parentEntity !== null)
             this.setParentEntity(parentEntity);
     }
@@ -2378,7 +2379,7 @@ class env_steam extends BaseEntity {
 
             this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
 
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, p.position);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, p.position);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
             this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
@@ -2517,6 +2518,7 @@ export class EntitySystem {
     }
 
     public findEntityByTargetName(targetName: string): BaseEntity | null {
+        targetName = targetName.toLowerCase();
         for (let i = 0; i < this.entities.length; i++)
             if (this.entities[i].targetName === targetName)
                 return this.entities[i];
@@ -2655,7 +2657,8 @@ class EntityMessageDebugger {
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, activatorColor, 6);
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, targetColor, 6);
             drawWorldSpaceLine(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, scratchVec3b, lineColor, 3);
-            drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, message.event.action.inputName, 6, lineColor, { outline: 3, font: '8pt monospace' });
+            drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, message.event.action.targetName, 6, lineColor, { outline: 3, font: '8pt monospace' });
+            drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, message.event.action.inputName, 18, lineColor, { outline: 3, font: '8pt monospace' });
         }
     }
 }
