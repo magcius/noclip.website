@@ -316,6 +316,33 @@ const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleF
 
 const FIdx2Rad = MathConstants.TAU / 0xFF;
 
+class CourseBGRenderer implements BaseObject {
+    public modelMatrix = mat4.create();
+
+    constructor(public modelInstance: MDL0ModelInstance) {
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.modelInstance.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.modelInstance.setTexturesEnabled(v);
+    }
+
+    public bindLightSetting(lightSetting: BRRES.LightSetting): void {
+        this.modelInstance.bindLightSetting(lightSetting);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+        this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
 class SimpleObjectRenderer implements BaseObject {
     public modelMatrix = mat4.create();
 
@@ -342,7 +369,6 @@ class SimpleObjectRenderer implements BaseObject {
     }
 
     public destroy(device: GfxDevice): void {
-        this.modelInstance.destroy(device);
     }
 }
 
@@ -907,15 +933,15 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const modelCache = renderer.modelCache, cache = renderer.renderHelper.renderCache;
 
         const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);
-        const courseInstance = this.createModelInstanceFromRRES(renderer, courseRRES, 'course');
+        const courseInstance = new CourseBGRenderer(this.createModelInstanceFromRRES(renderer, courseRRES, 'course'));
+        courseInstance.modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE);
         renderer.baseObjects.push(courseInstance);
-        courseInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE);
         mat4.copy(courseInstance.modelMatrix, posMtx);
 
         const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
-        const skyboxInstance = this.createModelInstanceFromRRES(renderer, skyboxRRES, 'vrcorn');
+        const skyboxInstance = new CourseBGRenderer(this.createModelInstanceFromRRES(renderer, skyboxRRES, 'vrcorn'));
+        skyboxInstance.modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE);
         renderer.baseObjects.push(skyboxInstance);
-        skyboxInstance.setSortKeyLayer(GfxRendererLayer.BACKGROUND);
         mat4.copy(skyboxInstance.modelMatrix, posMtx);
 
         for (let i = 0; i < kmp.gobj.length; i++)

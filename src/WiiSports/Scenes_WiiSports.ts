@@ -10,7 +10,6 @@ import * as Viewer from "../viewer";
 import { PMP, PMPObject } from "./PMP";
 import { ResourceSystem } from "./ResouceSystem";
 import { assertExists } from "../util";
-import { colorNewFromRGBA } from "../Color";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
@@ -66,10 +65,6 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
         super.destroy(device);
         this.textureHolder.destroy(device);
         this.resourceSystem.destroy(device);
-
-        for (let i = 0; i < this.modelInstances.length; i++) {
-            this.modelInstances[i].destroy(device);
-        }
     }
 }
 

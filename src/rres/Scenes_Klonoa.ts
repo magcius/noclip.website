@@ -111,8 +111,6 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
     }
 }
 

@@ -306,8 +306,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.renderHelper.destroy();
         this.modelCache.destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
         device.destroyTexture(this.blackTexture);
     }
 

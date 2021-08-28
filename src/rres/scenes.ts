@@ -91,8 +91,6 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
         this.textureHolder.destroy(device);
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
     }
 }
 
