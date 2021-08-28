@@ -57,7 +57,10 @@ export class SourceFileSystem {
     }
 
     public async createVPKMount(path: string) {
-        this.vpk.push(await createVPKMount(this.dataFetcher, path));
+        // This little dance here is to ensure that priorities are correctly ordered.
+        const dummyMount = null!;
+        const i = this.vpk.push(dummyMount) - 1;
+        this.vpk[i] = await createVPKMount(this.dataFetcher, path);
     }
 
     public async createZipMount(path: string) {
