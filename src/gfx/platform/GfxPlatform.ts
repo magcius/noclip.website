@@ -367,6 +367,10 @@ export interface GfxDevice {
     destroyRenderPipeline(o: GfxRenderPipeline): void;
     destroyReadback(o: GfxReadback): void;
 
+    // Render pipeline compilation control.
+    pipelineQueryReady(o: GfxRenderPipeline): boolean;
+    pipelineForceReady(o: GfxRenderPipeline): void;
+
     // Command submission.
     createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass;
     // Consumes and destroys the pass.
@@ -387,7 +391,6 @@ export interface GfxDevice {
     // Information queries.
     queryLimits(): GfxDeviceLimits;
     queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean;
-    queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
     queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;

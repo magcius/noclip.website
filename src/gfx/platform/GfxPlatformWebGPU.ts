@@ -72,8 +72,8 @@ interface GfxInputStateP_WebGPU extends GfxInputState {
 
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
     descriptor: GfxRenderPipelineDescriptor;
-    isCreating: boolean;
     gpuRenderPipeline: GPURenderPipeline | null;
+    isCreatingAsync: boolean;
 }
 
 interface GfxReadbackP_WebGPU extends GfxReadback {
@@ -937,16 +937,17 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         const gpuRenderPipeline: GPURenderPipeline | null = null;
-        const isCreating = false;
+        const isCreatingAsync = false;
         const renderPipeline: GfxRenderPipelineP_WebGPU = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(),
-            descriptor, isCreating, gpuRenderPipeline,
+            descriptor, isCreatingAsync, gpuRenderPipeline,
         };
-        this.ensureRenderPipeline(renderPipeline);
+        this._createRenderPipeline(renderPipeline, true);
         return renderPipeline;
     }
 
-    private async ensureRenderPipeline(renderPipeline: GfxRenderPipelineP_WebGPU): Promise<void> {
-        if (renderPipeline.isCreating)
+    private async _createRenderPipeline(renderPipeline: GfxRenderPipelineP_WebGPU, async: boolean): Promise<void> {
+        // If we're already in the process of creating a the pipeline async, no need to kick the process off again...
+        if (async && renderPipeline.isCreatingAsync)
             return;
 
         if (renderPipeline.gpuRenderPipeline !== null)
@@ -968,9 +969,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             buffers = (descriptor.inputLayout as GfxInputLayoutP_WebGPU).buffers;
         const sampleCount = descriptor.sampleCount;
 
-        renderPipeline.isCreating = true;
+        renderPipeline.isCreatingAsync = true;
 
-        const gpuRenderPipeline: GPURenderPipelineDescriptor = {
+        const gpuRenderPipelineDescriptor: GPURenderPipelineDescriptor = {
             layout,
             vertex: {
                 ... vertexStage,
@@ -987,8 +988,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             },
         };
 
-        // TODO(jstpierre): createRenderPipelineAsync
-        renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipeline);
+        if (async) {
+            const gpuRenderPipeline = await this.device.createRenderPipelineAsync(gpuRenderPipelineDescriptor);
+
+            // We might have created a sync pipeline while we were async building; no way to cancel the async
+            // pipeline build at this point, so just chunk it out :/
+            if (renderPipeline.gpuRenderPipeline === null)
+                renderPipeline.gpuRenderPipeline = gpuRenderPipeline;
+        } else {
+            renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipelineDescriptor);
+        }
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
@@ -1038,6 +1047,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyReadback(o: GfxReadback): void {
+    }
+
+    public pipelineQueryReady(o: GfxRenderPipeline): boolean {
+        const renderPipeline = o as GfxRenderPipelineP_WebGPU;
+        return renderPipeline.gpuRenderPipeline !== null;
+    }
+
+    public pipelineForceReady(o: GfxRenderPipeline): void {
+        const renderPipeline = o as GfxRenderPipelineP_WebGPU;
+        this._createRenderPipeline(renderPipeline, false);
     }
 
     public createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
@@ -1148,12 +1167,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             return this._featureTextureCompressionBC;
         }
         return true;
-    }
-
-    public queryPipelineReady(o: GfxRenderPipeline): boolean {
-        const renderPipeline = o as GfxRenderPipelineP_WebGPU;
-        this.ensureRenderPipeline(renderPipeline);
-        return renderPipeline.gpuRenderPipeline !== null;
     }
 
     public queryPlatformAvailable(): boolean {

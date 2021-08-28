@@ -432,17 +432,6 @@ export class GfxRenderInst {
     }
 
     /**
-     * Tests whether the underlying pipeline for this {@see GfxRenderInst} is ready.
-     *
-     * By default, {@see GfxRenderInstManager} will skip any insts with non-ready pipelines. If you wish
-     * to override this and force the render inst to draw, please use {@see setAllowSkippingIfPipelineNotReady}.
-     */
-    public queryPipelineReady(device: GfxDevice, cache: GfxRenderCache): boolean {
-        const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
-        return cache.device.queryPipelineReady(gfxPipeline);
-    }
-
-    /**
      * Sets whether this render inst should be skipped if the render pipeline isn't ready.
      *
      * Some draws of objects can be skipped if the pipelines aren't ready. Others are more
@@ -481,11 +470,12 @@ export class GfxRenderInst {
 
         const gfxPipeline = cache.createRenderPipeline(this._renderPipelineDescriptor);
 
-        const pipelineReady = device.queryPipelineReady(gfxPipeline);
+        const pipelineReady = device.pipelineQueryReady(gfxPipeline);
         if (!pipelineReady) {
-            const needsToSkip = !device.queryVendorInfo().supportsSyncPipelineCompilation;
-            if (needsToSkip || !!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady))
+            if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady))
                 return false;
+
+            device.pipelineForceReady(gfxPipeline);
         }
 
         if (SET_DEBUG_POINTER)

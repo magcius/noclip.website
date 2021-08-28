@@ -1136,6 +1136,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
+    public pipelineQueryReady(o: GfxRenderPipeline): boolean {
+        const pipeline = o as GfxRenderPipelineP_GL;
+        return this.queryProgramReady(pipeline.program);
+    }
+
+    public pipelineForceReady(o: GfxRenderPipeline): void {
+        // No need to do anything; it will be forced to compile when used naturally.
+    }
+
     public createRenderPass(descriptor: GfxRenderPassDescriptor): GfxRenderPass {
         assert(this._currentRenderPassDescriptor === null);
         this._currentRenderPassDescriptor = descriptor;
@@ -1369,11 +1378,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         return program.compileState === GfxProgramCompileStateP_GL.NeedsBind || program.compileState === GfxProgramCompileStateP_GL.ReadyToUse;
-    }
-
-    public queryPipelineReady(o: GfxRenderPipeline): boolean {
-        const pipeline = o as GfxRenderPipelineP_GL;
-        return this.queryProgramReady(pipeline.program);
     }
 
     public queryPlatformAvailable(): boolean {
