@@ -1,5 +1,6 @@
 
 use wasm_bindgen::prelude::wasm_bindgen;
+use crate::util;
 
 const GOB_SIZE_X: usize = 64;
 const GOB_SIZE_Y: usize = 8;
