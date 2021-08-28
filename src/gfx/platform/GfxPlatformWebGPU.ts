@@ -45,6 +45,7 @@ interface GfxSamplerP_WebGPU extends GfxSampler {
 
 interface GfxProgramP_WebGPU extends GfxProgram {
     descriptor: GfxProgramDescriptorSimple;
+    stagesFinishedPromise: Promise<void> | null;
     vertexStage: GPUProgrammableStage | null;
     fragmentStage: GPUProgrammableStage | null;
 }
@@ -814,15 +815,19 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private async _createProgram(program: GfxProgramP_WebGPU): Promise<void> {
         const deviceProgram = program.descriptor;
-        // TODO(jstpierre): Asynchronous program compilation
-        program.vertexStage = await this._createShaderStage(deviceProgram.preprocessedVert, 'vertex');
-        program.fragmentStage = await this._createShaderStage(deviceProgram.preprocessedFrag, 'fragment');
+        const vertex = this._createShaderStage(deviceProgram.preprocessedVert, 'vertex');
+        const fragment = deviceProgram.preprocessedFrag !== null ? this._createShaderStage(deviceProgram.preprocessedFrag, 'fragment') : Promise.resolve(null);
+        program.stagesFinishedPromise = Promise.all([vertex, fragment]).then(([vertexStage, fragmentStage]) => {
+            program.vertexStage = vertexStage;
+            program.fragmentStage = fragmentStage;
+            program.stagesFinishedPromise = null;
+        });
     }
 
     public createProgramSimple(deviceProgram: GfxProgramDescriptorSimple): GfxProgram {
         const vertexStage: GPUProgrammableStage | null = null;
         const fragmentStage: GPUProgrammableStage | null = null;
-        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor: deviceProgram, vertexStage, fragmentStage };
+        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor: deviceProgram, vertexStage, fragmentStage, stagesFinishedPromise: null, };
         this._createProgram(program);
         return program;
     }
@@ -955,10 +960,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         const descriptor = renderPipeline.descriptor;
         const program = descriptor.program as GfxProgramP_WebGPU;
-        const vertexStage = program.vertexStage, fragmentStage = program.fragmentStage;
-        if (vertexStage === null || fragmentStage === null)
-            return;
 
+        if (program.stagesFinishedPromise !== null) {
+            // TODO(jstpierre): No way to synchronously wait on shader modules to be completed...
+            assert(async);
+            await program.stagesFinishedPromise;
+        }
+
+        const vertexStage = assertExists(program.vertexStage), fragmentStage = program.fragmentStage;
         const layout = this._createPipelineLayout(descriptor.bindingLayouts);
         const primitive = translatePrimitiveState(descriptor.topology, descriptor.megaStateDescriptor);
         const targets = translateTargets(descriptor.colorAttachmentFormats, descriptor.megaStateDescriptor);
@@ -971,6 +980,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         renderPipeline.isCreatingAsync = true;
 
+        let fragment: GPUFragmentState | undefined = undefined;
+        if (fragmentStage !== null) {
+            fragment = {
+                ... fragmentStage,
+                targets,
+            };
+        }
+
         const gpuRenderPipelineDescriptor: GPURenderPipelineDescriptor = {
             layout,
             vertex: {
@@ -982,10 +999,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             multisample: {
                 count: sampleCount,
             },
-            fragment: {
-                ... fragmentStage,
-                targets,
-            },
+            fragment,
         };
 
         if (async) {
@@ -1001,6 +1015,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
+
+        renderPipeline.isCreatingAsync = false;
     }
 
     public createReadback(): GfxReadback {

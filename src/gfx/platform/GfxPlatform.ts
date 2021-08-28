@@ -180,7 +180,7 @@ export interface GfxBindingsDescriptor {
 
 export interface GfxProgramDescriptorSimple {
     preprocessedVert: string;
-    preprocessedFrag: string;
+    preprocessedFrag: string | null;
 }
 
 export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
