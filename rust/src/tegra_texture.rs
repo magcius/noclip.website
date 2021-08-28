@@ -51,6 +51,7 @@ fn calc_required_unswizzled_buffer_len(w: usize, h: usize, bpp: usize, block_hei
 
 fn color_table_bc1(color_table: &mut [[u8; 4]; 4], color1: u16, color2: u16, blend: util::BlendFunction<u8, u32>) {
     // Fill in first two colors in color table.
+    // TODO(jstpierre): SRGB-correct blending.
     color_table[0] = [
         util::expand_n_to_8(5, ((color1 >> 11) & 0x1F) as u8),
         util::expand_n_to_8(6, ((color1 >> 5) & 0x3F) as u8),
@@ -101,7 +102,8 @@ pub struct SurfaceMetaData {
     block_height_log2: usize,
 }
 
-pub trait OutputType {
+pub trait OutputType
+{
     type Type: Ord + Copy + Clone;
     type BigType: From<Self::Type> + From<u8> + Ord + Add<Output=Self::BigType> + Mul<Output=Self::BigType> + Div<Output=Self::BigType> + Copy + Clone;
     const MIN: Self::Type;
