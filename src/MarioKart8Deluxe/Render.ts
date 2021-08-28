@@ -6,10 +6,10 @@ import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
 
 import * as BNTX from '../fres_nx/bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
-import { translateImageFormat, getImageFormatString, decompress } from '../fres_nx/tegra_texture';
+import { translateImageFormat, deswizzle, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2 } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat, TypeFormat, ChannelFormat } from '../fres_nx/nngfx_enum';
+import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
 import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -48,6 +48,8 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
         const canvases: HTMLCanvasElement[] = [];
 
+        const channelFormat = getChannelFormat(textureEntry.imageFormat);
+
         for (let i = 0; i < textureEntry.mipBuffers.length; i++) {
             const mipLevel = i;
 
@@ -55,13 +57,14 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const src = new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength);
+            const blockHeightLog2 = textureEntry.blockHeightLog2;
+            const deswizzled = deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 });
+            const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
+            const rgbaPixels = rgbaTexture.pixels;
+            device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
+
             const canvas = document.createElement('canvas');
-            decompress({ ...textureEntry, width, height, depth }, src).then(rgbaTexture => {
-                const rgbaPixels = rgbaTexture.pixels;
-                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-                surfaceToCanvas(canvas, rgbaTexture);
-            });
+            surfaceToCanvas(canvas, rgbaTexture);
             canvases.push(canvas);
         }
 
