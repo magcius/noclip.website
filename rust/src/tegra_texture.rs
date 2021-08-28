@@ -29,6 +29,13 @@ const fn get_format_block_width(channel_format: CompressionType) -> usize {
     }
 }
 
+const fn get_format_block_height(channel_format: CompressionType) -> usize {
+    use CompressionType::*;
+    match channel_format {
+        Bc1 | Bc2 | Bc3 | Bc4 | Bc5 => 4,
+    }
+}
+
 fn get_addr_block_linear(mut x: usize, y: usize, w: usize, bpp: usize, block_height: usize, base_addr: usize) -> usize {
     let width_in_gobs = ((w * bpp) + GOB_SIZE_X - 1) / GOB_SIZE_X;
     let mut gob_addr = base_addr;
@@ -47,25 +54,10 @@ fn get_addr_block_linear(mut x: usize, y: usize, w: usize, bpp: usize, block_hei
     return addr;
 }
 
-fn next_pow2(value: usize) -> usize {
-    match value {
-        0 => 1,
-        mut v => {
-            v -= 1;
-            v |= v >> 1;
-            v |= v >> 2;
-            v |= v >> 4;
-            v |= v >> 8;
-            v |= v >> 16;
-            v + 1
-        }
-    }
-}
-
 #[wasm_bindgen]
 pub fn tegra_deswizzle(src: &[u8], compression_type: CompressionType, w: usize, h: usize, block_height_log2: usize) -> Vec<u8> {
     let format_block_width = get_format_block_width(compression_type);
-    let format_block_height = get_format_block_width(compression_type);
+    let format_block_height = get_format_block_height(compression_type);
 
     let width_in_blocks = (w + format_block_width - 1) / format_block_width;
     let height_in_blocks = (h + format_block_height - 1) / format_block_height;
@@ -74,7 +66,7 @@ pub fn tegra_deswizzle(src: &[u8], compression_type: CompressionType, w: usize, 
     let bpp = get_format_bytes_per_block(compression_type);
 
     // Adjust block height down per mip to fit the image.
-    while block_height > 1 && (next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
+    while block_height > 1 && (util::next_pow2(height_in_blocks) < (GOB_SIZE_Y * block_height)) {
         block_height >>= 1;
     };
 

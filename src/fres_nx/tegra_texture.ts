@@ -106,57 +106,12 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     }
 }
 
-/*
-function getBlockHeightLog2(heightInBlocks: number): number {
-    return clamp(Math.ceil(Math.log2((heightInBlocks / 8) | 0)), 0, 4);
-}
-
-function calcSurfaceBlockHeight(channelFormat: ChannelFormat, textureHeight: number): number {
-    const formatBlockHeight = getFormatBlockHeight(channelFormat);
-    const heightInBlocks = ((textureHeight + formatBlockHeight - 1) / formatBlockHeight) | 0;
-    const blockHeight = 1 << getBlockHeightLog2(heightInBlocks);
-    return blockHeight;
-}
-*/
-
 export interface SwizzledSurface {
     width: number;
     height: number;
     channelFormat: ChannelFormat;
     buffer: ArrayBufferSlice;
     blockHeightLog2: number; // The block height of mip0.
-}
-
-const GOB_SIZE_X = 64;
-const GOB_SIZE_Y = 8;
-
-function getAddrBlockLinear(x: number, y: number, w: number, bpp: number, blockHeight: number, baseAddr: number = 0): number {
-    const widthInGOBs = (((w * bpp) + GOB_SIZE_X - 1) / GOB_SIZE_X) | 0;
-    let gobAddr = baseAddr;
-
-    gobAddr += ((y / (GOB_SIZE_Y * blockHeight)) | 0) * 512 * blockHeight * widthInGOBs;
-    gobAddr += ((x * bpp / 64) | 0) * 512 * blockHeight;
-    gobAddr += ((y % (GOB_SIZE_Y * blockHeight) / 8) | 0) * 512;
-
-    x *= bpp;
-    let addr = gobAddr;
-    addr += (((x % 64) / 32) | 0) * 256;
-    addr += (((y % 8) / 2) | 0) * 64;
-    addr += (((x % 32) / 16) | 0) * 32;
-    addr += ((y % 2) * 16);
-    addr += (x % 16);
-    return addr;
-}
-
-function nextPow2(v: number): number {
-    v--;
-    v |= v >>> 1;
-    v |= v >>> 2;
-    v |= v >>> 4;
-    v |= v >>> 8;
-    v |= v >>> 16;
-    v++;
-    return v;
 }
 
 export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array> {

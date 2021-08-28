@@ -8,4 +8,5 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 pub mod gx_texture;
 pub mod glsl_compile;
 pub mod tegra_texture;
+pub mod util;
 pub mod yaz0;
