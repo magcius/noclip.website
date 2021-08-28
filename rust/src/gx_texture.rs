@@ -1,5 +1,5 @@
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 use std::convert::TryInto;
 
