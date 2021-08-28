@@ -1062,6 +1062,7 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
+#define u_SpecExponentFactor (u_Misc[0].z)
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1644,9 +1645,12 @@ void mainPS() {
     t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
     t_SpecularLightInput.Fresnel = t_Fresnel;
 
-    // TODO(jstpierre): Support $phongexponentfactor override
     vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
-    t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
+#ifdef USE_PHONG_EXPONENT_TEXTURE
+    t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
+#else
+    t_SpecularLightInput.SpecularExponent = u_SpecExponentFactor;
+#endif
     t_SpecularLightInput.RimExponent = 4.0;
 
     // Specular mask is either in base map or normal map alpha.
@@ -1698,6 +1702,7 @@ class Material_Generic extends BaseMaterial {
     private wantsSelfIllum = false;
     private wantsBlendModulate = false;
     private wantsPhong = false;
+    private wantsPhongExponentTexture = false;
     private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
     private wantsAmbientCube = false;
@@ -1789,7 +1794,9 @@ class Material_Generic extends BaseMaterial {
         // Phong (Skin)
         p['$phong']                        = new ParameterBoolean(false, false);
         p['$phongboost']                   = new ParameterNumber(1.0);
+        p['$phongexponent']                = new ParameterNumber(5.0);
         p['$phongexponenttexture']         = new ParameterTexture(false);
+        p['$phongexponentfactor']          = new ParameterNumber(149.0);
         p['$phongfresnelranges']           = new ParameterVector(3);
         p['$basemapalphaphongmask']        = new ParameterBoolean(false, false);
         p['$invertphongmask']              = new ParameterBoolean(false, false);
@@ -1843,6 +1850,11 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = GenericShaderType.Skin;
             this.wantsPhong = true;
             this.program.setDefineBool('USE_PHONG', true);
+
+            if (this.paramGetVTF('$phongexponenttexture') !== null) {
+                this.wantsPhongExponentTexture = true;
+                this.program.setDefineBool('USE_PHONG_EXPONENT_TEXTURE', true);
+            }
         }
 
         if (this.paramGetVTF('$detail') !== null) {
@@ -2060,7 +2072,8 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
+        const specExponentFactor = this.wantsPhongExponentTexture ? this.paramGetNumber('$phongexponentfactor') : this.paramGetNumber('$phongexponent');
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, specExponentFactor);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
