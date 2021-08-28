@@ -280,7 +280,6 @@ export interface GfxVendorInfo {
     readonly separateSamplerTextures: boolean;
     readonly viewportOrigin: GfxViewportOrigin;
     readonly clipSpaceNearZ: GfxClipSpaceNearZ;
-    readonly supportsSyncPipelineCompilation: boolean;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
