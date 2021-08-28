@@ -1,17 +1,17 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { randomRange } from '../BanjoKazooie/particles';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView } from './Main';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
@@ -70,9 +70,11 @@ const scratchMat4b = mat4.create();
 export class BaseEntity {
     public modelBSP: BSPModelRenderer | null = null;
     public modelStudio: StudioModelInstance | null = null;
+    public modelSprite: SpriteInstance | null = null;
 
     public localOrigin = vec3.create();
     public localAngles = vec3.create();
+    public rendercolor = colorNewCopy(White);
     public renderamt: number = 1.0;
     public rendermode: number = 0;
     public visible = true;
@@ -116,6 +118,8 @@ export class BaseEntity {
             vec3.set(this.localAngles, angles[0], angles[1], angles[2]);
         }
 
+        if (entity.rendercolor !== undefined)
+            vmtParseColor(this.rendercolor, entity.rendercolor);
         this.renderamt = vmtParseNumber(entity.renderamt, 255.0) / 255.0;
         this.rendermode = vmtParseNumber(entity.rendermode, 0);
 
@@ -204,8 +208,9 @@ export class BaseEntity {
             this.modelBSP = this.bspRenderer.models[index];
             this.modelBSP.setEntity(this);
         } else if (modelName.endsWith('.mdl')) {
-            // External model reference.
             this.fetchStudioModel(renderContext, modelName);
+        } else if (modelName.endsWith('.vmt') || modelName.endsWith('.spr')) {
+            this.fetchSpriteModel(renderContext, modelName);
         }
     }
 
@@ -246,16 +251,24 @@ export class BaseEntity {
         materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin);
     }
 
-    protected modelUpdated(): void {
-    }
-
     private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
         this.ready = false;
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.modelStudio.setSkin(renderContext, this.skin);
-        this.modelUpdated();
         this.updateLightingData();
+        this.ready = true;
+    }
+
+    private async fetchSpriteModel(renderContext: SourceRenderContext, modelName: string) {
+        this.ready = false;
+        const materialName = modelName.replace('.spr', '.vmt');
+        const materialCache = renderContext.materialCache;
+        const materialInstance = await materialCache.createMaterialInstance(materialName);
+        materialInstance.paramSetNumber('$rendermode', this.rendermode);
+        materialInstance.entityParams = this.ensureMaterialParams();
+        await materialInstance.init(renderContext);
+        this.modelSprite = new SpriteInstance(renderContext, materialInstance);
         this.ready = true;
     }
 
@@ -267,22 +280,23 @@ export class BaseEntity {
         this.modelStudio.setupPoseFromSequence(this.seqindex, this.seqtime);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (!this.shouldDraw())
             return;
 
-        if (this.modelStudio !== null) {
-            if (this.materialParams !== null) {
-                this.materialParams.blendColor.a = this.renderamt;
-            }
+        if (this.materialParams !== null)
+            colorCopy(this.materialParams.blendColor, this.rendercolor, this.renderamt);
 
+        if (this.modelStudio !== null) {
             this.updateStudioPose();
             this.modelStudio.setSkin(renderContext, this.skin);
             this.modelStudio.prepareToRender(renderContext, renderInstManager);
-
-            if ((this as any).debug)
-                this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
+        } else if (this.modelSprite !== null) {
+            this.modelSprite.prepareToRender(renderContext, renderInstManager);
         }
+
+        if ((this as any).debug)
+            this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
     }
 
     private calcParentModelMatrix(dst: mat4): void {
@@ -875,11 +889,6 @@ class func_door extends BaseDoor {
             // If we should start open, then start open.
             vec3.copy(this.localOrigin, this.positionOpened);
         }
-    }
-
-    protected modelUpdated(): void {
-        super.modelUpdated();
-        this.updateExtents();
     }
 
     protected moveToOpened(entitySystem: EntitySystem): void {
@@ -2339,13 +2348,14 @@ class env_steam extends BaseEntity {
         colorLerp(dst, this.lightingRamp[i0], this.lightingRamp[i1], t);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (!this.shouldDraw())
             return;
 
         if (this.materialInstance === null)
             return;
 
+        const view = renderContext.currentView;
         const particleStaticRes = renderContext.particleStaticRes;
         for (let i = 0; i < this.particlePool.length; i++) {
             const p = this.particlePool[i];
@@ -2360,11 +2370,8 @@ class env_steam extends BaseEntity {
             particleStaticRes.setQuadOnRenderInst(renderInst);
 
             // This is a bit hacky -- set the color/alpha per-particle. Blergh.
-            const colorParam = (this.materialInstance.param['$color'] as any);
-            colorParam.setFromColor(scratchColor);
-
-            const alphaParam = (this.materialInstance.param['$alpha'] as any);
-            alphaParam.value = this.renderamt * alpha;
+            this.materialInstance.paramSetColor('$color', scratchColor);
+            this.materialInstance.paramSetNumber('$alpha', this.renderamt * alpha);
 
             this.materialInstance.setOnRenderInst(renderContext, renderInst);
 
@@ -2393,10 +2400,104 @@ class env_steam extends BaseEntity {
     private input_turnoff(entitySystem: EntitySystem): void {
         this.shouldEmit = false;
     }
-    
+
     private input_toggle(entitySystem: EntitySystem): void {
         this.shouldEmit = !this.shouldEmit;
     }
+}
+
+class env_sprite extends BaseEntity {
+    public static classname = `env_sprite`;
+
+    public scale: number;
+    public framerate: number;
+    public frame: number;
+    public maxframe: number;
+    public once: boolean = false;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.scale = Number(this.entity.scale);
+        this.framerate = Number(this.entity.framerate);
+        this.frame = Number(fallbackUndefined(this.entity.frame, '0'));
+
+        this.registerInput('showsprite', this.input_showsprite.bind(this));
+        this.registerInput('hidesprite', this.input_hidesprite.bind(this));
+        this.registerInput('togglesprite', this.input_togglesprite.bind(this));
+        this.registerInput('setscale', this.input_setscale.bind(this));
+        this.registerInput('colorredvalue', this.input_colorredvalue.bind(this));
+        this.registerInput('colorgreenvalue', this.input_colorgreenvalue.bind(this));
+        this.registerInput('colorbluevalue', this.input_colorbluevalue.bind(this));
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        const sprite = assertExists(this.modelSprite);
+        this.maxframe = sprite.materialInstance.getNumFrames();
+
+        const enum SpawnFlags {
+            StartOn = 0x01,
+            Once    = 0x02,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+        this.visible = !!(spawnflags & SpawnFlags.StartOn);
+        this.once = !!(spawnflags & SpawnFlags.Once);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        this.frame += this.framerate * renderContext.globalDeltaTime;
+        if (this.framerate >= 0 && this.maxframe > 1 && this.frame >= this.maxframe) {
+            this.frame = 0;
+            if (this.once)
+                this.visible = false;
+        }
+
+        const sprite = assertExists(this.modelSprite);
+        this.getAbsOriginAndAngles(sprite.origin, sprite.angles);
+        sprite.scale = this.scale;
+
+        sprite.materialInstance.paramSetNumber('$frame', this.frame);
+
+        sprite.materialInstance.movement(renderContext);
+    }
+
+    private input_showsprite(entitySystem: EntitySystem): void {
+        this.visible = true;
+        this.frame = 0;
+    }
+
+    private input_hidesprite(entitySystem: EntitySystem): void {
+        this.visible = false;
+    }
+
+    private input_togglesprite(entitySystem: EntitySystem): void {
+        this.visible = !this.visible;
+    }
+
+    private input_setscale(entitySystem: EntitySystem, value: string): void {
+        this.scale = Number(value);
+    }
+
+    private input_colorredvalue(entitySystem: EntitySystem, value: string): void {
+        this.rendercolor.r = Number(value) / 255.0;
+    }
+
+    private input_colorgreenvalue(entitySystem: EntitySystem, value: string): void {
+        this.rendercolor.g = Number(value) / 255.0;
+    }
+
+    private input_colorbluevalue(entitySystem: EntitySystem, value: string): void {
+        this.rendercolor.b = Number(value) / 255.0;
+    }
+}
+
+// Alias
+class env_glow extends env_sprite {
+    public static classname = `env_glow`;
 }
 
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
@@ -2451,6 +2552,8 @@ export class EntityFactoryRegistry {
         this.registerFactory(point_template);
         this.registerFactory(env_entity_maker);
         this.registerFactory(env_steam);
+        this.registerFactory(env_sprite);
+        this.registerFactory(env_glow);
     }
 
     public registerFactory(factory: EntityFactory): void {

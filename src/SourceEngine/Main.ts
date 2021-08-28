@@ -174,7 +174,7 @@ export class SourceFileSystem {
 
 // In Source, the convention is +X for forward and -X for backward, +Y for left and -Y for right, and +Z for up and -Z for down.
 // Converts from Source conventions to noclip ones.
-export const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
+const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
     0,  0, -1, 0,
     -1, 0,  0, 0,
     0,  1,  0, 0,
@@ -335,9 +335,11 @@ export class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, liveFaceSet: Set<number> | null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, liveFaceSet: Set<number> | null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
+
+        const view = renderContext.currentView;
 
         if (this.surface.bbox !== null) {
             scratchAABB.transform(this.surface.bbox, modelMatrix);
@@ -480,26 +482,26 @@ export class BSPModelRenderer {
         return true;
     }
 
-    public prepareToRenderModel(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
-        if (!this.prepareToRenderCommon(view))
+    public prepareToRenderModel(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        if (!this.prepareToRenderCommon(renderContext.currentView))
             return;
 
         // Submodels don't use the BSP tree, they simply render all surfaces back to back in a batch.
         for (let i = 0; i < this.model.surfaces.length; i++)
-            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, null);
+            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, this.modelMatrix, null);
     }
 
-    public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap): void {
-        if (!this.prepareToRenderCommon(view))
+    public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, pvs: BitMap): void {
+        if (!this.prepareToRenderCommon(renderContext.currentView))
             return;
 
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
         this.liveFaceSet.clear();
-        this.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, null, pvs, view);
+        this.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, null, pvs, renderContext.currentView);
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
-            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, this.liveFaceSet);
+            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.liveFaceSet);
     }
 }
 
@@ -756,21 +758,21 @@ export class BSPRenderer {
             this.staticPropRenderers[i].movement(renderContext);
     }
 
-    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, kinds: RenderObjectKind): void {
+    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, pvs: BitMap, kinds: RenderObjectKind): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        fillSceneParamsOnRenderInst(template, view);
+        fillSceneParamsOnRenderInst(template, renderContext.currentView);
 
         // Render the world-spawn model.
         if (!!(kinds & RenderObjectKind.WorldSpawn))
-            this.models[0].prepareToRenderWorld(renderContext, renderInstManager, view, pvs);
+            this.models[0].prepareToRenderWorld(renderContext, renderInstManager, pvs);
 
         if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++)
-                this.models[i].prepareToRenderModel(renderContext, renderInstManager, view);
+                this.models[i].prepareToRenderModel(renderContext, renderInstManager);
             for (let i = 0; i < this.entitySystem.entities.length; i++)
-                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager, view);
+                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager);
         }
 
         // Static props.
@@ -781,13 +783,13 @@ export class BSPRenderer {
         // Detail props.
         if (!!(kinds & RenderObjectKind.DetailProps)) {
             this.liveLeafSet.clear();
-            this.models[0].gatherLiveSets(null, null, this.liveLeafSet, pvs, view);
+            this.models[0].gatherLiveSets(null, null, this.liveLeafSet, pvs, renderContext.currentView);
 
             for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
                 const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
                 if (!this.liveLeafSet.has(detailPropLeafRenderer.leaf))
                     continue;
-                detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager, view);
+                detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager);
             }
         }
 
@@ -797,7 +799,7 @@ export class BSPRenderer {
                 if ((leaf as any).debug) {
                     drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, leaf.bbox);
                     for (const sample of leaf.ambientLightSamples)
-                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, view, sample.pos, sample.ambientCube);
+                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, renderContext.currentView, sample.pos, sample.ambientCube);
                 }
             }
         }
@@ -1108,7 +1110,7 @@ class SourceWorldViewRenderer {
                 if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.skyboxView))
                     continue;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.skyboxView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
             }
         }
 
@@ -1130,7 +1132,7 @@ class SourceWorldViewRenderer {
                 else
                     this.mainView.fogParams.maxdensity = 0.0;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.mainView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube));
             }
         }
 

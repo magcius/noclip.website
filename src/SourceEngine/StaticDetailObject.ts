@@ -265,9 +265,11 @@ export class DetailPropLeafRenderer {
         this.modelEntries.push(studioModelInstance);
     }
 
-    private prepareToRenderSprites(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    private prepareToRenderSprites(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (this.materialInstance === null)
             return;
+
+        const view = renderContext.currentView;
 
         // Upload new sprite data.
         const vertexData = this.vertexData;
@@ -355,17 +357,17 @@ export class DetailPropLeafRenderer {
         this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }
 
-    private prepareToRenderModels(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    private prepareToRenderModels(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         for (let i = 0; i < this.modelEntries.length; i++)
             this.modelEntries[i].prepareToRender(renderContext, renderInstManager);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (!this.visible)
             return;
 
-        this.prepareToRenderSprites(renderContext, renderInstManager, view);
-        this.prepareToRenderModels(renderContext, renderInstManager, view);
+        this.prepareToRenderSprites(renderContext, renderInstManager);
+        this.prepareToRenderModels(renderContext, renderInstManager);
     }
 
     public movement(renderContext: SourceRenderContext): void {
