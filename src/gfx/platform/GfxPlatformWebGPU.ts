@@ -617,6 +617,69 @@ function translateImageLayout(layout: GPUImageDataLayout, format: GfxFormat, mip
     layout.rowsPerImage = numBlocksY;
 }
 
+// Hack for now until browsers implement compositingAlphaMode
+// https://bugs.chromium.org/p/chromium/issues/detail?id=1241373
+class FullscreenAlphaClear {
+    private pipeline: GPURenderPipeline | null = null;
+    private shaderModule: GPUShaderModule | null = null;
+
+    private shaderText = `
+struct VertexOutput {
+    [[builtin(position)]] pos: vec4<f32>;
+};
+
+[[stage(vertex)]]
+fn vs([[builtin(vertex_index)]] index: u32) -> VertexOutput {
+    var out: VertexOutput;
+    out.pos.x = select(-1.0, 3.0, index == 1u);
+    out.pos.y = select(-1.0, 3.0, index == 2u);
+    out.pos.z = 1.0;
+    out.pos.w = 1.0;
+    return out;
+}
+
+struct FragmentOutput {
+    [[location(0)]] color: vec4<f32>;
+};
+
+[[stage(fragment)]]
+fn fs() -> FragmentOutput {
+    return FragmentOutput(vec4<f32>(1.0, 0.0, 1.0, 1.0));
+}
+`;
+
+    constructor(device: GPUDevice) {
+        this.create(device);
+    }
+
+    private async create(device: GPUDevice): Promise<void> {
+        const format: GPUTextureFormat = 'bgra8unorm';
+        this.shaderModule = await device.createShaderModule({ code: this.shaderText });
+        this.pipeline = await device.createRenderPipeline({
+            vertex: { module: this.shaderModule, entryPoint: 'vs', },
+            fragment: { module: this.shaderModule, entryPoint: 'fs', targets: [{ format, writeMask: 0x08, }] },
+        });
+    }
+
+    public render(device: GPUDevice, onscreenTexture: GPUTextureView): void {
+        // Not much we can do until it's ready.
+        if (this.pipeline === null)
+            return;
+
+        const encoder = device.createCommandEncoder();
+        const renderPass = encoder.beginRenderPass({
+            colorAttachments: [{ view: onscreenTexture, loadValue: 'load', storeOp: 'store', }],
+        });
+        renderPass.setPipeline(this.pipeline);
+        renderPass.draw(3);
+        renderPass.endPass();
+        device.queue.submit([encoder.finish()]);
+    }
+
+    public destroy(device: GPUDevice): void {
+    }
+}
+
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
@@ -629,6 +692,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _featureTextureCompressionBC: boolean = false;
 
     private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
+
+    private _fullscreenAlphaClear: FullscreenAlphaClear;
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
@@ -655,6 +720,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this.device.onuncapturederror = (event) => {
             console.error(event.error);
         };
+
+        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device);
     }
 
     // GfxSwapChain
@@ -693,7 +760,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public present(): void {
-        // Nothing to do, AFAIK. Might have to make a fake swap chain eventually, I think...
+        this._fullscreenAlphaClear.render(this.device, this.canvasContext.getCurrentTexture().createView());
     }
 
     // GfxDevice
