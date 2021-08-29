@@ -25,6 +25,8 @@ jobs:
             # fallback to using the latest cache if no exact match is found
             - v3-dependencies-
 
+      - run: npm install -g pnpm
+
       - run: pnpm install
 
       # wasm-pack is amazingly ridiculous and puts a binary in .config/, which
