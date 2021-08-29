@@ -206,6 +206,7 @@ export class BaseEntity {
         if (modelName.startsWith('*')) {
             const index = parseInt(modelName.slice(1), 10);
             this.modelBSP = this.bspRenderer.models[index];
+            this.modelBSP.modelMatrix = this.modelMatrix;
             this.modelBSP.setEntity(this);
         } else if (modelName.endsWith('.mdl')) {
             this.fetchStudioModel(renderContext, modelName);
@@ -422,7 +423,6 @@ export class BaseEntity {
 
             if (this.modelBSP !== null) {
                 this.modelBSP.visible = visible;
-                mat4.copy(this.modelBSP.modelMatrix, modelMatrix);
             } else if (this.modelStudio !== null) {
                 this.modelStudio.visible = visible;
                 this.modelStudio.movement(renderContext);
@@ -1590,6 +1590,8 @@ class trigger_multiple extends BaseEntity {
     private output_onStartTouch = new EntityOutput();
     private output_onEndTouch = new EntityOutput();
     private output_onEndTouchAll = new EntityOutput();
+    private output_onTouching = new EntityOutput();
+    private output_onNotTouching = new EntityOutput();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -1598,6 +1600,9 @@ class trigger_multiple extends BaseEntity {
         this.output_onStartTouch.parse(this.entity.onstarttouch);
         this.output_onEndTouch.parse(this.entity.onendtouch);
         this.output_onEndTouchAll.parse(this.entity.onendtouchall);
+        this.output_onTouching.parse(this.entity.ontouching);
+        this.output_onNotTouching.parse(this.entity.onnottouching);
+        this.registerInput('touchtest', this.input_touchtest.bind(this));
 
         this.visible = false;
     }
@@ -1609,6 +1614,14 @@ class trigger_multiple extends BaseEntity {
             return this.modelStudio.modelData.viewBB;
         else
             return null;
+    }
+
+    private input_touchtest(entitySystem: EntitySystem): void {
+        if (this.isPlayerTouching) {
+            this.output_onTouching.fire(entitySystem, this);
+        } else {
+            this.output_onNotTouching.fire(entitySystem, this);
+        }
     }
 
     protected activateTrigger(entitySystem: EntitySystem): void {

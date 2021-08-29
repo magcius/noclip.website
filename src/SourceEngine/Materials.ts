@@ -359,7 +359,7 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
     return results;
 }
 
-const scratchMatrix = mat4.create();
+const scratchMat4a = mat4.create();
 class ParameterMatrix {
     public matrix = mat4.create();
 
@@ -369,12 +369,12 @@ class ParameterMatrix {
         this.matrix[13] = -cy;
         this.matrix[0] = sx;
         this.matrix[5] = sy;
-        mat4.fromZRotation(scratchMatrix, MathConstants.DEG_TO_RAD * r);
-        mat4.mul(this.matrix, scratchMatrix, this.matrix);
-        mat4.identity(scratchMatrix);
-        scratchMatrix[12] = cx + tx;
-        scratchMatrix[13] = cy + ty;
-        mat4.mul(this.matrix, scratchMatrix, this.matrix);
+        mat4.fromZRotation(scratchMat4a, MathConstants.DEG_TO_RAD * r);
+        mat4.mul(this.matrix, scratchMat4a, this.matrix);
+        mat4.identity(scratchMat4a);
+        scratchMat4a[12] = cx + tx;
+        scratchMat4a[13] = cy + ty;
+        mat4.mul(this.matrix, scratchMat4a, this.matrix);
     }
 
     public parse(S: string): void {
@@ -733,21 +733,19 @@ export abstract class BaseMaterial {
     protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         if (useMappingTransform) {
-            scaleMatrix(scratchMatrix, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
-            return fillMatrix4x2(d, offs, scratchMatrix);
+            scaleMatrix(scratchMat4a, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
+            return fillMatrix4x2(d, offs, scratchMat4a);
         } else {
             return fillMatrix4x2(d, offs, m);
         }
     }
 
-    protected paramFillGammaColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
-        const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
+    protected paramFillGammaColor(d: Float32Array, offs: number, name: string, alpha: number = 1.0): number {
         this.paramGetVector(name).fillColor(scratchColor, alpha);
         return fillGammaColor(d, offs, scratchColor);
     }
 
-    protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
-        const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
+    protected paramFillColor(d: Float32Array, offs: number, name: string, alpha: number = 1.0): number {
         this.paramGetVector(name).fillColor(scratchColor, alpha);
         return fillColor(d, offs, scratchColor);
     }
@@ -997,7 +995,12 @@ export abstract class BaseMaterial {
             let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
 
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
+            if (modelMatrix !== null) {
+                offs += fillMatrix4x3(d, offs, modelMatrix);
+            } else {
+                mat4.identity(scratchMat4a);
+                offs += fillMatrix4x3(d, offs, scratchMat4a);
+            }
         }
     }
 
@@ -1008,10 +1011,10 @@ export abstract class BaseMaterial {
             let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
 
-            mat4.identity(scratchMatrix);
+            mat4.identity(scratchMat4a);
             for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
                 const boneIndex = bonePaletteTable[i];
-                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
+                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMat4a;
                 offs += fillMatrix4x3(d, offs, m);
             }
         } else if (this.skinningMode === SkinningMode.Rigid) {
@@ -2082,8 +2085,8 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsDetail) {
             const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
             const detailScale = this.paramGetNumber('$detailscale');
-            scaleMatrix(scratchMatrix, detailTextureTransform, detailScale, detailScale);
-            offs += fillScaleBias(d, offs, scratchMatrix);
+            scaleMatrix(scratchMat4a, detailTextureTransform, detailScale, detailScale);
+            offs += fillScaleBias(d, offs, scratchMat4a);
         }
 
         if (this.wantsEnvmapMask)
@@ -2353,7 +2356,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
-        offs += this.paramFillColor(d, offs, '$color', '$alpha');
+        offs += this.paramFillColor(d, offs, '$color', this.paramGetNumber('$alpha'));
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -2604,25 +2607,25 @@ void mainPS() {
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
     vec3 t_ReflectColor = vec3(0.0);
-#ifdef USE_EXPENSIVE_REFLECT
+
     float t_ReflectAmount = u_ReflectAmount;
-
+    if (t_ReflectAmount > 0.0) {
 #ifndef USE_FLOWMAP
-    // not sure why, but it's super distorted otherwise... see d2_coast_01
-    // guessing something about my distortion math isn't 100%
-    t_ReflectAmount *= 0.25;
+        // not sure why, but it's super distorted otherwise... see d2_coast_01
+        // guessing something about my distortion math isn't 100%
+        t_ReflectAmount *= 0.25;
 #endif
 
-    vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
-    // Reflection texture is stored upside down
-    t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
+        vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
+        // Reflection texture is stored upside down
+        t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
 
-    vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
-    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-#else
-    vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
-    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-#endif
+        vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
+        t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+    } else {
+        vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
+        t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+    }
 
     vec4 t_FinalColor;
 
@@ -2802,11 +2805,13 @@ class Material_Water extends BaseMaterial {
 
         const forceEnvMap = this.paramGetBoolean('$forceenvmap');
         const useExpensiveReflect = renderContext.currentView.useExpensiveWater && !forceEnvMap;
-        if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
-            this.gfxProgram = null;
 
-        offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
-        offs += this.paramFillGammaColor(d, offs, '$reflecttint', '$reflectamount');
+        let reflectAmount = this.paramGetNumber('$reflectamount');
+        if (!useExpensiveReflect)
+            reflectAmount = 0.0;
+
+        offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
+        offs += this.paramFillGammaColor(d, offs, '$reflecttint', reflectAmount);
 
         const fogStart = this.paramGetNumber('$fogstart');
         const fogEnd = this.paramGetNumber('$fogend');
@@ -2817,8 +2822,8 @@ class Material_Water extends BaseMaterial {
         offs += fillGammaColor(d, offs, scratchColor);
 
         // This will take us from -1...1 to world space position.
-        mat4.invert(scratchMatrix, renderContext.currentView.clipFromWorldMatrix);
-        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        mat4.invert(scratchMat4a, renderContext.currentView.clipFromWorldMatrix);
+        offs += fillMatrix4x4(d, offs, scratchMat4a);
 
         if (this.wantsFlowmap) {
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
@@ -3100,7 +3105,7 @@ class Material_Refract extends BaseMaterial {
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
-        offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
+        offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
         offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
 
         if (this.wantsEnvmap) {
@@ -3738,6 +3743,9 @@ export function unpackColorRGBExp32(v: number, exp: number): number {
 }
 
 function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, srcOffs: number, size: number, m: number): void {
+    if (m <= 0.0)
+        return;
+
     for (let i = 0; i < size; i += 4) {
         const sr = src[srcOffs + i + 0], sg = src[srcOffs + i + 1], sb = src[srcOffs + i + 2], exp = src[srcOffs + i + 3];
         dst[dstOffs++] += m * unpackColorRGBExp32(sr, exp);
@@ -3959,22 +3967,21 @@ export class SurfaceLightmap {
         }
     }
 
+    public checkDirty(renderContext: SourceRenderContext): boolean {
+        const worldLightingState = renderContext.worldLightingState;
+
+        for (let i = 0; i < this.lightmapData.styles.length; i++) {
+            const styleIdx = this.lightmapData.styles[i];
+            if (worldLightingState.styleIntensities[styleIdx] !== this.lightmapStyleIntensities[i])
+                return true;
+        }
+
+        return false;
+    }
+
     public buildLightmap(renderContext: SourceRenderContext): void {
         const worldLightingState = renderContext.worldLightingState;
         const scratchpad = renderContext.lightmapManager.scratchpad;
-
-        // Check if our lightmap needs rebuilding.
-        let dirty = false;
-        for (let i = 0; i < this.lightmapData.styles.length; i++) {
-            const styleIdx = this.lightmapData.styles[i];
-            if (worldLightingState.styleIntensities[styleIdx] !== this.lightmapStyleIntensities[i]) {
-                this.lightmapStyleIntensities[i] = worldLightingState.styleIntensities[styleIdx];
-                dirty = true;
-            }
-        }
-
-        if (!dirty)
-            return;
 
         const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
@@ -3991,6 +3998,7 @@ export class SurfaceLightmap {
                 const intensity = worldLightingState.styleIntensities[styleIdx];
                 lightmapAccumLight(scratchpad, 0, this.lightmapData.samples!, srcOffs, srcSize, intensity);
                 srcOffs += srcSize;
+                this.lightmapStyleIntensities[i] = intensity;
             }
 
             if (this.wantsBumpmap && !this.lightmapData.hasBumpmapSamples) {

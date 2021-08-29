@@ -335,22 +335,23 @@ export class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, liveFaceSet: Set<number> | null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4 | null, liveFaceSet: Set<number> | null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
         const view = renderContext.currentView;
 
         if (this.surface.bbox !== null) {
-            scratchAABB.transform(this.surface.bbox, modelMatrix);
-            if (!view.frustum.contains(scratchAABB))
+            if (!view.frustum.contains(transformAABB(this.surface.bbox, modelMatrix)))
                 return;
         }
 
         for (let i = 0; i < this.lightmaps.length; i++) {
             const lightmap = this.lightmaps[i];
+            if (!lightmap.checkDirty(renderContext))
+                continue;
             if (liveFaceSet === null || liveFaceSet.has(lightmap.lightmapData.faceIndex))
-                this.lightmaps[i].buildLightmap(renderContext);
+                lightmap.buildLightmap(renderContext);
         }
 
         const renderInst = renderInstManager.newRenderInst();
@@ -369,9 +370,16 @@ export class BSPSurfaceRenderer {
 }
 
 const scratchAABB = new AABB();
+function transformAABB(src: AABB, m: ReadonlyMat4 | null): AABB {
+    if (m === null)
+        return src;
+    scratchAABB.transform(src, m);
+    return scratchAABB;
+}
+
 export class BSPModelRenderer {
     public visible: boolean = true;
-    public modelMatrix = mat4.create();
+    public modelMatrix: ReadonlyMat4 | null = null;
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
     public surfacesByIdx: BSPSurfaceRenderer[] = [];
@@ -438,8 +446,7 @@ export class BSPModelRenderer {
             // node
             const node = this.bsp.nodelist[nodeid];
 
-            scratchAABB.transform(node.bbox, this.modelMatrix);
-            if (!view.frustum.contains(scratchAABB))
+            if (!view.frustum.contains(transformAABB(node.bbox, this.modelMatrix)))
                 return;
 
             this.gatherLiveSets(liveSurfaceSet, liveFaceSet, liveLeafSet, pvs, view, node.child0);
@@ -454,8 +461,7 @@ export class BSPModelRenderer {
             if (!pvs.getBit(leaf.cluster))
                 return;
 
-            scratchAABB.transform(leaf.bbox, this.modelMatrix);
-            if (!view.frustum.contains(scratchAABB))
+            if (!view.frustum.contains(transformAABB(leaf.bbox, this.modelMatrix)))
                 return;
 
             if (liveSurfaceSet !== null)
@@ -475,8 +481,7 @@ export class BSPModelRenderer {
         if (!this.visible)
             return false;
 
-        scratchAABB.transform(this.model.bbox, this.modelMatrix);
-        if (!view.frustum.contains(scratchAABB))
+        if (!view.frustum.contains(transformAABB(this.model.bbox, this.modelMatrix)))
             return false;
 
         return true;
@@ -1052,6 +1057,7 @@ class SourceWorldViewRenderer {
     public drawIndirect = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities | RenderObjectKind.DebugCube;
     public pvsEnabled = true;
+    public pvsFallback = true;
 
     public mainView = new SourceEngineView();
     public skyboxView = new SourceEngineView();
@@ -1125,9 +1131,18 @@ class SourceWorldViewRenderer {
             for (let i = 0; i < renderer.bspRenderers.length; i++) {
                 const bspRenderer = renderer.bspRenderers[i];
 
-                if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.mainView)) {
-                    // No valid PVS, mark everything visible.
-                    renderer.pvsScratch.fill(true);
+                const validPVS = this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.mainView);
+                if (!validPVS) {
+                    // No valid PVS. If the fallback system is enabled, mark everything visible,
+                    // otherwise, just skip this view.
+
+                    if (this.pvsFallback) {
+                        // Mark everything visible.
+                        renderer.pvsScratch.fill(true);
+                    } else {
+                        // Skip this view.
+                        continue;
+                    }
                 }
 
                 // Calculate our fog parameters from the local player's fog controller.
@@ -1270,6 +1285,7 @@ export class SourceRenderer implements SceneGfx {
     constructor(context: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.drawIndirect = false;
+        this.reflectViewRenderer.pvsFallback = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
