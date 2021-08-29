@@ -543,6 +543,7 @@ export class SourceEngineView {
     }
 
     public copy(other: SourceEngineView): void {
+        this.clipSpaceNearZ = other.clipSpaceNearZ;
         mat4.copy(this.viewFromWorldMatrix, other.viewFromWorldMatrix);
         mat4.copy(this.clipFromViewMatrix, other.clipFromViewMatrix);
         vec3.copy(this.cameraPos, other.cameraPos);
