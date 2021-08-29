@@ -23,7 +23,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera } from "./EntitySystem";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -735,16 +735,21 @@ export class BSPRenderer {
                 this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this.bsp, staticProp));
 
         // Spawn detail objects.
-        if (this.bsp.detailObjects !== null)
+        if (this.bsp.detailObjects !== null) {
+            const detailMaterial = this.getWorldSpawn().detailMaterial;
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
-                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf));
+                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf, detailMaterial));
+        }
 
         this.debugCube = new DebugCube(device, cache);
     }
 
+    public getWorldSpawn(): worldspawn {
+        return assertExists(this.entitySystem.findEntityByType(worldspawn));
+    }
+
     public getSkyCamera(): sky_camera | null {
-        const skyCameraEntity = this.entitySystem.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
-        return skyCameraEntity !== undefined ? skyCameraEntity : null;
+        return this.entitySystem.findEntityByType(sky_camera);
     }
 
     public movement(renderContext: SourceRenderContext): void {

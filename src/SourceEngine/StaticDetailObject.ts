@@ -186,7 +186,7 @@ export class DetailPropLeafRenderer {
     private inputState: GfxInputState;
     private centerPoint = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number) {
+    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number, detailMaterial: string) {
         const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -248,7 +248,7 @@ export class DetailPropLeafRenderer {
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
 
-        this.bindMaterial(renderContext);
+        this.bindMaterial(renderContext, detailMaterial);
     }
 
     private async createModelDetailProp(renderContext: SourceRenderContext, modelName: string, detailModel: DetailModel): Promise<void> {
@@ -383,9 +383,9 @@ export class DetailPropLeafRenderer {
             this.modelEntries[i].destroy(device);
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext) {
+    private async bindMaterial(renderContext: SourceRenderContext, detailMaterial: string) {
         const materialCache = renderContext.materialCache;
-        const materialInstance = await materialCache.createMaterialInstance(`detail/detailsprites`);
+        const materialInstance = await materialCache.createMaterialInstance(detailMaterial);
         await materialInstance.init(renderContext);
         this.materialInstance = materialInstance;
     }

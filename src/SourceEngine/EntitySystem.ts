@@ -582,8 +582,18 @@ class player extends BaseEntity {
     }
 }
 
+export class worldspawn extends BaseEntity {
+    public static classname = `worldspawn`;
+    public detailMaterial: string;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.detailMaterial = fallbackUndefined(this.entity.detailmaterial, `detail/detailsprites`);
+    }
+}
+
 export class sky_camera extends BaseEntity {
-    public static classname = 'sky_camera';
+    public static classname = `sky_camera`;
     public area: number = -1;
     public scale: number = 1;
     public modelMatrix = mat4.create();
@@ -1334,6 +1344,9 @@ class logic_timer extends BaseEntity {
         this.useRandomTime = fallbackUndefined(this.entity.userandomtime, '0') !== '0';
         this.lowerRandomBound = Number(fallbackUndefined(this.entity.lowerrandombound, '0'));
         this.upperRandomBound = Number(fallbackUndefined(this.entity.upperrandombound, '5'));
+
+        this.registerInput(`resettimer`, this.input_resettimer.bind(this));
+        this.registerInput(`firetimer`, this.input_firetimer.bind(this));
     }
 
     private reset(entitySystem: EntitySystem): void {
@@ -1342,16 +1355,27 @@ class logic_timer extends BaseEntity {
         this.nextFireTime = entitySystem.currentTime + this.refiretime;
     }
 
+    private fireTimer(entitySystem: EntitySystem): void {
+        this.output_onTimer.fire(entitySystem, this);
+        this.reset(entitySystem);
+    }
+
+    private input_resettimer(entitySystem: EntitySystem): void {
+        this.reset(entitySystem);
+    }
+
+    private input_firetimer(entitySystem: EntitySystem): void {
+        this.fireTimer(entitySystem);
+    }
+
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (!this.enabled)
             return;
 
-        if (entitySystem.currentTime >= this.nextFireTime) {
-            this.output_onTimer.fire(entitySystem, this);
-            this.reset(entitySystem);
-        }
+        if (entitySystem.currentTime >= this.nextFireTime)
+            this.fireTimer(entitySystem);
     }
 }
 
@@ -2521,6 +2545,7 @@ export class EntityFactoryRegistry {
     }
 
     private registerDefaultFactories(): void {
+        this.registerFactory(worldspawn);
         this.registerFactory(sky_camera);
         this.registerFactory(water_lod_control);
         this.registerFactory(func_movelinear);

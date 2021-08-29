@@ -562,6 +562,7 @@ export class EntityMaterialParameters {
     public textureFrameIndex = 0;
     public blendColor = colorNewCopy(White);
     public lightCache: LightCache | null = null;
+    public randomNumber = Math.random();
 }
 
 const enum AlphaBlendMode {
@@ -4098,6 +4099,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_WaterLOD);
         this.registerProxyFactory(MaterialProxy_TextureTransform);
         this.registerProxyFactory(MaterialProxy_ToggleTexture);
+        this.registerProxyFactory(MaterialProxy_EntityRandom);
     }
 
     public registerProxyFactory(factory: MaterialProxyFactory): void {
@@ -4562,6 +4564,26 @@ class MaterialProxy_ToggleTexture {
         }
 
         paramSetNum(map, this.toggletextureframenumvar, frame);
+    }
+}
+
+class MaterialProxy_EntityRandom {
+    public static type = 'entityrandom';
+
+    private scale: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.scale = new ParameterReference(params.scale);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        if (entityParams == null)
+            return;
+
+        const scale = paramGetNum(map, this.scale);
+        paramSetNum(map, this.resultvar, entityParams.randomNumber * scale);
     }
 }
 //#endregion
