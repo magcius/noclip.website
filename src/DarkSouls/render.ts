@@ -1152,8 +1152,6 @@ export class PartInstance {
     }
 }
 
-const scratchMat4a = mat4.create();
-
 function fillSceneParamsData(d: Float32Array, view: CameraView, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
     getMatrixTranslation(scratchVec3a, view.worldFromViewMatrix);

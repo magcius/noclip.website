@@ -52,7 +52,8 @@
   },
   "bin": {
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",
-    "nc-rarctool": "./src/tools/rarctool.ts"
+    "nc-rarctool": "./src/tools/rarctool.ts",
+    "nc-witnessassettool": "./src/tools/witnessassettool.ts"
   },
   "browserslist": [
     "last 2 Chrome versions"
