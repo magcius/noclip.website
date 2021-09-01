@@ -555,6 +555,32 @@ class Timeline {
         this.draw();
     }
 
+    public jumpToNextKeyframe() {
+        const curX = this.playhead.getX();
+        for (let i = 1; i < this.keyframeIcons.length; i++) {
+            if (curX < this.keyframeIcons[i].getX()) {
+                this.deselectKeyframeIcon();
+                this.playhead.updatePosition(this.keyframeIcons[i].getX());
+                this.selectKeyframeIcon(this.keyframeIcons[i]);
+                break;
+            }
+        }
+        this.draw();
+    }
+
+    public jumpToPreviousKeyframe() {
+        const curX = this.playhead.getX();
+        for (let i = this.keyframeIcons.length - 1; i > -1; i--) {
+            if (curX > this.keyframeIcons[i].getX()) {
+                this.deselectKeyframeIcon();
+                this.playhead.updatePosition(this.keyframeIcons[i].getX());
+                this.selectKeyframeIcon(this.keyframeIcons[i]);
+                break;
+            }
+        }
+        this.draw();
+    }
+
     /**
      * Return the playhead time in milliseconds, for logic purposes.
      */
@@ -1257,10 +1283,24 @@ export class StudioPanel extends FloatingPanel {
         });
 
         this.timelineElementsCanvas.addEventListener('keydown', (ev:KeyboardEvent) => {
-            if (this.timeline.selectedKeyframeIcon && ev.key === 'Delete' && !ev.repeat) {
+            if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcon && !ev.repeat) {
                 this.deleteSelectedKeyframeIcon();
+            } else if (ev.key === 'j') {
+                this.timeline.jumpToPreviousKeyframe();
+                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+                this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (ev.key === 'k') {
+                this.timeline.jumpToNextKeyframe();
+                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+                this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (ev.key === ',') {
+                this.movePlayhead(-1 / 60);
+            } else if (ev.key === '.') {
+                this.movePlayhead(1 / 60);
+            } else if (ev.key === 'Enter') {
+                this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
             }
-        })
+        });
 
         document.addEventListener('mouseup', () => {
             if (this.timeline && !this.editingKeyframe) {
@@ -1277,6 +1317,12 @@ export class StudioPanel extends FloatingPanel {
 
         this.newAnimation();
         this.studioPanelContents.removeAttribute('hidden');
+    }
+
+    private movePlayhead(moveAmountSeconds: number) {
+        const curTime = parseFloat(this.timeline.getPlayheadTimeSeconds());
+        this.playheadTimePositionInput.value = (curTime + moveAmountSeconds).toFixed(2);
+        this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
     private redo() {
@@ -1738,12 +1784,8 @@ export class StudioPanel extends FloatingPanel {
 
         this.updatePreviewSteps();
 
-        if (advancePlayhead) {
-            const duration = parseFloat(this.timelineLengthInput.value) / 10;
-            const curTime = parseFloat(this.timeline.getPlayheadTimeSeconds());
-            this.playheadTimePositionInput.value = (curTime + duration).toFixed(2);
-            this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        if (advancePlayhead)
+            this.movePlayhead(parseFloat(this.timelineLengthInput.value) / 10);
 
         this.timeline.draw();
         this.saveState();
