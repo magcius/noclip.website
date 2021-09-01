@@ -537,7 +537,7 @@ export class StudioCameraController extends FPSCameraController {
                 this.camera.worldMatrixUpdated();
             }
             if (inputManager.isKeyDownEventTriggered('Escape'))
-                this.stopAnimation();
+                this.studioPanel.stopAnimation();
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
@@ -579,7 +579,7 @@ export class StudioCameraController extends FPSCameraController {
 
     public updateAnimation(dt: number): CameraUpdateResult {
         if (this.animationManager.isAnimationFinished()) {
-            this.stopAnimation();
+            this.studioPanel.stopAnimation();
             return CameraUpdateResult.Unchanged;
         }
 
@@ -598,14 +598,6 @@ export class StudioCameraController extends FPSCameraController {
         this.camera.worldMatrixUpdated();
     }
 
-    public playAnimation() {
-        this.isAnimationPlaying = true;
-    }
-
-    public stopAnimation() {
-        this.isAnimationPlaying = false;
-        this.studioPanel.onAnimationStopped();
-    }
 }
 
 export class XRCameraController {

@@ -684,7 +684,7 @@ export class StudioPanel extends FloatingPanel {
     private hideUiCheckbox: Checkbox;
     private delayStartCheckbox: Checkbox;
     private loopAnimationBtn: HTMLButtonElement;
-    private playBtn: HTMLButtonElement;
+    private playAnimationBtn: HTMLButtonElement;
     private stopAnimationBtn: HTMLButtonElement;
 
     private selectedNumericInput: HTMLInputElement | undefined;
@@ -1167,7 +1167,7 @@ export class StudioPanel extends FloatingPanel {
         this.playbackControls.insertAdjacentElement('afterbegin', this.delayStartCheckbox.elem);
         this.playbackControls.insertAdjacentElement('afterbegin', this.hideUiCheckbox.elem);
 
-        this.playBtn = this.contents.querySelector('#playAnimationBtn') as HTMLButtonElement;
+        this.playAnimationBtn = this.contents.querySelector('#playAnimationBtn') as HTMLButtonElement;
         this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLButtonElement;
 
         this.studioDataBtn.onclick = () => this.studioSaveLoadControls.toggleAttribute('hidden');
@@ -1188,42 +1188,19 @@ export class StudioPanel extends FloatingPanel {
         this.lookAtZTangentInput.onchange = () => this.onChangeTangentInput(this.lookAtZTangentInput);
         this.bankTangentInput.onchange = () => this.onChangeTangentInput(this.bankTangentInput);
 
-        this.playBtn.onclick = (e) => {
-            if (this.timeline.keyframeIcons.length > 1) {
-                e.stopPropagation();
-                this.disableKeyframeControls();
-                this.playBtn.setAttribute('hidden', '');
-                this.stopAnimationBtn.removeAttribute('disabled');
-                this.stopAnimationBtn.classList.remove('disabled');
-                this.stopAnimationBtn.removeAttribute('hidden');
-                if (this.hideUiCheckbox.checked) {
-                    this.ui.toggleUI(false);
-                    this.elem.style.display = 'none';
-                }
-
-                let startTime = this.timeline.getPlayheadTimeMs();
-                if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
-                    startTime = 0;
-
-                if (this.delayStartCheckbox.checked) {
-                    setTimeout(() => {
-                        this.animationManager.initAnimationPlayback(this.animation, startTime);
-                        this.studioCameraController.playAnimation();
-                    }, 2000);
-                } else {
-                    this.animationManager.initAnimationPlayback(this.animation, startTime);
-                    this.studioCameraController.playAnimation();
-                }
-            }
+        this.playAnimationBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.playAnimation();
+            this.stopAnimationBtn.focus();
         }
 
-        this.stopAnimationBtn.onclick = () => {
-            this.studioCameraController.stopAnimation();
-            this.onAnimationStopped();
+        this.stopAnimationBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.stopAnimation();
+            this.playAnimationBtn.focus();
         }
 
         const numericInputs: NodeList = document.querySelectorAll('#studioPanelContents .StudioNumericInput');
-        // tslint:disable-next-line: prefer-for-of
         for (let i = 0; i < numericInputs.length; i++) {
             const element = numericInputs[i] as HTMLInputElement;
             element.addEventListener('mousedown', (e: MouseEvent) => {
@@ -1234,7 +1211,6 @@ export class StudioPanel extends FloatingPanel {
 
         // Set a mouseover event for any elements in the panel with defined help text.
         const controls: NodeList = document.querySelectorAll('#studioPanelContents *');
-        // tslint:disable-next-line: prefer-for-of
         for (let i = 0; i < controls.length; i++) {
             const control: HTMLElement = controls[i] as HTMLElement;
             if (control.dataset.helpText) {
@@ -1282,7 +1258,7 @@ export class StudioPanel extends FloatingPanel {
             });
         });
 
-        this.timelineElementsCanvas.addEventListener('keydown', (ev:KeyboardEvent) => {
+        this.timelineElementsCanvas.addEventListener('keydown', (ev: KeyboardEvent) => {
             if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcon && !ev.repeat) {
                 this.deleteSelectedKeyframeIcon();
             } else if (ev.key === 'j') {
@@ -1297,6 +1273,11 @@ export class StudioPanel extends FloatingPanel {
                 this.movePlayhead(-1 / 60);
             } else if (ev.key === '.') {
                 this.movePlayhead(1 / 60);
+            } else if (ev.key === ' ') {
+                if (this.studioCameraController.isAnimationPlaying)
+                    this.stopAnimation();
+                else
+                    this.playAnimation();
             } else if (ev.key === 'Enter') {
                 this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
             }
@@ -1317,6 +1298,46 @@ export class StudioPanel extends FloatingPanel {
 
         this.newAnimation();
         this.studioPanelContents.removeAttribute('hidden');
+    }
+
+    public playAnimation() {
+        if (this.timeline.keyframeIcons.length > 1) {
+            this.disableKeyframeControls();
+            this.playAnimationBtn.setAttribute('hidden', '');
+            this.stopAnimationBtn.removeAttribute('disabled');
+            this.stopAnimationBtn.classList.remove('disabled');
+            this.stopAnimationBtn.removeAttribute('hidden');
+
+            if (this.hideUiCheckbox.checked) {
+                this.ui.toggleUI(false);
+                this.elem.style.display = 'none';
+            }
+
+            let startTime = this.timeline.getPlayheadTimeMs();
+            if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
+                startTime = 0;
+
+            if (this.delayStartCheckbox.checked) {
+                setTimeout(() => {
+                    this.animationManager.initAnimationPlayback(this.animation, startTime);
+                    this.studioCameraController.isAnimationPlaying = true;
+                }, 2000);
+            } else {
+                this.animationManager.initAnimationPlayback(this.animation, startTime);
+                this.studioCameraController.isAnimationPlaying = true;
+            }
+        }
+    }
+
+    public stopAnimation() {
+        this.studioCameraController.isAnimationPlaying = false;
+        this.enableKeyframeControls();
+        this.playAnimationBtn.removeAttribute('hidden');
+        this.stopAnimationBtn.setAttribute('hidden', '');
+        if (this.hideUiCheckbox.checked) {
+            this.ui.toggleUI(true);
+            this.elem.style.display = '';
+        }
     }
 
     private movePlayhead(moveAmountSeconds: number) {
@@ -1578,16 +1599,6 @@ export class StudioPanel extends FloatingPanel {
     public onAnimationAdvance(t: number) {
         this.playheadTimePositionInput.value = t.toFixed(2);
         this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    public onAnimationStopped() {
-        this.enableKeyframeControls();
-        this.playBtn.removeAttribute('hidden');
-        this.stopAnimationBtn.setAttribute('hidden', '');
-        if (this.hideUiCheckbox.checked) {
-            this.ui.toggleUI(true);
-            this.elem.style.display = '';
-        }
     }
 
     private beginEditKeyframePosition() {
