@@ -18,22 +18,10 @@ class TheWitnessSceneDesc implements SceneDesc {
         const zip = ZipFile.parseZipFile(await context.dataFetcher.fetchData(`${pathBase}/data-pc.zip`));
         asset_manager.add_bundle(zip);
 
-        const globals = new TheWitnessGlobals(device);
-        globals.asset_manager = asset_manager;
+        const globals = new TheWitnessGlobals(device, asset_manager);
         globals.entity_manager.load_world(globals);
 
-        const r = new TheWitnessRenderer(device, globals);
-
-        /*
-        const mesh = asset_manager.load_asset(Asset_Type.Mesh, 'loc_hub_church_tower');
-        const g = new Mesh_Instance(globals, mesh);
-        r.mesh_instance_array.push(g);
-
-        const lightmap = asset_manager.load_asset(Asset_Type.Lightmap, 'save_187171_00');
-        console.log(lightmap);
-        */
-
-        return r;
+        return new TheWitnessRenderer(device, globals);
     }
 }
 

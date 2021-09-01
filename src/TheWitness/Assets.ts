@@ -43,6 +43,7 @@ type AssetT<T extends Asset_Type> =
     T extends Asset_Type.Texture ? Texture_Asset :
     T extends Asset_Type.Lightmap ? Lightmap_Asset :
     T extends Asset_Type.Mesh ? Mesh_Asset :
+    T extends Asset_Type.Raw ? ArrayBufferSlice :
     T extends Asset_Type.World ? Entity[] :
     never;
 
@@ -255,6 +256,8 @@ export const enum Material_Type {
     Grass_Blocker, Occluder, Deprecated_Trunk, Cable, Collision_Only, Deprecated_Tree_Collision_Only,
     Deprecated_Blended4, Cloud, Laser, Laser_Halo_Deprecated, Puzzle, Force_Bridge, Foam_Decal,
     Screen, Eyelid, Underwater,
+
+    Sky, // noclip extension
 }
 
 export const enum Material_Flags {
@@ -608,6 +611,10 @@ function load_mesh_asset(device: GfxDevice, cache: GfxRenderCache, version: numb
 }
 
 function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCache, asset_type_: T, buffer: ArrayBufferSlice, name: string): AssetT<T> {
+    type ResT = AssetT<T>;
+    if (asset_type_ === Asset_Type.Raw)
+        return buffer as ResT;
+
     let headerView = buffer.createDataView();
     const asset_type = headerView.getUint32(0x00, true) as T;
     assert(asset_type_ === asset_type);
@@ -625,7 +632,6 @@ function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCac
         buffer = LZ4.decompress(buffer, uncompressed_size);
     }
 
-    type ResT = AssetT<T>;
     if (asset_type === Asset_Type.Texture) {
         return load_texture_asset(device, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.Lightmap) {

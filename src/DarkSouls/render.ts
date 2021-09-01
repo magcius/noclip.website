@@ -449,7 +449,7 @@ ${specularEpi}
 
         const bumpmapEpi = `
     vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
-    vec3 t_NormalDirWorld = CalcNormalWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
+    vec3 t_NormalDirWorld = CalcTangentToWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 `;
 
         if (bumpmap1 !== null && bumpmap2 !== null) {
@@ -513,8 +513,8 @@ vec3 DecodeNormalMap(vec3 t_NormalMapIn) {
     return normalize(t_NormalMap.xyz);
 }
 
-vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
-    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 + t_MapNormal.zzz * t_Basis2;
+vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
 }
 
 // https://gamedev.stackexchange.com/a/59808

@@ -1,7 +1,7 @@
 
-import { mat4, ReadonlyMat4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { CameraController } from "../Camera";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, colorScale, White } from "../Color";
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, White } from "../Color";
 import { AABB } from "../Geometry";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -31,6 +31,10 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_CameraPosWorld;
     vec4 u_KeyLightDir;
     vec4 u_KeyLightColor;
+
+    vec4 u_FogColor;
+    vec4 u_FogSkyColor;
+    vec4 u_FogSunColor;
 };
 
 layout(std140) uniform ub_ObjectParams {
@@ -80,8 +84,8 @@ vec3 UnpackNormalMap(in vec4 t_NormalMapSample) {
     return t_Normal;
 }
 
-vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
-    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 * t_MapNormal.zzz * t_Basis2;
+vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
 }
 
 vec3 UnpackLightMapSample(in vec4 t_Sample) {
@@ -128,7 +132,7 @@ void main() {
     gl_Position = Mul(u_ViewProjection, vec4(v_PositionWorld, 1.0));
     v_TexCoord0 = a_TexCoord0.xy;
 
-    vec3 t_NormalWorld = a_Normal;
+    vec3 t_NormalWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal.xyz, 0.0)).xyz;
     vec3 t_TangentSWorld = a_TangentS.xyz;
     vec3 t_TangentTWorld = cross(t_NormalWorld, t_TangentSWorld);
 
@@ -212,6 +216,44 @@ float HalfLambert(in float t_Dot) {
     return saturate(t_Dot) * 0.5 + 0.5;
 }
 
+void CalcLight(inout bool t_HasLighting, inout vec3 t_Diffuse, vec3 t_LightDirWorld, vec3 t_LightColor, vec3 t_NormalWorld, vec3 t_WorldDirectionToEye) {
+    float t_NoL = dot(t_NormalWorld, t_LightDirWorld);
+
+    bool use_standard_light = ${this.is_type(Material_Type.Standard) || this.is_type(Material_Type.Blended) || this.is_type(Material_Type.Blended3)};
+    if (use_standard_light) {
+        t_NoL = saturate(t_NoL);
+        t_NoL *= t_NoL;
+
+        t_Diffuse += t_LightColor * t_NoL;
+        t_HasLighting = true;
+    }
+
+    bool use_foliage = ${this.is_type(Material_Type.Foliage)};
+    if (use_foliage) {
+        if (t_NoL >= 0.0) {
+            t_NoL = mix(0.2, 1.0, t_NoL);
+        } else {
+            t_NoL = (-0.3 * t_NoL) + 0.2;
+        }
+
+        t_NoL *= 0.578597;
+
+        t_Diffuse += t_LightColor * t_NoL;
+        t_HasLighting = true;
+    }
+
+    bool use_vegetation = ${this.is_type(Material_Type.Vegetation)};
+    if (use_vegetation) {
+        float t_Wrap = u_FoliageParams.x;
+
+        t_NoL = saturate((t_NoL + t_Wrap) / (1.0 + t_Wrap));
+        t_NoL *= 1.0 / (1.0 + t_Wrap);
+
+        t_Diffuse += t_LightColor * t_NoL;
+        t_HasLighting = true;
+    }
+}
+
 vec4 TintTexture(in vec4 t_Sample, in vec3 t_TintColor, in vec3 t_AverageColor, in float t_TintAmount) {
     vec3 t_TintedColor = t_TintColor.rgb * (t_Sample.rgb / t_AverageColor.rgb);
     t_Sample.rgb = mix(t_Sample.rgb, t_TintedColor.rgb, t_TintAmount);
@@ -234,7 +276,7 @@ vec4 TintTerrain(in vec4 t_Sample, in vec3 t_AverageColor, in float t_TintAmount
     }
 }
 
-vec4 CalcAlbedo() {
+vec4 CalcAlbedoMap() {
     vec2 t_TexCoord0 = v_TexCoord0.xy;
     vec3 t_BlendWeightAlbedo = CalcBlendWeightAlbedo(t_TexCoord0.xy, v_Color0.rgba, u_BlendFactor);
     vec4 t_Albedo = vec4(0.0);
@@ -260,6 +302,53 @@ vec3 CalcNormalMap() {
     return t_NormalMapSample;
 }
 
+vec4 CalcAlbedo() {
+    bool use_sky = ${this.is_type(Material_Type.Sky)};
+    if (use_sky) {
+        vec3 t_Normal = normalize(v_PositionWorld.xyz);
+
+        vec3 t_Color = u_FogSkyColor.rgb;
+
+        float t_FogColorAmount = pow(saturate(1.0 - t_Normal.z), u_FogColor.a);
+        t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogColorAmount);
+
+        float t_SunAmount = saturate(dot(t_Normal.xyz, u_KeyLightDir.xyz));
+        float t_FogSunColorAmount = pow(t_SunAmount, 8.0);
+        t_Color.rgb = mix(t_Color.rgb, u_FogSunColor.rgb, t_FogSunColorAmount);
+
+        vec3 t_SunColor = vec3(1.0, 0.8, 0.4) * 256.0;
+        t_Color.rgb += t_SunColor * smoothstep(0.9985, 0.9989, t_SunAmount);
+
+        return vec4(t_Color, 1.0);
+    }
+
+    return CalcAlbedoMap();
+}
+
+float Uncharted2Tonemap(float x) {
+    // http://filmicworlds.com/blog/filmic-tonemapping-operators/
+    float A = 0.15;
+    float B = 0.5;
+    float C = 0.1;
+    float D = 0.1;
+    float E = 0.02;
+    float F = 0.6;
+    return (((x * ((A * x) + (C * B))) + (D * E)) / ((x * ((A * x) + B)) + (D * F))) - (E / F);
+}
+
+void CalcToneMap(inout vec3 t_Color) {
+    float t_Luma = max(max(max(t_Color.x, t_Color.y), t_Color.z), 0.01);
+    float ExposureBias = 2.0;
+    float t_TonemappedLuma = Uncharted2Tonemap(ExposureBias * t_Luma);
+
+    float W = 32.0;
+    float whiteScale = 1.0 / Uncharted2Tonemap(W);
+    t_TonemappedLuma *= whiteScale;
+
+    float t_Scale = (t_TonemappedLuma / t_Luma);
+    t_Color.rgb *= t_Scale;
+}
+
 void main() {
     vec2 t_TexCoord0 = v_TexCoord0.xy;
 
@@ -268,12 +357,17 @@ void main() {
 
     vec4 t_Albedo = CalcAlbedo();
     vec3 t_NormalMapSample = CalcNormalMap();
-    vec3 t_NormalWorld = CalcNormalWorld(t_NormalMapSample, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
+    vec3 t_NormalWorld = CalcTangentToWorld(t_NormalMapSample, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
     vec3 t_NormalWorldSurface = normalize(v_TangentSpaceBasis2);
 
     t_Albedo.rgb *= u_MaterialColorAndEmission.rgb;
 
-    vec3 t_DiffuseLight = vec3(1.0);
+    vec3 t_DiffuseLight = vec3(0.0);
+
+    bool t_HasIncomingLight = false;
+
+    // Add directional light.
+    CalcLight(t_HasIncomingLight, t_DiffuseLight, u_KeyLightDir.xyz, u_KeyLightColor.rgb, t_NormalWorld.xyz, t_WorldDirectionToEye.xyz);
 
     bool use_lightmap = ${this.is_flag(Material_Flags.Lightmapped)};
     if (use_lightmap) {
@@ -286,13 +380,21 @@ void main() {
             t_LightMapSample = CalcLightMapColor(v_LightMapData.xy);
         }
 
-        // This should only happen on "standard" indirect shading; I think...
-        t_LightMapSample *= HalfLambert(dot(t_NormalWorld, t_NormalWorldSurface));
+        bool use_vegetation = ${this.is_type(Material_Type.Vegetation)};
+        if (use_vegetation) {
+            // Kill some of the existing light.
+            t_DiffuseLight *= t_LightMapSample * 0.5 + 0.5;
+        } else {
+            // Foliage and Standard both use a half-lambert mapping.
+            t_LightMapSample *= HalfLambert(dot(t_NormalWorld, t_NormalWorldSurface));
+        }
 
-        t_DiffuseLight = t_LightMapSample;
-
-        // TODO(jstpierre): Sun directional?
+        t_DiffuseLight += t_LightMapSample;
+        t_HasIncomingLight = true;
     }
+
+    if (!t_HasIncomingLight)
+        t_DiffuseLight = vec3(1.0);
 
     bool use_cloud = ${this.is_type(Material_Type.Cloud)};
     if (use_cloud) {
@@ -315,7 +417,8 @@ void main() {
     vec3 t_FinalColor = vec3(0.0);
     t_FinalColor.rgb += t_DiffuseLight.rgb * t_Albedo.rgb;
 
-    // Gamma correct
+    // Tone mapping & gamma correction
+    CalcToneMap(t_FinalColor.rgb);
     t_FinalColor = pow(t_FinalColor, vec3(1.0 / 2.2));
 
     float t_Alpha = 1.0;
@@ -392,6 +495,7 @@ function material_will_dynamically_override_color(type: Material_Type, flags: Ma
 
 const scratchColor = colorNewCopy(White);
 const scratchAABB = new AABB();
+const scratchVec3a = vec3.create();
 class Device_Material {
     public visible: boolean = true;
 
@@ -403,7 +507,7 @@ class Device_Material {
     public sortKeyBase = 0;
     public megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
-    constructor(globals: TheWitnessGlobals, private render_material: Render_Material) {
+    constructor(globals: TheWitnessGlobals, public render_material: Render_Material) {
         const wrap_sampler = globals.cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
@@ -420,21 +524,24 @@ class Device_Material {
             wrapT: GfxWrapMode.Clamp,
         });
 
-        for (let i = 0; i < 3; i++)
-            this.texture_map[i] = this.load_texture(globals, 0 + i, this.render_material.texture_map_names[i], wrap_sampler);
-        for (let i = 0; i < 3; i++)
-            this.load_texture(globals, 3 + i, this.render_material.normal_map_names[i], wrap_sampler);
-        for (let i = 0; i < 3; i++)
-            this.load_texture(globals, 6 + i, this.render_material.blend_map_names[i], wrap_sampler);
-
         const material_type = this.render_material.material_type;
+        const is_terrain = (material_type === Material_Type.Blended3 || material_type === Material_Type.Tinted || material_type === Material_Type.Decal);
+        const is_foliage = (material_type === Material_Type.Foliage || material_type === Material_Type.Hedge);
+
+        if (is_terrain)
+            this.load_texture(globals, 11, 'color_map', clamp_sampler);
+        const texture_sampler = is_foliage ? clamp_sampler : wrap_sampler;
+
+        for (let i = 0; i < 3; i++)
+            this.texture_map[i] = this.load_texture(globals, 0 + i, this.render_material.texture_map_names[i], texture_sampler);
+        for (let i = 0; i < 3; i++)
+            this.load_texture(globals, 3 + i, this.render_material.normal_map_names[i], texture_sampler);
+        for (let i = 0; i < 3; i++)
+            this.load_texture(globals, 6 + i, this.render_material.blend_map_names[i], texture_sampler);
 
         // 9, 10 are LightMap0 / LightMap1. By default, fill with white...
         this.load_texture(globals, 9, 'white', clamp_sampler);
         this.load_texture(globals, 10, 'white', clamp_sampler);
-
-        if (material_type === Material_Type.Blended3 || material_type === Material_Type.Tinted || material_type === Material_Type.Decal)
-            this.load_texture(globals, 11, 'color_map', clamp_sampler);
 
         this.program = new TheWitnessProgram(this.render_material);
         this.gfx_program = globals.asset_manager.cache.createProgram(this.program);
@@ -479,7 +586,7 @@ class Device_Material {
         return texture;
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, params: Material_Params): void {
+    public fillMaterialParams(globals: TheWitnessGlobals, renderInst: GfxRenderInst, params: Material_Params): void {
         let offs = renderInst.allocateUniformBuffer(TheWitnessProgram.ub_ObjectParams, 4*4+4*8);
         const d = renderInst.mapUniformBufferF32(TheWitnessProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, params.model_matrix);
@@ -517,15 +624,16 @@ class Device_Material {
 
         // Terrain Tint System
 
-        // These come from All.variables.raw -- maybe we should parse these out eventually.
-        const terrain_scale = 0.001395089285714;
-        const terrain_offset_x = 0.5460377;
-        const terrain_offset_y = 0.4347101;
+        const terrain_scale = globals.all_variables.terrain.scale as number;
+        const terrain_offset_x = globals.all_variables.terrain.offset_x as number;
+        const terrain_offset_y = globals.all_variables.terrain.offset_y as number;
 
         const map_scale_x = terrain_scale;
         const map_scale_y = 0.5 * terrain_scale;
         const map_offset_x = terrain_offset_x;
-        const map_offset_y = 0.5 * ((!!(this.render_material.flags & Material_Flags.Alternate_Map) ? 0 : 1) + terrain_offset_y);
+
+        const alternate_map = !!(this.render_material.flags & Material_Flags.Alternate_Map);
+        const map_offset_y = 0.5 * (terrain_offset_y + (alternate_map ? 0 : 1));
         offs += fillVec4(d, offs, map_scale_x, map_scale_y, map_offset_x, map_offset_y);
 
         offs += fillVec4v(d, offs, this.render_material.tint_factors);
@@ -553,7 +661,7 @@ class Device_Material {
 }
 
 export class Mesh_Instance {
-    private device_material_array: Device_Material[] = [];
+    public device_material_array: Device_Material[] = [];
 
     constructor(globals: TheWitnessGlobals, public mesh_asset: Mesh_Asset) {
         for (let i = 0; i < this.mesh_asset.material_array.length; i++)
@@ -580,7 +688,7 @@ export class Mesh_Instance {
             const renderInst = renderInstManager.newRenderInst();
             device_mesh.setOnRenderInst(renderInst);
             device_material.setOnRenderInst(renderInst, params);
-            device_material.fillMaterialParams(renderInst, params);
+            device_material.fillMaterialParams(globals, renderInst, params);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -599,7 +707,12 @@ class Skydome {
     private mesh_instance: Mesh_Instance;
 
     constructor(globals: TheWitnessGlobals) {
-        this.mesh_instance = new Mesh_Instance(globals, globals.asset_manager.load_asset(Asset_Type.Mesh, 'new-skydome')!);
+        const mesh_asset = globals.asset_manager.load_asset(Asset_Type.Mesh, 'new-skydome')!;
+
+        // Do some finagling to set the material as the sky...
+        mesh_asset.material_array[0].material_type = Material_Type.Sky;
+
+        this.mesh_instance = new Mesh_Instance(globals, mesh_asset);
     }
 
     public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager): void {
@@ -626,24 +739,32 @@ export class TheWitnessRenderer implements SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        const viewpoint = this.globals.viewpoint;
+        const globals = this.globals;
+        const viewpoint = globals.viewpoint;
 
         viewpoint.setupFromCamera(viewerInput.camera);
-        let offs = template.allocateUniformBuffer(TheWitnessProgram.ub_SceneParams, 28);
+        let offs = template.allocateUniformBuffer(TheWitnessProgram.ub_SceneParams, 40);
         const d = template.mapUniformBufferF32(TheWitnessProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewpoint.clipFromWorldMatrix);
         offs += fillVec3v(d, offs, viewpoint.cameraPos);
 
-        const sun_x = 1.0, sun_y = -0.3, sun_z = 0.88;
-        offs += fillVec4(d, offs, sun_x, sun_y, sun_z);
+        const misc = globals.all_variables.misc;
+        vec3.set(scratchVec3a, misc.sun_x as number, misc.sun_y as number, misc.sun_z as number);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        offs += fillVec3v(d, offs, scratchVec3a);
         offs += fillVec4(d, offs, 32, 32, 32);
 
+        const render_sky = globals.sky_variables['render/sky'];
+        offs += fillVec4(d, offs, render_sky.fog_color_x as number, render_sky.fog_color_y as number, render_sky.fog_color_z as number, render_sky.fog_sky_blend as number);
+        offs += fillVec4(d, offs, render_sky.fog_sky_color_x as number, render_sky.fog_sky_color_y as number, render_sky.fog_sky_color_z as number);
+        offs += fillVec4(d, offs, render_sky.fog_sun_color_x as number, render_sky.fog_sun_color_y as number, render_sky.fog_sun_color_z as number);
+
         // Start with the skydome.
-        this.skydome.prepareToRender(this.globals, this.renderHelper.renderInstManager);
+        this.skydome.prepareToRender(globals, this.renderHelper.renderInstManager);
 
         // Go through each entity and render them.
-        for (let i = 0; i < this.globals.entity_manager.entity_list.length; i++)
-            this.globals.entity_manager.entity_list[i].prepareToRender(this.globals, this.renderHelper.renderInstManager);
+        for (let i = 0; i < globals.entity_manager.entity_list.length; i++)
+            globals.entity_manager.entity_list[i].prepareToRender(globals, this.renderHelper.renderInstManager);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();

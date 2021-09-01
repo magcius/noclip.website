@@ -145,9 +145,7 @@ export class Entity_Inanimate extends Entity {
 export class Entity_Pattern_Point extends Entity {
 }
 
-export class Entity_Power_Cable extends Entity {
-    public transport_create_hook(): void {
-    }
+export class Entity_Power_Cable extends Entity_Inanimate {
 }
 
 export function register_entities(manager: Entity_Manager, entities: Entity[]): void {
