@@ -2009,6 +2009,8 @@ class Material_Generic extends BaseMaterial {
                 this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.BlendAdd);
                 // TODO(jstpierre): Once we support glow traces, re-enable this.
                 // this.megaStateFlags.depthCompare = GfxCompareMode.Always;
+            } else if (renderMode === RenderMode.TransAdd) {
+                this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Add);
             } else {
                 // Haven't seen this render mode yet.
                 debugger;

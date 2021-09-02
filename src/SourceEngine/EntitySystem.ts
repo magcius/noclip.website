@@ -2479,7 +2479,7 @@ class env_sprite extends BaseEntity {
             Once    = 0x02,
         };
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
-        this.visible = !!(spawnflags & SpawnFlags.StartOn);
+        this.visible = this.targetName === null || !!(spawnflags & SpawnFlags.StartOn);
         this.once = !!(spawnflags & SpawnFlags.Once);
     }
 
@@ -2537,6 +2537,10 @@ class env_glow extends env_sprite {
     public static classname = `env_glow`;
 }
 
+class env_sprite_clientside extends env_sprite {
+    public static classname = `env_sprite_clientside`;
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2592,6 +2596,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_steam);
         this.registerFactory(env_sprite);
         this.registerFactory(env_glow);
+        this.registerFactory(env_sprite_clientside);
     }
 
     public registerFactory(factory: EntityFactory): void {
