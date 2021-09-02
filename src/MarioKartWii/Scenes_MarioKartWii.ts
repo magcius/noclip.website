@@ -94,6 +94,8 @@ interface BaseObject extends GraphObjBase {
 function getModelInstance(baseObj: BaseObject): MDL0ModelInstance {
     if (baseObj instanceof SimpleObjectRenderer)
         return baseObj.modelInstance;
+    else if (baseObj instanceof CourseBGRenderer)
+        return baseObj.modelInstance;
     else if (baseObj instanceof MDL0ModelInstance)
         return baseObj;
     else
@@ -123,8 +125,9 @@ class MarioKartWiiRenderer {
         computeModelMatrixS(negScaleMatrix, -1, 1, 1);
         for (let i = 0; i < this.baseObjects.length; i++) {
             mat4.mul(this.baseObjects[i].modelMatrix, negScaleMatrix, this.baseObjects[i].modelMatrix);
-            for (let j = 0; j < getModelInstance(this.baseObjects[i]).materialInstances.length; j++)
-                getModelInstance(this.baseObjects[i]).materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
+            const modelInstance = getModelInstance(this.baseObjects[i]);
+            for (let j = 0; j < modelInstance.materialInstances.length; j++)
+                modelInstance.materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
         }
     }
 
