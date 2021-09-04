@@ -101,11 +101,11 @@ class GalaxyNamePlate extends LayoutActor {
         this.startAnim('OneLine', 2);
     }
 
-    public show(text: string, unknown: number, normal: boolean, ready: boolean): void {
-        showPaneRecursive(this, normal ? 'GalaxyNamePlate' : 'GalaxyNamePlateU');
-        hidePaneRecursive(this, normal ? 'GalaxyNamePlateU' : 'GalaxyNamePlate');
-        setTextBoxRecursive(this, normal ? 'GalaxyNamePlate' : 'GalaxyNamePlateU', text);
-        setAnimFrameAndStopAdjustTextWidth(this, normal ? 'TxtGalaxyName' : 'TxtGalaxyNameU', 2);
+    public show(text: string, unknown: number, above: boolean, ready: boolean): void {
+        showPaneRecursive(this, above ? 'GalaxyNamePlate' : 'GalaxyNamePlateU');
+        hidePaneRecursive(this, above ? 'GalaxyNamePlateU' : 'GalaxyNamePlate');
+        setTextBoxRecursive(this, above ? 'GalaxyNamePlate' : 'GalaxyNamePlateU', text);
+        setAnimFrameAndStopAdjustTextWidth(this, above ? 'TxtGalaxyName' : 'TxtGalaxyNameU', 2);
 
         this.startAnim('Unknown', 1);
         this.setAnimFrameAndStop(unknown, 1);
@@ -212,6 +212,8 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
     private galaxyMapMarioIcon: GalaxyMapMarioIcon;
     private galaxyMapDomeIcon: GalaxyMapDomeIcon[] = [];
 
+    private starNum = 131;
+
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'GalaxyMap');
         this.initLayoutManager(sceneObjHolder, 'MapGrandGalaxy', 1);
@@ -261,7 +263,11 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
             this.galaxyMapDomeIcon[i].makeActorAppeared(sceneObjHolder);
         this.galaxyMapMarioIcon.showBlink(sceneObjHolder);
 
-        setTextBoxRecursive(this, 'Star', '131');
+        this.setStarNum('' + this.starNum);
+    }
+
+    public setStarNum(text: string): void {
+        setTextBoxRecursive(this, 'Star', text);
     }
 
     public movement(sceneObjHolder: SceneObjHolder): void {
@@ -428,6 +434,8 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
             pass.exec((passRenderer) => {
                 renderInstManager.drawListOnPassRenderer(this.renderInstList, passRenderer);
             });
+
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
         return layoutTargetID;

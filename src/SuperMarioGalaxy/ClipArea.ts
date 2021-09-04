@@ -786,7 +786,7 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
-            
+
             pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
@@ -804,6 +804,8 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
+
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
         builder.pushPass((pass) => {

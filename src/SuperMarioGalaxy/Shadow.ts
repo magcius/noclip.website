@@ -813,20 +813,17 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
-        front.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(front);
         this.materialFront.setOnRenderInst(device, cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
-        back.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(back);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
-
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst.reset();
     }
 
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
@@ -918,20 +915,17 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
-        front.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(front);
         this.materialFront.setOnRenderInst(device, cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
-        back.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(back);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
-
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst.reset();
     }
 
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
