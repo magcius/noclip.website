@@ -318,10 +318,8 @@ abstract class ShadowSurfaceDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setUsePnMtxIdx(false);
-        mb.setColorUpdate(false);
-        mb.setAlphaUpdate(true);
 
-        this.material = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
+        this.material = new GXMaterialHelperGfx(mb.finish('ShadowSurfaceDrawer'));
     }
 }
 
@@ -409,8 +407,6 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.GEQUAL, false);
         mb.setUsePnMtxIdx(usePnMtxIdx);
-        mb.setColorUpdate(false);
-        mb.setAlphaUpdate(true);
 
         mb.setCullMode(GX.CullMode.FRONT);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
@@ -437,7 +433,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x40 / 0xFF;
+        materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.loadDrawModelMtx(packetParams, viewerInput);
@@ -1026,6 +1022,7 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
 }
 
 // NOTE(jstpierre): This is not how it's normally done. fillSilhouetteColor is called directly from the main list, normally.
+// NOTE(jstpierre): The original game uses framebuffer alpha to store the shadow buffer, but we just use a separate R8 target.
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
@@ -1035,7 +1032,7 @@ class AlphaShadow extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'AlphaShadow');
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
 
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
@@ -1044,9 +1041,10 @@ class AlphaShadow extends NameObj {
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
         mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.KONST, GX.CA.A0, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
+        mb.setTevSwapMode(0, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R]);
         mb.setZMode(true, GX.CompareType.ALWAYS, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);

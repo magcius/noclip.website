@@ -145,7 +145,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    private clipAreaMaskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
+    private maskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
@@ -365,6 +365,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
+        this.maskDesc.copyDimensions(this.mainColorDesc);
+        this.maskDesc.colorClearColor = TransparentBlack;
+
         if (sceneObjHolder.fallOutFieldDraw !== null && sceneObjHolder.clipAreaHolder !== null && sceneObjHolder.clipAreaHolder.isActive && this.hasAnyDrawBuffer(DrawBufferType.ClippedMapParts)) {
             builder.pushPass((pass) => {
                 pass.setDebugName('Clipped Map Parts');
@@ -380,10 +383,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
             });
 
-            this.clipAreaMaskDesc.copyDimensions(this.mainColorDesc);
-            this.clipAreaMaskDesc.colorClearColor = TransparentBlack;
-
-            const clipAreaMaskTargetID = builder.createRenderTargetID(this.clipAreaMaskDesc, 'Clip Area Mask');
+            const clipAreaMaskTargetID = builder.createRenderTargetID(this.maskDesc, 'Clip Area Mask');
 
             builder.pushPass((pass) => {
                 pass.setDebugName('Clipped Map Parts Mask');
@@ -440,9 +440,30 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.MapObjStrongLight);
                 this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
                 this.drawOpa(passRenderer, 0x1F); // player light?
+            });
+        });
 
+        let shadowColorTargetID: number;
+        builder.pushPass((pass) => {
+            pass.setDebugName('Shadow Volumes');
+
+            shadowColorTargetID = builder.createRenderTargetID(this.maskDesc, 'Shadow Volume Mask');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            pass.exec((passRenderer) => {
                 this.execute(passRenderer, DrawType.ShadowVolume);
+            });
 
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Opaque after Shadow');
+
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
                 // executeDrawBufferListNormalOpaBeforeSilhouette()
                 this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObj);
                 this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
@@ -451,7 +472,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Main Opaque');
-            const shadowColorTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            const shadowColorTextureID = builder.resolveRenderTarget(shadowColorTargetID);
             pass.attachResolveTexture(shadowColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
