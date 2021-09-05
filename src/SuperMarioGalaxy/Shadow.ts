@@ -334,10 +334,10 @@ function drawCircle(ddraw: TDDraw, pos: ReadonlyVec3, axis: ReadonlyVec3, radius
 
     ddraw.begin(GX.Command.DRAW_TRIANGLE_FAN);
     ddraw.position3vec3(pos);
-    for (let i = 0; i < pointCount; i++) {
+    for (let i = 0; i <= pointCount; i++) {
         vec3.scaleAndAdd(scratchVec3b, pos, scratchVec3a, radius);
-        transformVec3Mat4w0(scratchVec3b, scratchMat4a, scratchVec3b);
         ddraw.position3vec3(scratchVec3b);
+        transformVec3Mat4w0(scratchVec3a, scratchMat4a, scratchVec3a);
     }
     ddraw.end();
 }
@@ -349,7 +349,6 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowSurfaceCircle', controller);
-        debugger;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
@@ -361,8 +360,12 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x80 / 0xFF;
+        this.material.setOnRenderInst(device, cache, template);
+
+        materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
 
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
@@ -371,7 +374,8 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
-        this.ddraw.endAndUpload(renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
+        renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -1213,16 +1217,6 @@ function setUpShadowVolumeFromCSV(volume: ShadowVolumeDrawer, infoIter: JMapInfo
     volume.cutDropShadow = volumeCut !== 0;
 }
 
-function createShadowSurfaceCircleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
-    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeSurface();
-
-    const drawer = new ShadowSurfaceCircle(sceneObjHolder, controller);
-    drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
-    controller.shadowDrawer = drawer;
-}
-
 function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
     controller.setDropTypeNormal();
@@ -1297,9 +1291,11 @@ function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: Li
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
-        createShadowSurfaceCircleFromCSV(sceneObjHolder, actor, infoIter);
+        // Never used
     } else if (shadowType === 'SurfaceOval') {
+        // Only used in Meramera
     } else if (shadowType === 'SurfaceBox') {
+        // Never used
     } else if (shadowType === 'VolumeSphere') {
         createShadowVolumeSphereFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOval') {
@@ -1311,7 +1307,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeBox') {
         createShadowVolumeBoxFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeFlatModel') {
-        debugger;
+        // Only used in SkeletalFishGuard
     } else if (shadowType === 'VolumeLine') {
         createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {

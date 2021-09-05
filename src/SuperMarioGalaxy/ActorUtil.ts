@@ -1056,7 +1056,6 @@ export function clampVecAngleDeg(dst: vec3, axis: ReadonlyVec3, clampDeg: number
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
     // v0 and v1 are normalized.
 
-    // TODO(jstpierre): There's probably a better way to do this that doesn't involve an atan2.
     vec3.cross(scratch, v0, v1);
     const sin = vec3.length(scratch);
     if (sin > MathConstants.EPSILON) {

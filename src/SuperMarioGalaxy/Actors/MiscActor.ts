@@ -1683,12 +1683,27 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         setBindTriangleFilter(this, isWallCodeNoAction);
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'message', 1, 0.0, Vec3Zero);
+        initShadowVolumeSphere(sceneObjHolder, this, 30.0);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            listenStageSwitchOnOffAppear(sceneObjHolder, this, this.appearPreShooting.bind(this), null);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
 
         this.calcAndSetBaseMtxBase();
 
         calcUpVec(this.axisY, this);
 
         startBpk(this, 'ShootingStar');
+    }
+
+    private appearPreShooting(sceneObjHolder: SceneObjHolder): void {
+        this.makeActorAppeared(sceneObjHolder);
+        this.setNerve(ShootingStarNrv.PreShooting);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
@@ -4359,6 +4374,13 @@ export class SwingRope extends LiveActor {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        initShadowSurfaceCircle(sceneObjHolder, this, 50.0);
+        onCalcShadow(this);
+        // TODO(jstpierre): Manual drop position / setShadowDropPosPositionPtr
+        setShadowDropLength(this, null, 2000);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     private initPoints(): void {
@@ -6019,8 +6041,6 @@ export class ElectricRailHolder extends NameObj {
                     continue;
 
                 materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport, packetParams);
-
-                // TODO(jstpierre): Do this in one TDDraw?
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
