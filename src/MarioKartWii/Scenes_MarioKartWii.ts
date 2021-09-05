@@ -236,6 +236,7 @@ class MarioKartWiiRenderer {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
         this.textureHolder.destroy(device);
+        this.modelCache.destroy(device);
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].destroy(device);
     }

@@ -682,6 +682,7 @@ export class DebugCube {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
     }
 }
 
@@ -1010,6 +1011,7 @@ export class SourceRenderContext {
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderCache.destroy();
         this.lightmapManager.destroy(device);
         this.materialCache.destroy(device);
         this.studioModelCache.destroy(device);
