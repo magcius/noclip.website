@@ -24,14 +24,14 @@ import { JSystemFileReaderHelper } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
-import { EffectSystem } from './EffectSystem';
+import { EffectSystem, ParticleResourceHolder } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate, ResourceHolder } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea, MercatorTransformCube, DeathArea } from './MiscMap';
-import { SensorHitChecker } from './HitSensor';
+import { HitSensor, SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
@@ -746,6 +746,8 @@ export class ModelCache {
     public extraDataCache = new Map<string, ArrayBufferSlice>();
     public cache: GfxRenderCache;
     public textureListHolder = new TextureListHolder();
+    public gameSystemFontHolder: GameSystemFontHolder | null = null;
+    public particleResourceHolder: ParticleResourceHolder | null = null;
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
         this.cache = new GfxRenderCache(device);
@@ -842,11 +844,24 @@ export class ModelCache {
         return resourceHolder;
     }
 
-    public getLayoutHolder(gameSystemFontHolder: GameSystemFontHolder, layoutName: string): LayoutHolder {
+    private ensureGameSystemFontHolder(): GameSystemFontHolder {
+        if (this.gameSystemFontHolder === null)
+            this.gameSystemFontHolder = new GameSystemFontHolder(this);
+        return this.gameSystemFontHolder;
+    }
+
+    public ensureParticleResourceHolder(): ParticleResourceHolder {
+        if (this.particleResourceHolder === null)
+            this.particleResourceHolder = new ParticleResourceHolder(this);
+        return this.particleResourceHolder;
+    }
+
+    public getLayoutHolder(layoutName: string): LayoutHolder {
         if (this.archiveLayoutHolder.has(layoutName))
             return this.archiveLayoutHolder.get(layoutName)!;
 
         const arc = this.getLayoutData(layoutName);
+        const gameSystemFontHolder = this.ensureGameSystemFontHolder();
         const layoutHolder = new LayoutHolder(this.device, this.cache, gameSystemFontHolder, layoutName, arc);
         this.archiveLayoutHolder.set(layoutName, layoutHolder);
         return layoutHolder;
@@ -858,6 +873,10 @@ export class ModelCache {
             resourceHolder.destroy(device);
         for (const layoutHolder of this.archiveLayoutHolder.values())
             layoutHolder.destroy(device);
+        if (this.particleResourceHolder !== null)
+            this.particleResourceHolder.destroy(device);
+        if (this.gameSystemFontHolder !== null)
+            this.gameSystemFontHolder.destroy(device);
     }
 }
 
@@ -943,7 +962,7 @@ export const enum SceneObj {
     BloomEffectSimple              = 0x1F,
     ScreenBlurEffect               = 0x20,
     DepthOfFieldBlur               = 0x21,
-    ScreenWipeHolder               = 0x22,
+    SceneWipeHolder                = 0x22,
     PlayerActionGuidance           = 0x23,
     ScenePlayingResult             = 0x24,
     LensFlareDirector              = 0x25,
@@ -1035,7 +1054,6 @@ export const enum SceneObj {
 
     // Noclip additions
     GalaxyNameSortTable            = 0xA0,
-    GameSystemFontHolder           = 0xA1,
 }
 
 export class SceneObjHolder {
@@ -1091,7 +1109,6 @@ export class SceneObjHolder {
 
     // noclip additions -- some of these are singletons in the original game.
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
-    public gameSystemFontHolder: GameSystemFontHolder | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
@@ -1190,8 +1207,6 @@ export class SceneObjHolder {
             return this.galaxyMapController;
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             return this.galaxyNameSortTable;
-        else if (sceneObj === SceneObj.GameSystemFontHolder)
-            return this.gameSystemFontHolder;
         return null;
     }
 
@@ -1249,7 +1264,7 @@ export class SceneObjHolder {
         else if (sceneObj === SceneObj.ClipAreaDropHolder)
             this.clipAreaDropHolder = new ClipAreaDropHolder(this);
         else if (sceneObj === SceneObj.FallOutFieldDraw)
-            assert(false); // this.fallOutFieldDraw = new FallOutFieldDraw(this); // Handled by createFallOutFieldDraw
+            assert(false); // Handled by createFallOutFieldDraw
         else if (sceneObj === SceneObj.ClipAreaHolder)
             this.clipAreaHolder = new ClipAreaHolder(this);
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
@@ -1272,8 +1287,6 @@ export class SceneObjHolder {
             this.galaxyMapController = new GalaxyMapController(this);
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             this.galaxyNameSortTable = new GalaxyNameSortTable(this);
-        else if (sceneObj === SceneObj.GameSystemFontHolder)
-            this.gameSystemFontHolder = new GameSystemFontHolder(this);
     }
 
     public requestArchives(): void {
@@ -1761,7 +1774,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             return new ModelCache(device, this.pathBase, context.dataFetcher);
         });
 
-        const renderHelper = new GXRenderHelperGfx(device, context);
+        const renderHelper = new GXRenderHelperGfx(device, context, modelCache.cache);
         context.destroyablePool.push(renderHelper);
 
         const galaxyName = this.galaxyName;

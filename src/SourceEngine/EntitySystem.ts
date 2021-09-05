@@ -1662,7 +1662,7 @@ class trigger_multiple extends BaseEntity {
             if (this.enabled) {
                 if (this.isPlayerTouching !== isPlayerTouching) {
                     this.isPlayerTouching = isPlayerTouching;
-    
+
                     if (this.isPlayerTouching)
                         this.onStartTouch(entitySystem);
                     else

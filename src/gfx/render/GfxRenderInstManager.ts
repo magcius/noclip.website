@@ -732,7 +732,6 @@ export class GfxRenderInstManager {
 
     public destroy(): void {
         this.instPool.destroy();
-        this.gfxRenderCache.destroy();
     }
 
     /**

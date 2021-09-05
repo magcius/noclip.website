@@ -8,13 +8,20 @@ import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpe
 
 class GfxRenderHelperBase {
     public renderCache: GfxRenderCache;
+    public renderCacheOwn: GfxRenderCache | null = null;
     public renderGraph: GfxrRenderGraph;
     public renderInstManager: GfxRenderInstManager;
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public debugThumbnails: DebugThumbnailDrawer;
 
     constructor(public device: GfxDevice, renderCache: GfxRenderCache | null = null) {
-        this.renderCache = renderCache !== null ? renderCache : new GfxRenderCache(device);
+        if (renderCache === null) {
+            this.renderCacheOwn = new GfxRenderCache(device);
+            this.renderCache = this.renderCacheOwn;
+        } else {
+            this.renderCache = renderCache;
+        }
+
         this.renderGraph = new GfxrRenderGraphImpl(this.device);
         this.renderInstManager = new GfxRenderInstManager(this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
@@ -32,9 +39,10 @@ class GfxRenderHelperBase {
     }
 
     public destroy(): void {
+        if (this.renderCacheOwn !== null)
+            this.renderCacheOwn.destroy();
         this.uniformBuffer.destroy();
         this.renderInstManager.destroy();
-        this.renderCache.destroy();
         this.renderGraph.destroy();
     }
 

@@ -1,5 +1,5 @@
 
-import { getDeltaTimeFrames, SceneObj, SceneObjHolder } from "./Main";
+import { getDeltaTimeFrames, ModelCache, SceneObj, SceneObjHolder } from "./Main";
 import { NameObj } from "./NameObj";
 import { Spine } from "./Spine";
 import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane, LayoutTextbox } from "../Common/NW4R/lyt/Layout";
@@ -170,8 +170,7 @@ class LayoutManager {
     constructor(sceneObjHolder: SceneObjHolder, layoutName: string, numRootAnm: number) {
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
 
-        sceneObjHolder.create(SceneObj.GameSystemFontHolder);
-        this.layoutHolder = sceneObjHolder.modelCache.getLayoutHolder(sceneObjHolder.gameSystemFontHolder!, layoutName);
+        this.layoutHolder = sceneObjHolder.modelCache.getLayoutHolder(layoutName);
 
         const layoutRes = assertExists(getRes(this.layoutHolder.rlytTable, layoutName));
         this.layout = new Layout(device, cache, layoutRes, this.layoutHolder);
@@ -298,6 +297,10 @@ class LayoutManager {
 
         this.layout.draw(sceneObjHolder.modelCache.device, renderInstManager, drawInfo);
     }
+
+    public destroy(device: GfxDevice): void {
+        this.layout.destroy(device);
+    }
 }
 
 export class LayoutActor<TNerve extends number = number> extends NameObj {
@@ -395,21 +398,24 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.setAnimFrameAndStop(frameCtrl.endFrame, index);
     }
 
+    public destroy(device: GfxDevice): void {
+        if (this.layoutManager !== null)
+            this.layoutManager.destroy(device);
+    }
+
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         GameSystemFontHolder.requestArchives(sceneObjHolder);
     }
 }
 
-export class GameSystemFontHolder extends NameObj {
+export class GameSystemFontHolder {
     private rfntTable = new Map<string, ResFont>();
 
-    constructor(sceneObjHolder: SceneObjHolder) {
-        super(sceneObjHolder, 'GameSystemFontHolder');
-
-        const arc = sceneObjHolder.modelCache.getLayoutData('Font');
+    constructor(modelCache: ModelCache) {
+        const arc = modelCache.getLayoutData('Font');
         initEachResTable(arc, this.rfntTable, ['.brfnt'], (file) => {
             const rfnt = parseBRFNT(file.buffer);
-            return new ResFont(sceneObjHolder.modelCache.device, rfnt);
+            return new ResFont(modelCache.device, rfnt);
         }, true);
     }
 
