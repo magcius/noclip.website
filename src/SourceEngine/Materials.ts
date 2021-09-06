@@ -2371,6 +2371,7 @@ class WaterMaterialProgram extends MaterialProgramBase {
 
     public both = `
 precision mediump float;
+precision mediump sampler2DArray;
 
 ${MaterialProgramBase.Common}
 
