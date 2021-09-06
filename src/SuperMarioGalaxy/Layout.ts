@@ -62,7 +62,10 @@ class LayoutAnmPlayer {
     public movement(sceneObjHolder: SceneObjHolder): void {
         if (this.curAnim === null)
             return;
-        this.frameCtrl.update(getDeltaTimeFrames(sceneObjHolder.viewerInput));
+        let deltaTimeFrames = getDeltaTimeFrames(sceneObjHolder.viewerInput);
+        // Layout animations expect 30fps, we're timed for 60fps.
+        deltaTimeFrames /= 2;
+        this.frameCtrl.update(deltaTimeFrames);
     }
 
     public reflectFrame(): void {
