@@ -3632,7 +3632,7 @@ class LightmapPage {
 
         this.data = new Uint8Array(width * height * numSlices * 4);
 
-        const fillEmptySpaceWithPink = true;
+        const fillEmptySpaceWithPink = false;
         if (fillEmptySpaceWithPink) {
             for (let i = 0; i < width * height * numSlices * 4; i += 4) {
                 this.data[i+0] = 0xFF;
