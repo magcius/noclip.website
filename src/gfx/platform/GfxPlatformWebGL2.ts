@@ -375,7 +375,18 @@ interface EXT_texture_compression_rgtc {
     COMPRESSED_SIGNED_RED_RGTC1_EXT: GLenum;
     COMPRESSED_RED_GREEN_RGTC2_EXT: GLenum;
     COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT: GLenum;
-};
+}
+
+interface EXT_texture_norm16 {
+    R16_EXT: GLenum;
+    RG16_EXT: GLenum;
+    RGB16_EXT: GLenum;
+    RGBA16_EXT: GLenum;
+    R16_SNORM_EXT: GLenum;
+    RG16_SNORM_EXT: GLenum;
+    RGB16_SNORM_EXT: GLenum;
+    RGBA16_SNORM_EXT: GLenum;
+}
 
 interface OES_draw_buffers_indexed {
     enableiOES(target: GLuint, index: GLuint): void;
@@ -397,9 +408,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
     private _EXT_texture_compression_rgtc: EXT_texture_compression_rgtc | null = null;
     private _EXT_texture_filter_anisotropic: EXT_texture_filter_anisotropic | null = null;
+    private _EXT_texture_norm16: EXT_texture_norm16 | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
     private _OES_draw_buffers_indexed: OES_draw_buffers_indexed | null = null;
-    private _uniformBufferMaxPageByteSize: number;
 
     // Swap Chain
     private _scTexture: GfxTexture | null = null;
@@ -449,6 +460,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
 
     // GfxLimits
+    private _uniformBufferMaxPageByteSize: number;
     public uniformBufferWordAlignment: number;
     public uniformBufferMaxPageWordSize: number;
     public supportedSampleCounts: number[];
@@ -460,6 +472,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
         this._EXT_texture_filter_anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
+        this._EXT_texture_norm16 = gl.getExtension('EXT_texture_norm16');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
         // this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
 
@@ -572,6 +585,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.RGBA32F;
         case GfxFormat.U16_R:
             return WebGL2RenderingContext.R16UI;
+        case GfxFormat.U16_R_NORM:
+            return this._EXT_texture_norm16!.R16_EXT;
+        case GfxFormat.U16_RG_NORM:
+            return this._EXT_texture_norm16!.RG16_EXT;
+        case GfxFormat.U16_RGBA_NORM:
+            return this._EXT_texture_norm16!.RGBA16_EXT;
         case GfxFormat.U32_R:
             return WebGL2RenderingContext.R32UI;
         case GfxFormat.U16_RGBA_5551:
@@ -1349,6 +1368,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._EXT_texture_compression_rgtc !== null)
                 return isBlockCompressSized(width, height, 4, 4);
             return false;
+        case GfxFormat.U16_R_NORM:
+        case GfxFormat.U16_RG_NORM:
+        case GfxFormat.U16_RGBA_NORM:
+            return this._EXT_texture_norm16 !== null;
         default:
             return true;
         }

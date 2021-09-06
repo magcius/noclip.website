@@ -460,7 +460,14 @@ export class GfxRenderInst {
 
         const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
+        if (depthStencilAttachmentDescriptor !== null) {
+            if (sampleCount === -1)
+                sampleCount = depthStencilAttachmentDescriptor.sampleCount;
+            else
+                assert(sampleCount == depthStencilAttachmentDescriptor.sampleCount);
+        }
 
+        assert(sampleCount > 0);
         this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 

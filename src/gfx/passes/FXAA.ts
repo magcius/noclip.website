@@ -50,7 +50,7 @@ export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderH
         renderInst.setAllowSkippingIfPipelineNotReady(false);
 
         renderInst.setMegaStateFlags(fullscreenMegaState);
-        renderInst.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 2 }]);
+        renderInst.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         renderInst.drawPrimitives(3);
 
         let offs = renderInst.allocateUniformBuffer(0, 4);
