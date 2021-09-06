@@ -3959,7 +3959,7 @@ export class SurfaceLightmap {
     public pixelData: Uint8ClampedArray | null;
 
     constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
-        this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
+        this.pixelData = createRuntimeLightmap(this.lightmapData.mapWidth, this.lightmapData.mapHeight, this.wantsLightmap, this.wantsBumpmap);
 
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
 

@@ -62,7 +62,6 @@ export interface SurfaceLightmapData {
     width: number;
     height: number;
     styles: number[];
-    lightmapSize: number;
     samples: Uint8Array | null;
     hasBumpmapSamples: boolean;
     // Dynamic allocation
@@ -1108,17 +1107,17 @@ export class BSPFile {
             // surface lighting info
             const mapWidth = m_LightmapTextureSizeInLuxels[0] + 1, mapHeight = m_LightmapTextureSizeInLuxels[1] + 1;
             const hasBumpmapSamples = !!(tex.flags & TexinfoFlags.BUMPLIGHT);
-            const numlightmaps = hasBumpmapSamples ? 4 : 1;
-            const width = mapWidth, height = mapHeight * numlightmaps;
-            const lightmapSize = styles.length * (width * height * 4);
+            const srcNumLightmaps = hasBumpmapSamples ? 4 : 1;
+            const width = mapWidth, height = mapHeight * srcNumLightmaps;
+            const srcLightmapSize = styles.length * (width * height * 4);
 
             let samples: Uint8Array | null = null;
             if (lightofs !== -1)
-                samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
+                samples = lighting.subarray(lightofs, srcLightmapSize).createTypedArray(Uint8Array);
 
             const lightmapData: SurfaceLightmapData = {
                 faceIndex: i,
-                mapWidth, mapHeight, width, height, styles, lightmapSize, samples, hasBumpmapSamples,
+                mapWidth, mapHeight, width, height, styles, samples, hasBumpmapSamples,
                 pageIndex: -1, pagePosX: -1, pagePosY: -1,
             };
 
