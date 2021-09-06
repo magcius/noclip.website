@@ -1134,9 +1134,12 @@ class func_areaportalwindow extends BaseEntity {
         super.spawn(entitySystem);
 
         // We don't support areaportals yet, so just hide the replacement target entity.
-        const targetEntity = entitySystem.findEntityByTargetName(this.entity.target);
-        if (targetEntity !== null)
-            targetEntity.visible = false;
+        const targetName = this.entity.target;
+        if (targetName) {
+            const targetEntity = entitySystem.findEntityByTargetName(this.entity.target);
+            if (targetEntity !== null)
+                targetEntity.visible = false;
+        }
     }
 }
 
