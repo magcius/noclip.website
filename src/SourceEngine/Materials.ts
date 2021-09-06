@@ -4,7 +4,7 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -1051,6 +1051,7 @@ class Material_Generic_Program extends MaterialProgramBase {
 
     public both = `
 precision mediump float;
+precision mediump sampler2DArray;
 
 ${MaterialProgramBase.Common}
 
@@ -1126,9 +1127,6 @@ varying vec3 v_TangentSpaceBasis1;
 #endif
 // Just need the vertex normal component.
 varying vec3 v_TangentSpaceBasis2;
-#ifdef USE_BUMPMAP
-varying float v_LightmapOffset;
-#endif
 #ifdef USE_DYNAMIC_PIXEL_LIGHTING
 varying vec4 v_LightAtten;
 #endif
@@ -1137,7 +1135,7 @@ varying vec4 v_LightAtten;
 uniform sampler2D u_TextureBase;
 uniform sampler2D u_TextureDetail;
 uniform sampler2D u_TextureBumpmap;
-uniform sampler2D u_TextureLightmap;
+uniform sampler2DArray u_TextureLightmap;
 uniform sampler2D u_TextureEnvmapMask;
 uniform sampler2D u_TextureBase2;
 uniform sampler2D u_TextureSpecularExponent;
@@ -1338,7 +1336,6 @@ void mainVS() {
 
     v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #ifdef USE_BUMPMAP
-    v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord0.zw = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 #ifdef USE_LIGHTMAP
@@ -1536,11 +1533,11 @@ void mainPS() {
 #ifdef USE_LIGHTMAP
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
-    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy)).rgb;
+    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0))).rgb;
 #ifdef USE_DIFFUSE_BUMPMAP
-    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
-    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
-    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
+    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 1.0))).rgb;
+    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 2.0))).rgb;
+    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 3.0))).rgb;
 
     vec3 t_Influence;
 
@@ -2430,7 +2427,7 @@ uniform sampler2D u_TextureReflect;
 
 // Flow -- BaseTexture, Lightmap, Flow Map, Flow Noise
 uniform sampler2D u_TextureBase;
-uniform sampler2D u_TextureLightmap;
+uniform sampler2DArray u_TextureLightmap;
 uniform sampler2D u_TextureFlowmap;
 uniform sampler2D u_TextureFlowNoise;
 
@@ -2571,7 +2568,7 @@ void mainPS() {
 
     vec3 t_DiffuseLight = vec3(1.0);
 #ifdef USE_LIGHTMAP_WATER_FOG
-    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord1.zw).rgb;
+    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
     t_LightmapColor.rgb *= t_LightmapScale;
     t_DiffuseLight.rgb *= t_LightmapColor;
@@ -3622,14 +3619,22 @@ class LightmapPage {
     public surfaceLightmaps: SurfaceLightmap[] = [];
 
     constructor(device: GfxDevice, private page: LightmapPackerPage) {
-        const width = this.page.width, height = this.page.height;
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, width, height, 1));
-        this.data = new Uint8Array(width * height * 4);
+        const width = this.page.width, height = this.page.height, numSlices = 4;
+        this.gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2DArray,
+            usage: GfxTextureUsage.Sampled,
+            pixelFormat: GfxFormat.U8_RGBA_SRGB,
+            width: page.width,
+            height: page.height,
+            depth: numSlices,
+            numLevels: 1,
+        });
 
-        const fillEmptySpaceWithPink = false;
+        this.data = new Uint8Array(width * height * numSlices * 4);
 
+        const fillEmptySpaceWithPink = true;
         if (fillEmptySpaceWithPink) {
-            for (let i = 0; i < width * height * 4; i += 4) {
+            for (let i = 0; i < width * height * numSlices * 4; i += 4) {
                 this.data[i+0] = 0xFF;
                 this.data[i+1] = 0x00;
                 this.data[i+2] = 0xFF;
@@ -3658,14 +3663,21 @@ class LightmapPage {
             const pixelData = instance.pixelData!;
 
             let srcOffs = 0;
-            for (let y = lightmapData.pagePosY; y < lightmapData.pagePosY + lightmapData.height; y++) {
-                for (let x = lightmapData.pagePosX; x < lightmapData.pagePosX + lightmapData.width; x++) {
-                    let dstOffs = (y * this.page.width + x) * 4;
-                    // Copy one pixel.
-                    data[dstOffs++] = pixelData[srcOffs++];
-                    data[dstOffs++] = pixelData[srcOffs++];
-                    data[dstOffs++] = pixelData[srcOffs++];
-                    data[dstOffs++] = pixelData[srcOffs++];
+
+            for (let slice = 0; slice < 4; slice++) {
+                // If we don't have bumpmap samples, just upload the same data to all four slices...
+                if (!lightmapData.hasBumpmapSamples)
+                    srcOffs = 0;
+
+                for (let y = lightmapData.pagePosY; y < lightmapData.pagePosY + lightmapData.height; y++) {
+                    for (let x = lightmapData.pagePosX; x < lightmapData.pagePosX + lightmapData.width; x++) {
+                        let dstOffs = ((slice * this.page.height + y) * this.page.width + x) * 4;
+                        // Copy one pixel.
+                        data[dstOffs++] = pixelData[srcOffs++];
+                        data[dstOffs++] = pixelData[srcOffs++];
+                        data[dstOffs++] = pixelData[srcOffs++];
+                        data[dstOffs++] = pixelData[srcOffs++];
+                    }
                 }
             }
 
@@ -3959,7 +3971,7 @@ export class SurfaceLightmap {
     public pixelData: Uint8ClampedArray | null;
 
     constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
-        this.pixelData = createRuntimeLightmap(this.lightmapData.mapWidth, this.lightmapData.mapHeight, this.wantsLightmap, this.wantsBumpmap);
+        this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
 
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
 
@@ -3987,7 +3999,7 @@ export class SurfaceLightmap {
 
         const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
-            const texelCount = this.lightmapData.mapWidth * this.lightmapData.mapHeight;
+            const texelCount = this.lightmapData.width * this.lightmapData.height;
             const srcNumLightmaps = (this.wantsBumpmap && this.lightmapData.hasBumpmapSamples) ? 4 : 1;
             const srcSize = srcNumLightmaps * texelCount * 4;
 

@@ -1,8 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZ4 from "../Common/Compression/LZ4";
-import { assert, nArray } from "../util";
-import { ZipFile, parseZipFile } from "../ZipFile";
+import { assert, nArray, nullify } from "../util";
+import { ZipFile, parseZipFile, decompressZipFileEntry } from "../ZipFile";
 import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { Color } from "../Color";
@@ -61,6 +61,7 @@ const enum D3DFormat {
     ATI2 = 0x32495441,
     A8R8G8B8 = 0x15,
     X8R8G8B8 = 0x16,
+    L16      = 0x51,
 }
 
 function get_gfx_format(format: D3DFormat, srgb: boolean): GfxFormat {
@@ -76,6 +77,8 @@ function get_gfx_format(format: D3DFormat, srgb: boolean): GfxFormat {
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (format === D3DFormat.X8R8G8B8)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (format === D3DFormat.L16)
+        return GfxFormat.U16_R_NORM;
     else
         throw "whoops";
 }
@@ -107,9 +110,17 @@ function get_mipmap_size(format: D3DFormat, width: number, height: number, depth
             return count * 16;
         else
             throw "whoops";
+    } else {
+        const num_pixels = width * height * depth;
+        if (format === D3DFormat.A8R8G8B8)
+            return num_pixels * 4;
+        else if (format === D3DFormat.X8R8G8B8)
+            return num_pixels * 4;
+        else if (format === D3DFormat.L16)
+            return num_pixels * 2;
+        else
+            throw "whoops";
     }
-
-    return 4 * width * height * depth;
 }
 
 export class Texture_Asset {
@@ -156,11 +167,16 @@ export class Texture_Asset {
         });
         device.setResourceName(this.texture, name);
 
-        const levelData: Uint8Array[] = [];
+        const levelData: ArrayBufferView[] = [];
         let w = this.width, h = this.height, d = this.depth;
         for (let i = 0; i < this.mipmap_count; i++) {
             const sliceBytes = get_mipmap_size(d3d_format, w, h, d);
-            levelData.push(stream.readBytes(sliceBytes).createTypedArray(Uint8Array));
+            const bytes = stream.readBytes(sliceBytes);
+            if (d3d_format === D3DFormat.L16) {
+                levelData.push(bytes.createTypedArray(Uint16Array));
+            } else {
+                levelData.push(bytes.createTypedArray(Uint8Array));
+            }
             w = Math.max((w >>> 1), 1);
             h = Math.max((h >>> 1), 1);
             d = Math.max((d >>> 1), 1);
@@ -668,10 +684,10 @@ function get_processed_filename(type: Asset_Type, source_name: string, options_h
 }
 
 export class Asset_Manager {
-    private bundles: ZipFile[] = [];
     public cache: GfxRenderCache;
     private destroyables: Destroyable[] = [];
     private asset_cache = new Map<string, any>();
+    private data_cache = new Map<string, ArrayBufferSlice>();
 
     constructor(public device: GfxDevice) {
         this.cache = new GfxRenderCache(device);
@@ -680,24 +696,22 @@ export class Asset_Manager {
     public add_bundle(bundle: ZipFile, filename?: string) {
         if (filename)
             (bundle as any).filename = filename;
-        this.bundles.push(bundle);
 
         // XXX(jstpierre): This is a hack to load all assets. Eventually go through and implement the cluster system.
-        for (let i = 0; i < bundle.length; i++)
-            if (bundle[i].filename.endsWith('.pkg'))
-                this.add_bundle(parseZipFile(bundle[i].data), bundle[i].filename);
+        for (let i = 0; i < bundle.length; i++) {
+            const entry = bundle[i];
+            const data = decompressZipFileEntry(entry);
+
+            if (entry.filename.endsWith('.pkg')) {
+                this.add_bundle(parseZipFile(data), entry.filename);
+            } else {
+                this.data_cache.set(entry.filename, data);
+            }
+        }
     }
 
     private find_asset_data(processed_filename: string): ArrayBufferSlice | null {
-        // find it in one of our bundles
-        for (let i = 0; i < this.bundles.length; i++) {
-            const bundle = this.bundles[i];
-            for (let j = 0; j < bundle.length; j++)
-                if (bundle[j].filename === processed_filename)
-                    return bundle[j].data;
-        }
-
-        return null;
+        return nullify(this.data_cache.get(processed_filename));
     }
 
     public load_asset<T extends Asset_Type>(type: T, source_name: string, options_hash: number = 0): AssetT<T> | null {

@@ -26,7 +26,7 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (defines !== null)
         definesString = [... defines.entries()].map(([k, v]) => defineStr(k, v)).join('\n');
 
-    const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
+    const precision = lines.filter((line) => line.startsWith('precision')).join('\n') || 'precision mediump float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
     let extraDefines = '';
 

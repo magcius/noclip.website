@@ -56,9 +56,6 @@ const enum LumpType {
 export interface SurfaceLightmapData {
     faceIndex: number;
     // Size of a single lightmap.
-    mapWidth: number;
-    mapHeight: number;
-    // Size of the full lightmap texture (x4 for RN bumpmap)
     width: number;
     height: number;
     styles: number[];
@@ -124,8 +121,8 @@ function calcTexCoord(dst: vec2, v: ReadonlyVec3, m: TexinfoMapping): void {
     dst[1] = v[0]*m.t[0] + v[1]*m.t[1] + v[2]*m.t[2] + m.t[3];
 }
 
+// Place into the lightmap page.
 function calcLightmapTexcoords(dst: vec2, uv: ReadonlyVec2, lightmapData: SurfaceLightmapData, lightmapPage: LightmapPackerPage): void {
-    // Place into the lightmap page.
     dst[0] = (uv[0] + lightmapData.pagePosX) / lightmapPage.width;
     dst[1] = (uv[1] + lightmapData.pagePosY) / lightmapPage.height;
 }
@@ -806,10 +803,6 @@ class ResizableArrayBuffer {
     }
 }
 
-function calcLightmapBumpOffset(lightmapData: SurfaceLightmapData, lightmapPage: LightmapPackerPage): number {
-    return lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / lightmapPage.height) : 1;
-}
-
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
@@ -1105,11 +1098,10 @@ export class BSPFile {
             }
 
             // surface lighting info
-            const mapWidth = m_LightmapTextureSizeInLuxels[0] + 1, mapHeight = m_LightmapTextureSizeInLuxels[1] + 1;
+            const width = m_LightmapTextureSizeInLuxels[0] + 1, height = m_LightmapTextureSizeInLuxels[1] + 1;
             const hasBumpmapSamples = !!(tex.flags & TexinfoFlags.BUMPLIGHT);
             const srcNumLightmaps = hasBumpmapSamples ? 4 : 1;
-            const width = mapWidth, height = mapHeight * srcNumLightmaps;
-            const srcLightmapSize = styles.length * (width * height * 4);
+            const srcLightmapSize = styles.length * (width * height * srcNumLightmaps * 4);
 
             let samples: Uint8Array | null = null;
             if (lightofs !== -1)
@@ -1117,7 +1109,7 @@ export class BSPFile {
 
             const lightmapData: SurfaceLightmapData = {
                 faceIndex: i,
-                mapWidth, mapHeight, width, height, styles, samples, hasBumpmapSamples,
+                width, height, styles, samples, hasBumpmapSamples,
                 pageIndex: -1, pagePosX: -1, pagePosY: -1,
             };
 
@@ -1349,7 +1341,7 @@ export class BSPFile {
                 vertexData[dstOffsVertex++] = scratchTangentS[0];
                 vertexData[dstOffsVertex++] = scratchTangentS[1];
                 vertexData[dstOffsVertex++] = scratchTangentS[2];
-                // Tangent Sign and Lightmap Offset
+                // Tangent Sign
                 vertexData[dstOffsVertex++] = tangentW;
 
                 // Texture UV
@@ -1431,9 +1423,8 @@ export class BSPFile {
             const lightmapData = face.lightmapData;
             const lightmapPageIndex = lightmapData.pageIndex;
             const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
-            const lightmapBumpOffset = calcLightmapBumpOffset(lightmapData, lightmapPage);
 
-            const tangentW = tangentSSign * lightmapBumpOffset;
+            const tangentW = tangentSSign;
 
             // World surfaces always want the texcoord0 scale.
             const wantsTexCoord0Scale = true;
@@ -1666,11 +1657,8 @@ export class BSPFile {
             for (let j = 0; j < overlayResult.surfaces.length; j++) {
                 const overlaySurface = overlayResult.surfaces[j];
 
-                const lightmapData = overlaySurface.lightmapData;
-                const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
-                const lightmapBumpOffset = calcLightmapBumpOffset(overlaySurface.lightmapData, lightmapPage);
                 // Don't care about tangentS of decals right now...
-                const tangentW = lightmapBumpOffset;
+                const tangentW = 1.0;
 
                 addVertexDataToBuffer(overlaySurface.vertex, tex, center, tangentW);
 

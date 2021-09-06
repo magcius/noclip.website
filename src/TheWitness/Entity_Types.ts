@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { Stream, Stream_read_Vector3, Stream_read_Array_int, Stream_read_Color, Stream_read_Quaternion, Stream_read_Vector2, Stream_read_Array_float } from "./Stream";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, nullify } from "../util";
-import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable } from "./Entity";
+import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable, Entity_Cluster } from "./Entity";
 
 function get_truth_value(portable: Portable, item: Metadata_Item): boolean {
     const v: any = portable[item.name];
@@ -618,6 +618,10 @@ class Entity_Type_Cluster extends Portable_Type {
         m.add_float('bounding_radius', { minimum_revision_number: 0x51, maximum_revision_number: 0x5d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_vector3('bounding_center', { minimum_revision_number: 0x51, maximum_revision_number: 0x5d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('cluster_flags', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
+    }
+
+    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Cluster(portable_id, revision_number);
     }
 }
 

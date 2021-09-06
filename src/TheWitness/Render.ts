@@ -3,13 +3,13 @@ import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { CameraController } from "../Camera";
 import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, White } from "../Color";
 import { AABB } from "../Geometry";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { setMatrixTranslation } from "../MathHelpers";
@@ -18,8 +18,21 @@ import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Asset_Type, Material_Flags, Material_Type, Mesh_Asset, Render_Material, Texture_Asset } from "./Assets";
-import { Lightmap_Table } from "./Entity";
+import { Entity_World, Lightmap_Table } from "./Entity";
 import { TheWitnessGlobals } from "./Globals";
+
+class DepthCopyProgram extends DeviceProgram {
+    public vert = GfxShaderLibrary.fullscreenVS;
+    public frag = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    float t_Depth = texture(SAMPLER_2D(u_Texture), v_TexCoord).r;
+    gl_FragDepth = 1.0 - t_Depth;
+}
+`;
+}
 
 class TheWitnessProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -427,6 +440,12 @@ void main() {
         t_Alpha *= t_Albedo.a;
     }
 
+    bool use_hedge_alpha = ${this.is_type(Material_Type.Hedge)};
+    if (use_hedge_alpha) {
+        float t_HedgeInstance = 0.0 + (1.0 - v_Color0.x);
+        t_Alpha = smoothstep(t_HedgeInstance - 0.1, t_HedgeInstance + 0.1, t_Albedo.a);
+    }
+
     bool use_decal_alpha = ${this.is_type(Material_Type.Decal)};
     if (use_decal_alpha) {
         float t_Blend0 = texture(SAMPLER_2D(u_BlendMap0), t_TexCoord0.xy).x;
@@ -434,7 +453,7 @@ void main() {
         t_Alpha *= t_BlendFactor;
     }
 
-    bool use_alpharef = ${this.is_type(Material_Type.Vegetation) || this.is_type(Material_Type.Foliage)};
+    bool use_alpharef = ${this.is_type(Material_Type.Vegetation) || this.is_type(Material_Type.Foliage) || this.is_type(Material_Type.Hedge)};
     if (use_alpharef) {
         if (t_Alpha < 0.5)
             discard;
@@ -493,6 +512,16 @@ function material_will_dynamically_override_color(type: Material_Type, flags: Ma
     return false;
 }
 
+function load_texture(globals: TheWitnessGlobals, m: TextureMapping, texture_name: string | null, gfxSampler: GfxSampler): Texture_Asset | null {
+    m.gfxSampler = gfxSampler;
+    if (texture_name === null)
+        return null;
+    const texture = globals.asset_manager.load_asset(Asset_Type.Texture, texture_name);
+    if (texture !== null)
+        texture.fillTextureMapping(m);
+    return texture;
+}
+
 const scratchColor = colorNewCopy(White);
 const scratchAABB = new AABB();
 const scratchVec3a = vec3.create();
@@ -526,7 +555,7 @@ class Device_Material {
 
         const material_type = this.render_material.material_type;
         const is_terrain = (material_type === Material_Type.Blended3 || material_type === Material_Type.Tinted || material_type === Material_Type.Decal);
-        const is_foliage = (material_type === Material_Type.Foliage || material_type === Material_Type.Hedge);
+        const is_foliage = material_type === Material_Type.Foliage || material_type === Material_Type.Vegetation;
 
         if (is_terrain)
             this.load_texture(globals, 11, 'color_map', clamp_sampler);
@@ -555,7 +584,7 @@ class Device_Material {
             this.visible = false;
 
         let translucent = false;
-        if (material_type === Material_Type.Translucent || material_type === Material_Type.Decal || material_type === Material_Type.Cloud)
+        if (material_type === Material_Type.Translucent || material_type === Material_Type.Decal || material_type === Material_Type.Cloud || material_type === Material_Type.Hedge)
             translucent = true;
 
         if (translucent) {
@@ -577,13 +606,7 @@ class Device_Material {
     }
 
     private load_texture(globals: TheWitnessGlobals, i: number, texture_name: string | null, gfxSampler: GfxSampler): Texture_Asset | null {
-        this.texture_mapping_array[i].gfxSampler = gfxSampler;
-        if (texture_name === null)
-            return null;
-        const texture = globals.asset_manager.load_asset(Asset_Type.Texture, texture_name);
-        if (texture !== null)
-            texture.fillTextureMapping(this.texture_mapping_array[i]);
-        return texture;
+        return load_texture(globals, this.texture_mapping_array[i], texture_name, gfxSampler);
     }
 
     public fillMaterialParams(globals: TheWitnessGlobals, renderInst: GfxRenderInst, params: Material_Params): void {
@@ -696,7 +719,7 @@ export class Mesh_Instance {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 12, },
+    { numUniformBuffers: 2, numSamplers: 16, },
 ];
 
 class Skydome {
@@ -721,14 +744,37 @@ class Skydome {
     }
 }
 
+export class Cached_Shadow_Map {
+    public texture_mapping = nArray(1, () => new TextureMapping());
+    private shadow_map_size = 8192;
+
+    constructor(globals: TheWitnessGlobals, world: Entity_World) {
+        const texture_name = `${globals.entity_manager.universe_name}_shadow_map_${this.shadow_map_size}`;
+
+        const clamp_sampler = globals.cache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+        });
+
+        load_texture(globals, this.texture_mapping[0], texture_name, clamp_sampler);
+    }
+}
+
 export class TheWitnessRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
 
     private skydome: Skydome;
+    private cached_shadow_map: Cached_Shadow_Map;
 
     constructor(device: GfxDevice, private globals: TheWitnessGlobals) {
         this.renderHelper = new GfxRenderHelper(device);
         this.skydome = new Skydome(globals);
+
+        const world = this.globals.entity_manager.flat_entity_list.find((e) => e instanceof Entity_World) as Entity_World;
+        this.cached_shadow_map = new Cached_Shadow_Map(globals, world);
     }
 
     public adjustCameraController(c: CameraController): void {
@@ -763,8 +809,8 @@ export class TheWitnessRenderer implements SceneGfx {
         this.skydome.prepareToRender(globals, this.renderHelper.renderInstManager);
 
         // Go through each entity and render them.
-        for (let i = 0; i < globals.entity_manager.entity_list.length; i++)
-            globals.entity_manager.entity_list[i].prepareToRender(globals, this.renderHelper.renderInstManager);
+        for (let i = 0; i < globals.entity_manager.flat_entity_list.length; i++)
+            globals.entity_manager.flat_entity_list[i].prepareToRender(globals, this.renderHelper.renderInstManager);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -775,6 +821,34 @@ export class TheWitnessRenderer implements SceneGfx {
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const shadowDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D24);
+        shadowDepthDesc.setDimensions(1024, 1024, 1);
+
+        const shadowDepthTargetID = builder.createRenderTargetID(shadowDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Cached Shadow Map');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowDepthTargetID);
+
+            const renderHelper = this.renderHelper;
+            const renderInst = renderHelper.renderInstManager.newRenderInst();
+            renderInst.setUniformBuffer(renderHelper.uniformBuffer);
+            renderInst.setAllowSkippingIfPipelineNotReady(false);
+    
+            renderInst.setMegaStateFlags(fullscreenMegaState);
+            renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
+            renderInst.drawPrimitives(3);
+    
+            const copyProgram = new DepthCopyProgram();
+            const gfxProgram = renderHelper.renderCache.createProgram(copyProgram);
+    
+            renderInst.setGfxProgram(gfxProgram);
+    
+            pass.exec((passRenderer) => {
+                renderInst.setSamplerBindingsFromTextureMappings(this.cached_shadow_map.texture_mapping);
+                renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
+            });
+        });
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
