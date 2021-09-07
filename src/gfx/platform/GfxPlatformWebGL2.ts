@@ -1,9 +1,9 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxColor, GfxViewportOrigin } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxColor, GfxViewportOrigin, GfxQueryPoolType } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
 
-import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify } from './GfxPlatformUtil';
+import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil';
 import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
@@ -105,6 +105,20 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
 interface GfxReadbackP_GL extends GfxReadback {
     gl_pbo: WebGLBuffer;
     gl_sync: WebGLSync | null;
+}
+
+interface GfxQueryPoolP_GL extends GfxQueryPool {
+    gl_query: WebGLQuery[];
+    gl_query_type: GLenum;
+}
+
+function translateQueryPoolType(type: GfxQueryPoolType): GLenum {
+    switch (type) {
+    case GfxQueryPoolType.OcclusionConservative:
+        return WebGL2RenderingContext.ANY_SAMPLES_PASSED_CONSERVATIVE;
+    default:
+        throw "whoops";
+    }
 }
 
 function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
@@ -1073,6 +1087,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return readback;
     }
 
+    public createQueryPool(type: GfxQueryPoolType, elemCount: number): GfxQueryPool {
+        const gl = this.gl;
+        const gl_query = nArray(elemCount, () => this.ensureResourceExists(gl.createQuery()));
+        const gl_query_type = translateQueryPoolType(type);
+        const queryPool: GfxQueryPoolP_GL = { _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId(), gl_query, gl_query_type };
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.trackResourceCreated(queryPool);
+        return queryPool;
+    }
+
     public createWebXRLayer(webXRSession: XRSession): XRWebGLLayer {
         return new XRWebGLLayer(webXRSession, this.gl);
     }
@@ -1152,6 +1176,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this.gl.deleteBuffer(readback.gl_pbo);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
+    }
+
+    public destroyQueryPool(o: GfxQueryPool): void {
+        const queryPool = o as GfxQueryPoolP_GL;
+        for (let i = 0; i < queryPool.gl_query.length; i++)
+            this.gl.deleteQuery(queryPool.gl_query[i]);
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.trackResourceDestroyed(queryPool);
     }
 
     public pipelineQueryReady(o: GfxRenderPipeline): boolean {
@@ -1341,6 +1373,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         } else {
             return false;
         }
+    }
+
+    public queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null {
+        const gl = this.gl;
+        const queryPool = o as GfxQueryPoolP_GL;
+        const gl_query = queryPool.gl_query[dstOffs];
+        if (!gl.getQueryParameter(gl_query, gl.QUERY_RESULT_AVAILABLE))
+            return null;
+
+        // Returns whether any samples passed.
+        return !!gl.getQueryParameter(gl_query, gl.QUERY_RESULT);
     }
 
     public queryLimits(): GfxDeviceLimits {
@@ -2074,6 +2117,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.drawElementsInstanced(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset, instanceCount);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
+    }
+
+    public beginQuery(dstOffs: number): void {
+        const gl = this.gl;
+        const queryPool = this._currentRenderPassDescriptor!.queryPool! as GfxQueryPoolP_GL;
+        gl.beginQuery(queryPool.gl_query_type, queryPool.gl_query[dstOffs]);
+    }
+
+    public endQuery(dstOffs: number): void {
+        const gl = this.gl;
+        const queryPool = this._currentRenderPassDescriptor!.queryPool! as GfxQueryPoolP_GL;
+        gl.endQuery(queryPool.gl_query_type);
     }
 
     private endPass(): void {

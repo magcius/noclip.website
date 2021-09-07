@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -247,6 +247,9 @@ export interface GfxRenderPassDescriptor {
     depthStencilResolveTo: GfxTexture | null;
     depthClearValue: number | 'load';
     stencilClearValue: number | 'load';
+
+    // Query system.
+    queryPool: GfxQueryPool | null;
 }
 
 export interface GfxDeviceLimits {
@@ -292,6 +295,10 @@ export interface GfxNormalizedViewportCoords {
     h: number;
 }
 
+export const enum GfxQueryPoolType {
+    OcclusionConservative,
+}
+
 export interface GfxSwapChain {
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
@@ -317,6 +324,10 @@ export interface GfxRenderPass {
     draw(vertexCount: number, firstVertex: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
+
+    // Query system.
+    beginQuery(dstOffs: number): void;
+    endQuery(dstOffs: number): void;
 };
 
 export type GfxPass = GfxRenderPass;
@@ -348,13 +359,12 @@ export interface GfxDevice {
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
-    createReadback(elemCount: number): GfxReadback;
+    createReadback(byteCount: number): GfxReadback;
+    createQueryPool(type: GfxQueryPoolType, elemCount: number): GfxQueryPool;
 
-    /**
-     * Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
-     * to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
-     * set loadSceneDelta to 0 and switch scenes).
-     */
+    // Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
+    // to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
+    // set loadSceneDelta to 0 and switch scenes).
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
@@ -365,6 +375,7 @@ export interface GfxDevice {
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
     destroyReadback(o: GfxReadback): void;
+    destroyQueryPool(o: GfxQueryPool): void;
 
     // Render pipeline compilation control.
     pipelineQueryReady(o: GfxRenderPipeline): boolean;
@@ -386,6 +397,10 @@ export interface GfxDevice {
     readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
     submitReadback(o: GfxReadback): void;
     queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean;
+
+    // Query system
+    // Returns null if the query results are still pending. Returns true if any samples passed.
+    queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null;
 
     // Information queries.
     queryLimits(): GfxDeviceLimits;

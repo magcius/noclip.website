@@ -680,7 +680,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        sceneObjHolder.drawSyncManager.endFrame(device, renderInstManager, builder, mainDepthTargetID);
+        sceneObjHolder.drawSyncManager.endFrame(renderInstManager, builder, mainDepthTargetID);
 
         renderInstManager.popTemplateRenderInst();
 

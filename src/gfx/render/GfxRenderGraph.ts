@@ -1,5 +1,6 @@
 
 import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
+import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 import { assert, assertExists } from "../platform/GfxPlatformUtil";
 
 // GfxrRenderGraph is a simple, automatically managed "frame graph".
@@ -78,6 +79,11 @@ export interface GfxrPass {
     attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void;
 
     /**
+     * Attach the query pool used by this rendering pass.
+     */
+    attachQueryPool(queryPool: GfxQueryPool): void;
+
+    /**
      * Set the viewport used by this rendering pass.
      */
     setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void;
@@ -129,6 +135,7 @@ class PassImpl implements GfxrPass {
         colorClearColor: ['load'],
         depthClearValue: 'load',
         stencilClearValue: 'load',
+        queryPool: null,
     };
 
     public viewportX: number = 0;
@@ -152,10 +159,6 @@ class PassImpl implements GfxrPass {
         this.debugThumbnails[attachmentSlot] = true;
     }
 
-    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.viewport = viewport;
-    }
-
     public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void {
         assert(this.renderTargetIDs[attachmentSlot] === undefined);
         this.renderTargetIDs[attachmentSlot] = renderTargetID;
@@ -163,6 +166,14 @@ class PassImpl implements GfxrPass {
 
     public attachResolveTexture(resolveTextureID: number): void {
         this.resolveTextureInputIDs.push(resolveTextureID);
+    }
+
+    public attachQueryPool(queryPool: GfxQueryPool): void {
+        this.descriptor.queryPool = queryPool;
+    }
+
+    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.viewport = viewport;
     }
 
     public resolveToExternalTexture(attachmentSlot: GfxrAttachmentSlot, texture: GfxTexture): void {

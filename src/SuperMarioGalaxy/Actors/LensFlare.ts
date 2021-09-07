@@ -28,9 +28,9 @@ export class DrawSyncManager {
         this.peekZ.beginFrame(device);
     }
 
-    public endFrame(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
-        this.peekZ.pushPasses(device, renderInstManager, builder, depthTargetID);
-        this.peekZ.peekData(device);
+    public endFrame(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
+        this.peekZ.pushPasses(renderInstManager, builder, depthTargetID);
+        this.peekZ.peekData(renderInstManager.gfxRenderCache.device);
     }
 
     public destroy(device: GfxDevice): void {

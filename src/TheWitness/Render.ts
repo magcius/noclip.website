@@ -584,7 +584,7 @@ class Device_Material {
             this.visible = false;
 
         let translucent = false;
-        if (material_type === Material_Type.Translucent || material_type === Material_Type.Decal || material_type === Material_Type.Cloud || material_type === Material_Type.Hedge)
+        if (material_type === Material_Type.Translucent || material_type === Material_Type.Decal || material_type === Material_Type.Cloud)
             translucent = true;
 
         if (translucent) {
@@ -767,14 +767,14 @@ export class TheWitnessRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
 
     private skydome: Skydome;
-    private cached_shadow_map: Cached_Shadow_Map;
+    private cached_shadow_map: Cached_Shadow_Map | null = null;
 
     constructor(device: GfxDevice, private globals: TheWitnessGlobals) {
         this.renderHelper = new GfxRenderHelper(device);
         this.skydome = new Skydome(globals);
 
         const world = this.globals.entity_manager.flat_entity_list.find((e) => e instanceof Entity_World) as Entity_World;
-        this.cached_shadow_map = new Cached_Shadow_Map(globals, world);
+        // this.cached_shadow_map = new Cached_Shadow_Map(globals, world);
     }
 
     public adjustCameraController(c: CameraController): void {
@@ -805,50 +805,57 @@ export class TheWitnessRenderer implements SceneGfx {
         offs += fillVec4(d, offs, render_sky.fog_sky_color_x as number, render_sky.fog_sky_color_y as number, render_sky.fog_sky_color_z as number);
         offs += fillVec4(d, offs, render_sky.fog_sun_color_x as number, render_sky.fog_sun_color_y as number, render_sky.fog_sun_color_z as number);
 
-        // Start with the skydome.
-        this.skydome.prepareToRender(globals, this.renderHelper.renderInstManager);
+        globals.occlusion_manager.prepareToRender(globals, this.renderHelper.renderInstManager);
 
         // Go through each entity and render them.
         for (let i = 0; i < globals.entity_manager.flat_entity_list.length; i++)
             globals.entity_manager.flat_entity_list[i].prepareToRender(globals, this.renderHelper.renderInstManager);
+
+        this.skydome.prepareToRender(globals, this.renderHelper.renderInstManager);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
+        const globals = this.globals;
+
         viewerInput.camera.setClipPlanes(0.1);
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const shadowDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D24);
-        shadowDepthDesc.setDimensions(1024, 1024, 1);
+        globals.occlusion_manager.pushPasses(globals, builder, renderInstManager);
 
-        const shadowDepthTargetID = builder.createRenderTargetID(shadowDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Cached Shadow Map');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowDepthTargetID);
+        if (this.cached_shadow_map !== null) {
+            const shadowDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D24);
+            shadowDepthDesc.setDimensions(1024, 1024, 1);
 
-            const renderHelper = this.renderHelper;
-            const renderInst = renderHelper.renderInstManager.newRenderInst();
-            renderInst.setUniformBuffer(renderHelper.uniformBuffer);
-            renderInst.setAllowSkippingIfPipelineNotReady(false);
-    
-            renderInst.setMegaStateFlags(fullscreenMegaState);
-            renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-            renderInst.drawPrimitives(3);
-    
-            const copyProgram = new DepthCopyProgram();
-            const gfxProgram = renderHelper.renderCache.createProgram(copyProgram);
-    
-            renderInst.setGfxProgram(gfxProgram);
-    
-            pass.exec((passRenderer) => {
-                renderInst.setSamplerBindingsFromTextureMappings(this.cached_shadow_map.texture_mapping);
-                renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
+            const shadowDepthTargetID = builder.createRenderTargetID(shadowDepthDesc, 'Main Depth');
+            builder.pushPass((pass) => {
+                pass.setDebugName('Cached Shadow Map');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowDepthTargetID);
+
+                const renderHelper = this.renderHelper;
+                const renderInst = renderHelper.renderInstManager.newRenderInst();
+                renderInst.setUniformBuffer(renderHelper.uniformBuffer);
+                renderInst.setAllowSkippingIfPipelineNotReady(false);
+        
+                renderInst.setMegaStateFlags(fullscreenMegaState);
+                renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
+                renderInst.drawPrimitives(3);
+        
+                const copyProgram = new DepthCopyProgram();
+                const gfxProgram = renderHelper.renderCache.createProgram(copyProgram);
+        
+                renderInst.setGfxProgram(gfxProgram);
+        
+                pass.exec((passRenderer) => {
+                    renderInst.setSamplerBindingsFromTextureMappings(this.cached_shadow_map!.texture_mapping);
+                    renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
+                });
             });
-        });
+        }
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);

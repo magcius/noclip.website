@@ -1,6 +1,6 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin } from "./GfxPlatform";
-import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import { _T, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
 import { assertExists, assert, leftPad, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
@@ -78,6 +78,9 @@ interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
 }
 
 interface GfxReadbackP_WebGPU extends GfxReadback {
+}
+
+interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
 }
 
 function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
@@ -529,6 +532,12 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     public setDebugPointer(value: any): void {
         this.debugPointer = value;
+    }
+
+    public beginQuery(dstOffs: number): void {
+    }
+
+    public endQuery(dstOffs: number): void {
     }
 
     public finish(): GPUCommandBuffer {
@@ -1090,6 +1099,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return o;
     }
 
+    public createQueryPool(): GfxQueryPool {
+        const o: GfxQueryPoolP_WebGPU = { _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId() };
+        return o;
+    }
+
     public createWebXRLayer(webXRSession: XRSession): XRWebGLLayer {
         // TODO WebXR: currently now way to use WebGPU with WebXR.
         // This method should never be called.
@@ -1129,6 +1143,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyReadback(o: GfxReadback): void {
+    }
+
+    public destroyQueryPool(o: GfxQueryPool): void {
     }
 
     public pipelineQueryReady(o: GfxRenderPipeline): boolean {
@@ -1226,6 +1243,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean {
+        return true;
+    }
+
+    public queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null {
         return true;
     }
 

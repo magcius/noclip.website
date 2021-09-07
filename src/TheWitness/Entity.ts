@@ -5,7 +5,7 @@ import { Color, colorNewCopy, Magenta } from "../Color";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { scaleMatrix } from "../MathHelpers";
 import { leftPad } from "../util";
-import { Asset_Type, Lightmap_Asset } from "./Assets";
+import { Asset_Type, Lightmap_Asset, Mesh_Asset } from "./Assets";
 import { TheWitnessGlobals } from "./Globals";
 import { Mesh_Instance } from "./Render";
 
@@ -29,6 +29,8 @@ export class Entity_Manager {
                 (this.flat_entity_list[i] as Entity_Cluster).validate(globals);
         for (let i = 0; i < this.flat_entity_list.length; i++)
             this.flat_entity_list[i].transport_create_hook(globals);
+
+        globals.occlusion_manager.init(globals);
     }
 }
 
@@ -130,6 +132,9 @@ export class Entity implements Portable {
         if (!this.visible)
             return;
 
+        if (this.cluster_id !== undefined && !globals.occlusion_manager.clusterIsVisible(this.cluster_id))
+            return;
+
         const depth = computeViewSpaceDepthFromWorldSpacePoint(globals.viewpoint.viewFromWorldMatrix, this.bounding_center_world);
         if (this.mesh_instance !== null)
             this.mesh_instance.prepareToRender(globals, renderInstManager, this, depth);
@@ -163,15 +168,17 @@ export class Entity_Cluster extends Entity {
     public bounding_center: vec3;
     public cluster_flags: number;
 
+    public cluster_mesh_data: Mesh_Asset | null = null;
+    public cluster_mesh_instance: Mesh_Instance | null = null;
+
     public transport_create_hook(globals: TheWitnessGlobals): void {
         super.transport_create_hook(globals);
 
-        // TODO: Load the cluster mesh for Z-occlusion
-
-        // const mesh_name = `${globals.entity_manager.universe_name}_${this.portable_id}`;
-        // const mesh_data = globals.asset_manager.load_asset(Asset_Type.Mesh, mesh_name);
-        // if (mesh_data !== null)
-        //     this.mesh_instance = new Mesh_Instance(globals, mesh_data);
+        const mesh_name = `${globals.entity_manager.universe_name}_${this.portable_id}`;
+        const mesh_data = globals.asset_manager.load_asset(Asset_Type.Mesh, mesh_name);
+        this.cluster_mesh_data = mesh_data;
+        if (mesh_data !== null && mesh_data.device_mesh_array.length > 0)
+            this.cluster_mesh_instance = new Mesh_Instance(globals, mesh_data);
     }
 
     public validate(globals: TheWitnessGlobals): void {

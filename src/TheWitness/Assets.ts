@@ -595,7 +595,7 @@ export class Mesh_Asset {
     public collision_mesh: Collision_Mesh;
     public skeleton: Skeleton | null;
 
-    public device_mesh_array: Device_Mesh[] = [];
+    public device_mesh_array: Device_Mesh[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, version: number, stream: Stream, name: string) {
         this.checksum = stream.readUint32();
@@ -605,6 +605,7 @@ export class Mesh_Asset {
         this.sphere = Stream_read_Bounding_Sphere(stream);
         this.lightmap_size = Stream_read_Vector2(stream);
         const material_array = unpack_Array(stream, unpack_Render_Material);
+
         const sub_mesh_array = unpack_Array(stream, unpack_Sub_Mesh_Asset);
         const z_sub_mesh_array = unpack_Array(stream, unpack_Sub_Mesh_Asset);
 
