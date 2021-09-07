@@ -1,4 +1,5 @@
 
+precision mediump float;
 precision lowp sampler2DArray;
 
 layout(std140) uniform ub_SceneParams {
