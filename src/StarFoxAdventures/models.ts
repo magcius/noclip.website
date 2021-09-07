@@ -52,7 +52,7 @@ export interface ModelRenderContext {
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
 }
 
-const FUR_RENDER_LAYER = 7;
+const BLOCK_FUR_RENDER_LAYER = 23;
 
 export class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
@@ -72,35 +72,33 @@ export class ModelShapes {
         }
     }
 
-    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number, overrideSortDepth?: number, overrideSortLayer?: number) {
-        if (drawStep < 0 || drawStep >= this.shapes.length)
-            return;
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+        for (let i = 0; i < 3; i++) {
+            if (this.shapes[i] !== undefined) {
+                if (renderLists !== null)
+                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
+                for (const shape of this.shapes[i]) {
+                    if (shape.isDevGeometry && !modelCtx.showDevGeometry)
+                        continue;
 
-        const shapes = this.shapes[drawStep];
-        for (let i = 0; i < shapes.length; i++) {
-            if (shapes[i].isDevGeometry && !modelCtx.showDevGeometry)
-                continue;
-
-            mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
-            mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            shapes[i].addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices, overrideSortDepth, overrideSortLayer);
+                    mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
+                    mat4.mul(scratchMtx0, matrix, scratchMtx0);
+                    shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette, overrideSortDepth, overrideSortLayer);
+                }
+            }
         }
-    }
-    
-    public addWaterRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
-        for (let i = 0; i < this.waters.length; i++) {
-            const water = this.waters[i];
-
+        
+        if (renderLists !== null)
+            renderInstManager.setCurrentRenderInstList(renderLists.waters);
+        for (const water of this.waters) {
             mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
             water.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette);
         }
-    }
-
-    public addFurRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
-        for (let i = 0; i < this.furs.length; i++) {
-            const fur = this.furs[i];
-
+        
+        if (renderLists !== null)
+            renderInstManager.setCurrentRenderInstList(renderLists.furs);
+        for (const fur of this.furs) {
             for (let j = 0; j < fur.numLayers; j++) {
                 mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
                 mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
@@ -119,9 +117,28 @@ export class ModelShapes {
                 fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {
                     overrideIndMtx: [scratchMtx1],
                     furLayer: j,
-                }, matrixPalette, undefined, FUR_RENDER_LAYER);
+                }, matrixPalette, undefined, BLOCK_FUR_RENDER_LAYER);
             }
         }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let shapes of this.shapes) {
+            for (let shape of shapes) {
+                shape.destroy(device);
+            }
+        }
+        this.shapes = [];
+
+        for (let fur of this.furs) {
+            fur.shape.destroy(device);
+        }
+        this.furs = [];
+
+        for (let water of this.waters) {
+            water.shape.destroy(device);
+        }
+        this.waters = [];
     }
 }
 
@@ -177,6 +194,13 @@ export class Model {
 
     public getMaterials() {
         return this.materials;
+    }
+
+    public destroy(device: GfxDevice) {
+        if (this.sharedModelShapes !== null) {
+            this.sharedModelShapes.destroy(device);
+            this.sharedModelShapes = null;
+        }
     }
 }
 
@@ -240,26 +264,7 @@ export class ModelInstance {
     
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, overrideSortDepth?: number, overrideSortLayer?: number) {
         this.updateSkinning();
-
-        if (this.modelShapes.shapes.length !== 0) {
-            for (let i = 0; i < 3; i++) {
-                if (renderLists !== null)
-                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
-                this.modelShapes.addRenderInsts(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i, overrideSortDepth, overrideSortLayer);
-            }
-        }
-
-        if (this.modelShapes.waters.length !== 0) {
-            if (renderLists !== null)
-                renderInstManager.setCurrentRenderInstList(renderLists.waters);
-            this.modelShapes.addWaterRenderInsts(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-        }
-
-        if (this.modelShapes.furs.length !== 0) {
-            if (renderLists !== null)
-                renderInstManager.setCurrentRenderInstList(renderLists.furs);
-            this.modelShapes.addFurRenderInsts(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-        }
+        this.modelShapes.addRenderInsts(device, renderInstManager, modelCtx, renderLists, matrix, this.matrixPalette, overrideSortDepth, overrideSortLayer);
     }
     
     private updateSkinning() {
@@ -389,12 +394,19 @@ export class ModelInstance {
         // Rerun all display lists
         this.modelShapes.reloadVertices();
     }
+
+    public destroy(device: GfxDevice) {
+        // Destroy our shapes only if they are not shared
+        if (this.model.sharedModelShapes === null) {
+            this.modelShapes.destroy(device);
+        }
+    }
 }
 
 class ModelsFile {
     private tab: DataView;
     private bin: ArrayBufferSlice;
-    private models: Model[] = [];
+    private models: (Model | undefined)[] = [];
 
     private constructor(private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
@@ -439,7 +451,13 @@ class ModelsFile {
             this.models[num] = loadModel(modelData.createDataView(), this.texFetcher, this.materialFactory, this.modelVersion);
         }
 
-        return this.models[num];
+        return this.models[num]!;
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let model of this.models)
+            if (model !== undefined)
+                model.destroy(device);
     }
 }
 
@@ -507,5 +525,12 @@ export class ModelFetcher {
         if (model === null)
             throw Error(`Model ${num} not found`);
         return new ModelInstance(model);
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let file in this.files) {
+            this.files[file].destroy(device);
+        }
+        this.files = {};
     }
 }
