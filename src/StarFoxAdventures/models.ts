@@ -406,7 +406,7 @@ export class ModelInstance {
 class ModelsFile {
     private tab: DataView;
     private bin: ArrayBufferSlice;
-    private models: Model[] = [];
+    private models: (Model | undefined)[] = [];
 
     private constructor(private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
@@ -451,14 +451,13 @@ class ModelsFile {
             this.models[num] = loadModel(modelData.createDataView(), this.texFetcher, this.materialFactory, this.modelVersion);
         }
 
-        return this.models[num];
+        return this.models[num]!;
     }
 
     public destroy(device: GfxDevice) {
-        for (let model of this.models) {
-            model.destroy(device);
-        }
-        this.models = [];
+        for (let model of this.models)
+            if (model !== undefined)
+                model.destroy(device);
     }
 }
 

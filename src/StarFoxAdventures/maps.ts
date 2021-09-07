@@ -93,7 +93,6 @@ export class MapInstance {
     private numRows: number;
     private numCols: number;
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
-    // Every ModelInstance is owned by the blockFetcher.
     private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
     constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
@@ -165,15 +164,22 @@ export class MapInstance {
                 }
 
                 try {
-                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
-                    if (blockRenderer) {
-                        row.push(blockRenderer);
+                    const blockModel = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
+                    if (blockModel) {
+                        row.push(new ModelInstance(blockModel));
                     }
                 } catch (e) {
                     console.warn(`Skipping block at ${x},${z} due to exception:`);
                     console.error(e);
                 }
             }
+        }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let row of this.blocks) {
+            for (let model of row)
+                model?.destroy(device);
         }
     }
 }

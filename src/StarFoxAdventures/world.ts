@@ -127,6 +127,7 @@ export class World {
     public destroy(device: GfxDevice) {
         for (let obj of this.objectInstances)
             obj.destroy(device);
+        this.mapInstance?.destroy(device);
         this.resColl.destroy(device);
         this.blockFetcher.destroy(device);
     }
@@ -441,6 +442,11 @@ class WorldRenderer extends SFARenderer {
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice) {
+        super.destroy(device);
+        this.world.destroy(device);
     }
 }
 
