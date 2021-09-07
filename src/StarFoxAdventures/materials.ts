@@ -15,7 +15,7 @@ import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { SceneRenderContext } from './render';
 
-interface ShaderLayer {
+export interface ShaderLayer {
     texId: number | null;
     tevMode: number;
     enableTexChainStuff: number;
@@ -36,60 +36,10 @@ export interface Shader {
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
 }
 
-function parseTexId(data: DataView, offs: number, texIds: number[]): number | null {
-    const texNum = data.getUint32(offs);
-    return texNum !== 0xffffffff ? texIds[texNum] : null;
+export enum ShaderAttrFlags {
+    NRM = 0x1,
+    CLR = 0x2,
 }
-
-function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): ShaderLayer {
-    const scrollingTexMtx = data.getUint8(0x6);
-    return {
-        texId: parseTexId(data, 0x0, texIds),
-        tevMode: data.getUint8(0x4),
-        enableTexChainStuff: data.getUint8(0x5),
-        scrollingTexMtx: scrollingTexMtx || undefined,
-    };
-}
-
-interface ShaderFields {
-    isAncient?: boolean;
-    isBeta?: boolean;
-    size: number;
-    numLayers: number;
-    layers: number;
-}
-
-export const SFA_SHADER_FIELDS: ShaderFields = {
-    size: 0x44,
-    numLayers: 0x41,
-    layers: 0x24,
-};
-
-export const SFADEMO_MODEL_SHADER_FIELDS: ShaderFields = {
-    size: 0x44,
-    numLayers: 0x41,
-    layers: 0x24, // ???
-};
-
-export const SFADEMO_MAP_SHADER_FIELDS: ShaderFields = {
-    size: 0x40,
-    numLayers: 0x3b,
-    layers: 0x24, // ???
-};
-
-export const BETA_MODEL_SHADER_FIELDS: ShaderFields = {
-    isBeta: true,
-    size: 0x38,
-    numLayers: 0x36,
-    layers: 0x20,
-};
-
-export const ANCIENT_MAP_SHADER_FIELDS: ShaderFields = {
-    isAncient: true,
-    size: 0x3c,
-    numLayers: 0x3a,
-    layers: 0x24,
-};
 
 export enum ShaderFlags {
     DevGeometry = 0x2,
@@ -106,59 +56,6 @@ export enum ShaderFlags {
     StreamingVideo = 0x20000, // Occurs on video panels in Great Fox. Used to display preview video.
     IndoorOutdoorBlend = 0x40000, // Occurs near cave entrances and windows. Requires special handling for lighting.
     Water = 0x80000000,
-}
-
-export enum ShaderAttrFlags {
-    NRM = 0x1,
-    CLR = 0x2,
-}
-
-export function parseShader(data: DataView, fields: ShaderFields, texIds: number[]): Shader {
-    const shader: Shader = {
-        layers: [],
-        flags: 0,
-        attrFlags: 0,
-        hasAuxTex0: false,
-        hasAuxTex1: false,
-        hasAuxTex2: false,
-        auxTex2Num: 0xffffffff,
-        furRegionsTexId: null,
-    };
-
-    let numLayers = data.getUint8(fields.numLayers);
-    if (numLayers > 2) {
-        console.warn(`Number of shader layers greater than maximum (${numLayers} / 2)`);
-        numLayers = 2;
-    }
-    for (let i = 0; i < numLayers; i++) {
-        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds, !!fields.isBeta);
-        shader.layers.push(layer);
-    }
-
-    if (fields.isAncient) {
-        shader.isAncient = true;
-        shader.attrFlags = ShaderAttrFlags.CLR; // FIXME: where is this field if present?
-        shader.flags = ShaderFlags.CullBackface;
-    } else if (fields.isBeta) {
-        shader.isBeta = true;
-        shader.attrFlags = data.getUint8(0x34);
-        shader.flags = 0; // TODO: where is this field?
-        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
-        shader.hasAuxTex1 = data.getUint32(0x14) === 1;
-        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
-    } else {
-        shader.flags = data.getUint32(0x3c);
-        shader.attrFlags = data.getUint8(0x40);
-        shader.hasAuxTex0 = data.getUint32(0x8) !== 0;
-        shader.hasAuxTex1 = data.getUint32(0x14) !== 0;
-        shader.auxTex2Num = data.getUint32(0x34);
-        shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
-        shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
-    }
-
-    // console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
-
-    return shader;
 }
 
 export interface MaterialRenderContext {
@@ -1414,22 +1311,19 @@ export class FaultyTVMaterial extends MaterialBase {
 }
 
 export class MaterialFactory {
+    private rampGfxTexture: SFATexture | null = null;
     private rampTexture: MaterialTexture | null = null;
+    private causticGfxTexture: SFATexture | null = null;
     private causticTexture: MaterialTexture | null = null;
+    private wavyGfxTexture: SFATexture | null = null;
     private wavyTexture: MaterialTexture | null = null;
+    private halfGrayGfxTexture: SFATexture | null = null;
     private halfGrayTexture: MaterialTexture | null = null;
     private furFactory: FurFactory | null = null;
     public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
     constructor(private device: GfxDevice) {
     }
-
-    // public getAmbientColor(out: Color, ambienceNum: number) {
-    //     if (this.envfxMan !== undefined)
-    //         this.envfxMan.getAmbientColor(out, ambienceNum);
-    //     else
-    //         colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
-    // }
 
     public update(animController: SFAAnimationController) {
         for (let i = 0; i < this.scrollingTexMtxs.length; i++) {
@@ -1498,8 +1392,9 @@ export class MaterialFactory {
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.rampTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
-        return this.rampTexture;
+        this.halfGrayGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
+        this.halfGrayTexture = makeMaterialTexture(this.halfGrayGfxTexture);
+        return this.halfGrayTexture;
     }
     
     public getRampTexture(): MaterialTexture {
@@ -1537,7 +1432,8 @@ export class MaterialFactory {
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.rampTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
+        this.rampGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
+        this.rampTexture = makeMaterialTexture(this.rampGfxTexture);
         return this.rampTexture;
     }
     
@@ -1596,7 +1492,8 @@ export class MaterialFactory {
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.causticTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
+        this.causticGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
+        this.causticTexture = makeMaterialTexture(this.causticGfxTexture);
         return this.causticTexture;
     }
     
@@ -1647,7 +1544,20 @@ export class MaterialFactory {
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.wavyTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
+        this.wavyGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
+        this.wavyTexture = makeMaterialTexture(this.wavyGfxTexture);
         return this.wavyTexture;
+    }
+
+    public destroy(device: GfxDevice) {
+        if (this.halfGrayGfxTexture !== null)
+            this.halfGrayGfxTexture.destroy(device);
+        if (this.rampGfxTexture !== null)
+            this.rampGfxTexture.destroy(device);
+        if (this.causticGfxTexture !== null)
+            this.causticGfxTexture.destroy(device);
+        if (this.wavyGfxTexture !== null)
+            this.wavyGfxTexture.destroy(device);
+        this.furFactory?.destroy(device);
     }
 }

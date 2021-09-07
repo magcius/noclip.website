@@ -37,9 +37,8 @@ export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: 
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const sub = (blockInfo >>> 17) & 0x3F;
     const mod = (blockInfo >>> 23);
-    if (mod == 0xff) {
+    if (mod == 0xff)
         return null;
-    }
     return {mod, sub};
 }
 
@@ -94,6 +93,7 @@ export class MapInstance {
     private numRows: number;
     private numCols: number;
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
+    // Every ModelInstance is owned by the blockFetcher.
     private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
     constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {

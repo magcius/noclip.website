@@ -3,14 +3,13 @@ import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
@@ -123,6 +122,13 @@ export class World {
             offs += entrySize;
             i++;
         }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let obj of this.objectInstances)
+            obj.destroy(device);
+        this.resColl.destroy(device);
+        this.blockFetcher.destroy(device);
     }
 }
 

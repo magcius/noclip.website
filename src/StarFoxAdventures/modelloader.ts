@@ -5,7 +5,8 @@ import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
 import { nArray } from '../util';
 
-import { ANCIENT_MAP_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, MaterialFactory, parseShader, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, SFAMaterial, SFA_SHADER_FIELDS, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
+import { parseShader, ANCIENT_MAP_SHADER_FIELDS, SFA_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS } from './materialloader';
+import { MaterialFactory, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
 import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';

@@ -40,9 +40,8 @@ export class BlockCollection {
     public getBlockModel(num: number): ModelInstance | null {
         if (this.blockModels[num] === undefined) {
             const tabValue = readUint32(this.tab, 0, num);
-            if (!(tabValue & 0x10000000)) {
+            if (!(tabValue & 0x10000000))
                 return null;
-            }
 
             const blockOffset = tabValue & 0xffffff;
             const blockBin = this.bin.subarray(blockOffset);
@@ -56,6 +55,11 @@ export class BlockCollection {
         }
 
         return this.blockModels[num];
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let model of this.blockModels)
+            model.destroy(device);
     }
 }
 
@@ -117,6 +121,13 @@ export class SFABlockFetcher implements BlockFetcher {
 
         return this.blockColls[mod];
     }
+
+    public destroy(device: GfxDevice) {
+        for (let coll of this.blockColls) {
+            coll.destroy(device);
+        }
+        this.blockColls = [];
+    }
 }
 
 export class SwapcircleBlockFetcher implements BlockFetcher {
@@ -139,6 +150,10 @@ export class SwapcircleBlockFetcher implements BlockFetcher {
     public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null> {
         console.log(`fetching swapcircle block ${mod}.${sub}`);
         return this.blockColl.getBlockModel(0x21c + sub);
+    }
+
+    public destroy(device: GfxDevice) {
+        this.blockColl.destroy(device);
     }
 }
 

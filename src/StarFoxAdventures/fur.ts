@@ -150,9 +150,8 @@ export class FurFactory {
     }
 
     public getLayer(layer: number): SFATexture {
-        if (this.layers[layer] === undefined) {
+        if (this.layers[layer] === undefined)
             this.layers[layer] = this.makeFurMap(layer);
-        }
 
         return this.layers[layer];
     }
@@ -192,6 +191,11 @@ export class FurFactory {
     
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
     
-        return { gfxTexture, gfxSampler, width, height };
+        return new SFATexture(gfxTexture, gfxSampler, width, height);
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let texture of this.layers)
+            texture.destroy(device);
     }
 }
