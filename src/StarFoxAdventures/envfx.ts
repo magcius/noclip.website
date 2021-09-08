@@ -7,6 +7,7 @@ import { SFATexture } from './textures';
 import { dataSubarray, readUint16 } from './util';
 import { ObjectInstance } from './objects';
 import { World } from './world';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -14,12 +15,18 @@ enum EnvfxType {
 }
 
 class Atmosphere {
+    // Note: Textures are not owned by this class.
     public textures: (SFATexture | null)[] = nArray(8, () => null);
     public outdoorAmbientColors: Color[] = nArray(8, () => colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
 }
 
 class Skyscape { // Clouds, mountains, etc.
     public objects: ObjectInstance[] = [];
+
+    public destroy(device: GfxDevice) {
+        for (let obj of this.objects)
+            obj.destroy(device);
+    }
 }
 
 export class EnvfxManager {
@@ -154,5 +161,9 @@ export class EnvfxManager {
         }
 
         return fields;
+    }
+
+    public destroy(device: GfxDevice) {
+        this.skyscape.destroy(device);
     }
 }

@@ -287,10 +287,6 @@ export class Shape {
     public constructor(public geom: ShapeGeometry, public material: ShapeMaterial, public isDevGeometry: boolean) {
     }
 
-    public destroy(device: GfxDevice) {
-        this.geom.destroy(device);
-    }
-
     public reloadVertices() {
         this.geom.reloadVertices();
     }
@@ -304,5 +300,9 @@ export class Shape {
         const renderInst = renderInstManager.newRenderInst();
         this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette, overrideSortDepth, overrideSortLayer);
         renderInstManager.submitRenderInst(renderInst);
+    }
+    
+    public destroy(device: GfxDevice) {
+        this.geom.destroy(device);
     }
 }
