@@ -607,7 +607,7 @@ export interface MAT3 {
     materialEntries: MaterialEntry[];
 }
 
-export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number): void {
+export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number): void {
     const theta = rotation * Math.PI;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
@@ -636,7 +636,7 @@ export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotat
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1.0;
 }
 
 function readColorU8(view: DataView, srcOffs: number): Color {
@@ -1124,7 +1124,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         if (isMaya) {
             calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
         } else {
-            calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT);
         }
 
         const texMtx: TexMtx = { info, projection, effectMatrix, matrix };
