@@ -508,49 +508,22 @@ function createParameterAuto(value: any): Parameter | null {
     return null;
 }
 
-function parseKey(key: string, defines: string[]): string | null {
-    const question = key.indexOf('?');
-    if (question >= 0) {
-        let define = key.slice(0, question);
-
-        let negate = false;
-        if (key.charAt(0) === '!') {
-            define = define.slice(1);
-            negate = true;
-        }
-
-        let isValid = defines.includes(define);
-        if (negate)
-            isValid = !isValid;
-
-        if (!isValid)
-            return null;
-
-        key = key.slice(question + 1);
-    }
-
-    return key;
-}
-
 function setupParametersFromVMT(param: ParameterMap, vmt: VMT, defines: string[]): void {
     for (const vmtKey in vmt) {
-        const destKey = parseKey(vmtKey, defines);
-        if (destKey === null)
-            continue;
-        if (!destKey.startsWith('$'))
+        if (!vmtKey.startsWith('$'))
             continue;
 
         const value = vmt[vmtKey];
-        if (destKey in param) {
+        if (vmtKey in param) {
             // Easy case -- existing parameter.
-            param[destKey].parse(value as string);
+            param[vmtKey].parse(value as string);
         } else {
             // Hard case -- auto-detect type from string.
             const p = createParameterAuto(value);
             if (p !== null) {
-                param[destKey] = p;
+                param[vmtKey] = p;
             } else {
-                console.warn("Could not parse parameter", destKey, value);
+                console.warn("Could not parse parameter", vmtKey, value);
             }
         }
     }
@@ -655,32 +628,9 @@ export abstract class BaseMaterial {
             return 1;
     }
 
-    private findFallbackBlock(shaderTypeName: string, materialDefines: string[]): any | null {
-        for (let i = 0; i < materialDefines.length; i++) {
-            const suffix = materialDefines[i];
-            let block: any;
-
-            block = this.vmt[suffix];
-            if (block !== undefined)
-                return block;
-
-            block = this.vmt[`${shaderTypeName}_${suffix}`];
-            if (block !== undefined)
-                return block;
-        }
-
-        return null;
-    }
-
     private setupParametersFromVMT(renderContext: SourceRenderContext): void {
         const materialDefines = renderContext.materialCache.materialDefines;
-
         setupParametersFromVMT(this.param, this.vmt, materialDefines);
-
-        const shaderTypeName = this.vmt._Root.toLowerCase();
-        const fallback = this.findFallbackBlock(shaderTypeName, materialDefines);
-        if (fallback !== null)
-            setupParametersFromVMT(this.param, fallback, materialDefines);
     }
 
     public paramGetString(name: string): string {
@@ -3194,7 +3144,7 @@ export class MaterialCache {
     }
 
     private async fetchMaterialDataInternal(name: string): Promise<VMT> {
-        return parseVMT(this.filesystem, this.resolvePath(name));
+        return parseVMT(this.filesystem, this.resolvePath(name), this.materialDefines);
     }
 
     private fetchMaterialData(path: string): Promise<VMT> {

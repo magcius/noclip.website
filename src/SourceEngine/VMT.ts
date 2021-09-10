@@ -1,7 +1,7 @@
 
 // Valve Material Type
 
-import { arrayRemove, assertExists } from "../util";
+import { arrayRemove, assertExists, fallback } from "../util";
 import { SourceFileSystem } from "./Main";
 import { Color } from "../Color";
 
@@ -160,7 +160,7 @@ class ValveKeyValueParser {
     }
 }
 
-function convertPairsToObj(o: any, pairs: VKFPair[], recurse: boolean = false, supportsMultiple: boolean = true): void {
+function convertPairsToObj(o: any, pairs: VKFPair[], recurse: boolean, supportsMultiple: boolean): void {
     for (let i = 0; i < pairs.length; i++) {
         const [k, v] = pairs[i];
         const vv = (recurse && typeof v === 'object') ? pairs2obj(v) : v;
@@ -183,7 +183,7 @@ function convertPairsToObj(o: any, pairs: VKFPair[], recurse: boolean = false, s
 
 function pairs2obj(pairs: VKFPair[], recurse: boolean = false): any {
     const o: any = {};
-    convertPairsToObj(o, pairs, recurse);
+    convertPairsToObj(o, pairs, recurse, true);
     return o;
 }
 
@@ -210,7 +210,48 @@ function stealPair(pairs: VKFPair[], name: string): VKFPair | null {
     return pair;
 }
 
-export async function parseVMT(filesystem: SourceFileSystem, path: string, depth: number = 0): Promise<VMT> {
+function findFallbackBlock(vmt: VMT, root: string, materialDefines: string[]): any | null {
+    for (let i = 0; i < materialDefines.length; i++) {
+        const suffix = materialDefines[i];
+        let block: any;
+
+        block = vmt[suffix];
+        if (block !== undefined)
+            return block;
+
+        block = vmt[`${root}_${suffix}`];
+        if (block !== undefined)
+            return block;
+    }
+
+    return null;
+}
+
+function parseKey(key: string, defines: string[]): string | null {
+    const question = key.indexOf('?');
+    if (question >= 0) {
+        let define = key.slice(0, question);
+
+        let negate = false;
+        if (key.charAt(0) === '!') {
+            define = define.slice(1);
+            negate = true;
+        }
+
+        let isValid = defines.includes(define);
+        if (negate)
+            isValid = !isValid;
+
+        if (!isValid)
+            return null;
+
+        key = key.slice(question + 1);
+    }
+
+    return key;
+}
+
+export async function parseVMT(filesystem: SourceFileSystem, path: string, defines: string[], depth: number = 0): Promise<VMT> {
     async function parsePath(path: string): Promise<VMT> {
         path = filesystem.resolvePath(path, '.vmt');
         if (!filesystem.hasEntry(path)) {
@@ -245,10 +286,32 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const replace = stealPair(rootObj, 'replace');
         const insert = stealPair(rootObj, 'insert');
 
+        // Parse our pairs based on our defines.
+        for (let i = 0; i < rootObj.length; i++) {
+            const pair = rootObj[i];
+            const [vmtKey, v] = pair;
+
+            const destKey = parseKey(vmtKey, defines);
+            if (destKey === null) {
+                // Drop entirely from key list.
+                rootObj.splice(i--, 1);
+                continue;
+            }
+
+            if (destKey !== vmtKey) {
+                // Key name changed.
+                pair[0] = destKey;
+            }
+        }
+
         // Now go through and convert all the other pairs. Note that if we encounter duplicates, we drop, rather
         // than convert to a list.
         const recurse = true, supportsMultiple = false;
         convertPairsToObj(vmt, rootObj, recurse, supportsMultiple);
+
+        const fallbackBlock = findFallbackBlock(vmt, vmt._Root, defines);
+        if (fallbackBlock !== null)
+            Object.assign(vmt, fallbackBlock);
 
         vmt.replace = replace !== null ? replace[1] : null;
         vmt.insert = insert !== null ? insert[1] : null;
@@ -257,7 +320,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
 
     const vmt = await parsePath(path);
     if (vmt._Root === 'patch') {
-        const base = await parseVMT(filesystem, vmt['include'], depth++);
+        const base = await parseVMT(filesystem, vmt['include'], defines, depth++);
         patch(base, vmt.replace, true);
         patch(base, vmt.insert, false);
         base._Patch = base._Filename;
