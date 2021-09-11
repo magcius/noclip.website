@@ -1113,22 +1113,22 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             fragment,
         };
 
-        if (async) {
-            this.device.pushErrorScope('validation');
+        // this.device.pushErrorScope('validation');
 
+        if (async) {
             const gpuRenderPipeline = await this.device.createRenderPipelineAsync(gpuRenderPipelineDescriptor);
 
             // We might have created a sync pipeline while we were async building; no way to cancel the async
-            // pipeline build at this point, so just chunk it out :/
+            // pipeline build at this point, so just chuck it out :/
             if (renderPipeline.gpuRenderPipeline === null)
                 renderPipeline.gpuRenderPipeline = gpuRenderPipeline;
-
-            const e = await this.device.popErrorScope();
-            if (e)
-                debugger;
         } else {
             renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipelineDescriptor);
         }
+
+        // const e = await this.device.popErrorScope();
+        // if (e)
+        //     debugger;
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;

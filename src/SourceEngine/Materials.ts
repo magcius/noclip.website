@@ -142,6 +142,8 @@ float CalcFresnelTerm2Ranges(float t_DotProduct, in vec3 t_Ranges) {
         return mix(t_Ranges.x, t_Ranges.y, invlerp(0.0, 0.5, t_Fresnel));
     else
         return mix(t_Ranges.y, t_Ranges.z, invlerp(0.5, 1.0, t_Fresnel));
+    // Workaround for https://github.com/gfx-rs/naga/issues/1053
+    return 0.0;
 }
 
 vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
@@ -1328,10 +1330,10 @@ vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_Com
     } else if (t_CombineMode == COMBINE_MODE_SSBUMP_BUMP) {
         // Done as part of bumpmapping.
         return t_BaseTexture;
-    } else {
-        // Unknown.
-        return t_BaseTexture + vec4(1.0, 0.0, 1.0, 0.0);
     }
+
+    // Unknown.
+    return t_BaseTexture + vec4(1.0, 0.0, 1.0, 0.0);
 }
 
 vec3 TextureCombinePostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
@@ -1346,10 +1348,10 @@ vec3 TextureCombinePostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture,
             float t_Mult = (4.0 * t_BlendFactor);
             return t_DiffuseColor.rgb + clamp((t_Mult * t_DetailTexture.rgb) + (-0.5 * t_Mult), 0.0, 1.0);
         }
-    } else {
-        // Nothing to do.
-        return t_DiffuseColor.rgb;
     }
+
+    // Nothing to do.
+    return t_DiffuseColor.rgb;
 }
 
 // https://steamcdn-a.akamaihd.net/apps/valve/2004/GDC2004_Half-Life2_Shading.pdf#page=10
@@ -1462,7 +1464,7 @@ void mainPS() {
 
     vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
-    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_TextureBumpmap, v_TexCoord0.zw));
+    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_TextureBumpmap), v_TexCoord0.zw);
 
 #ifdef USE_SSBUMP
     // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
@@ -2519,7 +2521,7 @@ void mainPS() {
 
     vec3 t_DiffuseLight = vec3(1.0);
 #ifdef USE_LIGHTMAP_WATER_FOG
-    vec3 t_LightmapColor = texture(SAMPLER_2D(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb;
+    vec3 t_LightmapColor = texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb;
     float t_LightmapScale = 2.0; // TODO(HDR)
     t_LightmapColor.rgb *= t_LightmapScale;
     t_DiffuseLight.rgb *= t_LightmapColor;

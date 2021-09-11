@@ -1035,8 +1035,9 @@ class AlphaShadow extends NameObj {
 
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
+        // TODO(jstpierre): Replace this with a single FS tri?
         const mb = new GXMaterialBuilder(`fillSilhouetteColor`);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -1050,7 +1051,7 @@ class AlphaShadow extends NameObj {
         mb.setUsePnMtxIdx(false);
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
 
-        projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 1, 0, 0, 10);
         projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, sceneObjHolder.viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
@@ -1080,6 +1081,12 @@ class AlphaShadow extends NameObj {
         colorFromRGBA(materialParams.u_Color[ColorKind.K0], 0.0, 0.0, 0.0, 1 / 0xFF);
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0.0, 0.0, 0.0, 0.5);
         materialParams.m_TextureMapping[0].copy(this.textureMapping);
+
+        mat4.identity(materialParams.u_TexMtx[0]);
+        if (this.textureMapping.flipY) {
+            materialParams.u_TexMtx[0][5] = -1;
+            materialParams.u_TexMtx[0][13] = 1;
+        }
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();

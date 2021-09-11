@@ -83,6 +83,10 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return `sampler${samplerType}(T_${samplerName}, S_${samplerName})`;
         });
+
+        rest = rest.replace(/\bTEXTURE\((.*?)\)/g, (substr, samplerName) => {
+            return `T_${samplerName}`;
+        });
     } else {
         rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return `sampler${samplerType} P_${samplerName}`;
@@ -93,6 +97,10 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         });
 
         rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return samplerName;
+        });
+
+        rest = rest.replace(/\bTEXTURE\((.*?)\)/g, (substr, samplerName) => {
             return samplerName;
         });
     }

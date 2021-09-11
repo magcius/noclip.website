@@ -2,7 +2,7 @@
 import { mat4, vec2 } from "gl-matrix";
 import { TransparentBlack } from "../../Color";
 import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
-import { GfxFormat } from "../../gfx/platform/GfxPlatform";
+import { GfxClipSpaceNearZ, GfxFormat } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../../gfx/render/GfxRenderGraph";
 import { GX_Program } from "../../gx/gx_material";
@@ -15,6 +15,7 @@ import { SceneObj, SceneObjHolder } from "../Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "../NameObj";
 import { isFirstStep } from "../Spine";
 import { GalaxyNameSortTable } from "./MiscActor";
+import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers";
 
 export class GalaxyMapBackground extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder) {
@@ -399,6 +400,8 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
 
         const w = 604, h = 456;
         projectionMatrixForCuboid(scratchMatrix, -w / 2, w / 2, -h / 2, h / 2, -10000.0, 10000.0);
+        const clipSpaceNearZ = renderInstManager.gfxRenderCache.device.queryVendorInfo().clipSpaceNearZ;
+        projectionMatrixConvertClipSpaceNearZ(scratchMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         fillSceneParams(sceneParams, scratchMatrix, desc.width, desc.height);
         fillSceneParamsData(d, offs, sceneParams);
 

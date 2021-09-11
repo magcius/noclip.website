@@ -1042,7 +1042,7 @@ void main() {
     vec4 t_Color = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord);
     t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
 
-    vec3 t_Size = vec3(textureSize(u_ColorCorrectTexture, 0));
+    vec3 t_Size = vec3(textureSize(TEXTURE(u_ColorCorrectTexture), 0));
     vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
     t_Color.rgb = texture(SAMPLER_3D(u_ColorCorrectTexture), t_TexCoord).rgb;
 

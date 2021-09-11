@@ -10,7 +10,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
@@ -31,7 +31,7 @@ import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate, ResourceHolder } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea, MercatorTransformCube, DeathArea } from './MiscMap';
-import { HitSensor, SensorHitChecker } from './HitSensor';
+import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
@@ -52,6 +52,7 @@ import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
 import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -320,6 +321,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const sceneParamsOffs2D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
         projectionMatrixForCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        projectionMatrixConvertClipSpaceNearZ(scratchMatrix, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs2D, sceneParams);
         sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;

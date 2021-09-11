@@ -855,8 +855,8 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private stageUsesSimpleCoords(stage: TevStage): boolean {
-        // This is a bit of a hack. If there's no indirect stage, we use simple normalized texture coordinates,
-        // designed renderers where injecting the texture size might be difficult.
+        // This is a bit of a hack. If there's no indirect stage, we use simple normalized texture coordinates;
+        // this is for game renderers where injecting the texture size might be difficult.
         return stage.indTexMatrix === GX.IndTexMtxID.OFF && !stage.indTexAddPrev;
     }
 

@@ -12,7 +12,7 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRende
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
 import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from 'gl-matrix';
 import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
