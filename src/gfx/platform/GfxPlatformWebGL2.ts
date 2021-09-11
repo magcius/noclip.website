@@ -2131,6 +2131,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.endQuery(queryPool.gl_query_type);
     }
 
+    public beginDebugGroup(name: string): void {
+    }
+
+    public endDebugGroup(): void {
+    }
+
     private endPass(): void {
         const gl = this.gl;
 

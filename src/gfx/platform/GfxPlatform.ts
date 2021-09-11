@@ -328,6 +328,10 @@ export interface GfxRenderPass {
     // Query system.
     beginQuery(dstOffs: number): void;
     endQuery(dstOffs: number): void;
+
+    // Debug.
+    beginDebugGroup(name: string): void;
+    endDebugGroup(): void;
 };
 
 export type GfxPass = GfxRenderPass;

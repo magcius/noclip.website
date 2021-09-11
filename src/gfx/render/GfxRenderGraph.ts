@@ -828,12 +828,14 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         this.currentPass = pass;
 
         const renderPass = this.device.createRenderPass(pass.descriptor);
+        renderPass.beginDebugGroup(pass.debugName);
 
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
 
         if (pass.execFunc !== null)
             pass.execFunc(renderPass, this);
 
+        renderPass.endDebugGroup();
         this.device.submitPass(renderPass);
 
         if (pass.postFunc !== null)

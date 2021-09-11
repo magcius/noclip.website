@@ -127,7 +127,11 @@ function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
 }
 
 function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
-    if (format === GfxFormat.U8_RGBA_RT)
+    if (format === GfxFormat.U8_R_NORM)
+        return 'r8unorm';
+    else if (format === GfxFormat.U8_RG_NORM)
+        return 'rg8unorm';
+    else if (format === GfxFormat.U8_RGBA_RT)
         return 'bgra8unorm';
     else if (format === GfxFormat.U8_RGBA_RT_SRGB)
         return 'bgra8unorm-srgb';
@@ -135,8 +139,6 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'rgba8unorm';
     else if (format === GfxFormat.U8_RGBA_SRGB)
         return 'rgba8unorm-srgb';
-    else if (format === GfxFormat.U8_RG_NORM)
-        return 'rg8unorm';
     else if (format === GfxFormat.U32_R)
         return 'r32uint';
     else if (format === GfxFormat.D24)
@@ -536,9 +538,19 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 
     public beginQuery(dstOffs: number): void {
+        this.gpuRenderPassEncoder!.beginOcclusionQuery(dstOffs);
     }
 
     public endQuery(dstOffs: number): void {
+        this.gpuRenderPassEncoder!.endOcclusionQuery();
+    }
+
+    public beginDebugGroup(name: string): void {
+        this.gpuRenderPassEncoder!.pushDebugGroup(name);
+    }
+
+    public endDebugGroup(): void {
+        this.gpuRenderPassEncoder!.popDebugGroup();
     }
 
     public finish(): GPUCommandBuffer {
@@ -1090,12 +1102,18 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
 
         if (async) {
+            this.device.pushErrorScope('validation');
+
             const gpuRenderPipeline = await this.device.createRenderPipelineAsync(gpuRenderPipelineDescriptor);
 
             // We might have created a sync pipeline while we were async building; no way to cancel the async
             // pipeline build at this point, so just chunk it out :/
             if (renderPipeline.gpuRenderPipeline === null)
                 renderPipeline.gpuRenderPipeline = gpuRenderPipeline;
+
+            const e = await this.device.popErrorScope();
+            if (e)
+                debugger;
         } else {
             renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipelineDescriptor);
         }
