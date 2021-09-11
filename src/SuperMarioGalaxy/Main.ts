@@ -51,6 +51,7 @@ import { TransparentBlack } from '../Color';
 import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
 import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -84,6 +85,7 @@ export const enum SpecialTextureType {
 class SpecialTextureBinder {
     private mirrorSampler: GfxSampler;
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
+    private needsFlipY = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.mirrorSampler = cache.createSampler({
@@ -98,6 +100,8 @@ class SpecialTextureBinder {
 
         this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
         this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.mirrorSampler);
+
+        this.needsFlipY = gfxDeviceNeedsFlipY(device);
     }
 
     private registerSpecialTextureType(textureType: SpecialTextureType, gfxSampler: GfxSampler): void {
@@ -109,7 +113,7 @@ class SpecialTextureBinder {
     public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
         m.width = EFB_WIDTH;
         m.height = EFB_HEIGHT;
-        m.flipY = true;
+        m.flipY = this.needsFlipY;
         m.lateBinding = textureType;
     }
 

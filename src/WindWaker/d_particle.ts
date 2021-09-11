@@ -18,6 +18,7 @@ import { cLib_addCalc2, cM__Short2Rad } from "./SComponent";
 import { dGlobals } from "./zww_scenes";
 import * as GX from '../gx/gx_enum';
 import { ColorKind } from "../gx/gx_render";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -33,10 +34,10 @@ const enum EffectDrawGroup {
     Indirect = 1,
 }
 
-function setTextureMappingIndirect(m: TextureMapping): void {
+function setTextureMappingIndirect(m: TextureMapping, flipY: boolean): void {
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
-    m.flipY = true;
+    m.flipY = flipY;
     m.lateBinding = 'OpaqueSceneTexture';
 }
 
@@ -47,13 +48,14 @@ export class dPa_control_c {
     private resourceDatas = new Map<number, JPAResourceData>();
 
     constructor(device: GfxDevice, private jpac: JPAC[]) {
+        const flipY = gfxDeviceNeedsFlipY(device);
         this.emitterManager = new JPAEmitterManager(device, 6000, 300);
         for (let i = 0; i < this.jpac.length; i++) {
             const jpacData = new JPACData(this.jpac[i]);
 
             const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
             if (m !== null)
-                setTextureMappingIndirect(m);
+                setTextureMappingIndirect(m, flipY);
 
             this.jpacData.push(jpacData);
         }

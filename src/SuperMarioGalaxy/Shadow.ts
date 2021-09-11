@@ -23,7 +23,8 @@ import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { colorFromRGBA } from "../Color";
 import { TextureMapping } from "../TextureHolder";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform";
+import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 
 export function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -1050,6 +1051,7 @@ class AlphaShadow extends NameObj {
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
 
         projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, sceneObjHolder.viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
