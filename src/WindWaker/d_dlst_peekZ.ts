@@ -223,9 +223,5 @@ void main() {
             this.submittedFrames[i].destroy(device);
         for (let i = 0; i < this.framePool.length; i++)
             this.framePool[i].destroy(device);
-        if (this.fullscreenCopyProgram !== null)
-            device.destroyProgram(this.fullscreenCopyProgram);
-        if (this.depthSampler !== null)
-            device.destroySampler(this.depthSampler);
     }
 }
