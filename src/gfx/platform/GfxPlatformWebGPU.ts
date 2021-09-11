@@ -1,9 +1,10 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
-import { assertExists, assert, leftPad, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
+import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
+import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -712,7 +713,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly viewportOrigin = GfxViewportOrigin.UpperLeft;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
 
-    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: (src: string, shaderStage: string) => string) {
+    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
             wrapS: GfxWrapMode.Repeat,
@@ -876,15 +877,20 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private async _createShaderStage(sourceText: string, shaderStage: 'vertex' | 'fragment'): Promise<GPUProgrammableStage> {
-        let res: string;
+        const validationEnabled = false;
+
+        let code: string;
         try {
-            res = this.glsl_compile(sourceText, shaderStage);
+            code = this.glsl_compile(sourceText, shaderStage, validationEnabled);
         } catch(e) {
             console.error(sourceText);
             throw "whoops";
         }
 
-        const shaderModule = this.device.createShaderModule({ code: res });
+        // Hack for incorrect WGSL output for FMA function -- https://github.com/gfx-rs/naga/pull/1348
+        code = code.replace(/\*d/g, '(*d)');
+
+        const shaderModule = this.device.createShaderModule({ code });
         return { module: shaderModule, entryPoint: 'main' };
     }
 
