@@ -396,7 +396,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private debugPointer: any;
 
-    constructor(private device: GPUDevice) {
+    constructor() {
         this.gpuColorAttachments = [{
             view: null!,
             loadValue: 'load',
@@ -712,6 +712,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = true;
     public readonly viewportOrigin = GfxViewportOrigin.UpperLeft;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
+
+    public static readonly optionalFeatures: GPUFeatureName[] = [
+        'depth24unorm-stencil8',
+        'depth32float-stencil8',
+        'texture-compression-bc',
+    ];
 
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
@@ -1167,7 +1173,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
         let pass = this._renderPassPool.pop();
         if (pass === undefined)
-            pass = new GfxRenderPassP_WebGPU(this.device);
+            pass = new GfxRenderPassP_WebGPU();
         pass.commandEncoder = this.device.createCommandEncoder();
         pass.beginRenderPass(renderPassDescriptor);
         return pass;
@@ -1233,8 +1239,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const mipWidth = texture.width >>> mipLevel;
             const mipHeight = texture.height >>> mipLevel;
 
-            size.width = mipWidth;
-            size.height = mipHeight;
+            size.width = align(mipWidth, getFormatBlockSize(texture.pixelFormat));
+            size.height = align(mipHeight, getFormatBlockSize(texture.pixelFormat));
 
             translateImageLayout(layout, texture.pixelFormat, mipWidth, mipHeight);
 
@@ -1345,7 +1351,9 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (adapter === null)
         return null;
 
-    const device = await adapter.requestDevice();
+    const requiredFeatures = GfxImplP_WebGPU.optionalFeatures.filter((feature) => adapter.features.has(feature));
+
+    const device = await adapter.requestDevice({ requiredFeatures });
     if (device === null)
         return null;
 
