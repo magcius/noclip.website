@@ -278,21 +278,33 @@ function translateBlendMode(mode: GfxBlendMode): GPUBlendOperation {
         throw "whoops";
 }
 
-function translateBlendState(blendState: GfxChannelBlendState): GPUBlendComponent {
+function translateBlendComponent(ch: GfxChannelBlendState): GPUBlendComponent {
     return {
-        operation: translateBlendMode(blendState.blendMode),
-        srcFactor: translateBlendFactor(blendState.blendSrcFactor),
-        dstFactor: translateBlendFactor(blendState.blendDstFactor),
+        operation: translateBlendMode(ch.blendMode),
+        srcFactor: translateBlendFactor(ch.blendSrcFactor),
+        dstFactor: translateBlendFactor(ch.blendDstFactor),
     };
+}
+
+function blendComponentIsNil(ch: GfxChannelBlendState): boolean {
+    return ch.blendMode === GfxBlendMode.Add && ch.blendSrcFactor === GfxBlendFactor.One && ch.blendDstFactor === GfxBlendFactor.Zero;
+}
+
+function translateBlendState(attachmentState: GfxAttachmentState): GPUBlendState | undefined {
+    if (blendComponentIsNil(attachmentState.rgbBlendState) && blendComponentIsNil(attachmentState.alphaBlendState)) {
+        return undefined;
+    } else {
+        return {
+            color: translateBlendComponent(attachmentState.rgbBlendState),
+            alpha: translateBlendComponent(attachmentState.alphaBlendState),
+        };
+    }
 }
 
 function translateColorState(attachmentState: GfxAttachmentState, format: GfxFormat): GPUColorTargetState {
     return { 
         format: translateTextureFormat(format),
-        blend: {
-            color: translateBlendState(attachmentState.rgbBlendState),
-            alpha: translateBlendState(attachmentState.alphaBlendState),
-        },
+        blend: translateBlendState(attachmentState),
         writeMask: attachmentState.channelWriteMask,
     };
 }
