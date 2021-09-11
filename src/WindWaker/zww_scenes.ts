@@ -22,7 +22,7 @@ import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxR
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
-import { range, getMatrixAxisZ, computeProjectionMatrixFromCuboid } from '../MathHelpers';
+import { range, getMatrixAxisZ, projectionMatrixForCuboid } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { parseMaterial, GX_Program } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
@@ -203,7 +203,7 @@ class dDlst_alphaModel_c {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
 
-        computeProjectionMatrixFromCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);

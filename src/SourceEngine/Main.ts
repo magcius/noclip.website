@@ -31,7 +31,7 @@ import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
-import { reverseDepthForProjectionMatrix } from "../gfx/helpers/ReversedDepthHelpers";
+import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 import { ParticleStaticResource } from "./Particles_Simple";
 
 export class CustomMount {
@@ -1250,7 +1250,7 @@ const scratchPlane = new Plane();
 function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpaceNearZ: GfxClipSpaceNearZ): void {
     // Convert back to "standard OpenGL" clip space.
     projectionMatrixConvertClipSpaceNearZ(m, GfxClipSpaceNearZ.NegativeOne, clipSpaceNearZ);
-    reverseDepthForProjectionMatrix(m);
+    projectionMatrixReverseDepth(m);
 
     vec4.set(scratchVec4a, Math.sign(plane.n[0]), Math.sign(plane.n[1]), 1.0, 1.0);
     mat4.invert(scratchMatrix, m);
@@ -1264,7 +1264,7 @@ function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpa
     m[14] = scratchVec4b[3] - m[15];
 
     // Convert back to "device space"
-    reverseDepthForProjectionMatrix(m);
+    projectionMatrixReverseDepth(m);
     projectionMatrixConvertClipSpaceNearZ(m, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 }
 

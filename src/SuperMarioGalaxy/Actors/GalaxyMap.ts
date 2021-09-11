@@ -7,7 +7,7 @@ import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRen
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../../gfx/render/GfxRenderGraph";
 import { GX_Program } from "../../gx/gx_material";
 import { fillSceneParams, fillSceneParamsData, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
-import { computeProjectionMatrixFromCuboid, getMatrixTranslation } from "../../MathHelpers";
+import { projectionMatrixForCuboid, getMatrixTranslation } from "../../MathHelpers";
 import { assertExists } from "../../util";
 import { connectToScene } from "../ActorUtil";
 import { hideLayout, hidePaneRecursive, LayoutActor, setAnimFrameAndStopAdjustTextWidth, setTextBoxRecursive, showLayout, showPaneRecursive } from "../Layout";
@@ -398,7 +398,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
         const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
 
         const w = 604, h = 456;
-        computeProjectionMatrixFromCuboid(scratchMatrix, -w / 2, w / 2, -h / 2, h / 2, -10000.0, 10000.0);
+        projectionMatrixForCuboid(scratchMatrix, -w / 2, w / 2, -h / 2, h / 2, -10000.0, 10000.0);
         fillSceneParams(sceneParams, scratchMatrix, desc.width, desc.height);
         fillSceneParamsData(d, offs, sceneParams);
 

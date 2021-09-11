@@ -356,7 +356,7 @@ export function angleDist(v0: number, v1: number, maxAngle: number = MathConstan
 }
 
 // Similar to mat4.frustum, except it can handle infinite far planes.
-export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+export function projectionMatrixForFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
     const rl = 1 / (right - left);
     const tb = 1 / (top - bottom);
     m[0] = near * 2 * rl;
@@ -384,7 +384,7 @@ export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right:
     }
 }
 
-export function computeProjectionMatrixFromCuboid(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+export function projectionMatrixForCuboid(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
     const rl = 1 / (right - left);
     const tb = 1 / (top - bottom);
     const nf = 1 / (near - far);
