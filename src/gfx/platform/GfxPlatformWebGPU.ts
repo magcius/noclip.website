@@ -1282,7 +1282,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             texture: texture.gpuTexture,
         };
         const layout: GPUImageDataLayout = {};
-        const size: GPUExtent3DStrict = { width: 0, height: 0, depthOrArrayLayers: 1 };
+        const size: GPUExtent3DStrict = { width: 0, height: 0, depthOrArrayLayers: 0 };
 
         for (let i = 0; i < levelDatas.length; i++) {
             const mipLevel = firstMipLevel + i;

@@ -101,7 +101,7 @@ checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 [[package]]
 name = "naga"
 version = "0.6.0"
-source = "git+https://github.com/gfx-rs/naga#130f802c89d488b719a0e494f3e1ea9ba6f5ba92"
+source = "git+https://github.com/gfx-rs/naga#0e66930aff1340d5c636df616d573cc326702158"
 dependencies = [
  "bit-set",
  "bitflags",

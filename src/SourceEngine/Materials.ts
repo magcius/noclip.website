@@ -1144,6 +1144,9 @@ vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld
     } else {
         return normalize(t_WorldLight.Position.xyz - t_PositionWorld);
     }
+
+    // Workaround for https://github.com/gfx-rs/naga/issues/1053
+    return vec3(0.0);
 }
 
 vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
@@ -1165,6 +1168,9 @@ float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWor
     } else {
         return max(0.0, t_NoL);
     }
+
+    // Workaround for https://github.com/gfx-rs/naga/issues/1053
+    return 0.0;
 }
 
 vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert, in float t_Attenuation, in WorldLight t_WorldLight) {
@@ -1456,7 +1462,7 @@ void mainPS() {
 
 #ifdef USE_DETAIL
     vec2 t_DetailTexCoord = CalcScaleBias(v_TexCoord0.xy, u_DetailScaleBias);
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail, t_DetailTexCoord)));
+    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
     t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #endif
 
