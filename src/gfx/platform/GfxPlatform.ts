@@ -249,7 +249,7 @@ export interface GfxRenderPassDescriptor {
     stencilClearValue: number | 'load';
 
     // Query system.
-    queryPool: GfxQueryPool | null;
+    occlusionQueryPool: GfxQueryPool | null;
 }
 
 export interface GfxDeviceLimits {
@@ -326,8 +326,8 @@ export interface GfxRenderPass {
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 
     // Query system.
-    beginQuery(dstOffs: number): void;
-    endQuery(dstOffs: number): void;
+    beginOcclusionQuery(dstOffs: number): void;
+    endOcclusionQuery(dstOffs: number): void;
 
     // Debug.
     beginDebugGroup(name: string): void;
@@ -400,10 +400,16 @@ export interface GfxDevice {
     // Readback system.
     readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
     submitReadback(o: GfxReadback): void;
+    /**
+     * Checks if the readback object {@param o} is ready. If so, this will write the full set of readback
+     * values to {@param dst}, starting at index {@param dstOffs}, and returns true. If the readback is
+     * not ready, false is returned, and the array is untouched.
+     */
     queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean;
 
     // Query system
     // Returns null if the query results are still pending. Returns true if any samples passed.
+    // TODO(jstpierre): Check the pool as a whole?
     queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null;
 
     // Information queries.

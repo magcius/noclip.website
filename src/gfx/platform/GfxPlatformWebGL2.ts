@@ -2119,15 +2119,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
     }
 
-    public beginQuery(dstOffs: number): void {
+    public beginOcclusionQuery(dstOffs: number): void {
         const gl = this.gl;
-        const queryPool = this._currentRenderPassDescriptor!.queryPool! as GfxQueryPoolP_GL;
+        const queryPool = this._currentRenderPassDescriptor!.occlusionQueryPool! as GfxQueryPoolP_GL;
         gl.beginQuery(queryPool.gl_query_type, queryPool.gl_query[dstOffs]);
     }
 
-    public endQuery(dstOffs: number): void {
+    public endOcclusionQuery(dstOffs: number): void {
         const gl = this.gl;
-        const queryPool = this._currentRenderPassDescriptor!.queryPool! as GfxQueryPoolP_GL;
+        const queryPool = this._currentRenderPassDescriptor!.occlusionQueryPool! as GfxQueryPoolP_GL;
         gl.endQuery(queryPool.gl_query_type);
     }
 

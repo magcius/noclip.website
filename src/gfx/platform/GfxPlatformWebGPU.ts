@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
@@ -82,6 +82,7 @@ interface GfxReadbackP_WebGPU extends GfxReadback {
 }
 
 interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
+    querySet: GPUQuerySet;
 }
 
 function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
@@ -205,6 +206,11 @@ function getPlatformBuffer(buffer_: GfxBuffer): GPUBuffer {
 function getPlatformSampler(sampler_: GfxSampler): GPUSampler {
     const sampler = sampler_ as GfxSamplerP_WebGPU;
     return sampler.gpuSampler;
+}
+
+function getPlatformQuerySet(queryPool_: GfxQueryPool): GPUQuerySet {
+    const queryPool = queryPool_ as GfxQueryPoolP_WebGPU;
+    return queryPool.querySet;
 }
 
 function translateTopology(topology: GfxPrimitiveTopology): GPUPrimitiveTopology {
@@ -399,6 +405,13 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         throw "whoops";
 }
 
+function translateQueryPoolType(type: GfxQueryPoolType): GPUQueryType {
+    if (type === GfxQueryPoolType.OcclusionConservative)
+        return 'occlusion';
+    else
+        throw "whoops";
+}
+
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public commandEncoder: GPUCommandEncoder | null = null;
     public descriptor: GfxRenderPassDescriptor;
@@ -482,6 +495,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         } else {
             this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
+
+        this.gpuRenderPassDescriptor.occlusionQuerySet = descriptor.occlusionQueryPool !== null ? getPlatformQuerySet(descriptor.occlusionQueryPool) : undefined;
     }
 
     public beginRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): void {
@@ -549,11 +564,11 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.debugPointer = value;
     }
 
-    public beginQuery(dstOffs: number): void {
+    public beginOcclusionQuery(dstOffs: number): void {
         this.gpuRenderPassEncoder!.beginOcclusionQuery(dstOffs);
     }
 
-    public endQuery(dstOffs: number): void {
+    public endOcclusionQuery(dstOffs: number): void {
         this.gpuRenderPassEncoder!.endOcclusionQuery();
     }
 
@@ -1141,8 +1156,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return o;
     }
 
-    public createQueryPool(): GfxQueryPool {
-        const o: GfxQueryPoolP_WebGPU = { _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId() };
+    public createQueryPool(type: GfxQueryPoolType, elemCount: number): GfxQueryPool {
+        const querySet = this.device.createQuerySet({
+            type: translateQueryPoolType(type),
+            count: elemCount,
+        });
+        const o: GfxQueryPoolP_WebGPU = { _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId(),
+            querySet,
+        };
         return o;
     }
 
@@ -1188,6 +1209,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyQueryPool(o: GfxQueryPool): void {
+        getPlatformQuerySet(o).destroy();
     }
 
     public pipelineQueryReady(o: GfxRenderPipeline): boolean {

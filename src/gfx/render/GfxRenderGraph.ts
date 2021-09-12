@@ -79,9 +79,9 @@ export interface GfxrPass {
     attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void;
 
     /**
-     * Attach the query pool used by this rendering pass.
+     * Attach the occlusion query pool used by this rendering pass.
      */
-    attachQueryPool(queryPool: GfxQueryPool): void;
+    attachOcclusionQueryPool(queryPool: GfxQueryPool): void;
 
     /**
      * Set the viewport used by this rendering pass.
@@ -135,7 +135,7 @@ class PassImpl implements GfxrPass {
         colorClearColor: ['load'],
         depthClearValue: 'load',
         stencilClearValue: 'load',
-        queryPool: null,
+        occlusionQueryPool: null,
     };
 
     public viewportX: number = 0;
@@ -168,8 +168,8 @@ class PassImpl implements GfxrPass {
         this.resolveTextureInputIDs.push(resolveTextureID);
     }
 
-    public attachQueryPool(queryPool: GfxQueryPool): void {
-        this.descriptor.queryPool = queryPool;
+    public attachOcclusionQueryPool(queryPool: GfxQueryPool): void {
+        this.descriptor.occlusionQueryPool = queryPool;
     }
 
     public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
@@ -192,13 +192,29 @@ class PassImpl implements GfxrPass {
 }
 
 export interface GfxrPassScope {
+    /**
+     * Retrieve the resolve texture resource for a given resolve texture ID. This is guaranteed to be
+     * a single-sampled texture which can be bound to a shader's texture binding.
+     *
+     * @param id A resolve texture ID, as returned by {@see GfxrGraphBuilder::resolveRenderTarget},
+     * {@see GfxrGraphBuilder::resolveRenderTargetPassAttachmentSlot}, or
+     * {@see GfxrGraphBuilder::resolveRenderTargetToExternalTexture}.
+     */
     getResolveTextureForID(id: number): GfxTexture;
+
+    /**
+     * Retrieve the underlying render target resource for a given attachment slot {@param slot}.
+     */
     getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null;
-    getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
+
+    /**
+     * Retrieve the underlying texture resource for a given attachment slot {@param slot}. This is not
+     * guaranteed to be a single-sampled texture; to resolve the resource, see {@see getResolveTextureForID}.
+     */
+     getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
 }
 
-// TODO(jstpierre): These classes might go away...
-
+// These classes might go away...
 class GraphImpl {
     [Symbol.species]?: 'GfxrGraph';
 

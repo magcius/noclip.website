@@ -82,7 +82,7 @@ export class Occlusion_Manager {
         builder.pushPass((pass) => {
             pass.setDebugName('Occlusion Query');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, occlDepthTargetID);
-            pass.attachQueryPool(this.queryPool);
+            pass.attachOcclusionQueryPool(this.queryPool);
 
             pass.exec((passRenderer) => {
                 let allocQueryNum = 0;
@@ -111,9 +111,9 @@ export class Occlusion_Manager {
                         continue;
 
                     cluster.index = allocQueryNum++;
-                    passRenderer.beginQuery(cluster.index);
+                    passRenderer.beginOcclusionQuery(cluster.index);
                     cluster.renderInstList.drawOnPassRenderer(cache, passRenderer);
-                    passRenderer.endQuery(cluster.index);
+                    passRenderer.endOcclusionQuery(cluster.index);
                 }
             });
         });
