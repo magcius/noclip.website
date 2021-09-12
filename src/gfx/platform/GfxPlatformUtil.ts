@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxFormat } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxFormat, GfxBindingLayoutSamplerDescriptor } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
@@ -22,9 +22,7 @@ export function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
 }
 
 export function gfxSamplerBindingCopy(a: Readonly<GfxSamplerBinding>): GfxSamplerBinding {
-    const gfxSampler = a.gfxSampler;
-    const gfxTexture = a.gfxTexture;
-    const lateBinding = a.lateBinding;
+    const gfxSampler = a.gfxSampler, gfxTexture = a.gfxTexture, lateBinding = a.lateBinding;
     return { gfxSampler, gfxTexture, lateBinding };
 }
 
@@ -45,10 +43,16 @@ export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): G
     return { bindingLayout, samplerBindings, uniformBufferBindings };
 }
 
+function gfxBindingLayoutSamplerDescriptorCopy(a: Readonly<GfxBindingLayoutSamplerDescriptor>): GfxBindingLayoutSamplerDescriptor {
+    const dimension = a.dimension, formatKind = a.formatKind;
+    return { dimension, formatKind };
+}
+
 export function gfxBindingLayoutDescriptorCopy(a: Readonly<GfxBindingLayoutDescriptor>): GfxBindingLayoutDescriptor {
     const numSamplers = a.numSamplers;
     const numUniformBuffers = a.numUniformBuffers;
-    return { numSamplers, numUniformBuffers };
+    const samplerEntries = a.samplerEntries !== undefined ? arrayCopy(a.samplerEntries!, gfxBindingLayoutSamplerDescriptorCopy) : undefined;
+    return { numSamplers, numUniformBuffers, samplerEntries };
 }
 
 export function gfxRenderPipelineDescriptorCopy(a: Readonly<GfxRenderPipelineDescriptor>): GfxRenderPipelineDescriptor {
@@ -64,17 +68,13 @@ export function gfxRenderPipelineDescriptorCopy(a: Readonly<GfxRenderPipelineDes
 }
 
 export function gfxVertexAttributeDescriptorCopy(a: Readonly<GfxVertexAttributeDescriptor>): GfxVertexAttributeDescriptor {
-    const location = a.location;
-    const format = a.format;
-    const bufferIndex = a.bufferIndex;
-    const bufferByteOffset = a.bufferByteOffset;
+    const location = a.location, format = a.format, bufferIndex = a.bufferIndex, bufferByteOffset = a.bufferByteOffset;
     return { location, format, bufferIndex, bufferByteOffset };
 }
 
 export function gfxInputLayoutBufferDescriptorCopy(a: Readonly<GfxInputLayoutBufferDescriptor | null>): GfxInputLayoutBufferDescriptor | null {
     if (a !== null) {
-        const byteStride = a.byteStride;
-        const frequency = a.frequency;
+        const byteStride = a.byteStride, frequency = a.frequency;
         return { byteStride, frequency };
     } else {
         return null;
@@ -98,9 +98,15 @@ function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Reado
     return a.gfxSampler === b.gfxSampler && a.gfxTexture === b.gfxTexture;
 }
 
+function gfxBindingLayoutSamplerDescriptorEqual(a: Readonly<GfxBindingLayoutSamplerDescriptor>, b: Readonly<GfxBindingLayoutSamplerDescriptor>): boolean {
+    return a.dimension === b.dimension && a.formatKind === b.formatKind;
+}
+
 export function gfxBindingLayoutDescriptorEqual(a: Readonly<GfxBindingLayoutDescriptor>, b: Readonly<GfxBindingLayoutDescriptor>): boolean {
     if (a.numSamplers !== b.numSamplers) return false;
     if (a.numUniformBuffers !== b.numUniformBuffers) return false;
+    if ((a.samplerEntries === undefined) !== (b.samplerEntries === undefined)) return false;
+    if (a.samplerEntries !== undefined && !arrayEqual(a.samplerEntries!, b.samplerEntries!, gfxBindingLayoutSamplerDescriptorEqual)) return false;
     return true;
 }
 

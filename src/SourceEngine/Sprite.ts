@@ -53,7 +53,7 @@ export class SpriteInstance {
 
         // Set up model matrix for sprite.
         const renderInst = renderInstManager.newRenderInst();
-        renderContext.particleStaticRes.setQuadOnRenderInst(renderInst);
+        renderContext.materialCache.staticResources.particleStaticResource.setQuadOnRenderInst(renderInst);
 
         this.materialInstance.paramSetNumber('$alpha', distAlpha);
         this.materialInstance.setOnRenderInst(renderContext, renderInst);

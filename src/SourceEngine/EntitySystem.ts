@@ -2396,7 +2396,7 @@ class env_steam extends BaseEntity {
             return;
 
         const view = renderContext.currentView;
-        const particleStaticRes = renderContext.particleStaticRes;
+        const particleStaticRes = renderContext.materialCache.staticResources.particleStaticResource;
         for (let i = 0; i < this.particlePool.length; i++) {
             const p = this.particlePool[i];
             const lifeT = (p.life / this.particleLifetime);

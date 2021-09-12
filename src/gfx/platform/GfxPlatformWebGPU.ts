@@ -1,8 +1,8 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType } from "./GfxPlatform";
-import { _T, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind } from "./GfxPlatform";
+import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl";
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
-import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize } from "./GfxPlatformFormat";
+import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index";
 
@@ -32,6 +32,7 @@ interface GfxTextureSharedP_WebGPU {
     usage: GPUTextureUsageFlags;
     gpuTexture: GPUTexture;
     gpuTextureView: GPUTextureView;
+    dimension: GfxTextureDimension;
 }
 
 interface GfxTextureP_WebGPU extends GfxTextureSharedP_WebGPU, GfxTexture {
@@ -177,12 +178,25 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
 function translateTextureDimension(dimension: GfxTextureDimension): GPUTextureDimension {
     if (dimension === GfxTextureDimension.n2D)
         return '2d';
-    else if (dimension === GfxTextureDimension.Cube)
-        return '2d';
     else if (dimension === GfxTextureDimension.n2DArray)
         return '2d';
     else if (dimension === GfxTextureDimension.n3D)
         return '3d';
+    else if (dimension === GfxTextureDimension.Cube)
+        return '2d';
+    else
+        throw "whoops";
+}
+
+function translateViewDimension(dimension: GfxTextureDimension): GPUTextureViewDimension {
+    if (dimension === GfxTextureDimension.n2D)
+        return '2d';
+    else if (dimension === GfxTextureDimension.n2DArray)
+        return '2d-array';
+    else if (dimension === GfxTextureDimension.n3D)
+        return '3d';
+    else if (dimension === GfxTextureDimension.Cube)
+        return 'cube';
     else
         throw "whoops";
 }
@@ -191,9 +205,9 @@ function translateTextureUsage(usage: GfxTextureUsage): GPUTextureUsageFlags {
     let gpuUsage: GPUTextureUsageFlags = 0;
 
     if (!!(usage & GfxTextureUsage.Sampled))
-        gpuUsage |= GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
+        gpuUsage |= GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST;
     if (!!(usage & GfxTextureUsage.RenderTarget))
-        gpuUsage |= GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
+        gpuUsage |= GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
 
     return gpuUsage;
 }
@@ -412,6 +426,22 @@ function translateQueryPoolType(type: GfxQueryPoolType): GPUQueryType {
         throw "whoops";
 }
 
+function translateSampleType(type: GfxSamplerFormatKind): GPUTextureSampleType {
+    if (type === GfxSamplerFormatKind.Float)
+        return 'float';
+    else if (type === GfxSamplerFormatKind.Depth)
+        return 'depth';
+    else
+        throw "whoops";
+}
+
+function translateBindGroupTextureBinding(sampler: GfxBindingLayoutSamplerDescriptor): GPUTextureBindingLayout {
+    return {
+        sampleType: translateSampleType(sampler.formatKind),
+        viewDimension: translateViewDimension(sampler.dimension),
+    };
+}
+
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public commandEncoder: GPUCommandEncoder | null = null;
     public descriptor: GfxRenderPassDescriptor;
@@ -421,6 +451,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachment;
     private gfxColorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
+    private gfxDepthStencilAttachment: GfxTextureSharedP_WebGPU | null = null;
+    private gfxDepthStencilResolveTo: GfxTextureSharedP_WebGPU | null = null;
     private debugPointer: any;
 
     constructor() {
@@ -495,6 +527,9 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         } else {
             this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
+
+        this.gfxDepthStencilAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
+        this.gfxDepthStencilResolveTo = descriptor.depthStencilResolveTo as GfxTextureP_WebGPU;
 
         this.gpuRenderPassDescriptor.occlusionQuerySet = descriptor.occlusionQueryPool !== null ? getPlatformQuerySet(descriptor.occlusionQueryPool) : undefined;
     }
@@ -573,11 +608,30 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 
     public beginDebugGroup(name: string): void {
+        // FIREFOX MISSING
+        if (this.gpuRenderPassEncoder!.pushDebugGroup === undefined)
+            return;
+
         this.gpuRenderPassEncoder!.pushDebugGroup(name);
     }
 
     public endDebugGroup(): void {
+        // FIREFOX MISSING
+        if (this.gpuRenderPassEncoder!.popDebugGroup === undefined)
+            return;
+
         this.gpuRenderPassEncoder!.popDebugGroup();
+    }
+
+    private copyAttachment(dst: GfxTextureSharedP_WebGPU, src: GfxTextureSharedP_WebGPU): void {
+        assert(src.sampleCount === 1);
+        const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture };
+        const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture };
+        assert(src.width === dst.width);
+        assert(src.height === dst.height);
+        assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
+        assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
+        this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [dst.width, dst.height, 1]);
     }
 
     public finish(): GPUCommandBuffer {
@@ -588,15 +642,15 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         for (let i = 0; i < this.gfxColorAttachment.length; i++) {
             const colorAttachment = this.gfxColorAttachment[i];
             const colorResolveTo = this.gfxColorResolveTo[i];
+            if (colorAttachment !== null && colorResolveTo !== null && colorAttachment.sampleCount === 1)
+                this.copyAttachment(colorResolveTo, colorAttachment);
+        }
 
-            if (colorAttachment !== null && colorResolveTo !== null && colorAttachment.sampleCount === 1) {
-                const srcCopy: GPUImageCopyTexture = { texture: colorAttachment.gpuTexture };
-                const dstCopy: GPUImageCopyTexture = { texture: colorResolveTo.gpuTexture };
-                assert(colorAttachment.width === colorResolveTo.width);
-                assert(colorAttachment.height === colorResolveTo.height);
-                assert(!!(colorAttachment.usage & GPUTextureUsage.COPY_SRC));
-                assert(!!(colorResolveTo.usage & GPUTextureUsage.COPY_DST));
-                this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [colorResolveTo.width, colorResolveTo.height, 1]);
+        if (this.gfxDepthStencilAttachment !== null && this.gfxDepthStencilResolveTo !== null) {
+            if (this.gfxDepthStencilAttachment.sampleCount > 1) {
+                // TODO(jstpierre): MSAA depth resolve (requires shader)
+            } else {
+                this.copyAttachment(this.gfxDepthStencilResolveTo, this.gfxDepthStencilAttachment);
             }
         }
 
@@ -656,23 +710,20 @@ function getFormatBlockSize(format: GfxFormat): number {
     return 1;
 }
 
-function translateImageLayout(layout: GPUImageDataLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
+function translateImageLayout(size: GPUExtent3DDictStrict, layout: GPUImageDataLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
     const blockSize = getFormatBlockSize(format);
 
-    const numBlocksX = align(mipWidth, blockSize);
-    const numBlocksY = align(mipHeight, blockSize);
+    size.width = align(mipWidth, blockSize);
+    size.height = align(mipHeight, blockSize);
+
+    const numBlocksX = (size.width / blockSize) | 0;
+    const numBlocksY = (size.height / blockSize) | 0;
 
     layout.bytesPerRow = numBlocksX * getFormatByteSizePerBlock(format);
     layout.rowsPerImage = numBlocksY;
 }
 
-// Hack for now until browsers implement compositingAlphaMode
-// https://bugs.chromium.org/p/chromium/issues/detail?id=1241373
-class FullscreenAlphaClear {
-    private pipeline: GPURenderPipeline | null = null;
-    private shaderModule: GPUShaderModule | null = null;
-
-    private shaderText = `
+const fullscreenVS = `
 struct VertexOutput {
     [[builtin(position)]] pos: vec4<f32>;
 };
@@ -686,10 +737,18 @@ fn vs([[builtin(vertex_index)]] index: u32) -> VertexOutput {
     out.pos.w = 1.0;
     return out;
 }
+`;
 
-struct FragmentOutput {
-    [[location(0)]] color: vec4<f32>;
-};
+// Hack for now until browsers implement compositingAlphaMode
+// https://bugs.chromium.org/p/chromium/issues/detail?id=1241373
+class FullscreenAlphaClear {
+    private pipeline: GPURenderPipeline | null = null;
+    private shaderModule: GPUShaderModule | null = null;
+
+    private shaderText = `
+${fullscreenVS}
+
+struct FragmentOutput { [[location(0)]] color: vec4<f32>; };
 
 [[stage(fragment)]]
 fn fs() -> FragmentOutput {
@@ -735,9 +794,15 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private readonly _swapChainTextureUsage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
     private _resourceUniqueId: number = 0;
 
-    private _renderPassPool: GfxRenderPassP_WebGPU[] = [];
-    private _fallbackTexture: GfxTexture;
+    // Fallback resources.
+    private _fallbackTexture2D: GfxTextureP_WebGPU;
+    private _fallbackTexture2DDepth: GfxTextureP_WebGPU;
+    private _fallbackTexture2DArray: GfxTextureP_WebGPU;
+    private _fallbackTexture3D: GfxTextureP_WebGPU;
+    private _fallbackTextureCube: GfxTextureP_WebGPU;
     private _fallbackSampler: GfxSampler;
+
+    private _renderPassPool: GfxRenderPassP_WebGPU[] = [];
     private _featureTextureCompressionBC: boolean = false;
 
     private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
@@ -759,7 +824,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     ];
 
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
-        this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+        this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D);
+        this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D);
+        this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray);
+        this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D);
+        this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube);
+
         this._fallbackSampler = this.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -768,15 +838,24 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             mipFilter: GfxMipFilterMode.NoMip,
         });
 
-        // Firefox doesn't support GPUDevice.features yet...
+        // FIREFOX MISSING
         if (this.device.features)
             this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
 
         this.device.onuncapturederror = (event) => {
             console.error(event.error);
+            debugger;
         };
 
         this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device);
+    }
+
+    private createFallbackTexture(dimension: GfxTextureDimension): GfxTextureP_WebGPU {
+        const depth = dimension === GfxTextureDimension.Cube ? 6 : 1;
+        return this.createTexture({
+            dimension, pixelFormat: GfxFormat.U8_RGBA_NORM, usage: GfxTextureUsage.Sampled,
+            width: 1, height: 1, depth, numLevels: 1,
+        }) as GfxTextureP_WebGPU;
     }
 
     // GfxSwapChain
@@ -802,6 +881,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             numLevels: 1,
             usage: this._swapChainTextureUsage,
             sampleCount: 1,
+            dimension: GfxTextureDimension.n2D,
         };
         return texture;
     }
@@ -844,7 +924,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const usage = translateTextureUsage(descriptor.usage);
 
         const gpuTexture = this.device.createTexture({ size, mipLevelCount, format, dimension, usage });
-        const gpuTextureView = gpuTexture.createView();
+        const gpuTextureView = gpuTexture.createView({
+            dimension: translateViewDimension(descriptor.dimension),
+        });
         const texture: GfxTextureSharedP_WebGPU = { 
             pixelFormat: descriptor.pixelFormat,
             width: descriptor.width,
@@ -854,6 +936,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             usage,
             sampleCount: 1,
             gpuTexture, gpuTextureView,
+            dimension: descriptor.dimension,
         };
         return texture;
     }
@@ -917,6 +1000,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const attachment: GfxAttachmentP_WebGPU = { _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(),
             pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels,
             usage, gpuTexture, gpuTextureView,
+            dimension: GfxTextureDimension.n2D,
         };
         return attachment;
     }
@@ -932,8 +1016,15 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             throw "whoops";
         }
 
-        // Hack for incorrect WGSL output for FMA function -- https://github.com/gfx-rs/naga/pull/1348
-        code = code.replace(/\*d/g, '(*d)');
+        // Workaround for https://github.com/gfx-rs/naga/issues/1355
+        for (const depthTextureName of ['u_TextureFramebufferDepth']) {
+            if (!code.includes(depthTextureName)) continue;
+
+            code = code.replace(`var T_${depthTextureName}: texture_2d<f32>;`, `var T_${depthTextureName}: texture_depth_2d;`);
+            code = code.replace(new RegExp(`textureSample\\\(T_${depthTextureName}(.*)\\\);$`, 'gm'), (sub, cap) => {
+                return `vec4<f32>(textureSample(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
+            });
+        }
 
         const shaderModule = this.device.createShaderModule({ code });
         return { module: shaderModule, entryPoint: 'main' };
@@ -970,8 +1061,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             entries[0].push({ binding: entries[0].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform', hasDynamicOffset: true } });
 
         for (let i = 0; i < bindingLayout.numSamplers; i++) {
-            // TODO(jstpierre): This doesn't work for depth textures
-            entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } });
+            const samplerEntry = bindingLayout.samplerEntries !== undefined ? bindingLayout.samplerEntries[i] : defaultBindingLayoutSamplerDescriptor;
+            entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: translateBindGroupTextureBinding(samplerEntry), });
             entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } });
         }
 
@@ -986,6 +1077,20 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             this._bindGroupLayoutCache.add(bindingLayout, gpuBindGroupLayout);
         }
         return gpuBindGroupLayout;
+    }
+
+    private _getFallbackTexture(samplerEntry: GfxBindingLayoutSamplerDescriptor): GfxTexture {
+        const dimension = samplerEntry.dimension, formatKind = samplerEntry.formatKind;
+        if (dimension === GfxTextureDimension.n2D)
+            return formatKind === GfxSamplerFormatKind.Depth ? this._fallbackTexture2DDepth : this._fallbackTexture2D;
+        else if (dimension === GfxTextureDimension.n2DArray)
+            return this._fallbackTexture2DArray;
+        else if (dimension === GfxTextureDimension.n3D)
+            return this._fallbackTexture3D;
+        else if (dimension === GfxTextureDimension.Cube)
+            return this._fallbackTextureCube;
+        else
+            throw "whoops";
     }
 
     public createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings {
@@ -1007,8 +1112,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         numBindings = 0;
         for (let i = 0; i < bindingLayout.numSamplers; i++) {
+            const samplerEntry = bindingLayout.samplerEntries !== undefined ? bindingLayout.samplerEntries[i] : defaultBindingLayoutSamplerDescriptor;
+
             const gfxBinding = bindingsDescriptor.samplerBindings[i];
-            const gfxTexture = gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._fallbackTexture;
+            const gfxTexture = gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._getFallbackTexture(samplerEntry);
+            assert(samplerEntry.dimension === (gfxTexture as GfxTextureP_WebGPU).dimension);
+            assert(samplerEntry.formatKind === getFormatSamplerKind((gfxTexture as GfxTextureP_WebGPU).pixelFormat));
             const gpuTextureView = (gfxTexture as GfxTextureP_WebGPU).gpuTextureView;
             gpuBindGroupEntries[1].push({ binding: numBindings++, resource: gpuTextureView });
 
@@ -1077,6 +1186,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private async _createRenderPipeline(renderPipeline: GfxRenderPipelineP_WebGPU, async: boolean): Promise<void> {
+        // FIREFOX MISSING
+        if (this.device.createRenderPipelineAsync === undefined)
+            async = false;
+
         // If we're already in the process of creating a the pipeline async, no need to kick the process off again...
         if (async && renderPipeline.isCreatingAsync)
             return;
@@ -1282,7 +1395,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             texture: texture.gpuTexture,
         };
         const layout: GPUImageDataLayout = {};
-        const size: GPUExtent3DStrict = { width: 0, height: 0, depthOrArrayLayers: 0 };
+        const size: GPUExtent3DStrict = { width: 0, height: 0, depthOrArrayLayers: texture.depthOrArrayLayers };
 
         for (let i = 0; i < levelDatas.length; i++) {
             const mipLevel = firstMipLevel + i;
@@ -1291,11 +1404,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const mipWidth = texture.width >>> mipLevel;
             const mipHeight = texture.height >>> mipLevel;
 
-            size.width = align(mipWidth, getFormatBlockSize(texture.pixelFormat));
-            size.height = align(mipHeight, getFormatBlockSize(texture.pixelFormat));
-
-            translateImageLayout(layout, texture.pixelFormat, mipWidth, mipHeight);
-
+            translateImageLayout(size, layout, texture.pixelFormat, mipWidth, mipHeight);
             this.device.queue.writeTexture(destination, levelDatas[i], layout, size);
         }
     }

@@ -167,9 +167,21 @@ export interface GfxSamplerBinding {
     lateBinding: string | null;
 }
 
+export const enum GfxSamplerFormatKind {
+    Float,
+    Depth,
+}
+
+export interface GfxBindingLayoutSamplerDescriptor {
+    dimension: GfxTextureDimension;
+    formatKind: GfxSamplerFormatKind;
+};
+
 export interface GfxBindingLayoutDescriptor {
     numUniformBuffers: number;
+    // TODO(jstpierre): Remove / make optional?
     numSamplers: number;
+    samplerEntries?: GfxBindingLayoutSamplerDescriptor[];
 }
 
 export interface GfxBindingsDescriptor {

@@ -1,7 +1,7 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxColor, GfxViewportOrigin, GfxQueryPoolType } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
-import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxColor, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl";
+import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil';
 import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -26,6 +26,7 @@ interface GfxTextureP_GL extends GfxTexture {
     height: number;
     depth: number;
     numLevels: number;
+    formatKind: GfxSamplerFormatKind;
 }
 
 interface GfxRenderTargetP_GL extends GfxRenderTarget {
@@ -76,11 +77,17 @@ interface GfxInputStateP_GL extends GfxInputState {
     vertexBuffers: (GfxVertexBufferDescriptor | null)[];
 }
 
+interface GfxBindingLayoutSamplerDescriptorP_GL {
+    gl_target: GLenum;
+    formatKind: GfxSamplerFormatKind;
+}
+
 interface GfxBindingLayoutTableP_GL {
     firstUniformBuffer: number;
     numUniformBuffers: number;
     firstSampler: number;
     numSamplers: number;
+    samplerEntries: GfxBindingLayoutSamplerDescriptorP_GL[];
 }
 
 interface GfxBindingLayoutsP_GL {
@@ -254,6 +261,19 @@ function translatePrimitiveTopology(topology: GfxPrimitiveTopology): GLenum {
     }
 }
 
+function translateTextureDimension(dimension: GfxTextureDimension): GLenum {
+    if (dimension === GfxTextureDimension.n2D)
+        return WebGL2RenderingContext.TEXTURE_2D;
+    else if (dimension === GfxTextureDimension.n2DArray)
+        return WebGL2RenderingContext.TEXTURE_2D_ARRAY;
+    else if (dimension === GfxTextureDimension.Cube)
+        return WebGL2RenderingContext.TEXTURE_CUBE_MAP;
+    else if (dimension === GfxTextureDimension.n3D)
+        return WebGL2RenderingContext.TEXTURE_3D;
+    else
+        throw "whoops";
+}
+
 function getPlatformBuffer(buffer_: GfxBuffer, byteOffset: number = 0): WebGLBuffer {
     const buffer = buffer_ as GfxBufferP_GL;
     return buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
@@ -278,8 +298,20 @@ function createBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): Gfx
     let firstUniformBuffer = 0, firstSampler = 0;
     const bindingLayoutTables: GfxBindingLayoutTableP_GL[] = [];
     for (let i = 0; i < bindingLayouts.length; i++) {
-        const { numUniformBuffers, numSamplers } = bindingLayouts[i];
-        bindingLayoutTables.push({ firstUniformBuffer, numUniformBuffers, firstSampler, numSamplers });
+        const { numUniformBuffers, numSamplers, samplerEntries } = bindingLayouts[i];
+
+        const bindingSamplerEntries: GfxBindingLayoutSamplerDescriptorP_GL[] = [];
+
+        if (samplerEntries !== undefined)
+            assert(samplerEntries.length === numSamplers);
+
+        for (let j = 0; j < numSamplers; j++) {
+            const samplerEntry = samplerEntries !== undefined ? samplerEntries[j] : defaultBindingLayoutSamplerDescriptor;
+            const { dimension, formatKind } = samplerEntry;
+            bindingSamplerEntries.push({ gl_target: translateTextureDimension(dimension), formatKind });
+        }
+
+        bindingLayoutTables.push({ firstUniformBuffer, numUniformBuffers, firstSampler, numSamplers, samplerEntries: bindingSamplerEntries });
         firstUniformBuffer += numUniformBuffers;
         firstSampler += numSamplers;
     }
@@ -295,33 +327,6 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
         results.push(result);
     }
     return results;
-}
-
-type ArrayBufferView2 = Float32Array | Uint32Array;
-class Growable<T extends ArrayBufferView2> {
-    public b: T;
-    public i: number;
-    public o: number;
-
-    constructor(public m: (n: number) => T, public a: number = 0x400) {
-        this.i = this.a;
-        this.b = m(this.i);
-        this.o = 0;
-    }
-
-    public r() {
-        this.o = 0;
-    }
-
-    public n(v: number) {
-        if (this.o + 1 > this.b.length) {
-            const b = this.m(this.b.length + this.a);
-            b.set(this.b);
-            this.b = b;
-        }
-
-        this.b[this.o++] = v;
-    }
 }
 
 function isBlendStateNone(blendState: GfxChannelBlendState): boolean {
@@ -499,6 +504,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             width: 0, height: 0, depth: 1, numLevels: 1,
             gl_target: null!, gl_texture: null!,
             pixelFormat: (this._contextAttributes.alpha === false) ? GfxFormat.U8_RGB_RT : GfxFormat.U8_RGBA_RT,
+            formatKind: GfxSamplerFormatKind.Float,
         } as GfxTextureP_GL;
 
         this._resolveColorReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
@@ -883,6 +889,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             height: descriptor.height,
             depth: descriptor.depth,
             numLevels,
+            formatKind: getFormatSamplerKind(descriptor.pixelFormat),
         };
         return texture;
     }
@@ -1797,9 +1804,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             }
         }
 
-        for (let i = 0; i < samplerBindings.length; i++) {
+        for (let i = 0; i < bindingLayoutTable.numSamplers; i++) {
             const binding = samplerBindings[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
+            const samplerEntry = bindingLayoutTable.samplerEntries[i];
             const gl_sampler = binding !== null && binding.gfxSampler !== null ? getPlatformSampler(binding.gfxSampler) : null;
             const gl_texture = binding !== null && binding.gfxTexture !== null ? getPlatformTexture(binding.gfxTexture) : null;
 
@@ -1811,12 +1819,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._currentTextures[samplerIndex] !== gl_texture) {
                 this._setActiveTexture(gl.TEXTURE0 + samplerIndex);
                 if (gl_texture !== null) {
-                    const { gl_target } = (assertExists(binding).gfxTexture as GfxTextureP_GL);
+                    const { gl_target, formatKind } = (assertExists(binding).gfxTexture as GfxTextureP_GL);
                     gl.bindTexture(gl_target, gl_texture);
                     this._debugGroupStatisticsTextureBind();
+
+                    // Validate sampler entry.
+
+                    // TODO(webgpu): Turn this on at some point in the future when we've ported all of the code over.
+                    // assert(samplerEntry.gl_target === gl_target);
+                    // assert(samplerEntry.formatKind === formatKind);
                 } else {
-                    // XXX(jstpierre): wtf do I do here? Maybe do nothing?
-                    // Let's hope that it's a 2D texture.
+                    // TODO(jstpierre): Fallback textures for other dimensions.
                     gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
                 }
                 this._currentTextures[samplerIndex] = gl_texture;
@@ -2056,13 +2069,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
-            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+);\s*$/gm);
-            let samplerIndex = 0;
+            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+);\s* \/\/ BINDING=(\d+)$/gm);
             for (let i = 0; i < samplers.length; i++) {
-                const [m, name] = samplers[i];
-                // Assign identities in order.
+                const [m, name, location] = samplers[i];
                 const samplerUniformLocation = gl.getUniformLocation(prog, name);
-                gl.uniform1i(samplerUniformLocation, samplerIndex++);
+                gl.uniform1i(samplerUniformLocation, parseInt(location));
             }
 
             program.compileState = GfxProgramCompileStateP_GL.ReadyToUse;
