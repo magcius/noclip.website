@@ -169,6 +169,8 @@ export interface GfxSamplerBinding {
 
 export const enum GfxSamplerFormatKind {
     Float,
+    Uint,
+    Sint,
     Depth,
 }
 

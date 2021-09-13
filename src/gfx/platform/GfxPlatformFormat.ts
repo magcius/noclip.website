@@ -183,6 +183,10 @@ export function getFormatSamplerKind(fmt: GfxFormat): GfxSamplerFormatKind {
     const typeFlags = getFormatTypeFlags(fmt);
     if (typeFlags === FormatTypeFlags.F16 || typeFlags === FormatTypeFlags.F32)
         return GfxSamplerFormatKind.Float;
-    // uint / sint, shouldn't be used as textures as best we can help it!
-    throw "whoops";
+    else if (typeFlags === FormatTypeFlags.U8 || typeFlags === FormatTypeFlags.U16 || typeFlags === FormatTypeFlags.U32)
+        return GfxSamplerFormatKind.Uint;
+    else if (typeFlags === FormatTypeFlags.S8 || typeFlags === FormatTypeFlags.S16 || typeFlags === FormatTypeFlags.S32)
+        return GfxSamplerFormatKind.Sint;
+    else
+        throw "whoops";
 }
