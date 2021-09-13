@@ -29,7 +29,7 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     // Garbage WebGL2 shader compiler until I get something better down the line...
     const lines = source.split('\n').map((n) => {
         // Remove comments.
-        return n.replace(/[/][/].*$/, '');
+        return n.replace(/\s*[/][/].*$/, '');
     }).filter((n) => {
         // Filter whitespace.
         const isEmpty = !n || /^\s+$/.test(n);
