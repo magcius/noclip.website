@@ -22,7 +22,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
-const textureMappings = nArray(11, () => new TextureMapping());
+const textureMappings = nArray(13, () => new TextureMapping());
 
 function resetTextureMappings(m: TextureMapping[]): void {
     for (let i = 0; i < m.length; i++)
@@ -1092,15 +1092,17 @@ varying vec4 v_LightAtten;
 #endif
 
 layout(binding = 0) uniform sampler2D u_TextureBase;
-layout(binding = 1) uniform sampler2D u_TextureDetail;
+layout(binding = 1) uniform sampler2D u_TextureBase2;
 layout(binding = 2) uniform sampler2D u_TextureBumpmap;
-layout(binding = 3) uniform sampler2D u_TextureEnvmapMask;
-layout(binding = 4) uniform sampler2D u_TextureBase2;
-layout(binding = 5) uniform sampler2D u_TextureSpecularExponent;
-layout(binding = 6) uniform sampler2D u_TextureSelfIllum;
-layout(binding = 7) uniform sampler2D u_TextureBlendModulate;
-layout(binding = 8) uniform sampler2DArray u_TextureLightmap;
-layout(binding = 9) uniform samplerCube u_TextureEnvmap;
+layout(binding = 3) uniform sampler2D u_TextureBumpmap2;
+layout(binding = 4) uniform sampler2D u_TextureBumpMask;
+layout(binding = 5) uniform sampler2D u_TextureDetail;
+layout(binding = 6) uniform sampler2D u_TextureEnvmapMask;
+layout(binding = 7) uniform sampler2D u_TextureSpecularExponent;
+layout(binding = 8) uniform sampler2D u_TextureSelfIllum;
+layout(binding = 9) uniform sampler2D u_TextureBlendModulate;
+layout(binding = 10) uniform sampler2DArray u_TextureLightmap;
+layout(binding = 11) uniform samplerCube u_TextureEnvmap;
 
 // #define DEBUG_DIFFUSEONLY 1
 // #define DEBUG_FULLBRIGHT 1
@@ -1779,6 +1781,11 @@ class Material_Generic extends BaseMaterial {
         p['$bumpmap']                      = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
+        // TODO(jstpierre): Support $bumpmap2
+        p['$bumpmap2']                     = new ParameterTexture();
+        p['$bumpframe2']                   = new ParameterNumber(0);
+        p['$bumptransform2']               = new ParameterMatrix();
+        p['$bumpmask']                     = new ParameterTexture();
         p['$alphatestreference']           = new ParameterNumber(0.7);
         p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
         p['$ssbump']                       = new ParameterBoolean(false, false);
@@ -2007,17 +2014,20 @@ class Material_Generic extends BaseMaterial {
                 dst[0].gfxTexture = systemTextures.whiteTexture2D;
         }
 
-        this.paramGetTexture('$detail').fillTextureMapping(dst[1], this.paramGetInt('$detailframe'));
-        this.paramGetTexture('$bumpmap').fillTextureMapping(dst[2], this.paramGetInt('$bumpframe'));
-        this.paramGetTexture('$envmapmask').fillTextureMapping(dst[3], this.paramGetInt('$envmapmaskframe'));
         if (this.wantsBaseTexture2)
-            this.paramGetTexture('$basetexture2').fillTextureMapping(dst[4], this.paramGetInt('$frame2'));
-        this.paramGetTexture('$phongexponenttexture').fillTextureMapping(dst[5], 0);
-        this.paramGetTexture('$selfillummask').fillTextureMapping(dst[6], 0);
-        this.paramGetTexture('$blendmodulatetexture').fillTextureMapping(dst[7], 0);
+            this.paramGetTexture('$basetexture2').fillTextureMapping(dst[1], this.paramGetInt('$frame2'));
+
+        this.paramGetTexture('$bumpmap').fillTextureMapping(dst[2], this.paramGetInt('$bumpframe'));
+        // dst[3] = $bumpmap2
+        // dst[4] = $bumpmask
+        this.paramGetTexture('$detail').fillTextureMapping(dst[5], this.paramGetInt('$detailframe'));
+        this.paramGetTexture('$envmapmask').fillTextureMapping(dst[6], this.paramGetInt('$envmapmaskframe'));
+        this.paramGetTexture('$phongexponenttexture').fillTextureMapping(dst[7], 0);
+        this.paramGetTexture('$selfillummask').fillTextureMapping(dst[8], 0);
+        this.paramGetTexture('$blendmodulatetexture').fillTextureMapping(dst[9], 0);
         if (this.wantsLightmap)
-            renderContext.lightmapManager.fillTextureMapping(dst[8], lightmapPageIndex);
-        this.paramGetTexture('$envmap').fillTextureMapping(dst[9], this.paramGetInt('$envmapframe'));
+            renderContext.lightmapManager.fillTextureMapping(dst[10], lightmapPageIndex);
+        this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
@@ -2395,11 +2405,11 @@ layout(binding = 4) uniform sampler2D u_TextureFlowmap;
 layout(binding = 5) uniform sampler2D u_TextureFlowNoise;
 
 // Envmap ("Cheap" Water)
-layout(binding = 8) uniform sampler2DArray u_TextureLightmap;
-layout(binding = 9) uniform samplerCube u_TextureEnvmap;
+layout(binding = 10) uniform sampler2DArray u_TextureLightmap;
+layout(binding = 11) uniform samplerCube u_TextureEnvmap;
 
 // Depth
-layout(binding = 10) uniform sampler2D u_TextureFramebufferDepth;
+layout(binding = 12) uniform sampler2D u_TextureFramebufferDepth;
 
 #ifdef VERT
 void mainVS() {
@@ -2779,9 +2789,9 @@ class Material_Water extends BaseMaterial {
         this.paramGetTexture('$flowmap').fillTextureMapping(textureMappings[5], this.paramGetInt('$flowmapframe'));
         this.paramGetTexture('$flow_noise_texture').fillTextureMapping(textureMappings[6], 0);
 
-        renderContext.lightmapManager.fillTextureMapping(textureMappings[8], lightmapPageIndex);
-        this.paramGetTexture('$envmap').fillTextureMapping(textureMappings[9], this.paramGetInt('$envmapframe'));
-        this.paramGetTexture('$depthtexture').fillTextureMapping(textureMappings[10], 0);
+        renderContext.lightmapManager.fillTextureMapping(textureMappings[10], lightmapPageIndex);
+        this.paramGetTexture('$envmap').fillTextureMapping(textureMappings[11], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$depthtexture').fillTextureMapping(textureMappings[12], 0);
 
         let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
@@ -2891,7 +2901,7 @@ layout(binding = 1) uniform sampler2D u_TextureNormalmap;
 layout(binding = 2) uniform sampler2D u_TextureRefractTint;
 
 // Envmap
-layout(binding = 9) uniform samplerCube u_TextureEnvmap;
+layout(binding = 11) uniform samplerCube u_TextureEnvmap;
 
 #ifdef VERT
 void mainVS() {
@@ -2949,7 +2959,7 @@ void mainPS() {
     t_RefractTexCoordOffs += t_BumpmapNormal.xy;
     t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
 
-    vec2 t_TexSize = vec2(textureSize(u_TextureBase, 0));
+    vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
     t_RefractTexCoordOffs *= t_Aspect * u_RefractDepth;
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
@@ -2970,7 +2980,7 @@ void mainPS() {
     int g_BlurWidth = g_BlurAmount * 2 + 1;
     float g_BlurWeight = 1.0 / float(g_BlurWidth * g_BlurWidth);
 
-    vec2 t_FramebufferSize = vec2(textureSize(u_TextureBase, 0));
+    vec2 t_FramebufferSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_BlurSampleOffset = vec2(1.0) / t_FramebufferSize;
     for (int y = -g_BlurAmount; y <= g_BlurAmount; y++) {
         for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
@@ -3085,7 +3095,7 @@ class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$basetexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'));
         this.paramGetTexture('$normalmap').fillTextureMapping(dst[1], this.paramGetInt('$bumpframe'));
         this.paramGetTexture('$refracttinttexture').fillTextureMapping(dst[2], this.paramGetInt('$refracttinttextureframe'));
-        this.paramGetTexture('$envmap').fillTextureMapping(dst[9], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
@@ -3983,6 +3993,9 @@ export class SurfaceLightmap {
 
     public checkDirty(renderContext: SourceRenderContext): boolean {
         const worldLightingState = renderContext.worldLightingState;
+
+        if (!this.wantsLightmap)
+            return false;
 
         for (let i = 0; i < this.lightmapData.styles.length; i++) {
             const styleIdx = this.lightmapData.styles[i];

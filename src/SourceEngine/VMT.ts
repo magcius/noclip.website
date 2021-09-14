@@ -210,18 +210,18 @@ function stealPair(pairs: VKFPair[], name: string): VKFPair | null {
     return pair;
 }
 
-function findFallbackBlock(vmt: VMT, root: string, materialDefines: string[]): any | null {
+function findFallbackBlock(pairs: VKFPair[], root: string, materialDefines: string[]): VKFPair[] | null {
     for (let i = 0; i < materialDefines.length; i++) {
         const suffix = materialDefines[i];
-        let block: any;
+        let pair: VKFPair | null;
 
-        block = vmt[suffix];
-        if (block !== undefined)
-            return block;
+        pair = stealPair(pairs, suffix);
+        if (pair !== null && Array.isArray(pair[1]))
+            return pair[1] as VKFPair[];
 
-        block = vmt[`${root}_${suffix}`];
-        if (block !== undefined)
-            return block;
+        pair = stealPair(pairs, `${root}_${suffix}`);
+        if (pair !== null && Array.isArray(pair[1]))
+            return pair[1] as VKFPair[];
     }
 
     return null;
@@ -273,6 +273,10 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, defin
         vmt._Root = rootK;
         vmt._Filename = path;
 
+        const fallbackBlock = findFallbackBlock(rootObj, rootK, defines);
+        if (fallbackBlock !== null)
+            rootObj.unshift(...fallbackBlock);
+
         // First, handle proxies if they exist as special, since there can be multiple keys with the same name.
         const proxiesPairs = stealPair(rootObj, 'proxies');
         if (proxiesPairs !== null) {
@@ -308,10 +312,6 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, defin
         // than convert to a list.
         const recurse = true, supportsMultiple = false;
         convertPairsToObj(vmt, rootObj, recurse, supportsMultiple);
-
-        const fallbackBlock = findFallbackBlock(vmt, vmt._Root, defines);
-        if (fallbackBlock !== null)
-            Object.assign(vmt, fallbackBlock);
 
         vmt.replace = replace !== null ? replace[1] : null;
         vmt.insert = insert !== null ? insert[1] : null;

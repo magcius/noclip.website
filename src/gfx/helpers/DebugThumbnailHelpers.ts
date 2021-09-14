@@ -10,6 +10,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDe
 import { lerp, saturate, smoothstep } from '../../MathHelpers';
 import { GfxRenderHelper } from '../render/GfxRenderHelper';
 import { GfxRenderDynamicUniformBuffer } from '../render/GfxRenderDynamicUniformBuffer';
+import { gfxDeviceNeedsFlipY } from './GfxDeviceHelpers';
 
 interface MouseLocation {
     mouseX: number;
@@ -139,7 +140,7 @@ export class DebugThumbnailDrawer {
             const thumbnailDesc = builder.getRenderTargetDescription(renderTargetIDs[i]);
 
             const slotIndex = resolveTextureIDs.length - 1 - i;
-            const x2 = desc.width - (this.thumbnailWidth + this.padding) * slotIndex - this.padding;
+            const x2 = desc.width - (this.thumbnailWidth + this.padding) * slotIndex - this.padding - 50;
             const x1 = x2 - this.thumbnailWidth;
 
             const location = { x1, y1, x2, y2 };
@@ -147,7 +148,8 @@ export class DebugThumbnailDrawer {
             rectLerp(location, location, fullscreenRect, t);
 
             // y-flip will never die!!
-            rectFlipY(location, desc.height);
+            if (gfxDeviceNeedsFlipY(renderInstManager.gfxRenderCache.device))
+                rectFlipY(location, desc.height);
 
             const viewport = this.computeViewport(thumbnailDesc, location);
             const vw = viewport.x2 - viewport.x1, vh = viewport.y2 - viewport.y1;

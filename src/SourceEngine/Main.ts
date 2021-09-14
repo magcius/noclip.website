@@ -32,7 +32,6 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
-import { ParticleStaticResource } from "./Particles_Simple";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -1022,18 +1021,20 @@ export class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 11, samplerEntries: [
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },
+    { numUniformBuffers: 3, numSamplers: 13, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 0
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 1
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 2
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 3
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 4
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 5
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 6
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 7
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 8
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 9
+        { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, }, // 10
+        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },     // 11
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },      // 12
     ] },
 ];
 

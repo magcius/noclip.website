@@ -100,6 +100,10 @@ layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler S_${sampler
         return `SAMPLER_${samplerType}(P_${samplerName})`;
     });
 
+    rest = rest.replace(/\bPU_TEXTURE\((.*?)\)/g, (substr, samplerName) => {
+        return `TEXTURE(P_${samplerName})`;
+    });
+
     if (vendorInfo.separateSamplerTextures) {
         rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return `texture${samplerType} T_P_${samplerName}, sampler S_P_${samplerName}`;
