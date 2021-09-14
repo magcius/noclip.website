@@ -1009,7 +1009,8 @@ class Material_Generic_Program extends MaterialProgramBase {
 
     public static MaxDynamicWorldLights = 4;
 
-    public both = `
+    public finish(): void {
+        this.both = `
 precision mediump float;
 precision mediump sampler2DArray;
 
@@ -1328,7 +1329,14 @@ void mainVS() {
 #define COMBINE_MODE_MOD2X_SELECT_TWO_PATTERNS               (7)
 #define COMBINE_MODE_SSBUMP_BUMP                             (10)
 
-vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
+vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
+    bool use_detail = ${this.getDefineBool('USE_DETAIL')};
+    if (!use_detail)
+        return t_BaseTexture;
+
+    int t_CombineMode = ${this.getDefineString('DETAIL_COMBINE_MODE')};
+    float t_BlendFactor = u_DetailBlendFactor;
+
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
     } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE) {
@@ -1350,7 +1358,14 @@ vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_Com
     return t_BaseTexture + vec4(1.0, 0.0, 1.0, 0.0);
 }
 
-vec3 TextureCombinePostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
+vec3 CalcDetailPostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture) {
+    bool use_detail = ${this.getDefineBool('USE_DETAIL')};
+    if (!use_detail)
+        return t_DiffuseColor;
+
+    int t_CombineMode = ${this.getDefineString('DETAIL_COMBINE_MODE')};
+    float t_BlendFactor = u_DetailBlendFactor;
+
     if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM) {
         return t_DiffuseColor.rgb + t_DetailTexture.rgb * t_BlendFactor;
     } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
@@ -1451,27 +1466,31 @@ void mainPS() {
 
     vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
 
-#ifdef USE_BASETEXTURE2
-    // Blend in BaseTexture2 using blend factor.
-    float t_BlendFactor = v_PositionWorld.w;
+    bool use_basetexture2 = ${this.getDefineBool(`USE_BASETEXTURE2`)};
+    if (use_basetexture2) {
+        // Blend in BaseTexture2 using blend factor.
+        float t_BlendFactor = v_PositionWorld.w;
 
-#ifdef USE_BLEND_MODULATE
-    vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord2.xy);
-    float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
-    float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
-    t_BlendFactor = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactor);
-#endif
+        bool use_blend_modulate = ${this.getDefineBool(`USE_BLEND_MODULATE`)};
+        if (use_blend_modulate) {
+            vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord2.xy);
+            float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
+            float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
+            t_BlendFactor = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactor);
+        }
 
-    vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
-    t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactor);
-#else
-    t_Albedo = t_BaseTexture;
-#endif
+        vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
+        t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactor);
+    } else {
+        t_Albedo = t_BaseTexture;
+    }
+
+    vec4 t_DetailTexture = vec4(0.0);
 
 #ifdef USE_DETAIL
     vec2 t_DetailTexCoord = CalcScaleBias(v_TexCoord0.xy, u_DetailScaleBias);
-    vec4 t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
-    t_Albedo = TextureCombine(t_Albedo, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
+    t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
+    t_Albedo = CalcDetail(t_Albedo, t_DetailTexture);
 #endif
 
     vec4 t_FinalColor;
@@ -1479,14 +1498,16 @@ void mainPS() {
     vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
     vec4 t_BumpmapSample = texture(SAMPLER_2D(u_TextureBumpmap), v_TexCoord0.zw);
+    vec3 t_BumpmapNormal;
 
-#ifdef USE_SSBUMP
-    // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
-    vec3 t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
-#else
-    // In non-SSBUMP, this is a traditional normal map with signed offsets.
-    vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
-#endif
+    bool use_ssbump = ${this.getDefineBool(`USE_SSBUMP`)};
+    if (use_ssbump) {
+        // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
+        t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
+    } else {
+        // In non-SSBUMP, this is a traditional normal map with signed offsets.
+        t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
+    }
 
     // Transform from tangent space into world-space.
     t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
@@ -1496,58 +1517,61 @@ void mainPS() {
 
     vec3 t_DiffuseLighting = vec3(0.0);
 
-#ifdef USE_LIGHTMAP
-    vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
+    bool use_lightmap = ${this.getDefineBool(`USE_LIGHTMAP`)};
+    bool use_diffuse_bumpmap = ${this.getDefineBool(`USE_DIFFUSE_BUMPMAP`)};
 
-    vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0))).rgb;
-#ifdef USE_DIFFUSE_BUMPMAP
-    vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 1.0))).rgb;
-    vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 2.0))).rgb;
-    vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 3.0))).rgb;
+    if (use_lightmap) {
+        vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
-    vec3 t_Influence;
+        vec3 t_LightmapColor0 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0))).rgb;
 
-#ifdef USE_SSBUMP
-    // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
-    t_Influence = t_BumpmapSample.rgb;
+#ifdef USE_BUMPMAP
+        if (use_diffuse_bumpmap) {
+            vec3 t_LightmapColor1 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 1.0))).rgb;
+            vec3 t_LightmapColor2 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 2.0))).rgb;
+            vec3 t_LightmapColor3 = DebugLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 3.0))).rgb;
 
-#ifdef USE_DETAIL
-    if (DETAIL_COMBINE_MODE == COMBINE_MODE_SSBUMP_BUMP) {
-        t_Influence.xyz *= mix(vec3(1.0), 2.0 * t_DetailTexture.rgb, t_BaseTexture.a);
-        t_Albedo.a = 1.0; // Reset alpha
+            vec3 t_Influence;
+
+            if (use_ssbump) {
+                // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
+                t_Influence = t_BumpmapSample.rgb;
+
+                if (DETAIL_COMBINE_MODE == COMBINE_MODE_SSBUMP_BUMP) {
+                    t_Influence.xyz *= mix(vec3(1.0), 2.0 * t_DetailTexture.rgb, t_BaseTexture.a);
+                    t_Albedo.a = 1.0; // Reset alpha
+                }
+            } else {
+                t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
+                t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
+                t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
+
+                if (DETAIL_COMBINE_MODE == COMBINE_MODE_SSBUMP_BUMP) {
+                    t_Influence.xyz *= t_DetailTexture.rgb * 2.0;
+                }
+
+                // According to https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_EfficientSelfShadowedRadiosityNormalMapping.pdf
+                // even without SSBUMP, the engine squares and re-normalizes the results. Not sure why, and why it doesn't match the original
+                // Radiosity Normal Mapping text.
+                t_Influence *= t_Influence;
+                t_DiffuseLightingScale /= dot(t_Influence, vec3(1.0));
+            }
+
+            t_DiffuseLighting = vec3(0.0);
+            t_DiffuseLighting += t_LightmapColor1 * t_Influence.x;
+            t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
+            t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
+        } else
+#endif
+        {
+            t_DiffuseLighting.rgb = t_LightmapColor0;
+        }
+
+        t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * t_DiffuseLightingScale;
+    } else {
+        // When not using a lightmap, diffuse lighting comes from vertex shader.
+        t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
     }
-#endif
-#else
-    t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
-    t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
-    t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
-
-#ifdef USE_DETAIL
-    if (DETAIL_COMBINE_MODE == COMBINE_MODE_SSBUMP_BUMP) {
-        t_Influence.xyz *= t_DetailTexture.rgb * 2.0;
-    }
-#endif
-
-    // According to https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_EfficientSelfShadowedRadiosityNormalMapping.pdf
-    // even without SSBUMP, the engine squares and re-normalizes the results. Not sure why, and why it doesn't match the original
-    // Radiosity Normal Mapping text.
-    t_Influence *= t_Influence;
-    t_DiffuseLightingScale /= dot(t_Influence, vec3(1.0));
-#endif
-
-    t_DiffuseLighting = vec3(0.0);
-    t_DiffuseLighting += t_LightmapColor1 * t_Influence.x;
-    t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
-    t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
-#else
-    t_DiffuseLighting.rgb = t_LightmapColor0;
-#endif
-
-    t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * t_DiffuseLightingScale;
-#else
-    // Diffuse lighting comes from vertex shader.
-    t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
-#endif
 
     t_Albedo *= v_Color;
 
@@ -1556,16 +1580,16 @@ void mainPS() {
         discard;
 #endif
 
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
-    bool t_HalfLambert = false;
-#ifdef USE_HALF_LAMBERT
-    t_HalfLambert = true;
-#endif
+    bool use_half_lambert = ${this.getDefineBool(`USE_HALF_LAMBERT`)};
+    bool use_phong = ${this.getDefineBool(`USE_PHONG`)};
 
-#ifdef USE_PHONG
-    // Skin shader forces half-lambert on.
-    t_HalfLambert = true;
-#endif
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+    bool t_HalfLambert = use_half_lambert;
+
+    if (use_phong) {
+        // Skin shader forces half-lambert on.
+        t_HalfLambert = true;
+    }
 
     // TODO(jstpierre): Add in ambient cube? Or is that in the vertex color already...
     DiffuseLightInput t_DiffuseLightInput;
@@ -1577,23 +1601,20 @@ void mainPS() {
 #endif
 
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
-
-#ifdef USE_DETAIL
-    t_FinalDiffuse = TextureCombinePostLighting(t_FinalDiffuse, t_DetailTexture.rgb, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
-#endif
+    t_FinalDiffuse = CalcDetailPostLighting(t_FinalDiffuse, t_DetailTexture.rgb);
 
 #ifdef USE_SELFILLUM
     vec3 t_SelfIllumMask;
 
-#ifdef USE_SELFILLUM_ENVMAPMASK_ALPHA
-    t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
-#else
-#ifdef USE_SELFILLUM_MASK
-    t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllum), v_TexCoord1.xy).rgb;
-#else
-    t_SelfIllumMask = t_BaseTexture.aaa;
-#endif
-#endif
+    bool use_selfillum_envmapmask_alpha = ${this.getDefineBool(`USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
+    bool use_selfillum_mask = ${this.getDefineBool(`USE_SELFILLUM_MASK`)};
+    if (use_selfillum_envmapmask_alpha) {
+        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
+    } else if (use_selfillum_mask) {
+        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllum), v_TexCoord1.xy).rgb;
+    } else {
+        t_SelfIllumMask = t_BaseTexture.aaa;
+    }
 
     t_FinalDiffuse.rgb = mix(t_FinalDiffuse.rgb, u_SelfIllumTint.rgb * t_Albedo.rgb, t_SelfIllumMask.rgb);
 #endif
@@ -1613,19 +1634,22 @@ void mainPS() {
     t_Fresnel = CalcFresnelTerm5(t_FresnelDot);
 #endif
 
+    bool use_base_alpha_envmap_mask = ${this.getDefineBool(`USE_BASE_ALPHA_ENVMAP_MASK`)};
+
 #ifdef USE_ENVMAP
     vec3 t_EnvmapFactor = u_EnvmapTint.rgb;
 
-#ifdef USE_ENVMAP_MASK
-    t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
-#endif
+    bool use_envmap_mask = ${this.getDefineBool(`USE_ENVMAP_MASK`)};
+    if (use_envmap_mask)
+        t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
 
-#ifdef USE_NORMALMAP_ALPHA_ENVMAP_MASK
-    t_EnvmapFactor *= t_BumpmapSample.a;
+#ifdef USE_BUMPMAP
+    bool use_normalmap_alpha_envmap_mask = ${this.getDefineBool(`USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
+    if (use_normalmap_alpha_envmap_mask)
+        t_EnvmapFactor *= t_BumpmapSample.a;
 #endif
-#ifdef USE_BASE_ALPHA_ENVMAP_MASK
-    t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
-#endif
+    if (use_base_alpha_envmap_mask)
+        t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
@@ -1641,56 +1665,58 @@ void mainPS() {
     t_SpecularLighting.rgb += t_EnvmapColor.rgb;
 #endif
 
-#ifdef USE_PHONG
 #ifdef USE_DYNAMIC_PIXEL_LIGHTING
-    SpecularLightInput t_SpecularLightInput;
-    t_SpecularLightInput.PositionWorld = v_PositionWorld.xyz;
-    t_SpecularLightInput.NormalWorld = t_NormalWorld;
-    t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
-    t_SpecularLightInput.Fresnel = t_Fresnel;
+    if (use_phong) {
+        SpecularLightInput t_SpecularLightInput;
+        t_SpecularLightInput.PositionWorld = v_PositionWorld.xyz;
+        t_SpecularLightInput.NormalWorld = t_NormalWorld;
+        t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
+        t_SpecularLightInput.Fresnel = t_Fresnel;
 
-    vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
-#ifdef USE_PHONG_EXPONENT_TEXTURE
-    t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
-#else
-    t_SpecularLightInput.SpecularExponent = u_SpecExponentFactor;
-#endif
-    t_SpecularLightInput.RimExponent = 4.0;
+        bool use_phong_exponent_texture = ${this.getDefineBool(`USE_PHONG_EXPONENT_TEXTURE`)};
+        if (use_phong_exponent_texture) {
+            vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
+            t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
+        } else {
+            t_SpecularLightInput.SpecularExponent = u_SpecExponentFactor;
+        }
 
-    // Specular mask is either in base map or normal map alpha.
-    float t_SpecularMask;
-#ifdef USE_BASE_ALPHA_PHONG_MASK
-    t_SpecularMask = t_BaseTexture.a;
-#else
+        t_SpecularLightInput.RimExponent = 4.0;
+
+        // Specular mask is either in base map or normal map alpha.
+        float t_SpecularMask;
+        bool use_base_alpha_phong_mask = ${this.getDefineBool(`USE_BASE_ALPHA_PHONG_MASK`)};
+        if (use_base_alpha_phong_mask) {
+            t_SpecularMask = t_BaseTexture.a;
+        } else {
 #ifdef USE_BUMPMAP
-    t_SpecularMask = t_BumpmapSample.a;
+            t_SpecularMask = t_BumpmapSample.a;
 #else
-    t_SpecularMask = 1.0;
+            t_SpecularMask = 1.0;
 #endif
-#endif
+        }
 
-#ifdef USE_PHONG_MASK_INVERT
-    t_SpecularMask = 1.0 - t_SpecularMask;
-#endif
+        bool use_phong_mask_invert = ${this.getDefineBool(`USE_PHONG_MASK_INVERT`)};
+        if (use_phong_mask_invert)
+            t_SpecularMask = 1.0 - t_SpecularMask;
 
-    SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
-
-    t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight * t_SpecularMask * u_FresnelRangeSpecBoost.w;
-#endif
-#endif
+        SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
+        t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight * t_SpecularMask * u_FresnelRangeSpecBoost.w;
+    }
+#endif // USE_DYNAMIC_PIXEL_LIGHTING
 
     t_FinalColor.rgb += t_SpecularLighting.rgb;
 
     t_FinalColor.a = t_Albedo.a;
-#ifndef USE_BASE_ALPHA_ENVMAP_MASK
-    t_FinalColor.a *= t_BaseTexture.a;
-#endif
+    if (!use_base_alpha_envmap_mask)
+        t_FinalColor.a *= t_BaseTexture.a;
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
 }
 #endif
-`;
+        `;
+    }
 }
 
 const enum GenericShaderType {
@@ -1821,6 +1847,7 @@ class Material_Generic extends BaseMaterial {
 
     private recacheProgram(cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
+            this.program.finish();
             this.gfxProgram = cache.createProgram(this.program);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
         }
@@ -1875,7 +1902,9 @@ class Material_Generic extends BaseMaterial {
             this.wantsDetail = true;
             this.program.setDefineBool('USE_DETAIL', true);
             const detailBlendMode = this.paramGetNumber('$detailblendmode');
-            this.program.defines.set('DETAIL_COMBINE_MODE', '' + detailBlendMode);
+            this.program.setDefineString('DETAIL_COMBINE_MODE', '' + detailBlendMode);
+        } else {
+            this.program.setDefineString('DETAIL_COMBINE_MODE', '-1');
         }
 
         if (this.paramGetVTF('$bumpmap') !== null) {
