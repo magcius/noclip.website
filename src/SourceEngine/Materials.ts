@@ -2702,8 +2702,6 @@ void mainPS() {
 
     vec4 t_FinalColor;
 
-    float t_RefractAmount = t_Fresnel;
-
 #ifdef USE_FLOWMAP_BASETEXTURE
     // Parallax scum layer
     float t_ParallaxStrength = t_FlowNormalSample.a * u_FlowColorDisplacementStrength;
@@ -2722,12 +2720,11 @@ void mainPS() {
     //   0.0 - 0.5 = translucency, and 0.5 - 1.0 = above water
     t_RefractColor.rgb = mix(t_RefractColor.rgb, t_FlowColor.rgb, saturate(invlerp(0.0, 0.5, t_FlowColor.a)));
 
-    // Now compute above water
     float t_AboveWater = 1.0 - smoothstep(0.5, 0.7, t_FlowColor.a);
-    t_RefractAmount = saturate(t_Fresnel * t_AboveWater);
+    t_Fresnel = saturate(t_Fresnel * t_AboveWater);
 #endif
 
-    t_FinalColor.rgb = mix(t_RefractColor.rgb, t_ReflectColor.rgb, t_RefractAmount);
+    t_FinalColor.rgb = t_RefractColor.rgb + (t_ReflectColor.rgb * t_Fresnel);
 
 #ifdef USE_FLOWMAP
     t_FinalColor.a = u_WaterBlendFactor;
