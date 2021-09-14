@@ -155,7 +155,8 @@ float CalcFresnelTerm2Ranges(float t_DotProduct, in vec3 t_Ranges) {
 }
 
 vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
-    return t_NormalMapSample * 2.0 - 1.0;
+    t_NormalMapSample.rgb = t_NormalMapSample.rgb * 2.0 - 1.0;
+    return t_NormalMapSample;
 }
 
 // For vertex colors and other places without native sRGB data.
@@ -1040,6 +1041,9 @@ layout(std140) uniform ub_ObjectParams {
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
+#ifdef USE_BUMPMAP2
+    Mat4x2 u_Bumpmap2Transform;
+#endif
 #ifdef USE_DETAIL
     vec4 u_DetailScaleBias;
 #endif
@@ -1069,11 +1073,11 @@ layout(std140) uniform ub_ObjectParams {
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
-// Base, Bumpmap
+// Base, Blend Modulate
 varying vec4 v_TexCoord0;
 // Lightmap (0), Envmap Mask
 varying vec4 v_TexCoord1;
-// Blend Modulate
+// Bumpmap, Bumpmap 2
 varying vec4 v_TexCoord2;
 
 // w contains BaseTexture2 blend factor.
@@ -1302,8 +1306,8 @@ void mainVS() {
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
-#ifdef USE_BUMPMAP
-    v_TexCoord0.zw = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+#ifdef USE_BLEND_MODULATE
+    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_BlendModulateScaleBias);
 #endif
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
@@ -1311,8 +1315,11 @@ void mainVS() {
 #ifdef USE_ENVMAP_MASK
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
 #endif
-#ifdef USE_BLEND_MODULATE
-    v_TexCoord2.xy = CalcScaleBias(a_TexCoord.xy, u_BlendModulateScaleBias);
+#ifdef USE_BUMPMAP
+    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+#endif
+#ifdef USE_BUMPMAP2
+    v_TexCoord2.zw = Mul(u_Bumpmap2Transform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 }
 #endif
@@ -1461,26 +1468,34 @@ vec4 DebugLightmapTexture(vec4 t_TextureSample) {
     return t_TextureSample;
 }
 
+vec4 UnpackNormalMap(vec4 t_Sample) {
+    bool use_ssbump = ${this.getDefineBool(`USE_SSBUMP`)};
+    if (!use_ssbump)
+        t_Sample = UnpackUnsignedNormalMap(t_Sample);
+    return t_Sample;
+}
+
 void mainPS() {
     vec4 t_Albedo, t_BlendedAlpha;
 
     vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
 
     bool use_basetexture2 = ${this.getDefineBool(`USE_BASETEXTURE2`)};
+
+    float t_BlendFactorWorld = v_PositionWorld.w;
+
+    bool use_blend_modulate = ${this.getDefineBool(`USE_BLEND_MODULATE`)};
+    if (use_blend_modulate) {
+        vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord0.zw);
+        float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
+        float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
+        t_BlendFactorWorld = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactorWorld);
+    }
+
     if (use_basetexture2) {
         // Blend in BaseTexture2 using blend factor.
-        float t_BlendFactor = v_PositionWorld.w;
-
-        bool use_blend_modulate = ${this.getDefineBool(`USE_BLEND_MODULATE`)};
-        if (use_blend_modulate) {
-            vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord2.xy);
-            float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
-            float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
-            t_BlendFactor = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactor);
-        }
-
         vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
-        t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactor);
+        t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactorWorld);
     } else {
         t_Albedo = t_BaseTexture;
     }
@@ -1496,8 +1511,32 @@ void mainPS() {
     vec4 t_FinalColor;
 
     vec3 t_NormalWorld;
+
+    vec3 t_EnvmapFactor = vec3(1.0);
 #ifdef USE_BUMPMAP
-    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_TextureBumpmap), v_TexCoord0.zw);
+    vec4 t_BumpmapSample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap), v_TexCoord2.xy));
+
+    bool use_bumpmap2 = ${this.getDefineBool(`USE_BUMPMAP2`)};
+    if (use_bumpmap2) {
+        vec4 t_Bumpmap2Sample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap2), v_TexCoord2.zw));
+
+        bool use_bumpmask = ${this.getDefineBool(`USE_BUMPMASK`)};
+        if (use_bumpmask) {
+            vec4 t_BumpMaskSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureBumpMask), v_TexCoord0.xy));
+            t_BumpmapSample.rgb = normalize(t_BumpmapSample.rgb + t_Bumpmap2Sample.rgb);
+            t_BumpmapSample.rgb = mix(t_BumpMaskSample.rgb, t_BumpmapSample.rgb, t_BumpMaskSample.a);
+            // Envmap factor from bump mask is multiplied in regardless of whether we have use_normalmap_alpha_envmap_mask set.
+            t_EnvmapFactor *= t_BumpMaskSample.a;
+        } else {
+            // TODO(jstpierre): $addbumpmaps
+            t_BumpmapSample.rgb = mix(t_BumpmapSample.rgb, t_Bumpmap2Sample.rgb, t_BlendFactorWorld);
+        }
+    }
+
+    bool use_normalmap_alpha_envmap_mask = ${this.getDefineBool(`USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
+    if (use_normalmap_alpha_envmap_mask)
+        t_EnvmapFactor *= t_BumpmapSample.a;
+
     vec3 t_BumpmapNormal;
 
     bool use_ssbump = ${this.getDefineBool(`USE_SSBUMP`)};
@@ -1506,7 +1545,7 @@ void mainPS() {
         t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
     } else {
         // In non-SSBUMP, this is a traditional normal map with signed offsets.
-        t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
+        t_BumpmapNormal = t_BumpmapSample.rgb;
     }
 
     // Transform from tangent space into world-space.
@@ -1637,17 +1676,12 @@ void mainPS() {
     bool use_base_alpha_envmap_mask = ${this.getDefineBool(`USE_BASE_ALPHA_ENVMAP_MASK`)};
 
 #ifdef USE_ENVMAP
-    vec3 t_EnvmapFactor = u_EnvmapTint.rgb;
+    t_EnvmapFactor *= u_EnvmapTint.rgb;
 
     bool use_envmap_mask = ${this.getDefineBool(`USE_ENVMAP_MASK`)};
     if (use_envmap_mask)
         t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
 
-#ifdef USE_BUMPMAP
-    bool use_normalmap_alpha_envmap_mask = ${this.getDefineBool(`USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
-    if (use_normalmap_alpha_envmap_mask)
-        t_EnvmapFactor *= t_BumpmapSample.a;
-#endif
     if (use_base_alpha_envmap_mask)
         t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
 
@@ -1726,6 +1760,7 @@ const enum GenericShaderType {
 class Material_Generic extends BaseMaterial {
     private wantsDetail = false;
     private wantsBumpmap = false;
+    private wantsBumpmap2 = false;
     private wantsEnvmapMask = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
@@ -1807,7 +1842,6 @@ class Material_Generic extends BaseMaterial {
         p['$bumpmap']                      = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
-        // TODO(jstpierre): Support $bumpmap2
         p['$bumpmap2']                     = new ParameterTexture();
         p['$bumpframe2']                   = new ParameterNumber(0);
         p['$bumptransform2']               = new ParameterMatrix();
@@ -1913,9 +1947,15 @@ class Material_Generic extends BaseMaterial {
             const wantsDiffuseBumpmap = !this.paramGetBoolean('$nodiffusebumplighting');
             this.program.setDefineBool('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap);
             this.wantsBumpmappedLightmap = wantsDiffuseBumpmap;
-        }
 
-        // Lightmap = 3
+            if (this.paramGetVTF('$bumpmap2') !== null) {
+                this.wantsBumpmap2 = true;
+                this.program.setDefineBool(`USE_BUMPMAP2`, true);
+
+                if (this.paramGetVTF('$bumpmask'))
+                    this.program.setDefineBool(`USE_BUMPMASK`, true);
+            }
+        }
 
         if (this.paramGetVTF('$envmapmask') !== null) {
             this.wantsEnvmapMask = true;
@@ -2047,8 +2087,8 @@ class Material_Generic extends BaseMaterial {
             this.paramGetTexture('$basetexture2').fillTextureMapping(dst[1], this.paramGetInt('$frame2'));
 
         this.paramGetTexture('$bumpmap').fillTextureMapping(dst[2], this.paramGetInt('$bumpframe'));
-        // dst[3] = $bumpmap2
-        // dst[4] = $bumpmask
+        this.paramGetTexture('$bumpmap2').fillTextureMapping(dst[3], this.paramGetInt('$bumpframe2'));
+        this.paramGetTexture('$bumpmask').fillTextureMapping(dst[4], 0);
         this.paramGetTexture('$detail').fillTextureMapping(dst[5], this.paramGetInt('$detailframe'));
         this.paramGetTexture('$envmapmask').fillTextureMapping(dst[6], this.paramGetInt('$envmapmaskframe'));
         this.paramGetTexture('$phongexponenttexture').fillTextureMapping(dst[7], 0);
@@ -2083,6 +2123,9 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
+
+        if (this.wantsBumpmap2)
+            offs += this.paramFillTextureMatrix(d, offs, '$bumptransform2');
 
         if (this.wantsDetail) {
             const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
