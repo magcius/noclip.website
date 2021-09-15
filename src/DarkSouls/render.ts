@@ -1104,7 +1104,8 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstScatter.HGg = scatterBank.getF32(scatterID, `lsHGg`);
     dstScatter.betaRay = scatterBank.getF32(scatterID, `lsBetaRay`);
     dstScatter.betaMie = scatterBank.getF32(scatterID, `lsBetaMie`);
-    dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
+    // dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
+    dstScatter.blendCoeff = 0.2;
 }
 
 const bboxScratch = new AABB();
