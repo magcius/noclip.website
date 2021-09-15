@@ -85,6 +85,10 @@ export class SourceFileSystem {
         }
 
         path = path.replace(/\.\//g, '');
+
+        while (path.includes('//'))
+            path = path.replace(/\/\//g, '/');
+
         return path;
     }
 

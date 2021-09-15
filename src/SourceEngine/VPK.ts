@@ -19,7 +19,7 @@ interface VPKFileEntry {
 }
 
 interface VPKDirectory {
-    entries: VPKFileEntry[];
+    entries: Map<string, VPKFileEntry>;
     maxPackFile: number;
 }
 
@@ -47,7 +47,7 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
 
     let maxPackFile = 0;
 
-    const entries: VPKFileEntry[] = [];
+    const entries = new Map<string, VPKFileEntry>();
     while (true) {
         const ext = readString(buffer, idx);
         idx += ext.length + 1;
@@ -99,7 +99,7 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
                 const metadataChunk = metadataSize !== 0 ? buffer.subarray(idx, metadataSize) : null;
                 idx += metadataSize;
 
-                entries.push({ crc, path, chunks, metadataChunk });
+                entries.set(path, { crc, path, chunks, metadataChunk });
             }
         }
     }
@@ -119,7 +119,7 @@ export class VPKMount {
     }
 
     public findEntry(path: string): VPKFileEntry | null {
-        return nullify(this.dir.entries.find((entry) => entry.path === path));
+        return nullify(this.dir.entries.get(path));
     }
 
     private async fetchFileDataInternal(entry: VPKFileEntry, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {

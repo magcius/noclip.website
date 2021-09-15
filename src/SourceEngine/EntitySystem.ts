@@ -597,6 +597,7 @@ export class sky_camera extends BaseEntity {
     public area: number = -1;
     public scale: number = 1;
     public modelMatrix = mat4.create();
+    private fogEnabled: boolean;
     private fogStart: number;
     private fogEnd: number;
     private fogMaxDensity: number;
@@ -614,6 +615,7 @@ export class sky_camera extends BaseEntity {
             this.scale * -this.localOrigin[1],
             this.scale * -this.localOrigin[2]);
 
+        this.fogEnabled = !!Number(this.entity.fogenabled);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
@@ -625,7 +627,7 @@ export class sky_camera extends BaseEntity {
     public fillFogParams(dst: FogParams): void {
         dst.start = this.fogStart;
         dst.end = this.fogEnd;
-        dst.maxdensity = this.fogMaxDensity;
+        dst.maxdensity = this.fogEnabled ? this.fogMaxDensity : 0;
         // TODO(jstpierre): Color blending
         colorCopy(dst.color, this.fogColor1);
     }
@@ -1766,6 +1768,7 @@ class trigger_look extends trigger_once {
 
 class env_fog_controller extends BaseEntity {
     public static classname = `env_fog_controller`;
+    private fogEnabled: boolean;
     private fogStart: number;
     private fogEnd: number;
     private fogMaxDensity: number;
@@ -1785,6 +1788,7 @@ class env_fog_controller extends BaseEntity {
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
         this.isMaster = !!(spawnflags & SpawnFlags.IsMaster);
 
+        this.fogEnabled = !!Number(this.entity.fogenabled);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
@@ -1818,7 +1822,7 @@ class env_fog_controller extends BaseEntity {
     public fillFogParams(dst: FogParams): void {
         dst.start = this.fogStart;
         dst.end = this.fogEnd;
-        dst.maxdensity = this.fogMaxDensity;
+        dst.maxdensity = this.fogEnabled ? this.fogMaxDensity : 0;
         // TODO(jstpierre): Color blending
         colorCopy(dst.color, this.fogColor1);
     }

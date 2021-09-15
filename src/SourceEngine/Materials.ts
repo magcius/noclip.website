@@ -3,7 +3,7 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
-import { nArray, assert, assertExists } from "../util";
+import { nArray, assert, assertExists, nullify } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
@@ -254,7 +254,7 @@ export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Rea
 
 interface Parameter {
     parse(S: string): void;
-    index(i: number): Parameter;
+    index(i: number): Parameter | null;
     set(param: Parameter): void;
 }
 
@@ -442,8 +442,8 @@ class ParameterVector {
             this.internal[i] = new ParameterNumber(i > numbers.length - 1 ? numbers[0] : numbers[i]);
     }
 
-    public index(i: number): ParameterNumber {
-        return this.internal[i];
+    public index(i: number): ParameterNumber | null {
+        return nullify(this.internal[i]);
     }
 
     public set(param: Parameter): void {
@@ -774,6 +774,7 @@ export abstract class BaseMaterial {
                 blendDstFactor: GfxBlendFactor.One,
             });
             megaStateFlags.depthWrite = false;
+            this.isAdditive = true;
             this.isTranslucent = true;
         } else if (alphaBlendMode === AlphaBlendMode.Blend) {
             setAttachmentStateSimple(megaStateFlags, {
@@ -1060,6 +1061,9 @@ layout(std140) uniform ub_ObjectParams {
 #ifdef USE_SELFILLUM
     vec4 u_SelfIllumTint;
 #endif
+#ifdef USE_SELFILLUM_FRESNEL
+    vec4 u_SelfIllumFresnel;
+#endif
 #ifdef USE_PHONG
     vec4 u_FresnelRangeSpecBoost;
 #endif
@@ -1104,7 +1108,7 @@ layout(binding = 4) uniform sampler2D u_TextureBumpMask;
 layout(binding = 5) uniform sampler2D u_TextureDetail;
 layout(binding = 6) uniform sampler2D u_TextureEnvmapMask;
 layout(binding = 7) uniform sampler2D u_TextureSpecularExponent;
-layout(binding = 8) uniform sampler2D u_TextureSelfIllum;
+layout(binding = 8) uniform sampler2D u_TextureSelfIllumMask;
 layout(binding = 9) uniform sampler2D u_TextureBlendModulate;
 layout(binding = 10) uniform sampler2DArray u_TextureLightmap;
 layout(binding = 11) uniform samplerCube u_TextureEnvmap;
@@ -1642,6 +1646,11 @@ void mainPS() {
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
     t_FinalDiffuse = CalcDetailPostLighting(t_FinalDiffuse, t_DetailTexture.rgb);
 
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
+
+    float t_FresnelDot = dot(t_NormalWorld, t_WorldDirectionToEye);
+
 #ifdef USE_SELFILLUM
     vec3 t_SelfIllumMask;
 
@@ -1650,23 +1659,30 @@ void mainPS() {
     if (use_selfillum_envmapmask_alpha) {
         t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
     } else if (use_selfillum_mask) {
-        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllum), v_TexCoord1.xy).rgb;
+        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllumMask), v_TexCoord1.xy).rgb;
     } else {
         t_SelfIllumMask = t_BaseTexture.aaa;
     }
 
-    t_FinalDiffuse.rgb = mix(t_FinalDiffuse.rgb, u_SelfIllumTint.rgb * t_Albedo.rgb, t_SelfIllumMask.rgb);
+    vec3 t_SelfIllum = u_SelfIllumTint.rgb * t_Albedo.rgb;
+
+#ifdef USE_SELFILLUM_FRESNEL
+    float t_SelfIllumFresnelMin = u_SelfIllumFresnel.r;
+    float t_SelfIllumFresnelMax = u_SelfIllumFresnel.g;
+    float t_SelfIllumFresnelExp = u_SelfIllumFresnel.b;
+    
+    float t_SelfIllumFresnel = saturate(mix(t_SelfIllumFresnelMin, t_SelfIllumFresnelMax, pow(saturate(t_FresnelDot), t_SelfIllumFresnelExp)));
+    t_SelfIllumMask.rgb *= t_SelfIllumFresnel;
+#endif
+
+    t_FinalDiffuse.rgb = mix(t_FinalDiffuse.rgb, t_SelfIllum.rgb, t_SelfIllumMask.rgb);
 #endif
 
     t_FinalColor.rgb += t_FinalDiffuse;
 
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-
     vec3 t_SpecularLighting = vec3(0.0);
 
     float t_Fresnel;
-    float t_FresnelDot = dot(t_NormalWorld, t_WorldDirectionToEye);
 #ifdef USE_PHONG
     t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecBoost.xyz);
 #else
@@ -1759,12 +1775,13 @@ const enum GenericShaderType {
 
 class Material_Generic extends BaseMaterial {
     private wantsDetail = false;
+    private wantsBaseTexture2 = false;
     private wantsBumpmap = false;
     private wantsBumpmap2 = false;
     private wantsEnvmapMask = false;
-    private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
     private wantsSelfIllum = false;
+    private wantsSelfIllumFresnel = false;
     private wantsBlendModulate = false;
     private wantsPhong = false;
     private wantsPhongExponentTexture = false;
@@ -1852,6 +1869,8 @@ class Material_Generic extends BaseMaterial {
         p['$halflambert']                  = new ParameterBoolean(false, false);
         p['$selfillumtint']                = new ParameterColor(1, 1, 1);
         p['$selfillummask']                = new ParameterTexture(false, false);
+        p['$selfillumfresnel']             = new ParameterBoolean(false, false);
+        p['$selfillumfresnelminmaxexp']    = new ParameterVector(3);
 
         // World Vertex Transition
         p['$basetexture2']                 = new ParameterTexture(true);
@@ -1973,6 +1992,11 @@ class Material_Generic extends BaseMaterial {
 
             if (this.paramGetVTF('$selfillummask')) {
                 this.program.setDefineBool('USE_SELFILLUM_MASK', true);
+            }
+
+            if (this.paramGetBoolean('$selfillumfresnel')) {
+                this.wantsSelfIllumFresnel = true;
+                this.program.setDefineBool('USE_SELFILLUM_FRESNEL', true);
             }
         }
 
@@ -2150,6 +2174,12 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsSelfIllum)
             offs += this.paramFillGammaColor(d, offs, '$selfillumtint');
+
+        if (this.wantsSelfIllumFresnel) {
+            const minMaxExp = this.paramGetVector('$selfillumfresnelminmaxexp');
+            const min = minMaxExp.get(0), max = minMaxExp.get(1), exp = minMaxExp.get(2);
+            offs += fillVec4(d, offs, min, max, exp);
+        }
 
         if (this.wantsPhong) {
             const fresnelRanges = this.paramGetVector('$phongfresnelranges');
@@ -4169,7 +4199,12 @@ export function paramGetNum(map: ParameterMap, ref: ParameterReference): number 
 }
 
 export function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): void {
-    paramLookup<ParameterNumber>(map, ref).value = v;
+    const param = paramLookupOptional<ParameterNumber>(map, ref);
+    if (param === null) {
+        // Perhaps put in a warning, but this seems to happen in live content (TF2's hwn_skeleton_blue.vmt)
+        return;
+    }
+    param.value = v;
 }
 
 interface MaterialProxyFactory {
@@ -4611,16 +4646,16 @@ class MaterialProxy_TextureTransform {
         if (center instanceof ParameterNumber) {
             cx = cy = center.value;
         } else if (center instanceof ParameterVector) {
-            cx = center.index(0).value;
-            cy = center.index(1).value;
+            cx = center.index(0)!.value;
+            cy = center.index(1)!.value;
         }
 
         let sx = 1.0, sy = 1.0;
         if (scale instanceof ParameterNumber) {
             sx = sy = scale.value;
         } else if (scale instanceof ParameterVector) {
-            sx = scale.index(0).value;
-            sy = scale.index(1).value;
+            sx = scale.index(0)!.value;
+            sy = scale.index(1)!.value;
         }
 
         let r = 0.0;
@@ -4631,8 +4666,8 @@ class MaterialProxy_TextureTransform {
         if (translate instanceof ParameterNumber) {
             tx = ty = translate.value;
         } else if (translate instanceof ParameterVector) {
-            tx = translate.index(0).value;
-            ty = translate.index(1).value;
+            tx = translate.index(0)!.value;
+            ty = translate.index(1)!.value;
         }
 
         const result = paramLookup<ParameterMatrix>(map, this.resultvar);
