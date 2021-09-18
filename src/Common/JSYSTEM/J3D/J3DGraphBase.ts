@@ -174,7 +174,7 @@ export class MaterialInstanceState {
     public textureMappings: TextureMapping[];
 }
 
-function J3DMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
+function J3DMtxProjConcat(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
     // This is almost mat4.mul except it only outputs three rows of output.
     // Slightly more efficient.
 

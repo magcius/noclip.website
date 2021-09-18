@@ -47,7 +47,6 @@ interface GfxSamplerP_WebGPU extends GfxSampler {
 
 interface GfxProgramP_WebGPU extends GfxProgram {
     descriptor: GfxProgramDescriptorSimple;
-    stagesFinishedPromise: Promise<void> | null;
     vertexStage: GPUProgrammableStage | null;
     fragmentStage: GPUProgrammableStage | null;
 }
@@ -746,8 +745,8 @@ fn vs([[builtin(vertex_index)]] index: u32) -> VertexOutput {
 // Hack for now until browsers implement compositingAlphaMode
 // https://bugs.chromium.org/p/chromium/issues/detail?id=1241373
 class FullscreenAlphaClear {
-    private pipeline: GPURenderPipeline | null = null;
-    private shaderModule: GPUShaderModule | null = null;
+    private shaderModule: GPUShaderModule;
+    private pipeline: GPURenderPipeline;
 
     private shaderText = `
 ${fullscreenVS}
@@ -761,23 +760,15 @@ fn fs() -> FragmentOutput {
 `;
 
     constructor(device: GPUDevice) {
-        this.create(device);
-    }
-
-    private async create(device: GPUDevice): Promise<void> {
         const format: GPUTextureFormat = 'bgra8unorm';
-        this.shaderModule = await device.createShaderModule({ code: this.shaderText });
-        this.pipeline = await device.createRenderPipeline({
+        this.shaderModule = device.createShaderModule({ code: this.shaderText });
+        this.pipeline = device.createRenderPipeline({
             vertex: { module: this.shaderModule, entryPoint: 'vs', },
             fragment: { module: this.shaderModule, entryPoint: 'fs', targets: [{ format, writeMask: 0x08, }] },
         });
     }
 
     public render(device: GPUDevice, onscreenTexture: GPUTextureView): void {
-        // Not much we can do until it's ready.
-        if (this.pipeline === null)
-            return;
-
         const encoder = device.createCommandEncoder();
         const renderPass = encoder.beginRenderPass({
             colorAttachments: [{ view: onscreenTexture, loadValue: 'load', storeOp: 'store', }],
@@ -1010,7 +1001,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return attachment;
     }
 
-    private async _createShaderStage(sourceText: string, shaderStage: 'vertex' | 'fragment'): Promise<GPUProgrammableStage> {
+    private _createShaderStage(sourceText: string, shaderStage: 'vertex' | 'fragment'): GPUProgrammableStage {
         const validationEnabled = false;
 
         let code: string;
@@ -1035,22 +1026,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return { module: shaderModule, entryPoint: 'main' };
     }
 
-    private async _createProgram(program: GfxProgramP_WebGPU): Promise<void> {
-        const deviceProgram = program.descriptor;
-        const vertex = this._createShaderStage(deviceProgram.preprocessedVert, 'vertex');
-        const fragment = deviceProgram.preprocessedFrag !== null ? this._createShaderStage(deviceProgram.preprocessedFrag, 'fragment') : Promise.resolve(null);
-        program.stagesFinishedPromise = Promise.all([vertex, fragment]).then(([vertexStage, fragmentStage]) => {
-            program.vertexStage = vertexStage;
-            program.fragmentStage = fragmentStage;
-            program.stagesFinishedPromise = null;
-        });
-    }
-
-    public createProgramSimple(deviceProgram: GfxProgramDescriptorSimple): GfxProgram {
-        const vertexStage: GPUProgrammableStage | null = null;
-        const fragmentStage: GPUProgrammableStage | null = null;
-        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor: deviceProgram, vertexStage, fragmentStage, stagesFinishedPromise: null, };
-        this._createProgram(program);
+    public createProgramSimple(descriptor: GfxProgramDescriptorSimple): GfxProgram {
+        const vertexStage = this._createShaderStage(descriptor.preprocessedVert, 'vertex');
+        const fragmentStage = descriptor.preprocessedFrag !== null ? this._createShaderStage(descriptor.preprocessedFrag, 'fragment') : null;
+        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, vertexStage, fragmentStage, };
         return program;
     }
 
@@ -1204,12 +1183,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         const descriptor = renderPipeline.descriptor;
         const program = descriptor.program as GfxProgramP_WebGPU;
-
-        if (program.stagesFinishedPromise !== null) {
-            // TODO(jstpierre): No way to synchronously wait on shader modules to be completed...
-            assert(async);
-            await program.stagesFinishedPromise;
-        }
 
         const vertexStage = assertExists(program.vertexStage), fragmentStage = program.fragmentStage;
         const layout = this._createPipelineLayout(descriptor.bindingLayouts);
