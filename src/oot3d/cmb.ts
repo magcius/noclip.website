@@ -293,10 +293,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const textureCoordinators: TextureCoordinator[] = [];
         for (let j = 0; j < 3; j++) {
             // TODO(jstpierre): Unsure about how these are packed...
-            const matrixMode = view.getUint8(coordinatorsOffs + 0x00);
+            const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x00);
             const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
             const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
-            const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x03);
+            const matrixMode = view.getUint8(coordinatorsOffs + 0x03);
             const scaleS = view.getFloat32(coordinatorsOffs + 0x04, true);
             const scaleT = view.getFloat32(coordinatorsOffs + 0x08, true);
             const translationS = view.getFloat32(coordinatorsOffs + 0x0C, true);
