@@ -16,7 +16,9 @@ function calcSpriteOrientation(dst: mat4, orientation: string, view: SourceEngin
         getMatrixAxisZ(scratchVec3a, view.worldFromViewMatrix);
         computeMatrixForForwardDir(dst, scratchVec3a, Vec3Zero);
     } else {
-        debugger;
+        // Unimplemented.
+        getMatrixAxisZ(scratchVec3a, view.worldFromViewMatrix);
+        computeMatrixForForwardDir(dst, scratchVec3a, Vec3Zero);
     }
 }
 

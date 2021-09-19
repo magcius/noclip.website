@@ -3724,10 +3724,10 @@ export class LightCache {
 //#region Lightmap / Lighting data
 class LightmapPage {
     public gfxTexture: GfxTexture;
-    public data: Uint8Array;
-    public surfaceLightmaps: SurfaceLightmap[] = [];
+    public data: Uint8ClampedArray;
+    public uploadDirty = false;
 
-    constructor(device: GfxDevice, private page: LightmapPackerPage) {
+    constructor(device: GfxDevice, public page: LightmapPackerPage) {
         const width = this.page.width, height = this.page.height, numSlices = 4;
         this.gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray,
@@ -3739,7 +3739,7 @@ class LightmapPage {
             numLevels: 1,
         });
 
-        this.data = new Uint8Array(width * height * numSlices * 4);
+        this.data = new Uint8ClampedArray(width * height * numSlices * 4);
 
         const fillEmptySpaceWithPink = false;
         if (fillEmptySpaceWithPink) {
@@ -3752,52 +3752,13 @@ class LightmapPage {
         }
     }
 
-    public registerSurfaceLightmap(surface: SurfaceLightmap): void {
-        this.surfaceLightmaps.push(surface);
-    }
-
     public prepareToRender(device: GfxDevice): void {
         const data = this.data;
 
-        // Go through and stamp each surface into the page at the right location.
-
-        // TODO(jstpierre): Maybe it makes more sense for packRuntimeLightmapData to do this positioning.
-        let anyDirty = false;
-        for (let i = 0; i < this.surfaceLightmaps.length; i++) {
-            const instance = this.surfaceLightmaps[i];
-            if (!instance.lightmapUploadDirty)
-                continue;
-
-            const lightmapData = instance.lightmapData;
-            const pixelData = instance.pixelData!;
-
-            let srcOffs = 0;
-
-            for (let slice = 0; slice < 4; slice++) {
-                // If we don't have bumpmap samples, just upload the same data to all four slices...
-                if (!lightmapData.hasBumpmapSamples)
-                    srcOffs = 0;
-
-                for (let y = lightmapData.pagePosY; y < lightmapData.pagePosY + lightmapData.height; y++) {
-                    for (let x = lightmapData.pagePosX; x < lightmapData.pagePosX + lightmapData.width; x++) {
-                        let dstOffs = ((slice * this.page.height + y) * this.page.width + x) * 4;
-                        // Copy one pixel.
-                        data[dstOffs++] = pixelData[srcOffs++];
-                        data[dstOffs++] = pixelData[srcOffs++];
-                        data[dstOffs++] = pixelData[srcOffs++];
-                        data[dstOffs++] = pixelData[srcOffs++];
-                    }
-                }
-            }
-
-            // Not dirty anymore.
-            anyDirty = true;
-            instance.lightmapUploadDirty = false;
-        }
-
-        // TODO(jstpierre): Track sub-data resource uploads? :/
-        if (anyDirty) {
+        if (this.uploadDirty) {
+            // TODO(jstpierre): Sub-data resource uploads? :/
             device.uploadTextureData(this.gfxTexture, 0, [data]);
+            this.uploadDirty = false;
         }
     }
 
@@ -3843,12 +3804,12 @@ export class LightmapManager {
             this.lightmapPages[i].prepareToRender(device);
     }
 
-    public getPageTexture(pageIndex: number): GfxTexture {
-        return this.lightmapPages[pageIndex].gfxTexture;
+    public getPage(pageIndex: number): LightmapPage {
+        return this.lightmapPages[pageIndex];
     }
 
-    public registerSurfaceLightmap(instance: SurfaceLightmap, pageIndex: number): void {
-        this.lightmapPages[pageIndex].registerSurfaceLightmap(instance);
+    public getPageTexture(pageIndex: number): GfxTexture {
+        return this.lightmapPages[pageIndex].gfxTexture;
     }
 
     public destroy(device: GfxDevice): void {
@@ -3893,13 +3854,36 @@ function linearToLightmap(v: number): number {
     return Math.pow(v, 1.0 / gamma) * 0.5;
 }
 
-function lightmapPackRuntime(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
-    for (let i = 0; i < texelCount; i++) {
-        const sr = linearToLightmap(src[srcOffs++]), sg = linearToLightmap(src[srcOffs++]), sb = linearToLightmap(src[srcOffs++]);
-        dst[dstOffs++] = Math.round(sr * 255.0);
-        dst[dstOffs++] = Math.round(sg * 255.0);
-        dst[dstOffs++] = Math.round(sb * 255.0);
-        dstOffs++;
+function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>, src: Float32Array, srcOffs: number): void {
+    const dst = dstPage.data;
+    const dstWidth = dstPage.page.width;
+
+    for (let dstY = 0; dstY < location.height; dstY++) {
+        for (let dstX = 0; dstX < location.width; dstX++) {
+            const sr = linearToLightmap(src[srcOffs++]), sg = linearToLightmap(src[srcOffs++]), sb = linearToLightmap(src[srcOffs++]);
+            let dstOffs = ((location.pagePosY + dstY) * dstWidth + location.pagePosX + dstX) * 4;
+
+            dst[dstOffs++] = Math.round(sr * 255.0);
+            dst[dstOffs++] = Math.round(sg * 255.0);
+            dst[dstOffs++] = Math.round(sb * 255.0);
+            dstOffs++;
+        }
+    }
+}
+
+function lightmapPackRuntimeWhite(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>): void {
+    const dst = dstPage.data;
+    const dstWidth = dstPage.page.width;
+
+    for (let dstY = 0; dstY < location.height; dstY++) {
+        for (let dstX = 0; dstX < location.width; dstX++) {
+            let dstOffs = ((location.pagePosY + dstY) * dstWidth + location.pagePosX + dstX) * 4;
+
+            dst[dstOffs++] = 0xFF;
+            dst[dstOffs++] = 0xFF;
+            dst[dstOffs++] = 0xFF;
+            dstOffs++;
+        }
     }
 }
 
@@ -3920,81 +3904,88 @@ class LightmapColor {
         return 3;
     }
 
-    public fill(dst: Uint8ClampedArray, offs: number): number {
+    public fill(dst: Uint8ClampedArray, offs: number): void {
         dst[offs++] = Math.round(this.r * 255.0);
         dst[offs++] = Math.round(this.g * 255.0);
         dst[offs++] = Math.round(this.b * 255.0);
         // offs++;
-        return 4;
     }
 }
 
 const scratchColors = [new LightmapColor(), new LightmapColor(), new LightmapColor()];
 const scratchColorSort = [0, 1, 2];
-function lightmapPackRuntimeBumpmap(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
-    const srcSize = texelCount * 3;
-    const dstSize = texelCount * 4;
+
+function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>, src: Float32Array, srcOffs: number): void {
+    const dst = dstPage.data;
+    const srcTexelCount = location.width * location.height;
+    const srcSize = srcTexelCount * 3;
+    const dstWidth = dstPage.page.width, dstHeight = dstPage.page.height;
+    const dstSize = dstWidth * dstHeight * 4;
 
     let srcOffs0 = srcOffs, srcOffs1 = srcOffs + srcSize * 1, srcOffs2 = srcOffs + srcSize * 2, srcOffs3 = srcOffs + srcSize * 3;
-    let dstOffs0 = dstOffs, dstOffs1 = dstOffs + dstSize * 1, dstOffs2 = dstOffs + dstSize * 2, dstOffs3 = dstOffs + dstSize * 3;
-    for (let i = 0; i < texelCount; i++) {
-        const sr = linearToLightmap(src[srcOffs0++]), sg = linearToLightmap(src[srcOffs0++]), sb = linearToLightmap(src[srcOffs0++]);
+    for (let dstY = 0; dstY < location.height; dstY++) {
+        for (let dstX = 0; dstX < location.width; dstX++) {
+            let dstOffs = ((location.pagePosY + dstY) * dstWidth + location.pagePosX + dstX) * 4;
+            let dstOffs0 = dstOffs, dstOffs1 = dstOffs + dstSize * 1, dstOffs2 = dstOffs + dstSize * 2, dstOffs3 = dstOffs + dstSize * 3;
 
-        // Lightmap 0 is easy (unused tho).
-        dst[dstOffs0++] = Math.round(sr * 255.0);
-        dst[dstOffs0++] = Math.round(sg * 255.0);
-        dst[dstOffs0++] = Math.round(sb * 255.0);
-        dstOffs0++;
+            const sr = linearToLightmap(src[srcOffs0++]), sg = linearToLightmap(src[srcOffs0++]), sb = linearToLightmap(src[srcOffs0++]);
 
-        const c = scratchColors;
-        srcOffs1 += c[0].fetch(src, srcOffs1);
-        srcOffs2 += c[1].fetch(src, srcOffs2);
-        srcOffs3 += c[2].fetch(src, srcOffs3);
+            // Lightmap 0 is easy (unused tho).
+            dst[dstOffs0++] = Math.round(sr * 255.0);
+            dst[dstOffs0++] = Math.round(sg * 255.0);
+            dst[dstOffs0++] = Math.round(sb * 255.0);
+            dstOffs0++;
 
-        const avgr = sr / Math.max((c[0].r + c[1].r + c[2].r) / 3.0, MathConstants.EPSILON);
-        const avgg = sg / Math.max((c[0].g + c[1].g + c[2].g) / 3.0, MathConstants.EPSILON);
-        const avgb = sb / Math.max((c[0].b + c[1].b + c[2].b) / 3.0, MathConstants.EPSILON);
-        for (let j = 0; j < 3; j++) {
-            const cc = c[j];
-            cc.r *= avgr;
-            cc.g *= avgg;
-            cc.b *= avgb;
-            cc.origMax = cc.calcMax();
-        }
+            const c = scratchColors;
+            srcOffs1 += c[0].fetch(src, srcOffs1);
+            srcOffs2 += c[1].fetch(src, srcOffs2);
+            srcOffs3 += c[2].fetch(src, srcOffs3);
 
-        // Clamp & redistribute colors if necessary
-        if (c[0].origMax > 1.0 || c[1].origMax > 1.0 || c[2].origMax > 1.0) {
-            const sort = scratchColorSort;
-            for (let j = 0; j < 3; j++) { sort[j] = j; }
-            sort.sort((a, b) => c[b].origMax - c[a].origMax);
+            const avgr = sr / Math.max((c[0].r + c[1].r + c[2].r) / 3.0, MathConstants.EPSILON);
+            const avgg = sg / Math.max((c[0].g + c[1].g + c[2].g) / 3.0, MathConstants.EPSILON);
+            const avgb = sb / Math.max((c[0].b + c[1].b + c[2].b) / 3.0, MathConstants.EPSILON);
+            for (let j = 0; j < 3; j++) {
+                const cc = c[j];
+                cc.r *= avgr;
+                cc.g *= avgg;
+                cc.b *= avgb;
+                cc.origMax = cc.calcMax();
+            }
 
-            for (let j = 0; j < c.length; j++) {
-                const c0 = c[sort[j]];
-                if (c0.origMax > 1.0) {
-                    const max = c0.calcMax();
-                    const m = (max - 1.0) / max;
-                    const mr = m * c0.r, mg = m * c0.g, mb = m * c0.b;
+            // Clamp & redistribute colors if necessary
+            if (c[0].origMax > 1.0 || c[1].origMax > 1.0 || c[2].origMax > 1.0) {
+                const sort = scratchColorSort;
+                for (let j = 0; j < 3; j++) { sort[j] = j; }
+                sort.sort((a, b) => c[b].origMax - c[a].origMax);
 
-                    c0.r -= mr;
-                    c0.g -= mg;
-                    c0.b -= mb;
+                for (let j = 0; j < c.length; j++) {
+                    const c0 = c[sort[j]];
+                    if (c0.origMax > 1.0) {
+                        const max = c0.calcMax();
+                        const m = (max - 1.0) / max;
+                        const mr = m * c0.r, mg = m * c0.g, mb = m * c0.b;
 
-                    const c1 = c[sort[(j+1)%3]];
-                    c1.r += mr * 0.5;
-                    c1.g += mg * 0.5;
-                    c1.b += mb * 0.5;
+                        c0.r -= mr;
+                        c0.g -= mg;
+                        c0.b -= mb;
 
-                    const c2 = c[sort[(j+2)%3]];
-                    c2.r += mr * 0.5;
-                    c2.g += mg * 0.5;
-                    c2.b += mb * 0.5;
+                        const c1 = c[sort[(j+1)%3]];
+                        c1.r += mr * 0.5;
+                        c1.g += mg * 0.5;
+                        c1.b += mb * 0.5;
+
+                        const c2 = c[sort[(j+2)%3]];
+                        c2.r += mr * 0.5;
+                        c2.g += mg * 0.5;
+                        c2.b += mb * 0.5;
+                    }
                 }
             }
-        }
 
-        dstOffs1 += c[0].fill(dst, dstOffs1);
-        dstOffs2 += c[1].fill(dst, dstOffs2);
-        dstOffs3 += c[2].fill(dst, dstOffs3);
+            c[0].fill(dst, dstOffs1);
+            c[1].fill(dst, dstOffs2);
+            c[2].fill(dst, dstOffs3);
+        }
     }
 }
 
@@ -4059,35 +4050,12 @@ export class WorldLightingState {
     }
 }
 
-function createRuntimeLightmap(width: number, height: number, wantsLightmap: boolean, wantsBumpmap: boolean): Uint8ClampedArray | null {
-    if (!wantsLightmap && !wantsBumpmap) {
-        return null;
-    }
-
-    let numLightmaps = 1;
-    if (wantsLightmap && wantsBumpmap) {
-        numLightmaps = 4;
-    }
-
-    const lightmapSize = (width * height * 4);
-    return new Uint8ClampedArray(numLightmaps * lightmapSize);
-}
-
 export class SurfaceLightmap {
     // The styles that we built our lightmaps for.
     public lightmapStyleIntensities: number[];
-    public lightmapUploadDirty: boolean = false;
-    public pixelData: Uint8ClampedArray | null;
 
-    constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
-        this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
-
+    constructor(public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
-
-        if (this.wantsLightmap) {
-            // Associate ourselves with the right page.
-            lightmapManager.registerSurfaceLightmap(this, pageIndex);
-        }
     }
 
     public checkDirty(renderContext: SourceRenderContext): boolean {
@@ -4109,6 +4077,7 @@ export class SurfaceLightmap {
         const worldLightingState = renderContext.worldLightingState;
         const scratchpad = renderContext.lightmapManager.scratchpad;
 
+        const dstPage = renderContext.lightmapManager.getPage(this.lightmapData.pageIndex);
         const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
             const texelCount = this.lightmapData.width * this.lightmapData.height;
@@ -4137,16 +4106,16 @@ export class SurfaceLightmap {
             }
 
             if (this.wantsBumpmap) {
-                lightmapPackRuntimeBumpmap(this.pixelData!, 0, scratchpad, 0, texelCount);
+                lightmapPackRuntimeBumpmap(dstPage, this.lightmapData, scratchpad, 0);
             } else {
-                lightmapPackRuntime(this.pixelData!, 0, scratchpad, 0, texelCount);
+                lightmapPackRuntime(dstPage, this.lightmapData, scratchpad, 0);
             }
         } else if (this.wantsLightmap && !hasLightmap) {
             // Fill with white. Handles both bump & non-bump cases.
-            this.pixelData!.fill(255);
+            lightmapPackRuntimeWhite(dstPage, this.lightmapData);
         }
 
-        this.lightmapUploadDirty = true;
+        dstPage.uploadDirty = true;
         renderContext.debugStatistics.lightmapsBuilt++;
     }
 }

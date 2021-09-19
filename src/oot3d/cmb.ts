@@ -260,13 +260,21 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const textureCombinerSettingsTableOffs = offs + (materialCount * materialDataSize);
 
     for (let i = 0; i < materialCount; i++) {
+        const isFragmentLightingEnabled = !!view.getUint8(offs + 0x00);
+        const isVertexLightingEnabled = !!view.getUint8(offs + 0x01);
+        const isHemisphereLightingEnabled = !!view.getUint8(offs + 0x02);
+        const isHemisphereOcclusionEnabled = !!view.getUint8(offs + 0x03);
+
         const cullModeFlags = view.getUint8(offs + 0x04);
         assert(cullModeFlags >= 0x00 && cullModeFlags <= 0x03);
         const cullMode = translateCullModeFlags(cullModeFlags);
 
         const isPolygonOffsetEnabled = view.getUint8(offs + 0x05);
         const polygonOffsetUnit = view.getInt8(offs + 0x07);
-        const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0x10000 : 0;
+        const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0xFFFE : 0;
+
+        const textureBindingTableCount = view.getUint32(offs + 0x08);
+        const textureCoordinatorTableCount = view.getUint32(offs + 0x0C);
 
         let bindingOffs = offs + 0x10;
         const textureBindings: TextureBinding[] = [];
@@ -308,7 +316,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             coordinatorsOffs += 0x18;
         }
 
-        const unkColor0 = view.getUint32(offs + 0xB0, true);
+        const emissionColor = colorNewFromRGBA8(view.getUint32(offs + 0xA0, false));
+        const ambientColor = colorNewFromRGBA8(view.getUint32(offs + 0xA4, false));
+        const diffuseColor = colorNewFromRGBA8(view.getUint32(offs + 0xA8, false));
+        const specularColor0 = colorNewFromRGBA8(view.getUint32(offs + 0xAC, false));
+        const specularColor1 = colorNewFromRGBA8(view.getUint32(offs + 0xB0, false));
 
         const constantColors: Color[] = [];
         constantColors[0] = colorNewFromRGBA8(view.getUint32(offs + 0xB4, false));
@@ -325,6 +337,16 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const bumpTextureIndex = view.getUint16(offs + 0xDC, true);
         const bumpMode = view.getUint16(offs + 0xDE, true);
+        const isBumpRenormalize = !!view.getUint32(offs + 0xE0, true);
+
+        const layerConfig = view.getUint32(offs + 0xE4, true);
+        const fresnelSelector = view.getUint16(offs + 0xE8, true);
+        const isClampHighlight = !!view.getUint8(offs + 0xEA);
+        const isDistribution0Enabled = !!view.getUint8(offs + 0xEB);
+        const isDistribution1Enabled = !!view.getUint8(offs + 0xEC);
+        const isGeometricFactor0Enabled = !!view.getUint8(offs + 0xED);
+        const isGeometricFactor1Enabled = !!view.getUint8(offs + 0xEE);
+        const isReflectionEnabled = !!view.getUint8(offs + 0xEF);
 
         // Fragment lighting table.
         const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0xF0);
@@ -403,7 +425,8 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const depthWriteEnabled = !!view.getUint8(offs + 0x135);
         const depthTestFunction: GfxCompareMode = depthTestEnabled ? view.getUint16(offs + 0x136, true) : GfxCompareMode.Always;
 
-        const blendEnabled = !!view.getUint8(offs + 0x138);
+        const blendMode = view.getUint8(offs + 0x138);
+        const blendEnabled = blendMode !== 0;
 
         // Making a guess that this is LogicOpEnabled / LogicOp.
         assert(view.getUint8(offs + 0x139) == 0);
@@ -453,8 +476,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         offs += 0x15C;
 
-        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion) {
+            // Stencil.
             offs += 0x10;
+        }
     }
 }
 
@@ -581,6 +606,8 @@ function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     assert(readString(buffer, 0x00, 0x04) === 'mshs');
     const count = view.getUint32(0x08, true);
+    const opaqueMeshCount = view.getUint16(0x0C, true);
+    const idCount = view.getUint16(0x0E, true);
     let idx = 0x10;
     for (let i = 0; i < count; i++) {
         const mesh = new Mesh();
@@ -704,10 +731,26 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     assert(readString(buffer, 0x00, 0x04) === 'sepd');
     const count = view.getUint16(0x08, true);
+    const flags = view.getUint16(0x0A, true);
 
     const sepd = new Sepd();
 
-    // Probably OBB / position offset before the sepd arrays?
+    const centerX = view.getFloat32(0x0C, true);
+    const centerY = view.getFloat32(0x10, true);
+    const centerZ = view.getFloat32(0x14, true);
+    const offsX = view.getFloat32(0x18, true);
+    const offsY = view.getFloat32(0x1C, true);
+    const offsZ = view.getFloat32(0x20, true);
+
+    if (cmb.version === Version.LuigisMansion) {
+        const minX = view.getFloat32(0x24, true);
+        const minY = view.getFloat32(0x28, true);
+        const minZ = view.getFloat32(0x2C, true);
+        const maxX = view.getFloat32(0x30, true);
+        const maxY = view.getFloat32(0x34, true);
+        const maxZ = view.getFloat32(0x38, true);
+    }
+
     let sepdArrIdx = cmb.version === Version.LuigisMansion ? 0x3C : 0x24;
 
     function readVertexAttrib(): SepdVertexAttrib {
