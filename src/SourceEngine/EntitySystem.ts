@@ -625,7 +625,7 @@ export class sky_camera extends BaseEntity {
             this.scale * -this.localOrigin[1],
             this.scale * -this.localOrigin[2]);
 
-        this.fogEnabled = !!Number(this.entity.fogenabled);
+        this.fogEnabled = !!Number(this.entity.fogenable);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
@@ -1798,7 +1798,7 @@ class env_fog_controller extends BaseEntity {
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
         this.isMaster = !!(spawnflags & SpawnFlags.IsMaster);
 
-        this.fogEnabled = !!Number(this.entity.fogenabled);
+        this.fogEnabled = !!Number(this.entity.fogenable);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
