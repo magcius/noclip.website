@@ -1982,6 +1982,12 @@ class Material_Generic extends BaseMaterial {
         // decalmodulate doesn't load basetexture as sRGB.
         if (this.shaderType === GenericShaderType.DecalModulate)
             this.paramGetTexture('$basetexture').isSRGB = false;
+
+        // In some world materials, $envmap is incorrectly set up and isn't overridden correctly.
+        // In these cases, just replace it with a null texture.
+        // Simple example: Portal 1's observationwall_001b.vmt overrides in escape_01
+        if (this.shaderType === GenericShaderType.LightmappedGeneric && this.paramGetTexture('$envmap').ref === 'env_cubemap')
+            this.paramGetTexture('$envmap').ref = null;
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
