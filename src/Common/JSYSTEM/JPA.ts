@@ -1568,7 +1568,7 @@ export class JPABaseEmitter {
         let distance = get_rndm_f(this.random);
         if (!!(bem1.emitFlags & EmitFlags.FixedDensity)) {
             // Fixed density
-            distance = 1.0 - (distance * distance * distance);
+            distance = 1.0 - (distance ** 3.0);
         }
 
         const size = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
