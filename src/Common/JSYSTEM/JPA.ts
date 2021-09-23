@@ -1562,7 +1562,7 @@ export class JPABaseEmitter {
             }
         } else {
             angle = workData.volumeSweep * get_r_zh(this.random) * MathConstants.TAU;
-            x = (Math.PI * 0.5) + (get_r_zh(this.random) * Math.PI);
+            x = (get_rndm_f(this.random) * Math.PI);
         }
 
         let distance = get_rndm_f(this.random);

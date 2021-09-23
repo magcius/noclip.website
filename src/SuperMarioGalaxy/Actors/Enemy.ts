@@ -4,18 +4,18 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, getRailPointPosStart, getRailPointPosEnd, calcRailEndPointDirection } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, getRailPointPosStart, getRailPointPosEnd, calcRailEndPointDirection, rotateVecDegree, calcSideVec } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
-import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, isBindedGroundWaterBottomL } from '../Collision';
+import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, HitSensorInfo } from '../HitSensor';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, HitSensorInfo, sendMsgEnemyAttackStrong } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { isDead, isMsgTypeEnemyAttack, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObjHolder } from '../Main';
 import { MapPartsRailMover, MapPartsRailPointPassChecker } from '../MapParts';
-import { getWaterAreaInfo, isInWater, WaterInfo } from '../MiscMap';
+import { getWaterAreaInfo, isCameraInWater, isInWater, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType } from '../NameObj';
 import { getRailArg, isConnectedWithRail } from '../RailRider';
 import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength, initShadowVolumeFlatModel, initShadowController, addShadowVolumeFlatModel, addShadowVolumeBox, setShadowDropPosition, setShadowVolumeBoxSize } from '../Shadow';
@@ -24,7 +24,7 @@ import { appearCoinPop, declareCoin, isEqualStageName } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
-import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { Blue, Green, Red } from '../../Color';
 import { PartsModel } from './PartsModel';
 
@@ -1301,6 +1301,11 @@ function isFaceToTargetHorizontalDegree(actor: LiveActor, target: ReadonlyVec3, 
     vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
     vecKillElement(scratchVec3b, direction, actor.gravityVector);
     return isNearAngleVec3(scratchVec3a, scratchVec3b, Math.cos(MathConstants.DEG_TO_RAD * degrees));
+}
+
+function isFaceToPlayerHorizontalDegree(sceneObjHolder: SceneObjHolder, actor: LiveActor, direction: ReadonlyVec3, degrees: number): boolean {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    return isFaceToTargetHorizontalDegree(actor, scratchVec3a, direction, degrees);
 }
 
 function isFallNextMove(sceneObjHolder: SceneObjHolder, position: ReadonlyVec3, velocity: ReadonlyVec3, gravity:ReadonlyVec3, horizontalSpeed: number, upPosDistance: number, downSearchDistance: number, filter: TriangleFilterFunc | null = null): boolean {
@@ -3609,6 +3614,21 @@ function turnDirectionToPlayerDegreeHorizon(dst: vec3, sceneObjHolder: SceneObjH
     turnDirectionToTargetDegreeHorizon(dst, actor, scratchVec3a, speedInDegrees);
 }
 
+function turnDirectionToTarget(dst: vec3, actor: LiveActor, target: ReadonlyVec3, speedCos: number): void {
+    vec3.sub(scratchVec3a, target, actor.translation);
+    turnVecToVecCosOnPlane(dst, dst, scratchVec3a, actor.gravityVector, speedCos);
+}
+
+function turnDirectionToTargetDegree(dst: vec3, actor: LiveActor, target: ReadonlyVec3, speedInDegrees: number): void {
+    const speedCos = Math.cos(speedInDegrees * MathConstants.DEG_TO_RAD);
+    turnDirectionToTarget(dst, actor, target, speedCos);
+}
+
+function turnDirectionToPlayerDegree(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, speedInDegrees: number): void {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    turnDirectionToTargetDegree(dst, actor, scratchVec3a, speedInDegrees);
+}
+
 function normalize(v: number, min: number, max: number): number {
     if (isNearZero(max - min, 0.001))
         return v <= min ? 0.0 : 1.0;
@@ -3898,12 +3918,16 @@ function moveAndTurnToPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, m
     moveAndTurnToTarget(actor, scratchVec3a, moveSpeed, gravitySpeed, velocityDamp, turnSpeedDegrees);
 }
 
+function isFaceToTargetDegree(actor: LiveActor, target: ReadonlyVec3, degree: number): boolean {
+    vec3.sub(scratchVec3a, target, actor.translation);
+    calcFrontVec(scratchVec3b, actor);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+    return vec3.dot(scratchVec3b, scratchVec3a) >= Math.cos(MathConstants.DEG_TO_RAD * degree);
+}
+
 function isFaceToPlayerDegree(sceneObjHolder: SceneObjHolder, actor: LiveActor, degree: number): boolean {
-    calcFrontVec(scratchVec3a, actor);
-    getPlayerPos(scratchVec3b, sceneObjHolder);
-    vec3.sub(scratchVec3b, scratchVec3b, actor.translation);
-    vec3.normalize(scratchVec3b, scratchVec3b);
-    return vec3.dot(scratchVec3a, scratchVec3b) >= Math.cos(MathConstants.DEG_TO_RAD * degree);
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    return isFaceToTargetDegree(actor, scratchVec3a, degree);
 }
 
 const enum KaronNrv { Wait, FixWait, Walk, Turn, WalkOnRail, Search, Pursue }
@@ -5067,5 +5091,377 @@ export class Petari extends LiveActor<PetariNrv> {
 
         this.setNerve(PetariNrv.JumpOut);
         return true;
+    }
+}
+
+function isPlayerInWaterMode(sceneObjHolder: SceneObjHolder): boolean {
+    return isCameraInWater(sceneObjHolder);
+}
+
+function isNearVec3(a: LiveActor, b: ReadonlyVec3, threshold: number): boolean {
+    return vec3.squaredDistance(a.translation, b) >= (threshold ** 2);
+}
+
+const enum GessoNrv { Wait, Search, WalkCharge, Walk, Sink, ComeFromBox, ComeBack, LostPlayer, Attack, PunchDown }
+export class Gesso extends LiveActor<GessoNrv> {
+    private origTranslation = vec3.create();
+    private axisY = vec3.create();
+    private axisYTarget = vec3.create();
+    private axisZ = vec3.create();
+    private pushVelocity = vec3.create();
+    private highSpeedMode = false;
+    private walkIsMarioLeft = false;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        vec3.copy(this.origTranslation, this.translation);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Gesso');
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        this.initHitSensor();
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.KillerTargetEnemy, 8, 100.0, Vec3Zero);
+        this.initBinder(150, 0.0, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // addHitEffectNormal();
+        // initSound();
+        // initStarPointerTarget();
+        initShadowVolumeSphere(sceneObjHolder, this, 90.0);
+        calcFrontVec(this.axisZ, this);
+        calcUpVec(this.axisY, this);
+        vec3.copy(this.axisYTarget, this.axisY);
+        declareCoin(sceneObjHolder, this, 1);
+        // addToAttributeGroupSearchTurtle();
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+            if (arg0 === 0) {
+                this.initNerve(GessoNrv.ComeFromBox);
+            } else {
+                this.initNerve(GessoNrv.Wait);
+            }
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.initNerve(GessoNrv.Wait);
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
+
+        if (this.isNerve(GessoNrv.PunchDown))
+            return;
+
+        if (isSensorEnemy(thisSensor) && isSensorPlayer(otherSensor)) {
+            if (sendMsgEnemyAttackStrong(sceneObjHolder, otherSensor, thisSensor)) {
+                // emitEffectHitBetweenSensors();
+
+                vec3.sub(scratchVec3a, thisSensor.center, otherSensor.center);
+                vec3.normalize(scratchVec3a, scratchVec3a);
+                vec3.scale(this.velocity, scratchVec3a, 25.0);
+                this.setNerve(GessoNrv.Attack);
+            }
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.Push) {
+            if (isSensorEnemy(otherSensor!) || isSensorMapObj(otherSensor!)) {
+                vec3.sub(scratchVec3a, this.translation, otherSensor!.actor.translation);
+                vec3.normalize(scratchVec3a, scratchVec3a);
+                vec3.scaleAndAdd(this.pushVelocity, this.pushVelocity, scratchVec3a, 0.2);
+                return true;
+            }
+
+            return false;
+        } else if (isMsgTypeEnemyAttack(messageType)) {
+            if (this.isNerve(GessoNrv.PunchDown))
+                return false;
+
+            if (messageType === MessageType.EnemyAttackExplosion) {
+                this.knockOut(sceneObjHolder, otherSensor!, thisSensor!);
+                return true;
+            } else if (otherSensor!.isType(HitSensorType.Unizo)) {
+                this.knockOut(sceneObjHolder, otherSensor!, thisSensor!);
+            }
+
+            return false;
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
+    }
+
+    private knockOut(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor, thisSensor: HitSensor): void {
+        vec3.sub(scratchVec3a, thisSensor.center, otherSensor.center);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        vec3.scale(this.velocity, scratchVec3a, 30.0);
+        turnDirectionToTarget(this.axisZ, this, otherSensor.center, -1.0);
+        this.setNerve(GessoNrv.PunchDown);
+    }
+
+    private clipAndInitPos(sceneObjHolder: SceneObjHolder): boolean {
+        // TODO(jstpierre)
+        return false;
+    }
+
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (this.clipAndInitPos(sceneObjHolder))
+            return;
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        turnVecToVecCosOnPlane(this.axisY, this.axisY, this.axisYTarget, this.axisZ, Math.cos(MathConstants.DEG_TO_RAD * 0.5 * deltaTimeFrames));
+
+        const pushAmount = vec3.dot(this.velocity, this.pushVelocity);
+        if (pushAmount < 0.0)
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.pushVelocity, -pushAmount);
+
+        vec3.add(this.velocity, this.velocity, this.pushVelocity);
+        vec3.scale(this.pushVelocity, this.pushVelocity, 0.7 * deltaTimeFrames);
+        if (isNearZeroVec3(this.pushVelocity, 0.001))
+            vec3.zero(this.pushVelocity);
+
+        vec3.negate(scratchVec3a, this.gravityVector);
+        vec3.scaleAndAdd(scratchVec3b, this.translation, scratchVec3a, 50.0);
+        const buoyAmount = vec3.dot(this.velocity, scratchVec3a);
+        if (!isInWater(sceneObjHolder, scratchVec3b) && buoyAmount >= 0.0)
+            vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3a, -buoyAmount);
+    }
+
+    public calcAndSetBaseMtx(): void {
+        makeMtxUpFrontPos(this.modelInstance!.modelMatrix, this.axisY, this.axisZ, this.translation);
+    }
+
+    private kill(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'Death');
+        appearCoinPop(sceneObjHolder, this, this.translation, 1);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    private calcAndSetUpVecTarget(x: number, y: number, z: number): void {
+        if (x === 0.0 && y === 0.0 && z === 0.0) {
+            vec3.copy(this.axisYTarget, Vec3UnitY);
+        } else {
+            vec3.set(this.axisYTarget, x, y, z);
+            vec3.normalize(this.axisYTarget, this.axisYTarget);
+        }
+    }
+
+    private tryChangeHighSpeedMode(sceneObjHolder: SceneObjHolder): boolean {
+        this.highSpeedMode = isNearPlayer(sceneObjHolder, this, 1000.0) && isPlayerInWaterMode(sceneObjHolder);
+        return this.highSpeedMode;
+    }
+
+    private isMarioLeft(sceneObjHolder: SceneObjHolder): boolean {
+        getPlayerPos(scratchVec3a, sceneObjHolder);
+        vec3.sub(scratchVec3a, scratchVec3a, this.translation);
+        calcSideVec(scratchVec3b, this);
+        return vec3.dot(scratchVec3a, scratchVec3b) >= 0.0;
+    }
+
+    private isMarioUp(sceneObjHolder: SceneObjHolder): boolean {
+        getPlayerPos(scratchVec3a, sceneObjHolder);
+        vec3.sub(scratchVec3a, scratchVec3a, this.translation);
+        vec3.negate(scratchVec3b, this.gravityVector);
+        return vec3.dot(scratchVec3a, scratchVec3b) >= 0.0;
+    }
+
+    private selectNextNerve(sceneObjHolder: SceneObjHolder): void {
+        if (!isPlayerInWaterMode(sceneObjHolder))
+            this.setNerve(GessoNrv.ComeBack);
+        else if (!isNearPlayer(sceneObjHolder, this, 2400))
+            this.setNerve(GessoNrv.LostPlayer);
+        else if (this.isMarioUp(sceneObjHolder))
+            this.setNerve(GessoNrv.WalkCharge);
+        else if (!this.isNerve(GessoNrv.Sink))
+            this.setNerve(GessoNrv.Sink);
+    }
+
+    private calcAndSetVelocity(x: number, y: number, z: number): void {
+        calcSideVec(scratchVec3a, this);
+        vec3.scale(this.velocity, scratchVec3a, x);
+
+        calcUpVec(scratchVec3a, this);
+        vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3a, y);
+
+        vec3.scaleAndAdd(this.velocity, this.velocity, this.axisZ, z);
+    }
+
+    private calcWalkMove(step: number, deltaTimeFrames: number): boolean {
+        const stepDeg = step * 0.990099;
+
+        const upSpeed = 7.0 * Math.cos(stepDeg * MathConstants.DEG_TO_RAD);
+        const sideDir = this.walkIsMarioLeft ? 1.0 : -1.0;
+        const sideSpeed = sideDir * (this.highSpeedMode ? 3.0 : (3.0 / 5.0));
+        this.calcAndSetVelocity(sideSpeed * deltaTimeFrames, upSpeed * deltaTimeFrames, 2.3 * deltaTimeFrames);
+
+        if (isFirstStep(this)) {
+            const chargeSideSpeedMul = this.highSpeedMode ? (3.0 / 2.0) : (3.0 / 5.0);
+            this.calcAndSetUpVecTarget(chargeSideSpeedMul, upSpeed, 4.6);
+        }
+
+        if (stepDeg >= 70.0)
+            this.calcAndSetUpVecTarget(0.0, 1.0, 1.0);
+
+        return stepDeg > 100.0;
+    }
+
+    private calcSinkMove(step: number, deltaTimeFrames: number): boolean {
+        const stepDeg = Math.min(step * 3.0 + 100.0, 180.0);
+
+        const upSpeed = 3.0 * Math.cos(stepDeg * MathConstants.DEG_TO_RAD);
+        const sideDir = this.walkIsMarioLeft ? 1.0 : -1.0;
+        const sideSpeed = sideDir * 5.0;
+        this.calcAndSetVelocity(sideSpeed * deltaTimeFrames, upSpeed * deltaTimeFrames, 2.3 * deltaTimeFrames);
+        this.calcAndSetUpVecTarget(0.0, 1.0, 1.0);
+
+        return stepDeg >= 180.0;
+    }
+
+    private calcVelocityBob(step: number, deltaTimeFrames: number): void {
+        const speed = Math.sin(MathConstants.DEG_TO_RAD * (45.0 + 2.0 * step)) * deltaTimeFrames;
+        vec3.scale(this.velocity, this.gravityVector, speed * 1.5);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: GessoNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === GessoNrv.Wait) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Wait');
+                this.calcAndSetUpVecTarget(0.0, 0.0, 0.0);
+            }
+
+            this.calcVelocityBob(this.getNerveStep(), deltaTimeFrames);
+            rotateVecDegree(this.axisZ, this.gravityVector, 0.3 * deltaTimeFrames);
+
+            if (isNearPlayer(sceneObjHolder, this, 1400) && isPlayerInWaterMode(sceneObjHolder))
+                this.setNerve(GessoNrv.Search);
+        } else if (currentNerve === GessoNrv.Search) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Search');
+                this.calcAndSetUpVecTarget(0.0, 0.0, 0.0);
+            }
+
+            this.calcVelocityBob(this.getNerveStep(), deltaTimeFrames);
+            turnDirectionToPlayerDegree(this.axisZ, sceneObjHolder, this, 1.5 * deltaTimeFrames);
+
+            if (isFaceToPlayerHorizontalDegree(sceneObjHolder, this, this.axisZ, 1.5) && isActionEnd(this))
+                this.setNerve(GessoNrv.WalkCharge);
+        } else if (currentNerve === GessoNrv.WalkCharge) {
+            if (isFirstStep(this)) {
+                if (this.tryChangeHighSpeedMode(sceneObjHolder))
+                    startAction(this, 'WalkHigh');
+                else
+                    startAction(this, 'Walk');
+
+                this.calcAndSetUpVecTarget(0.0, 1.0, 1.0);
+            }
+
+            vec3.scale(this.velocity, this.velocity, Math.pow(0.995, deltaTimeFrames));
+            if (isGreaterEqualStep(this, 43)) {
+                this.walkIsMarioLeft = this.isMarioLeft(sceneObjHolder);
+                this.setNerve(GessoNrv.Walk);
+            }
+        } else if (currentNerve === GessoNrv.Walk) {
+            turnDirectionToPlayerDegree(this.axisZ, sceneObjHolder, this, 1.5 * deltaTimeFrames);
+            if (this.calcWalkMove(this.getNerveStep(), deltaTimeFrames))
+                this.selectNextNerve(sceneObjHolder);
+        } else if (currentNerve === GessoNrv.Sink) {
+            if (isFirstStep(this)) {
+                if (isNearPlayer(sceneObjHolder, this, 1000.0))
+                    startAction(this, 'SinkFast');
+                else
+                    startAction(this, 'Sink');
+            }
+
+            turnDirectionToPlayerDegree(this.axisZ, sceneObjHolder, this, 1.5 * deltaTimeFrames);
+            if (isBindedGround(this)) {
+                this.setNerve(GessoNrv.WalkCharge);
+            } else {
+                if (this.calcSinkMove(this.getNerveStep(), deltaTimeFrames))
+                    this.selectNextNerve(sceneObjHolder);
+            }
+        } else if (currentNerve === GessoNrv.ComeFromBox) {
+            if (isFirstStep(this)) {
+                startAction(this, 'FromBox');
+                invalidateHitSensors(this);
+
+                vec3.scaleAndAdd(this.translation, this.translation, this.gravityVector, -100.0);
+                this.calcAndSetUpVecTarget(0.0, 1.0, 0.3);
+            }
+
+            if (isLessStep(this, 10.0)) {
+                this.calcAndSetVelocity(0.0, 10.0, 5.0);
+            } else {
+                vec3.zero(this.velocity);
+            }
+
+            if (isActionEnd(this)) {
+                vec3.zero(this.velocity);
+                validateHitSensors(this);
+                this.setNerve(GessoNrv.Wait);
+            }
+        } else if (currentNerve === GessoNrv.ComeBack) {
+            if (isFirstStep(this))
+                startAction(this, 'CoolDown');
+            
+            if (isBckPlaying(this, 'CoolDown')) {
+                this.calcVelocityBob(this.getNerveStep(), deltaTimeFrames);
+            } else {
+                if (isBckOneTimeAndStopped(this))
+                    startAction(this, 'Sink');
+
+                if (isPlayerInWaterMode(sceneObjHolder)) {
+                    this.setNerve(GessoNrv.Wait);
+                } else {
+                    turnDirectionToPlayerDegree(this.axisZ, sceneObjHolder, this, 1.5 * deltaTimeFrames);
+                    vec3.sub(scratchVec3a, this.origTranslation, this.translation);
+                    vec3.normalize(scratchVec3a, scratchVec3a);
+                    vec3.scale(this.velocity, scratchVec3a, 3.0);
+
+                    if (isNearVec3(this, this.origTranslation, 300.0))
+                        this.setNerve(GessoNrv.Wait);
+                }
+            }
+        } else if (currentNerve === GessoNrv.LostPlayer) {
+            if (isFirstStep(this)) {
+                startAction(this, 'CoolDown');
+                this.calcAndSetUpVecTarget(0.0, 0.0, 0.0);
+            }
+
+            this.calcVelocityBob(this.getNerveStep(), deltaTimeFrames);
+
+            if (isActionEnd(this))
+                this.setNerve(GessoNrv.Wait);
+        } else if (currentNerve === GessoNrv.Attack) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Attack');
+                this.calcAndSetUpVecTarget(0.0, 0.0, 0.0);
+            }
+
+            if (isBckOneTimeAndStopped(this))
+                startAction(this, 'Wait');
+
+            if (isBckPlaying(this, 'Attack'))
+                this.calcVelocityBob(this.getNerveStep(), deltaTimeFrames);
+            else
+                vec3.scale(this.velocity, this.velocity, Math.pow(0.9, deltaTimeFrames));
+
+            if (isGreaterEqualStep(this, 240))
+                this.setNerve(GessoNrv.Wait);
+        } else if (currentNerve === GessoNrv.PunchDown) {
+            if (isFirstStep(this)) {
+                invalidateHitSensors(this);
+                startAction(this, 'PunchDown');
+            }
+
+            turnDirectionToPlayerDegree(this.axisZ, sceneObjHolder, this, 1.5 * deltaTimeFrames);
+            if (isGreaterEqualStep(this, 20) || isBinded(this))
+                this.kill(sceneObjHolder);
+        }
     }
 }

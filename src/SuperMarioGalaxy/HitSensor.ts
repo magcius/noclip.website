@@ -490,6 +490,10 @@ export function sendMsgEnemyAttack(sceneObjHolder: SceneObjHolder, recvSensor: H
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttack, sendSensor);
 }
 
+export function sendMsgEnemyAttackStrong(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackStrong, sendSensor);
+}
+
 export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackExplosion, sendSensor);
 }
