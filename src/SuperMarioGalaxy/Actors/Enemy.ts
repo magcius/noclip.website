@@ -25,7 +25,7 @@ import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './Mode
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
-import { Blue, Green, Red } from '../../Color';
+import { Blue, Green, Red, White } from '../../Color';
 import { PartsModel } from './PartsModel';
 
 // Scratchpad
@@ -5109,7 +5109,7 @@ export class Gesso extends LiveActor<GessoNrv> {
     private axisYTarget = vec3.create();
     private axisZ = vec3.create();
     private pushVelocity = vec3.create();
-    private highSpeedMode = false;
+    private walkHighSpeedMode = false;
     private walkIsMarioLeft = false;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -5229,6 +5229,15 @@ export class Gesso extends LiveActor<GessoNrv> {
         const buoyAmount = vec3.dot(this.velocity, scratchVec3a);
         if (!isInWater(sceneObjHolder, scratchVec3b) && buoyAmount >= 0.0)
             vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3a, -buoyAmount);
+
+        /*
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation, GessoNrv[this.getCurrentNerve()], 0, White, { outline: 4 });
+        const status1 = `Walk: ${this.walkHighSpeedMode ? 'High Speed' : 'Normal'}, ${this.walkIsMarioLeft ? 'Left' : 'Right'}`;
+        const status2 = `Next: ${this.walkHighSpeedMode ? 'High Speed' : 'Normal'}, ${this.isMarioUp(sceneObjHolder) ? 'Up' : 'Down'}, ${this.isMarioLeft(sceneObjHolder) ? 'Left' : 'Right'}`;
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation, status1, 16, White, { outline: 4 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation, status2, 32, White, { outline: 4 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation, `Up Target: ${this.axisYTarget}`, 48, White, { outline: 4 });
+        */
     }
 
     public calcAndSetBaseMtx(): void {
@@ -5251,8 +5260,8 @@ export class Gesso extends LiveActor<GessoNrv> {
     }
 
     private tryChangeHighSpeedMode(sceneObjHolder: SceneObjHolder): boolean {
-        this.highSpeedMode = isNearPlayer(sceneObjHolder, this, 1000.0) && isPlayerInWaterMode(sceneObjHolder);
-        return this.highSpeedMode;
+        this.walkHighSpeedMode = isNearPlayer(sceneObjHolder, this, 1000.0) && isPlayerInWaterMode(sceneObjHolder);
+        return this.walkHighSpeedMode;
     }
 
     private isMarioLeft(sceneObjHolder: SceneObjHolder): boolean {
@@ -5295,11 +5304,11 @@ export class Gesso extends LiveActor<GessoNrv> {
 
         const upSpeed = 7.0 * Math.cos(stepDeg * MathConstants.DEG_TO_RAD);
         const sideDir = this.walkIsMarioLeft ? 1.0 : -1.0;
-        const sideSpeed = sideDir * (this.highSpeedMode ? 3.0 : (3.0 / 5.0));
+        const sideSpeed = sideDir * (this.walkHighSpeedMode ? 3.0 : (3.0 / 5.0));
         this.calcAndSetVelocity(sideSpeed * deltaTimeFrames, upSpeed * deltaTimeFrames, 2.3 * deltaTimeFrames);
 
         if (isFirstStep(this)) {
-            const chargeSideSpeedMul = this.highSpeedMode ? (3.0 / 2.0) : (3.0 / 5.0);
+            const chargeSideSpeedMul = this.walkHighSpeedMode ? (3.0 / 2.0) : (3.0 / 5.0);
             this.calcAndSetUpVecTarget(chargeSideSpeedMul, upSpeed, 4.6);
         }
 
@@ -5314,7 +5323,7 @@ export class Gesso extends LiveActor<GessoNrv> {
 
         const upSpeed = 3.0 * Math.cos(stepDeg * MathConstants.DEG_TO_RAD);
         const sideDir = this.walkIsMarioLeft ? 1.0 : -1.0;
-        const sideSpeed = sideDir * 5.0;
+        const sideSpeed = sideDir * 3.0;
         this.calcAndSetVelocity(sideSpeed * deltaTimeFrames, upSpeed * deltaTimeFrames, 2.3 * deltaTimeFrames);
         this.calcAndSetUpVecTarget(0.0, 1.0, 1.0);
 
@@ -5354,7 +5363,7 @@ export class Gesso extends LiveActor<GessoNrv> {
         } else if (currentNerve === GessoNrv.WalkCharge) {
             if (isFirstStep(this)) {
                 if (this.tryChangeHighSpeedMode(sceneObjHolder))
-                    startAction(this, 'WalkHigh');
+                    startAction(this, 'WalkFast');
                 else
                     startAction(this, 'Walk');
 
