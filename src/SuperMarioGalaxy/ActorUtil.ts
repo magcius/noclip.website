@@ -996,6 +996,17 @@ export function makeMtxSideUp(dst: mat4, side: ReadonlyVec3, up: ReadonlyVec3): 
     setMtxAxisXYZ(dst, sideNorm, upNorm, front);
 }
 
+export function makeMtxSideFront(dst: mat4, side: ReadonlyVec3, front: ReadonlyVec3): void {
+    const up = scratchVec3b;
+    const sideNorm = scratchVec3a;
+    const frontNorm = scratchVec3c;
+    vec3.normalize(sideNorm, side);
+    vec3.cross(up, sideNorm, front);
+    vec3.normalize(up, up);
+    vec3.cross(frontNorm, sideNorm, up);
+    setMtxAxisXYZ(dst, sideNorm, up, frontNorm);
+}
+
 export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3, pos: ReadonlyVec3): void {
     makeMtxFrontSide(dst, front, side);
     setMatrixTranslation(dst, pos);
