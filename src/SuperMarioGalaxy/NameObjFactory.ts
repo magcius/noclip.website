@@ -405,7 +405,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("DarkHopperPlanetPartsC",         SimpleMapObj),
     _("DarkHopperPlanetPartsD",         SimpleMapObj),
     _("MiniMechaKoopaPartsFan",         SimpleMapObj),
-    _("RockRoadCirclA",                 SimpleMapObj),
+    _("RockRoadCircleA",                SimpleMapObj),
     _("HellBallGuidePartsA",            SimpleMapObj),
     _("IceSlipRoad",                    SimpleMapObj),
     _("SurfingRaceTutorialParts",       SimpleMapObj),

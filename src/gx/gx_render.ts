@@ -55,6 +55,11 @@ export class MaterialParams {
         colorFromRGBA(this.u_Color[ColorKind.MAT0], 1.0, 1.0, 1.0, 1.0);
         colorFromRGBA(this.u_Color[ColorKind.MAT1], 1.0, 1.0, 1.0, 1.0);
     }
+
+    public clear(): void {
+        for (let i = 0; i < 8; i++)
+            this.m_TextureMapping[i].reset();
+    }
 }
 
 export class PacketParams {

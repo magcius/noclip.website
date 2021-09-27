@@ -2605,6 +2605,7 @@ class SpinDriverPathDrawer extends LiveActor {
         const spinDriverPathDrawInit = sceneObjHolder.spinDriverPathDrawInit!;
         const materialHelper = spinDriverPathDrawInit.materialHelper;
 
+        materialParams.clear();
         if (this.color === SpinDriverColor.Normal)
             spinDriverPathDrawInit.normalColorTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         else if (this.color === SpinDriverColor.Green)
@@ -3611,6 +3612,7 @@ class WarpPodPathDrawer {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        materialParams.clear();
         this.testColor.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
@@ -4011,6 +4013,7 @@ export class WaterPlant extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
         const materialHelper = waterPlantDrawInit.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -4437,6 +4440,7 @@ export class SwingRope extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
         swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = swingRopeGroup.materialHelper;
@@ -4674,6 +4678,7 @@ export class Trapeze extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
         trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = trapezeRopeDrawInit.materialHelper;
@@ -4863,6 +4868,7 @@ export class Creeper extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -5061,6 +5067,7 @@ class OceanRingDrawer {
         setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
         loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera, viewerInput.viewport);
 
+        materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
         sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
@@ -5142,6 +5149,7 @@ class OceanRingPipeOutside extends LiveActor {
         renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
         renderInst.drawIndexes(this.pipe.indexCount);
 
+        materialParams.clear();
         this.waterPipeIndirect.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.waterPipeHighLight.fillTextureMapping(materialParams.m_TextureMapping[1]);
 
@@ -5839,6 +5847,7 @@ export class Flag extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
 
@@ -8943,6 +8952,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x7CA9BDFF);
