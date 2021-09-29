@@ -4,8 +4,7 @@ import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat
 import { BRTI } from "./bntx";
 import { GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture";
-import { assert, hexzero } from "../util";
-import { clamp } from "../MathHelpers";
+import { assert } from "../util";
 
 export function getFormatBlockWidth(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
@@ -107,19 +106,6 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     }
 }
 
-/*
-function getBlockHeightLog2(heightInBlocks: number): number {
-    return clamp(Math.ceil(Math.log2((heightInBlocks / 8) | 0)), 0, 4);
-}
-
-function calcSurfaceBlockHeight(channelFormat: ChannelFormat, textureHeight: number): number {
-    const formatBlockHeight = getFormatBlockHeight(channelFormat);
-    const heightInBlocks = ((textureHeight + formatBlockHeight - 1) / formatBlockHeight) | 0;
-    const blockHeight = 1 << getBlockHeightLog2(heightInBlocks);
-    return blockHeight;
-}
-*/
-
 export interface SwizzledSurface {
     width: number;
     height: number;
@@ -128,68 +114,17 @@ export interface SwizzledSurface {
     blockHeightLog2: number; // The block height of mip0.
 }
 
-const GOB_SIZE_X = 64;
-const GOB_SIZE_Y = 8;
-
-function getAddrBlockLinear(x: number, y: number, w: number, bpp: number, blockHeight: number, baseAddr: number = 0): number {
-    const widthInGOBs = (((w * bpp) + GOB_SIZE_X - 1) / GOB_SIZE_X) | 0;
-    let gobAddr = baseAddr;
-
-    gobAddr += ((y / (GOB_SIZE_Y * blockHeight)) | 0) * 512 * blockHeight * widthInGOBs;
-    gobAddr += ((x * bpp / 64) | 0) * 512 * blockHeight;
-    gobAddr += ((y % (GOB_SIZE_Y * blockHeight) / 8) | 0) * 512;
-
-    x *= bpp;
-    let addr = gobAddr;
-    addr += (((x % 64) / 32) | 0) * 256;
-    addr += (((y % 8) / 2) | 0) * 64;
-    addr += (((x % 32) / 16) | 0) * 32;
-    addr += ((y % 2) * 16);
-    addr += (x % 16);
-    return addr;
-}
-
-function nextPow2(v: number): number {
-    v--;
-    v |= v >>> 1;
-    v |= v >>> 2;
-    v |= v >>> 4;
-    v |= v >>> 8;
-    v |= v >>> 16;
-    v++;
-    return v;
-}
-
-export function deswizzle(swizzledSurface: SwizzledSurface): Uint8Array {
-    const formatBlockWidth = getFormatBlockWidth(swizzledSurface.channelFormat);
-    const formatBlockHeight = getFormatBlockHeight(swizzledSurface.channelFormat);
-
-    const widthInBlocks = ((swizzledSurface.width + formatBlockWidth - 1) / formatBlockWidth) | 0;
-    const heightInBlocks = ((swizzledSurface.height + formatBlockHeight - 1) / formatBlockHeight) | 0;
-
-    // Driver picks blockHeightLog2 for mip0.
-    let blockHeight = 1 << swizzledSurface.blockHeightLog2;
-
-    // Adjust block height down per mip to fit the image.
-    while (blockHeight > 1 && (nextPow2(heightInBlocks) < (GOB_SIZE_Y * blockHeight)))
-        blockHeight >>= 1;
-
-    const bpp = getFormatBytesPerPixel(swizzledSurface.channelFormat);
-
-    function memcpy(dst: Uint8Array, dstOffs: number, src: ArrayBufferSlice, srcOffs: number, length: number) {
-        dst.set(src.createTypedArray(Uint8Array, srcOffs, length), dstOffs);
-    }
-
-    const src = swizzledSurface.buffer;
-    const dst = new Uint8Array(widthInBlocks * heightInBlocks * bpp);
-    for (let y = 0; y < heightInBlocks; y++) {
-        for (let x = 0; x < widthInBlocks; x++) {
-            const srcOffs = getAddrBlockLinear(x, y, widthInBlocks, bpp, blockHeight);
-            const dstOffs = ((y * widthInBlocks) + x) * bpp;
-            memcpy(dst, dstOffs, src, srcOffs, bpp);
-        }
-    }
-    return dst;
+export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array> {
+    const { tegra_deswizzle, CompressionType } = await import("../../rust/pkg/index");
+    const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
+    const compressionType =
+        channelFormat === ChannelFormat.Bc1 ? CompressionType.Bc1 :
+        channelFormat === ChannelFormat.Bc2 ? CompressionType.Bc2 :
+        channelFormat === ChannelFormat.Bc3 ? CompressionType.Bc3 :
+        channelFormat === ChannelFormat.Bc4 ? CompressionType.Bc4 :
+        channelFormat === ChannelFormat.Bc5 ? CompressionType.Bc5 :
+        undefined!;
+    return tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2);
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array): DecodedSurfaceSW {

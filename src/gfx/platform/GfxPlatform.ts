@@ -180,7 +180,7 @@ export interface GfxBindingsDescriptor {
 
 export interface GfxProgramDescriptorSimple {
     preprocessedVert: string;
-    preprocessedFrag: string;
+    preprocessedFrag: string | null;
 }
 
 export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
@@ -280,7 +280,6 @@ export interface GfxVendorInfo {
     readonly separateSamplerTextures: boolean;
     readonly viewportOrigin: GfxViewportOrigin;
     readonly clipSpaceNearZ: GfxClipSpaceNearZ;
-    readonly supportsSyncPipelineCompilation: boolean;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
@@ -367,6 +366,10 @@ export interface GfxDevice {
     destroyRenderPipeline(o: GfxRenderPipeline): void;
     destroyReadback(o: GfxReadback): void;
 
+    // Render pipeline compilation control.
+    pipelineQueryReady(o: GfxRenderPipeline): boolean;
+    pipelineForceReady(o: GfxRenderPipeline): void;
+
     // Command submission.
     createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass;
     // Consumes and destroys the pass.
@@ -387,7 +390,6 @@ export interface GfxDevice {
     // Information queries.
     queryLimits(): GfxDeviceLimits;
     queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean;
-    queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
     queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;

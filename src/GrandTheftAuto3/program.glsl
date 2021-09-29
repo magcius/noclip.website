@@ -51,7 +51,6 @@ void main() {
     gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, v_Position.y);
 
     // TODO: get this working again
-    /*
     vec3 nearPlane = v_Position * u_Frustum.xyz;
     vec3 cameraRay = Mul(u_WorldMatrix, vec4(nearPlane, 0.0));
     vec3 cameraPos = Mul(u_WorldMatrix, vec4(vec3(0.0), 1.0));
@@ -74,7 +73,6 @@ void main() {
         float depthNDC = clipSpacePos.z / clipSpacePos.w;
         gl_FragDepth = 0.5 + 0.5 * depthNDC;
     }
-    */
 }
 #else
 void main() {

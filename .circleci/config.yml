@@ -25,14 +25,16 @@ jobs:
             # fallback to using the latest cache if no exact match is found
             - v3-dependencies-
 
-      - run: yarn install
+      - run: sudo npm install -g pnpm
+
+      - run: pnpm install
 
       # wasm-pack is amazingly ridiculous and puts a binary in .config/, which
       # won't get cached even when node_modules does. Force it to reinstall with
       # an 'upgrade'.
-      - run: yarn upgrade wasm-pack
+      - run: pnpm upgrade wasm-pack
 
-      - run: yarn run build
+      - run: pnpm run build
 
       - save_cache:
           paths:

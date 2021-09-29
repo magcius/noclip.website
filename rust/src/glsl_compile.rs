@@ -1,5 +1,5 @@
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::wasm_bindgen;
 use web_sys::console;
 use std::error::Error;
 

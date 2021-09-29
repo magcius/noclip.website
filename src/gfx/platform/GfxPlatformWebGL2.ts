@@ -447,7 +447,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = false;
     public readonly viewportOrigin = GfxViewportOrigin.LowerLeft;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
-    public readonly supportsSyncPipelineCompilation: boolean = true;
 
     // GfxLimits
     public uniformBufferWordAlignment: number;
@@ -1136,6 +1135,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
+    public pipelineQueryReady(o: GfxRenderPipeline): boolean {
+        const pipeline = o as GfxRenderPipelineP_GL;
+        return this.queryProgramReady(pipeline.program);
+    }
+
+    public pipelineForceReady(o: GfxRenderPipeline): void {
+        // No need to do anything; it will be forced to compile when used naturally.
+    }
+
     public createRenderPass(descriptor: GfxRenderPassDescriptor): GfxRenderPass {
         assert(this._currentRenderPassDescriptor === null);
         this._currentRenderPassDescriptor = descriptor;
@@ -1371,11 +1379,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return program.compileState === GfxProgramCompileStateP_GL.NeedsBind || program.compileState === GfxProgramCompileStateP_GL.ReadyToUse;
     }
 
-    public queryPipelineReady(o: GfxRenderPipeline): boolean {
-        const pipeline = o as GfxRenderPipelineP_GL;
-        return this.queryProgramReady(pipeline.program);
-    }
-
     public queryPlatformAvailable(): boolean {
         return this.gl.isContextLost();
     }
@@ -1508,8 +1511,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (!this._reportShaderError(program.gl_shader_vert!, descriptor.preprocessedVert))
                 return;
 
-            if (!this._reportShaderError(program.gl_shader_frag!, descriptor.preprocessedFrag))
-                return;
+            if (program.gl_shader_frag !== null) {
+                if (!this._reportShaderError(program.gl_shader_frag, descriptor.preprocessedFrag!))
+                    return;
+            }
 
             // Neither shader had an error, report the program info log.
             console.error(gl.getProgramInfoLog(program.gl_program!));
@@ -1528,9 +1533,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (program.gl_shader_frag !== null)
             gl.deleteShader(program.gl_shader_frag);
         program.gl_shader_vert = this._compileShader(descriptor.preprocessedVert, gl.VERTEX_SHADER);
-        program.gl_shader_frag = this._compileShader(descriptor.preprocessedFrag, gl.FRAGMENT_SHADER);
         gl.attachShader(program.gl_program, program.gl_shader_vert);
-        gl.attachShader(program.gl_program, program.gl_shader_frag);
+
+        if (descriptor.preprocessedFrag !== null) {
+            program.gl_shader_frag = this._compileShader(descriptor.preprocessedFrag, gl.FRAGMENT_SHADER);
+            gl.attachShader(program.gl_program, program.gl_shader_frag);
+        }
+
         gl.linkProgram(program.gl_program);
 
         program.compileState = GfxProgramCompileStateP_GL.Compiling;

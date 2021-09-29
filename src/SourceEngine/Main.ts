@@ -23,7 +23,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera } from "./EntitySystem";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -57,7 +57,10 @@ export class SourceFileSystem {
     }
 
     public async createVPKMount(path: string) {
-        this.vpk.push(await createVPKMount(this.dataFetcher, path));
+        // This little dance here is to ensure that priorities are correctly ordered.
+        const dummyMount = null!;
+        const i = this.vpk.push(dummyMount) - 1;
+        this.vpk[i] = await createVPKMount(this.dataFetcher, path);
     }
 
     public async createZipMount(path: string) {
@@ -171,7 +174,7 @@ export class SourceFileSystem {
 
 // In Source, the convention is +X for forward and -X for backward, +Y for left and -Y for right, and +Z for up and -Z for down.
 // Converts from Source conventions to noclip ones.
-export const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
+const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
     0,  0, -1, 0,
     -1, 0,  0, 0,
     0,  1,  0, 0,
@@ -332,20 +335,23 @@ export class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, liveFaceSet: Set<number> | null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4 | null, liveFaceSet: Set<number> | null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
+        const view = renderContext.currentView;
+
         if (this.surface.bbox !== null) {
-            scratchAABB.transform(this.surface.bbox, modelMatrix);
-            if (!view.frustum.contains(scratchAABB))
+            if (!view.frustum.contains(transformAABB(this.surface.bbox, modelMatrix)))
                 return;
         }
 
         for (let i = 0; i < this.lightmaps.length; i++) {
             const lightmap = this.lightmaps[i];
+            if (!lightmap.checkDirty(renderContext))
+                continue;
             if (liveFaceSet === null || liveFaceSet.has(lightmap.lightmapData.faceIndex))
-                this.lightmaps[i].buildLightmap(renderContext);
+                lightmap.buildLightmap(renderContext);
         }
 
         const renderInst = renderInstManager.newRenderInst();
@@ -364,9 +370,16 @@ export class BSPSurfaceRenderer {
 }
 
 const scratchAABB = new AABB();
+function transformAABB(src: AABB, m: ReadonlyMat4 | null): AABB {
+    if (m === null)
+        return src;
+    scratchAABB.transform(src, m);
+    return scratchAABB;
+}
+
 export class BSPModelRenderer {
     public visible: boolean = true;
-    public modelMatrix = mat4.create();
+    public modelMatrix: ReadonlyMat4 | null = null;
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
     public surfacesByIdx: BSPSurfaceRenderer[] = [];
@@ -433,8 +446,7 @@ export class BSPModelRenderer {
             // node
             const node = this.bsp.nodelist[nodeid];
 
-            scratchAABB.transform(node.bbox, this.modelMatrix);
-            if (!view.frustum.contains(scratchAABB))
+            if (!view.frustum.contains(transformAABB(node.bbox, this.modelMatrix)))
                 return;
 
             this.gatherLiveSets(liveSurfaceSet, liveFaceSet, liveLeafSet, pvs, view, node.child0);
@@ -449,8 +461,7 @@ export class BSPModelRenderer {
             if (!pvs.getBit(leaf.cluster))
                 return;
 
-            scratchAABB.transform(leaf.bbox, this.modelMatrix);
-            if (!view.frustum.contains(scratchAABB))
+            if (!view.frustum.contains(transformAABB(leaf.bbox, this.modelMatrix)))
                 return;
 
             if (liveSurfaceSet !== null)
@@ -470,33 +481,32 @@ export class BSPModelRenderer {
         if (!this.visible)
             return false;
 
-        scratchAABB.transform(this.model.bbox, this.modelMatrix);
-        if (!view.frustum.contains(scratchAABB))
+        if (!view.frustum.contains(transformAABB(this.model.bbox, this.modelMatrix)))
             return false;
 
         return true;
     }
 
-    public prepareToRenderModel(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
-        if (!this.prepareToRenderCommon(view))
+    public prepareToRenderModel(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        if (!this.prepareToRenderCommon(renderContext.currentView))
             return;
 
         // Submodels don't use the BSP tree, they simply render all surfaces back to back in a batch.
         for (let i = 0; i < this.model.surfaces.length; i++)
-            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, null);
+            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, this.modelMatrix, null);
     }
 
-    public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap): void {
-        if (!this.prepareToRenderCommon(view))
+    public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, pvs: BitMap): void {
+        if (!this.prepareToRenderCommon(renderContext.currentView))
             return;
 
         // Gather all BSP surfaces, and cull based on that.
         this.liveSurfaceSet.clear();
         this.liveFaceSet.clear();
-        this.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, null, pvs, view);
+        this.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, null, pvs, renderContext.currentView);
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
-            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, this.liveFaceSet);
+            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.liveFaceSet);
     }
 }
 
@@ -533,6 +543,7 @@ export class SourceEngineView {
     }
 
     public copy(other: SourceEngineView): void {
+        this.clipSpaceNearZ = other.clipSpaceNearZ;
         mat4.copy(this.viewFromWorldMatrix, other.viewFromWorldMatrix);
         mat4.copy(this.clipFromViewMatrix, other.clipFromViewMatrix);
         vec3.copy(this.cameraPos, other.cameraPos);
@@ -730,16 +741,21 @@ export class BSPRenderer {
                 this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this.bsp, staticProp));
 
         // Spawn detail objects.
-        if (this.bsp.detailObjects !== null)
+        if (this.bsp.detailObjects !== null) {
+            const detailMaterial = this.getWorldSpawn().detailMaterial;
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
-                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf));
+                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf, detailMaterial));
+        }
 
         this.debugCube = new DebugCube(device, cache);
     }
 
+    public getWorldSpawn(): worldspawn {
+        return assertExists(this.entitySystem.findEntityByType(worldspawn));
+    }
+
     public getSkyCamera(): sky_camera | null {
-        const skyCameraEntity = this.entitySystem.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
-        return skyCameraEntity !== undefined ? skyCameraEntity : null;
+        return this.entitySystem.findEntityByType(sky_camera);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -753,21 +769,21 @@ export class BSPRenderer {
             this.staticPropRenderers[i].movement(renderContext);
     }
 
-    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, kinds: RenderObjectKind): void {
+    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, pvs: BitMap, kinds: RenderObjectKind): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        fillSceneParamsOnRenderInst(template, view);
+        fillSceneParamsOnRenderInst(template, renderContext.currentView);
 
         // Render the world-spawn model.
         if (!!(kinds & RenderObjectKind.WorldSpawn))
-            this.models[0].prepareToRenderWorld(renderContext, renderInstManager, view, pvs);
+            this.models[0].prepareToRenderWorld(renderContext, renderInstManager, pvs);
 
         if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++)
-                this.models[i].prepareToRenderModel(renderContext, renderInstManager, view);
+                this.models[i].prepareToRenderModel(renderContext, renderInstManager);
             for (let i = 0; i < this.entitySystem.entities.length; i++)
-                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager, view);
+                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager);
         }
 
         // Static props.
@@ -778,13 +794,13 @@ export class BSPRenderer {
         // Detail props.
         if (!!(kinds & RenderObjectKind.DetailProps)) {
             this.liveLeafSet.clear();
-            this.models[0].gatherLiveSets(null, null, this.liveLeafSet, pvs, view);
+            this.models[0].gatherLiveSets(null, null, this.liveLeafSet, pvs, renderContext.currentView);
 
             for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
                 const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
                 if (!this.liveLeafSet.has(detailPropLeafRenderer.leaf))
                     continue;
-                detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager, view);
+                detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager);
             }
         }
 
@@ -794,7 +810,7 @@ export class BSPRenderer {
                 if ((leaf as any).debug) {
                     drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, leaf.bbox);
                     for (const sample of leaf.ambientLightSamples)
-                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, view, sample.pos, sample.ambientCube);
+                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, renderContext.currentView, sample.pos, sample.ambientCube);
                 }
             }
         }
@@ -1042,6 +1058,7 @@ class SourceWorldViewRenderer {
     public drawIndirect = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities | RenderObjectKind.DebugCube;
     public pvsEnabled = true;
+    public pvsFallback = true;
 
     public mainView = new SourceEngineView();
     public skyboxView = new SourceEngineView();
@@ -1105,7 +1122,7 @@ class SourceWorldViewRenderer {
                 if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.skyboxView))
                     continue;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.skyboxView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
             }
         }
 
@@ -1115,9 +1132,18 @@ class SourceWorldViewRenderer {
             for (let i = 0; i < renderer.bspRenderers.length; i++) {
                 const bspRenderer = renderer.bspRenderers[i];
 
-                if (!this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.mainView)) {
-                    // No valid PVS, mark everything visible.
-                    renderer.pvsScratch.fill(true);
+                const validPVS = this.calcPVS(bspRenderer.bsp, renderer.pvsScratch, this.mainView);
+                if (!validPVS) {
+                    // No valid PVS. If the fallback system is enabled, mark everything visible,
+                    // otherwise, just skip this view.
+
+                    if (this.pvsFallback) {
+                        // Mark everything visible.
+                        renderer.pvsScratch.fill(true);
+                    } else {
+                        // Skip this view.
+                        continue;
+                    }
                 }
 
                 // Calculate our fog parameters from the local player's fog controller.
@@ -1127,7 +1153,7 @@ class SourceWorldViewRenderer {
                 else
                     this.mainView.fogParams.maxdensity = 0.0;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.mainView, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube));
             }
         }
 
@@ -1260,6 +1286,7 @@ export class SourceRenderer implements SceneGfx {
     constructor(context: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.drawIndirect = false;
+        this.reflectViewRenderer.pvsFallback = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);

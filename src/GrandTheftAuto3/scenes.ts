@@ -13,7 +13,6 @@ import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition,
 import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
 import { mat4 } from 'gl-matrix';
-import { AABB } from '../Geometry';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { colorNewCopy, OpaqueBlack } from '../Color';
@@ -157,11 +156,6 @@ export class GTA3SceneDesc implements SceneDesc {
     private async fetchTimeCycle(dataFetcher: DataFetcher): Promise<ColorSet[]> {
         const text = await this.fetchText(dataFetcher, this.meta.paths.dat.timecyc);
         return parseTimeCycle(text, this.meta.paths.dat.timecyc);
-    }
-
-    private async fetchZones(dataFetcher: DataFetcher): Promise<Map<string, AABB>> {
-        const text = await this.fetchText(dataFetcher, this.meta.paths.zon);
-        return parseZones(text);
     }
 
     private async fetchWater(dataFetcher: DataFetcher): Promise<[ItemPlacement, MeshFragData[]]> {

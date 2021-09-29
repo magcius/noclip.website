@@ -186,7 +186,7 @@ export class DetailPropLeafRenderer {
     private inputState: GfxInputState;
     private centerPoint = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number) {
+    constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number, detailMaterial: string) {
         const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -248,7 +248,7 @@ export class DetailPropLeafRenderer {
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
 
-        this.bindMaterial(renderContext);
+        this.bindMaterial(renderContext, detailMaterial);
     }
 
     private async createModelDetailProp(renderContext: SourceRenderContext, modelName: string, detailModel: DetailModel): Promise<void> {
@@ -265,9 +265,11 @@ export class DetailPropLeafRenderer {
         this.modelEntries.push(studioModelInstance);
     }
 
-    private prepareToRenderSprites(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    private prepareToRenderSprites(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (this.materialInstance === null)
             return;
+
+        const view = renderContext.currentView;
 
         // Upload new sprite data.
         const vertexData = this.vertexData;
@@ -355,17 +357,17 @@ export class DetailPropLeafRenderer {
         this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }
 
-    private prepareToRenderModels(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    private prepareToRenderModels(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         for (let i = 0; i < this.modelEntries.length; i++)
             this.modelEntries[i].prepareToRender(renderContext, renderInstManager);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (!this.visible)
             return;
 
-        this.prepareToRenderSprites(renderContext, renderInstManager, view);
-        this.prepareToRenderModels(renderContext, renderInstManager, view);
+        this.prepareToRenderSprites(renderContext, renderInstManager);
+        this.prepareToRenderModels(renderContext, renderInstManager);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -381,9 +383,9 @@ export class DetailPropLeafRenderer {
             this.modelEntries[i].destroy(device);
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext) {
+    private async bindMaterial(renderContext: SourceRenderContext, detailMaterial: string) {
         const materialCache = renderContext.materialCache;
-        const materialInstance = await materialCache.createMaterialInstance(`detail/detailsprites`);
+        const materialInstance = await materialCache.createMaterialInstance(detailMaterial);
         await materialInstance.init(renderContext);
         this.materialInstance = materialInstance;
     }

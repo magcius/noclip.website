@@ -13,7 +13,7 @@ import { GfxDevice, GfxSampler, GfxNormalizedViewportCoords } from "../gfx/platf
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderInstManager";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { nArray, assertExists } from '../util';
+import { nArray, assertExists, assert } from '../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy, Color } from '../Color';
 import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers';
@@ -51,15 +51,13 @@ export class MDL0Model {
 
         for (let i = 0; i < this.mdl0.materials.length; i++) {
             const material = this.mdl0.materials[i];
-            this.materialData[i] = new MaterialData(device, material, this.materialHacks);
+            this.materialData[i] = new MaterialData(cache, material, this.materialHacks);
         }
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.shapeData.length; i++)
             this.shapeData[i].destroy(device);
-        for (let i = 0; i < this.materialData.length; i++)
-            this.materialData[i].destroy(device);
         this.bufferCoalescer.destroy(device);
     }
 }
@@ -86,6 +84,8 @@ class ShapeInstance {
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         const usesSkinning = this.shape.mtxIdx < 0;
+        assert(usesSkinning === materialInstance.usesSkinning);
+
         if (!usesSkinning)
             materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.mtxIdx, null, camera, viewport);
 
@@ -157,6 +157,7 @@ class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
     public visible = true;
+    public usesSkinning = false;
 
     constructor(private modelInstance: MDL0ModelInstance, public materialData: MaterialData) {
         // Create a copy of the GX material, so we can patch in custom channel controls without affecting the original.
@@ -169,14 +170,22 @@ class MaterialInstance {
         this.setSortKeyLayer(layer);
     }
 
-    public setSkinningEnabled(v: boolean): void {
+    public setUsesSkinning(v: boolean): void {
+        if (this.usesSkinning === v)
+            return;
+
+        this.usesSkinning = v;
+        let changed = false;
         for (let i = 0; i < this.materialData.material.texSrts.length; i++) {
             const mapMode = this.materialData.material.texSrts[i].mapMode;
-            if (mapMode === BRRES.MapMode.ENV_CAMERA || mapMode === BRRES.MapMode.ENV_SPEC || mapMode === BRRES.MapMode.ENV_LIGHT)
-                this.materialHelper.material.useTexMtxIdx![i] = v;
+            if (mapMode === BRRES.MapMode.ENV_CAMERA || mapMode === BRRES.MapMode.ENV_SPEC || mapMode === BRRES.MapMode.ENV_LIGHT) {
+                this.materialHelper.material.useTexMtxIdx![i] = this.usesSkinning;
+                changed = true;
+            }
         }
 
-        this.materialHelper.createProgram();
+        if (changed)
+            this.materialHelper.createProgram();
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -411,9 +420,6 @@ class MaterialInstance {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
-
-    public destroy(device: GfxDevice): void {
-    }
 }
 
 function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4): void {
@@ -485,8 +491,6 @@ export class MDL0ModelInstance {
         while (matrixScratchArray.length < this.instanceStateData.jointToWorldMatrixArray.length)
             matrixScratchArray.push(mat4.create());
 
-        for (let i = 0; i < this.mdl0Model.materialData.length; i++)
-            this.materialInstances[i] = new MaterialInstance(this, this.mdl0Model.materialData[i]);
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawOpaOps, false);
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
     }
@@ -687,18 +691,15 @@ export class MDL0ModelInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].destroy(device);
-    }
-
     private execDrawOpList(opList: BRRES.DrawOp[], translucent: boolean): void {
         const mdl0 = this.mdl0Model.mdl0;
 
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
 
-            const materialInstance = this.materialInstances[op.matId];
+            const materialData = this.mdl0Model.materialData[op.matId];
+            const materialInstance = new MaterialInstance(this, materialData);
+            this.materialInstances.push(materialInstance);
 
             const node = mdl0.nodes[op.nodeId];
             const shape = this.mdl0Model.mdl0.shapes[op.shpId];
@@ -708,7 +709,7 @@ export class MDL0ModelInstance {
                 shapeInstance.sortKeyBias = i;
 
             const usesSkinning = shape.mtxIdx < 0;
-            materialInstance.setSkinningEnabled(usesSkinning);
+            materialInstance.setUsesSkinning(usesSkinning);
 
             this.shapeInstances.push(shapeInstance);
         }
@@ -791,7 +792,7 @@ const matrixScratch = mat4.create();
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
-    constructor(device: GfxDevice, public material: BRRES.MDL0_MaterialEntry, public materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(cache: GfxRenderCache, public material: BRRES.MDL0_MaterialEntry, public materialHacks?: GX_Material.GXMaterialHacks) {
         for (let i = 0; i < 8; i++) {
             const sampler = this.material.samplers[i];
             if (!sampler)
@@ -802,7 +803,7 @@ class MaterialData {
 
             // In RRES, the minLOD / maxLOD are in the texture, not the sampler.
 
-            const gfxSampler = device.createSampler({
+            const gfxSampler = cache.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
                 minFilter, mipFilter, magFilter,
@@ -812,9 +813,5 @@ class MaterialData {
 
             this.gfxSamplers[i] = gfxSampler;
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.gfxSamplers.forEach((r) => device.destroySampler(r));
     }
 }

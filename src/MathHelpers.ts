@@ -751,3 +751,7 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
     dst[11] = 9999.0;
     dst[15] = 9999.0;
 }
+
+export function randomRange(a: number, b = -a): number {
+    return lerp(a, b, Math.random());
+}

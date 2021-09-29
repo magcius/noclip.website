@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
+import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, range, setMatrixTranslation } from "../MathHelpers";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 
 // Encompasses the MDL, VVD & VTX formats.
@@ -1328,11 +1328,7 @@ export class StudioModelData {
                             const stripOffset = vtxView.getUint32(vtxStripGroupIdx + 0x14, true);
 
                             const stripGroupFlags: OptimizeStripGroupFlags = vtxView.getUint8(vtxStripGroupIdx + 0x18);
-
-                            // DX90 VTX models should always have hw skin enabled.
-                            // TODO(jstpierre): Figure out why this is breaking on HL2's "female_07" model. Eyeballs?
-                            if (!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED))
-                                continue;
+                            const isHWSkin = !!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED);
 
                             const hasTopologyData = mdlVersion >= 49;
                             if (hasTopologyData) {
@@ -1382,11 +1378,22 @@ export class StudioModelData {
 
                                 const boneWeights: number[] = [0, 0, 0, 0];
 
+                                if (vtxNumBones >= 1)
+                                    assert(vvdNumBones === vtxNumBones);
+
                                 let totalBoneWeight = 0.0;
                                 for (let i = 0; i < vtxNumBones; i++) {
                                     const boneWeightIdx = vtxBoneWeightIdx[i];
                                     boneWeights[i] = vvdBoneWeight[boneWeightIdx];
                                     totalBoneWeight += boneWeights[i];
+
+                                    // Sanity check.
+                                    if (!isHWSkin) {
+                                        assert(vtxBoneID[i] === vvdBoneIdx[i]);
+
+                                        // TODO(jstpierre): Re-pack a new hardware bone table.
+                                        assert(vtxBoneID[i] < MaterialProgramBase.MaxSkinningParamsBoneMatrix);
+                                    }
                                 }
 
                                 // Normalize.
@@ -1460,15 +1467,21 @@ export class StudioModelData {
                             const stripGroupData = new StudioModelStripGroupData();
                             stripGroupDatas.push(stripGroupData);
 
-                            // Note that as noted before, "tristrip" in modern models refers mostly to trilists, not tristrips.
-                            // We can have multiple strips in a strip group if we have a bone change table between strips.
-                            // For unskinned / static prop models without bones, we should always have one strip.
+                            // We can have multiple strips in a strip group if we have a bone change table between
+                            // strips. For unskinned / static prop models without bones, we should always have one strip.
 
                             // Each strip in a strip group can change the bones, relative to the previous one.
                             const hardwareBoneTable: number[] = [];
 
+                            if (!isHWSkin) {
+                                // If this is a software skinned system, then the bone IDs stored in the vertices should be
+                                // the same as the overall bone table, not the hardware bone table. As such, set the table
+                                // to be identity.
+                                for (let i = 0; i < MaterialProgramBase.MaxSkinningParamsBoneMatrix; i++)
+                                    hardwareBoneTable[i] = i;
+                            }
+
                             let vtxStripIdx = vtxStripGroupIdx + stripOffset;
-                            // assert(numStrips === 1);
                             for (let s = 0; s < numStrips; s++) {
                                 const stripNumIndices = vtxView.getUint32(vtxStripIdx + 0x00, true);
                                 const stripIndexOffset = vtxView.getUint32(vtxStripIdx + 0x04, true);
@@ -1501,6 +1514,9 @@ export class StudioModelData {
                                     hardwareBoneTable[hardwareID] = boneID;
                                     boneStateChangeIdx += 0x08;
                                 }
+
+                                if (!isHWSkin)
+                                    assert(numBoneStateChanges === 0);
 
                                 stripGroupData.stripData.push(new StudioModelStripData(meshFirstIdx + stripIndexOffset, stripNumIndices, hardwareBoneTable.slice()));
 

@@ -45,6 +45,7 @@ interface GfxSamplerP_WebGPU extends GfxSampler {
 
 interface GfxProgramP_WebGPU extends GfxProgram {
     descriptor: GfxProgramDescriptorSimple;
+    stagesFinishedPromise: Promise<void> | null;
     vertexStage: GPUProgrammableStage | null;
     fragmentStage: GPUProgrammableStage | null;
 }
@@ -72,8 +73,8 @@ interface GfxInputStateP_WebGPU extends GfxInputState {
 
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
     descriptor: GfxRenderPipelineDescriptor;
-    isCreating: boolean;
     gpuRenderPipeline: GPURenderPipeline | null;
+    isCreatingAsync: boolean;
 }
 
 interface GfxReadbackP_WebGPU extends GfxReadback {
@@ -183,9 +184,9 @@ function translateTextureUsage(usage: GfxTextureUsage): GPUTextureUsageFlags {
     let gpuUsage: GPUTextureUsageFlags = 0;
 
     if (!!(usage & GfxTextureUsage.Sampled))
-        gpuUsage |= GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST;
+        gpuUsage |= GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
     if (!!(usage & GfxTextureUsage.RenderTarget))
-        gpuUsage |= GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
+        gpuUsage |= GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
 
     return gpuUsage;
 }
@@ -616,6 +617,69 @@ function translateImageLayout(layout: GPUImageDataLayout, format: GfxFormat, mip
     layout.rowsPerImage = numBlocksY;
 }
 
+// Hack for now until browsers implement compositingAlphaMode
+// https://bugs.chromium.org/p/chromium/issues/detail?id=1241373
+class FullscreenAlphaClear {
+    private pipeline: GPURenderPipeline | null = null;
+    private shaderModule: GPUShaderModule | null = null;
+
+    private shaderText = `
+struct VertexOutput {
+    [[builtin(position)]] pos: vec4<f32>;
+};
+
+[[stage(vertex)]]
+fn vs([[builtin(vertex_index)]] index: u32) -> VertexOutput {
+    var out: VertexOutput;
+    out.pos.x = select(-1.0, 3.0, index == 1u);
+    out.pos.y = select(-1.0, 3.0, index == 2u);
+    out.pos.z = 1.0;
+    out.pos.w = 1.0;
+    return out;
+}
+
+struct FragmentOutput {
+    [[location(0)]] color: vec4<f32>;
+};
+
+[[stage(fragment)]]
+fn fs() -> FragmentOutput {
+    return FragmentOutput(vec4<f32>(1.0, 0.0, 1.0, 1.0));
+}
+`;
+
+    constructor(device: GPUDevice) {
+        this.create(device);
+    }
+
+    private async create(device: GPUDevice): Promise<void> {
+        const format: GPUTextureFormat = 'bgra8unorm';
+        this.shaderModule = await device.createShaderModule({ code: this.shaderText });
+        this.pipeline = await device.createRenderPipeline({
+            vertex: { module: this.shaderModule, entryPoint: 'vs', },
+            fragment: { module: this.shaderModule, entryPoint: 'fs', targets: [{ format, writeMask: 0x08, }] },
+        });
+    }
+
+    public render(device: GPUDevice, onscreenTexture: GPUTextureView): void {
+        // Not much we can do until it's ready.
+        if (this.pipeline === null)
+            return;
+
+        const encoder = device.createCommandEncoder();
+        const renderPass = encoder.beginRenderPass({
+            colorAttachments: [{ view: onscreenTexture, loadValue: 'load', storeOp: 'store', }],
+        });
+        renderPass.setPipeline(this.pipeline);
+        renderPass.draw(3);
+        renderPass.endPass();
+        device.queue.submit([encoder.finish()]);
+    }
+
+    public destroy(device: GPUDevice): void {
+    }
+}
+
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
@@ -629,6 +693,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
 
+    private _fullscreenAlphaClear: FullscreenAlphaClear;
+
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
     public readonly glslVersion = `#version 440`;
@@ -636,7 +702,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = true;
     public readonly viewportOrigin = GfxViewportOrigin.UpperLeft;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
-    public readonly supportsSyncPipelineCompilation: boolean = false;
 
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: (src: string, shaderStage: string) => string) {
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
@@ -655,6 +720,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this.device.onuncapturederror = (event) => {
             console.error(event.error);
         };
+
+        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device);
     }
 
     // GfxSwapChain
@@ -693,7 +760,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public present(): void {
-        // Nothing to do, AFAIK. Might have to make a fake swap chain eventually, I think...
+        this._fullscreenAlphaClear.render(this.device, this.canvasContext.getCurrentTexture().createView());
     }
 
     // GfxDevice
@@ -814,15 +881,19 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private async _createProgram(program: GfxProgramP_WebGPU): Promise<void> {
         const deviceProgram = program.descriptor;
-        // TODO(jstpierre): Asynchronous program compilation
-        program.vertexStage = await this._createShaderStage(deviceProgram.preprocessedVert, 'vertex');
-        program.fragmentStage = await this._createShaderStage(deviceProgram.preprocessedFrag, 'fragment');
+        const vertex = this._createShaderStage(deviceProgram.preprocessedVert, 'vertex');
+        const fragment = deviceProgram.preprocessedFrag !== null ? this._createShaderStage(deviceProgram.preprocessedFrag, 'fragment') : Promise.resolve(null);
+        program.stagesFinishedPromise = Promise.all([vertex, fragment]).then(([vertexStage, fragmentStage]) => {
+            program.vertexStage = vertexStage;
+            program.fragmentStage = fragmentStage;
+            program.stagesFinishedPromise = null;
+        });
     }
 
     public createProgramSimple(deviceProgram: GfxProgramDescriptorSimple): GfxProgram {
         const vertexStage: GPUProgrammableStage | null = null;
         const fragmentStage: GPUProgrammableStage | null = null;
-        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor: deviceProgram, vertexStage, fragmentStage };
+        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor: deviceProgram, vertexStage, fragmentStage, stagesFinishedPromise: null, };
         this._createProgram(program);
         return program;
     }
@@ -937,16 +1008,17 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         const gpuRenderPipeline: GPURenderPipeline | null = null;
-        const isCreating = false;
+        const isCreatingAsync = false;
         const renderPipeline: GfxRenderPipelineP_WebGPU = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(),
-            descriptor, isCreating, gpuRenderPipeline,
+            descriptor, isCreatingAsync, gpuRenderPipeline,
         };
-        this.ensureRenderPipeline(renderPipeline);
+        this._createRenderPipeline(renderPipeline, true);
         return renderPipeline;
     }
 
-    private async ensureRenderPipeline(renderPipeline: GfxRenderPipelineP_WebGPU): Promise<void> {
-        if (renderPipeline.isCreating)
+    private async _createRenderPipeline(renderPipeline: GfxRenderPipelineP_WebGPU, async: boolean): Promise<void> {
+        // If we're already in the process of creating a the pipeline async, no need to kick the process off again...
+        if (async && renderPipeline.isCreatingAsync)
             return;
 
         if (renderPipeline.gpuRenderPipeline !== null)
@@ -954,10 +1026,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         const descriptor = renderPipeline.descriptor;
         const program = descriptor.program as GfxProgramP_WebGPU;
-        const vertexStage = program.vertexStage, fragmentStage = program.fragmentStage;
-        if (vertexStage === null || fragmentStage === null)
-            return;
 
+        if (program.stagesFinishedPromise !== null) {
+            // TODO(jstpierre): No way to synchronously wait on shader modules to be completed...
+            assert(async);
+            await program.stagesFinishedPromise;
+        }
+
+        const vertexStage = assertExists(program.vertexStage), fragmentStage = program.fragmentStage;
         const layout = this._createPipelineLayout(descriptor.bindingLayouts);
         const primitive = translatePrimitiveState(descriptor.topology, descriptor.megaStateDescriptor);
         const targets = translateTargets(descriptor.colorAttachmentFormats, descriptor.megaStateDescriptor);
@@ -968,9 +1044,17 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             buffers = (descriptor.inputLayout as GfxInputLayoutP_WebGPU).buffers;
         const sampleCount = descriptor.sampleCount;
 
-        renderPipeline.isCreating = true;
+        renderPipeline.isCreatingAsync = true;
 
-        const gpuRenderPipeline: GPURenderPipelineDescriptor = {
+        let fragment: GPUFragmentState | undefined = undefined;
+        if (fragmentStage !== null) {
+            fragment = {
+                ... fragmentStage,
+                targets,
+            };
+        }
+
+        const gpuRenderPipelineDescriptor: GPURenderPipelineDescriptor = {
             layout,
             vertex: {
                 ... vertexStage,
@@ -981,17 +1065,24 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             multisample: {
                 count: sampleCount,
             },
-            fragment: {
-                ... fragmentStage,
-                targets,
-            },
+            fragment,
         };
 
-        // TODO(jstpierre): createRenderPipelineAsync
-        renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipeline);
+        if (async) {
+            const gpuRenderPipeline = await this.device.createRenderPipelineAsync(gpuRenderPipelineDescriptor);
+
+            // We might have created a sync pipeline while we were async building; no way to cancel the async
+            // pipeline build at this point, so just chunk it out :/
+            if (renderPipeline.gpuRenderPipeline === null)
+                renderPipeline.gpuRenderPipeline = gpuRenderPipeline;
+        } else {
+            renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipelineDescriptor);
+        }
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
+
+        renderPipeline.isCreatingAsync = false;
     }
 
     public createReadback(): GfxReadback {
@@ -1038,6 +1129,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyReadback(o: GfxReadback): void {
+    }
+
+    public pipelineQueryReady(o: GfxRenderPipeline): boolean {
+        const renderPipeline = o as GfxRenderPipelineP_WebGPU;
+        return renderPipeline.gpuRenderPipeline !== null;
+    }
+
+    public pipelineForceReady(o: GfxRenderPipeline): void {
+        const renderPipeline = o as GfxRenderPipelineP_WebGPU;
+        this._createRenderPipeline(renderPipeline, false);
     }
 
     public createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
@@ -1150,12 +1251,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return true;
     }
 
-    public queryPipelineReady(o: GfxRenderPipeline): boolean {
-        const renderPipeline = o as GfxRenderPipelineP_WebGPU;
-        this.ensureRenderPipeline(renderPipeline);
-        return renderPipeline.gpuRenderPipeline !== null;
-    }
-
     public queryPlatformAvailable(): boolean {
         // TODO(jstpierre): Listen to the lost event?
         return true;
@@ -1227,7 +1322,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (device === null)
         return null;
 
-    const context = canvas.getContext('gpupresent') as any as GPUCanvasContext;
+    const context = canvas.getContext('webgpu') as any as GPUCanvasContext;
 
     if (!context)
         return null;

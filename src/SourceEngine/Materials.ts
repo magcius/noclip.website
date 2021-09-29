@@ -4,7 +4,7 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -37,6 +37,21 @@ export const enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     FramebufferDepth = `framebuffer-depth`,
     WaterReflection  = `water-reflection`,
+}
+
+// https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/const.h#L340-L387
+export const enum RenderMode {
+    Normal = 0,
+    TransColor,
+    TransTexture,
+    Glow,
+    TransAlpha,
+    TransAdd,
+    Environmental,
+    TransAddFrameBlend,
+    TransAddAlphaAdd,
+    WorldGlow,
+    None,
 }
 
 export class FogParams {
@@ -285,7 +300,8 @@ class ParameterTexture {
 }
 
 class ParameterString {
-    public value: string = '';
+    constructor(public value: string = '') {
+    }
 
     public parse(S: string): void {
         this.value = S;
@@ -343,7 +359,7 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
     return results;
 }
 
-const scratchMatrix = mat4.create();
+const scratchMat4a = mat4.create();
 class ParameterMatrix {
     public matrix = mat4.create();
 
@@ -353,12 +369,12 @@ class ParameterMatrix {
         this.matrix[13] = -cy;
         this.matrix[0] = sx;
         this.matrix[5] = sy;
-        mat4.fromZRotation(scratchMatrix, MathConstants.DEG_TO_RAD * r);
-        mat4.mul(this.matrix, scratchMatrix, this.matrix);
-        mat4.identity(scratchMatrix);
-        scratchMatrix[12] = cx + tx;
-        scratchMatrix[13] = cy + ty;
-        mat4.mul(this.matrix, scratchMatrix, this.matrix);
+        mat4.fromZRotation(scratchMat4a, MathConstants.DEG_TO_RAD * r);
+        mat4.mul(this.matrix, scratchMat4a, this.matrix);
+        mat4.identity(scratchMat4a);
+        scratchMat4a[12] = cx + tx;
+        scratchMat4a[13] = cy + ty;
+        mat4.mul(this.matrix, scratchMat4a, this.matrix);
     }
 
     public parse(S: string): void {
@@ -400,8 +416,8 @@ class ParameterMatrix {
 class ParameterVector {
     protected internal: ParameterNumber[];
 
-    constructor(length: number) {
-        this.internal = nArray(length, () => new ParameterNumber(0));
+    constructor(length: number, values: number[] | null = null) {
+        this.internal = nArray(length, (i) => new ParameterNumber(values !== null ? values[i] : 0));
     }
 
     public parse(S: string): void {
@@ -546,6 +562,7 @@ export class EntityMaterialParameters {
     public textureFrameIndex = 0;
     public blendColor = colorNewCopy(White);
     public lightCache: LightCache | null = null;
+    public randomNumber = Math.random();
 }
 
 const enum AlphaBlendMode {
@@ -578,19 +595,18 @@ export abstract class BaseMaterial {
     public param: ParameterMap = {};
     public entityParams: EntityMaterialParameters | null = null;
     public skinningMode = SkinningMode.None;
+    public representativeTexture: VTF | null = null;
 
     protected loaded = false;
     protected proxyDriver: MaterialProxyDriver | null = null;
-    protected representativeTexture: VTF | null = null;
     protected texCoord0Scale = vec2.create();
     protected isAdditive = false;
 
     constructor(public vmt: VMT) {
+        this.initParameters();
     }
 
     public async init(renderContext: SourceRenderContext) {
-        this.initParameters();
-
         this.setupParametersFromVMT(renderContext);
         if (this.vmt.proxies !== undefined)
             this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
@@ -624,6 +640,21 @@ export abstract class BaseMaterial {
         // Nothing by default.
     }
 
+    public paramSetColor(name: string, c: Color): void {
+        (this.param[name] as ParameterColor).setFromColor(c);
+    }
+
+    public paramSetNumber(name: string, v: number): void {
+        (this.param[name] as ParameterNumber).value = v;
+    }
+
+    public getNumFrames(): number {
+        if (this.representativeTexture !== null)
+            return this.representativeTexture.numFrames;
+        else
+            return 1;
+    }
+
     private findFallbackBlock(shaderTypeName: string, materialDefines: string[]): any | null {
         for (let i = 0; i < materialDefines.length; i++) {
             const suffix = materialDefines[i];
@@ -652,6 +683,10 @@ export abstract class BaseMaterial {
             setupParametersFromVMT(this.param, fallback, materialDefines);
     }
 
+    public paramGetString(name: string): string {
+        return (this.param[name] as ParameterString).value;
+    }
+
     protected paramGetTexture(name: string): ParameterTexture {
         return (this.param[name] as ParameterTexture);
     }
@@ -668,11 +703,11 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterNumber).value;
     }
 
-    protected paramGetInt(name: string): number {
+    public paramGetInt(name: string): number {
         return this.paramGetNumber(name) | 0;
     }
 
-    protected paramGetVector(name: string): ParameterVector {
+    public paramGetVector(name: string): ParameterVector {
         return (this.param[name] as ParameterVector);
     }
 
@@ -698,21 +733,19 @@ export abstract class BaseMaterial {
     protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         if (useMappingTransform) {
-            scaleMatrix(scratchMatrix, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
-            return fillMatrix4x2(d, offs, scratchMatrix);
+            scaleMatrix(scratchMat4a, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
+            return fillMatrix4x2(d, offs, scratchMat4a);
         } else {
             return fillMatrix4x2(d, offs, m);
         }
     }
 
-    protected paramFillGammaColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
-        const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
+    protected paramFillGammaColor(d: Float32Array, offs: number, name: string, alpha: number = 1.0): number {
         this.paramGetVector(name).fillColor(scratchColor, alpha);
         return fillGammaColor(d, offs, scratchColor);
     }
 
-    protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
-        const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
+    protected paramFillColor(d: Float32Array, offs: number, name: string, alpha: number = 1.0): number {
         this.paramGetVector(name).fillColor(scratchColor, alpha);
         return fillColor(d, offs, scratchColor);
     }
@@ -772,7 +805,7 @@ export abstract class BaseMaterial {
             megaStateFlags.cullMode = GfxCullMode.None;
     }
 
-    protected setAlphaBlendMode(megaStateFlags: Partial<GfxMegaStateDescriptor>, alphaBlendMode: AlphaBlendMode): boolean {
+    protected setAlphaBlendMode(megaStateFlags: Partial<GfxMegaStateDescriptor>, alphaBlendMode: AlphaBlendMode): void {
         if (alphaBlendMode === AlphaBlendMode.BlendAdd) {
             setAttachmentStateSimple(megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
@@ -780,7 +813,7 @@ export abstract class BaseMaterial {
                 blendDstFactor: GfxBlendFactor.One,
             });
             megaStateFlags.depthWrite = false;
-            return true;
+            this.isTranslucent = true;
         } else if (alphaBlendMode === AlphaBlendMode.Blend) {
             setAttachmentStateSimple(megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
@@ -788,7 +821,7 @@ export abstract class BaseMaterial {
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
             megaStateFlags.depthWrite = false;
-            return true;
+            this.isTranslucent = true;
         } else if (alphaBlendMode === AlphaBlendMode.Add) {
             setAttachmentStateSimple(megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
@@ -797,7 +830,7 @@ export abstract class BaseMaterial {
             });
             megaStateFlags.depthWrite = false;
             this.isAdditive = true;
-            return true;
+            this.isTranslucent = true;
         } else if (alphaBlendMode === AlphaBlendMode.None) {
             setAttachmentStateSimple(megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
@@ -805,7 +838,7 @@ export abstract class BaseMaterial {
                 blendDstFactor: GfxBlendFactor.Zero,
             });
             megaStateFlags.depthWrite = true;
-            return false;
+            this.isTranslucent = false;
         } else {
             throw "whoops";
         }
@@ -851,6 +884,9 @@ export abstract class BaseMaterial {
         p['$color']                        = new ParameterColor(1, 1, 1);
         p['$color2']                       = new ParameterColor(1, 1, 1);
         p['$alpha']                        = new ParameterNumber(1);
+
+        // Data passed from entity system.
+        p['$rendermode']                   = new ParameterNumber(0, false);
     }
 
     protected async fetchResources(materialCache: MaterialCache) {
@@ -907,9 +943,6 @@ export abstract class BaseMaterial {
     }
 
     private calcTexCoord0Scale(): void {
-        if (this.representativeTexture === null)
-            this.representativeTexture = this.calcRepresentativeTexture();
-
         let w: number, h: number;
         if (!this.wantsTexCoord0Scale) {
             w = h = 1;
@@ -924,6 +957,9 @@ export abstract class BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        if (this.representativeTexture === null)
+            this.representativeTexture = this.calcRepresentativeTexture();
+
         this.calcTexCoord0Scale();
     }
 
@@ -959,7 +995,12 @@ export abstract class BaseMaterial {
             let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
 
-            offs += fillMatrix4x3(d, offs, modelMatrix!);
+            if (modelMatrix !== null) {
+                offs += fillMatrix4x3(d, offs, modelMatrix);
+            } else {
+                mat4.identity(scratchMat4a);
+                offs += fillMatrix4x3(d, offs, scratchMat4a);
+            }
         }
     }
 
@@ -970,10 +1011,10 @@ export abstract class BaseMaterial {
             let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
 
-            mat4.identity(scratchMatrix);
+            mat4.identity(scratchMat4a);
             for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
                 const boneIndex = bonePaletteTable[i];
-                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
+                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMat4a;
                 offs += fillMatrix4x3(d, offs, m);
             }
         } else if (this.skinningMode === SkinningMode.Rigid) {
@@ -1062,6 +1103,7 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
+#define u_SpecExponentFactor (u_Misc[0].z)
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1644,9 +1686,12 @@ void mainPS() {
     t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
     t_SpecularLightInput.Fresnel = t_Fresnel;
 
-    // TODO(jstpierre): Support $phongexponentfactor override
     vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
-    t_SpecularLightInput.SpecularExponent = mix(1.0, 150.0, t_SpecularMapSample.r);
+#ifdef USE_PHONG_EXPONENT_TEXTURE
+    t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
+#else
+    t_SpecularLightInput.SpecularExponent = u_SpecExponentFactor;
+#endif
     t_SpecularLightInput.RimExponent = 4.0;
 
     // Specular mask is either in base map or normal map alpha.
@@ -1686,7 +1731,7 @@ void mainPS() {
 }
 
 const enum GenericShaderType {
-    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, DecalModulate, Unknown,
+    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, DecalModulate, Sprite, Unknown,
 };
 
 class Material_Generic extends BaseMaterial {
@@ -1698,6 +1743,7 @@ class Material_Generic extends BaseMaterial {
     private wantsSelfIllum = false;
     private wantsBlendModulate = false;
     private wantsPhong = false;
+    private wantsPhongExponentTexture = false;
     private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
     private wantsAmbientCube = false;
@@ -1789,10 +1835,16 @@ class Material_Generic extends BaseMaterial {
         // Phong (Skin)
         p['$phong']                        = new ParameterBoolean(false, false);
         p['$phongboost']                   = new ParameterNumber(1.0);
+        p['$phongexponent']                = new ParameterNumber(5.0);
         p['$phongexponenttexture']         = new ParameterTexture(false);
+        p['$phongexponentfactor']          = new ParameterNumber(149.0);
         p['$phongfresnelranges']           = new ParameterVector(3);
         p['$basemapalphaphongmask']        = new ParameterBoolean(false, false);
         p['$invertphongmask']              = new ParameterBoolean(false, false);
+
+        // Sprite
+        p['$spriteorientation']            = new ParameterString('parallel_upright');
+        p['$spriteorigin']                 = new ParameterVector(2, [0.5, 0.5]);
 
         // SolidEnergy (doesn't make sense on this..., basically only to get Portal 2 to load...)
         p['$flow_color_intensity']         = new ParameterNumber(0.0);
@@ -1821,6 +1873,8 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = GenericShaderType.Black;
         else if (shaderTypeStr === 'decalmodulate')
             this.shaderType = GenericShaderType.DecalModulate;
+        else if (shaderTypeStr === 'sprite')
+            this.shaderType = GenericShaderType.Sprite;
         else
             this.shaderType = GenericShaderType.Unknown;
 
@@ -1843,6 +1897,11 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = GenericShaderType.Skin;
             this.wantsPhong = true;
             this.program.setDefineBool('USE_PHONG', true);
+
+            if (this.paramGetVTF('$phongexponenttexture') !== null) {
+                this.wantsPhongExponentTexture = true;
+                this.program.setDefineBool('USE_PHONG_EXPONENT_TEXTURE', true);
+            }
         }
 
         if (this.paramGetVTF('$detail') !== null) {
@@ -1943,13 +2002,24 @@ class Material_Generic extends BaseMaterial {
                 blendDstFactor: GfxBlendFactor.Src,
             });
             this.megaStateFlags.depthWrite = false;
+        } else if (this.paramGetNumber('$rendermode') > 0) {
+            const renderMode: RenderMode = this.paramGetNumber('$rendermode');
+
+            if (renderMode === RenderMode.Glow || renderMode === RenderMode.WorldGlow) {
+                this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.BlendAdd);
+                // TODO(jstpierre): Once we support glow traces, re-enable this.
+                // this.megaStateFlags.depthCompare = GfxCompareMode.Always;
+            } else {
+                // Haven't seen this render mode yet.
+                debugger;
+            }
         } else {
             let isTranslucent = false;
 
             if (this.textureIsTranslucent('$basetexture'))
                 isTranslucent = true;
 
-            this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
+            this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         }
 
         this.setSkinningMode(this.program);
@@ -1993,6 +2063,7 @@ class Material_Generic extends BaseMaterial {
 
         this.setupFogParams(renderContext, renderInst);
 
+        // TODO(jstpierre): Carve down this allocation a bit.
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
 
@@ -2014,8 +2085,8 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsDetail) {
             const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
             const detailScale = this.paramGetNumber('$detailscale');
-            scaleMatrix(scratchMatrix, detailTextureTransform, detailScale, detailScale);
-            offs += fillScaleBias(d, offs, scratchMatrix);
+            scaleMatrix(scratchMat4a, detailTextureTransform, detailScale, detailScale);
+            offs += fillScaleBias(d, offs, scratchMat4a);
         }
 
         if (this.wantsEnvmapMask)
@@ -2060,7 +2131,8 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
+        const specExponentFactor = this.wantsPhongExponentTexture ? this.paramGetNumber('$phongexponentfactor') : this.paramGetNumber('$phongexponent');
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, specExponentFactor);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2257,7 +2329,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         this.program = new UnlitTwoTextureProgram();
 
         const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
-        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
+        this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
@@ -2284,7 +2356,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
-        offs += this.paramFillColor(d, offs, '$color', '$alpha');
+        offs += this.paramFillColor(d, offs, '$color', this.paramGetNumber('$alpha'));
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -2535,25 +2607,25 @@ void mainPS() {
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
 
     vec3 t_ReflectColor = vec3(0.0);
-#ifdef USE_EXPENSIVE_REFLECT
+
     float t_ReflectAmount = u_ReflectAmount;
-
+    if (t_ReflectAmount > 0.0) {
 #ifndef USE_FLOWMAP
-    // not sure why, but it's super distorted otherwise... see d2_coast_01
-    // guessing something about my distortion math isn't 100%
-    t_ReflectAmount *= 0.25;
+        // not sure why, but it's super distorted otherwise... see d2_coast_01
+        // guessing something about my distortion math isn't 100%
+        t_ReflectAmount *= 0.25;
 #endif
 
-    vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
-    // Reflection texture is stored upside down
-    t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
+        vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
+        // Reflection texture is stored upside down
+        t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
 
-    vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
-    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-#else
-    vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
-    t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-#endif
+        vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), t_ReflectTexCoord);
+        t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+    } else {
+        vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection);
+        t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
+    }
 
     vec4 t_FinalColor;
 
@@ -2733,11 +2805,13 @@ class Material_Water extends BaseMaterial {
 
         const forceEnvMap = this.paramGetBoolean('$forceenvmap');
         const useExpensiveReflect = renderContext.currentView.useExpensiveWater && !forceEnvMap;
-        if (this.program.setDefineBool('USE_EXPENSIVE_REFLECT', useExpensiveReflect))
-            this.gfxProgram = null;
 
-        offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
-        offs += this.paramFillGammaColor(d, offs, '$reflecttint', '$reflectamount');
+        let reflectAmount = this.paramGetNumber('$reflectamount');
+        if (!useExpensiveReflect)
+            reflectAmount = 0.0;
+
+        offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
+        offs += this.paramFillGammaColor(d, offs, '$reflecttint', reflectAmount);
 
         const fogStart = this.paramGetNumber('$fogstart');
         const fogEnd = this.paramGetNumber('$fogend');
@@ -2748,8 +2822,8 @@ class Material_Water extends BaseMaterial {
         offs += fillGammaColor(d, offs, scratchColor);
 
         // This will take us from -1...1 to world space position.
-        mat4.invert(scratchMatrix, renderContext.currentView.clipFromWorldMatrix);
-        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        mat4.invert(scratchMat4a, renderContext.currentView.clipFromWorldMatrix);
+        offs += fillMatrix4x4(d, offs, scratchMat4a);
 
         if (this.wantsFlowmap) {
             offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
@@ -3001,7 +3075,7 @@ class Material_Refract extends BaseMaterial {
         this.program.defines.set('BLUR_AMOUNT', '' + blurAmount);
 
         const isTranslucent = this.textureIsTranslucent('$basetexture');
-        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
+        this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
         this.isIndirect = this.textureIsIndirect('$basetexture');
@@ -3031,7 +3105,7 @@ class Material_Refract extends BaseMaterial {
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
-        offs += this.paramFillGammaColor(d, offs, '$refracttint', '$refractamount');
+        offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
         offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
 
         if (this.wantsEnvmap) {
@@ -3669,6 +3743,9 @@ export function unpackColorRGBExp32(v: number, exp: number): number {
 }
 
 function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, srcOffs: number, size: number, m: number): void {
+    if (m <= 0.0)
+        return;
+
     for (let i = 0; i < size; i += 4) {
         const sr = src[srcOffs + i + 0], sg = src[srcOffs + i + 1], sb = src[srcOffs + i + 2], exp = src[srcOffs + i + 3];
         dst[dstOffs++] += m * unpackColorRGBExp32(sr, exp);
@@ -3890,22 +3967,21 @@ export class SurfaceLightmap {
         }
     }
 
+    public checkDirty(renderContext: SourceRenderContext): boolean {
+        const worldLightingState = renderContext.worldLightingState;
+
+        for (let i = 0; i < this.lightmapData.styles.length; i++) {
+            const styleIdx = this.lightmapData.styles[i];
+            if (worldLightingState.styleIntensities[styleIdx] !== this.lightmapStyleIntensities[i])
+                return true;
+        }
+
+        return false;
+    }
+
     public buildLightmap(renderContext: SourceRenderContext): void {
         const worldLightingState = renderContext.worldLightingState;
         const scratchpad = renderContext.lightmapManager.scratchpad;
-
-        // Check if our lightmap needs rebuilding.
-        let dirty = false;
-        for (let i = 0; i < this.lightmapData.styles.length; i++) {
-            const styleIdx = this.lightmapData.styles[i];
-            if (worldLightingState.styleIntensities[styleIdx] !== this.lightmapStyleIntensities[i]) {
-                this.lightmapStyleIntensities[i] = worldLightingState.styleIntensities[styleIdx];
-                dirty = true;
-            }
-        }
-
-        if (!dirty)
-            return;
 
         const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
@@ -3922,6 +3998,7 @@ export class SurfaceLightmap {
                 const intensity = worldLightingState.styleIntensities[styleIdx];
                 lightmapAccumLight(scratchpad, 0, this.lightmapData.samples!, srcOffs, srcSize, intensity);
                 srcOffs += srcSize;
+                this.lightmapStyleIntensities[i] = intensity;
             }
 
             if (this.wantsBumpmap && !this.lightmapData.hasBumpmapSamples) {
@@ -4030,6 +4107,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_WaterLOD);
         this.registerProxyFactory(MaterialProxy_TextureTransform);
         this.registerProxyFactory(MaterialProxy_ToggleTexture);
+        this.registerProxyFactory(MaterialProxy_EntityRandom);
     }
 
     public registerProxyFactory(factory: MaterialProxyFactory): void {
@@ -4494,6 +4572,26 @@ class MaterialProxy_ToggleTexture {
         }
 
         paramSetNum(map, this.toggletextureframenumvar, frame);
+    }
+}
+
+class MaterialProxy_EntityRandom {
+    public static type = 'entityrandom';
+
+    private scale: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.scale = new ParameterReference(params.scale);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        if (entityParams == null)
+            return;
+
+        const scale = paramGetNum(map, this.scale);
+        paramSetNum(map, this.resultvar, entityParams.randomNumber * scale);
     }
 }
 //#endregion
