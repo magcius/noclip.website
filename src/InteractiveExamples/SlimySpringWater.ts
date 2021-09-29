@@ -278,7 +278,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
     public createCameraController() {
         this.orbitCC = new OrbitCameraController(this.shouldOrbit);
         this.orbitCC.orbitSpeed *= 0.4;
-        this.orbitCC.z = -1500;
+        this.orbitCC.z = this.orbitCC.zTarget = -1500;
         return this.orbitCC;
     }
 

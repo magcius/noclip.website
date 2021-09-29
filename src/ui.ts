@@ -1580,6 +1580,8 @@ class ViewerSettings extends Panel {
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
+        if (this.viewer.cameraController instanceof cameraControllerClass)
+            return;
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
         this.updateCameraSpeedFromSlider();
