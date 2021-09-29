@@ -399,7 +399,7 @@ class FurObj {
 }
 
 const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
-export class SceneRenderer implements SceneGfx {
+class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;
     public obj: GraphObjBase[] = [];

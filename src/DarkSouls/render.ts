@@ -331,14 +331,7 @@ layout(location = ${DKSProgram.a_Bitangent}) in vec4 a_Bitangent;
 
 #define UNORM_TO_SNORM(xyz) ((xyz - 0.5) * 2.0)
 
-vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
-    // Pull out the squared scaling.
-    vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
-    vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
-    vec3 t_Col2 = Mat4x3GetCol2(t_Matrix);
-    vec4 t_SqScale = vec4(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2), 1.0);
-    return normalize(Mul(t_Matrix, t_Value / t_SqScale));
-}
+${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
     vec4 t_PositionWorld = Mul(_Mat4x4(u_WorldFromLocal[0]), vec4(a_Position, 1.0));

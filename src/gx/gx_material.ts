@@ -1375,14 +1375,7 @@ Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
     return u_PosMtx[0u];
 }
 
-vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
-    // Pull out the squared scaling.
-    vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
-    vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
-    vec3 t_Col2 = Mat4x3GetCol2(t_Matrix);
-    vec4 t_SqScale = vec4(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2), 1.0);
-    return normalize(Mul(t_Matrix, t_Value / t_SqScale));
-}
+${GfxShaderLibrary.MulNormalMatrix}
 
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
     return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
