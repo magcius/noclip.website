@@ -501,7 +501,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
                 const dstAttachment = this.gpuColorAttachments[i];
                 dstAttachment.view = colorAttachment.gpuTextureView;
                 dstAttachment.loadValue = descriptor.colorClearColor[i];
-                dstAttachment.storeOp = 'store';
+                dstAttachment.storeOp = descriptor.colorStore[i] ? 'store' : 'discard';
                 dstAttachment.resolveTarget = undefined;
                 if (colorResolveTo !== null && colorAttachment.sampleCount > 1)
                     dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
@@ -524,8 +524,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             dstAttachment.view = dsAttachment.gpuTextureView;
             dstAttachment.depthLoadValue = descriptor.depthClearValue;
             dstAttachment.stencilLoadValue = descriptor.stencilClearValue;
-            dstAttachment.depthStoreOp = 'store';
-            dstAttachment.stencilStoreOp = 'store';
+            dstAttachment.depthStoreOp = descriptor.depthStencilStore ? 'store' : 'discard';
+            dstAttachment.stencilStoreOp = descriptor.depthStencilStore ? 'store' : 'discard';
             this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
         } else {
             this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;

@@ -2173,6 +2173,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     }
 
                     gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
                     didUnbind = true;
                 } else {
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
@@ -2187,6 +2189,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
                     didUnbind = true;
                 }
+
+                if (!this._currentRenderPassDescriptor!.colorStore[i])
+                    gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
 
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             }
@@ -2210,6 +2215,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             }
 
             gl.blitFramebuffer(0, 0, depthStencilResolveFrom.width, depthStencilResolveFrom.height, 0, 0, depthStencilResolveTo.width, depthStencilResolveTo.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+
+            if (!this._currentRenderPassDescriptor!.depthStencilStore)
+                gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.DEPTH_STENCIL_ATTACHMENT]);
 
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);

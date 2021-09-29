@@ -130,8 +130,10 @@ class PassImpl implements GfxrPass {
     public descriptor: GfxRenderPassDescriptor = {
         colorAttachment: [],
         colorResolveTo: [],
+        colorStore: [],
         depthStencilAttachment: null,
         depthStencilResolveTo: null,
+        depthStencilStore: true,
         colorClearColor: ['load'],
         depthClearValue: 'load',
         stencilClearValue: 'load',
@@ -730,6 +732,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             pass.renderTargets[slot] = colorRenderTarget;
             pass.descriptor.colorAttachment[slot] = colorRenderTarget !== null ? colorRenderTarget.attachment : null;
             pass.descriptor.colorResolveTo[slot] = this.determineResolveToTexture(graph, pass, slot);
+            pass.descriptor.colorStore[slot] = this.renderTargetOutputCount[colorRenderTargetID] > 1;
             pass.descriptor.colorClearColor[slot] = (colorRenderTarget !== null && colorRenderTarget.needsClear) ? graph.renderTargetDescriptions[colorRenderTargetID].colorClearColor : 'load';
         }
 
@@ -737,6 +740,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         pass.renderTargets[GfxrAttachmentSlot.DepthStencil] = depthStencilRenderTarget;
         pass.descriptor.depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
         pass.descriptor.depthStencilResolveTo = this.determineResolveToTexture(graph, pass, GfxrAttachmentSlot.DepthStencil);
+        pass.descriptor.depthStencilStore = this.renderTargetOutputCount[depthStencilRenderTargetID] > 1;
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
