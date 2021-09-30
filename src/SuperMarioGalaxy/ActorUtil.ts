@@ -1553,8 +1553,12 @@ export function calcDistanceToPlayerH(sceneObjHolder: SceneObjHolder, actor: Liv
     return vec3.length(scratchVec3a);
 }
 
-export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
+export function isNearPlayerAnyTime(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
     return calcSqDistanceToPlayer(sceneObjHolder, actor) <= radius ** 2.0;
+}
+
+export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
+    return isNearPlayerAnyTime(sceneObjHolder, actor, radius);
 }
 
 export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, threshold: number): boolean {

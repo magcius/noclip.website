@@ -585,6 +585,10 @@ export function addHitSensorMtxEnemyAttack(sceneObjHolder: SceneObjHolder, actor
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, mtx, offset);
 }
 
+export function clearHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.clear();
+}
+
 export function invalidateHitSensor(actor: LiveActor, name: string): void {
     actor.hitSensorKeeper!.getSensor(name)!.invalidate();
 }
