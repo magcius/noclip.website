@@ -711,7 +711,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
-        this.renderHelper.renderInstManager.drawListOnPassRenderer(list, passRenderer);
+        list.drawOnPassRenderer(this.renderCache, passRenderer);
     }
 
     private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set): void {

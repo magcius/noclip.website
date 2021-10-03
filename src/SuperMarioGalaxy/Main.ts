@@ -268,7 +268,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         if (list === null)
             return;
         this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(list);
-        this.renderHelper.renderInstManager.drawListOnPassRenderer(list, passRenderer);
+        const cache = this.renderHelper.renderInstManager.gfxRenderCache;
+        list.drawOnPassRenderer(cache, passRenderer);
     }
 
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {

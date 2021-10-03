@@ -232,8 +232,8 @@ export class SFARenderer implements Viewer.SceneGfx {
                 this.temporalTextureMapping.gfxTexture = this.temporalTexture.getTextureForSampling();
                 renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
 
-                renderInstManager.drawListOnPassRenderer(renderLists.world[0], passRenderer);
-                renderInstManager.drawListOnPassRenderer(renderLists.furs, passRenderer);
+                renderLists.world[0].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.furs.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -253,9 +253,8 @@ export class SFARenderer implements Viewer.SceneGfx {
                 this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 renderLists.waters.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
 
-                renderInstManager.drawListOnPassRenderer(renderLists.waters, passRenderer);
-                renderInstManager.drawListOnPassRenderer(renderLists.world[1], passRenderer);
-                renderInstManager.drawListOnPassRenderer(renderLists.world[2], passRenderer);
+                renderLists.world[1].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.world[2].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }

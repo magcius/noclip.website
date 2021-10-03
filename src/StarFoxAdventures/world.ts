@@ -364,7 +364,7 @@ class WorldRenderer extends SFARenderer {
             const skyDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skyscape Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawListOnPassRenderer(renderLists.skyscape, passRenderer);
+                renderLists.skyscape.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }
