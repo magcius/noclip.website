@@ -1376,15 +1376,13 @@ export class Slider implements Widget {
 }
 .Slider::-moz-range-track {
     cursor: pointer;
+    height: 24px;
     background: #444;
 }
 .Slider::-webkit-slider-runnable-track {
     cursor: pointer;
+    height: 24px;
     background: #444;
-}
-.Slider::-moz-range-progress, .Slider::-webkit-slider-thumb {
-    cursor: pointer;
-    background: #aaa;
 }
 </style>
 <div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center">
