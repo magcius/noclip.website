@@ -1,5 +1,5 @@
 
-import { vec3, mat4 } from 'gl-matrix';
+import { vec3, mat4, ReadonlyMat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray, assert } from '../util';
@@ -19,7 +19,7 @@ import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx
 import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix, GX_Program } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
-import { texEnvMtx, computeNormalMatrix, setMatrixTranslation, getMatrixTranslation } from '../MathHelpers';
+import { texEnvMtx, computeNormalMatrix, setMatrixTranslation, getMatrixTranslation, transformVec3Mat4w1 } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { areaCollisionLineCheck } from './collision';
@@ -181,7 +181,7 @@ class MaterialGroupInstance {
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, actorLights: ActorLights | null, worldAmbientColor: Color): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: ReadonlyMat4, isSkybox: boolean, actorLights: ActorLights | null, worldAmbientColor: Color): void {
         this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderInstManager);
 
         colorCopy(materialParams.u_Color[ColorKind.MAT0], White);
@@ -237,12 +237,8 @@ class MaterialGroupInstance {
                 mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 getMatrixTranslation(scratchVec3, modelMatrix);
-                vec3.set(scratchVec3, modelMatrix[12], modelMatrix[13], modelMatrix[14]);
-                vec3.transformMat4(scratchVec3, scratchVec3, viewerInput.camera.worldMatrix);
-                setMatrixTranslation(modelMatrix, scratchVec3);
-                texMtx[12] = scratchVec3[0];
-                texMtx[13] = scratchVec3[1];
-                texMtx[14] = scratchVec3[2];
+                transformVec3Mat4w1(scratchVec3, viewerInput.camera.worldMatrix, scratchVec3);
+                setMatrixTranslation(texMtx, scratchVec3);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.UV_SCROLL) {
                 const transS = animTime * uvAnimation.scaleS + uvAnimation.offsetS;
