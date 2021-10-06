@@ -598,10 +598,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
     }
 
-    public setDebugPointer(value: any): void {
-        this.debugPointer = value;
-    }
-
     public beginOcclusionQuery(dstOffs: number): void {
         this.gpuRenderPassEncoder!.beginOcclusionQuery(dstOffs);
     }

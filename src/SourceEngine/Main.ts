@@ -24,7 +24,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera, worldspawn } from "./EntitySystem";
-import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
+import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
@@ -291,7 +291,7 @@ export class SkyboxRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
-        fillSceneParamsOnRenderInst(template, view);
+        fillSceneParamsOnRenderInst(template, view, renderContext.toneMapParams);
 
         for (let i = 0; i < 6; i++) {
             const materialInstance = this.materialInstances[i];
@@ -781,7 +781,7 @@ export class BSPRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        fillSceneParamsOnRenderInst(template, renderContext.currentView);
+        fillSceneParamsOnRenderInst(template, renderContext.currentView, renderContext.toneMapParams);
 
         // Render the world-spawn model.
         if (!!(kinds & RenderObjectKind.WorldSpawn))
@@ -996,6 +996,7 @@ export class SourceRenderContext {
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
     public colorCorrection: SourceColorCorrection;
+    public toneMapParams = new ToneMapParams();
     public renderCache: GfxRenderCache;
 
     // Public settings
@@ -1504,8 +1505,6 @@ export class SourceRenderer implements SceneGfx {
         // Update our lightmaps right before rendering.
         renderContext.lightmapManager.prepareToRender(device);
         renderContext.colorCorrection.prepareToRender(device);
-
-        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -1561,6 +1560,7 @@ export class SourceRenderer implements SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorGammaTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
         this.resetViews();
         renderInstManager.resetRenderInsts();

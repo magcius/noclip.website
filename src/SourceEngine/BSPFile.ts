@@ -862,8 +862,7 @@ export class BSPFile {
 
         let lighting: ArrayBufferSlice | null = null;
 
-        // TODO(jstpierre): Implement Source HDR
-        const preferHDR = false;
+        const preferHDR = true;
         if (preferHDR) {
             lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
             this.usingHDR = true;

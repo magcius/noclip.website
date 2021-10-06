@@ -169,8 +169,6 @@ const enum GfxRenderInstFlags {
     InheritedFlags = Indexed | AllowSkippingIfPipelineNotReady,
 }
 
-const SET_DEBUG_POINTER = IS_DEVELOPMENT;
-
 export class GfxRenderInst {
     public sortKey: number = 0;
     // TODO(jstpierre): Remove when we remove legacy GfxRenderInstManager.
@@ -508,9 +506,6 @@ export class GfxRenderInst {
 
             device.pipelineForceReady(gfxPipeline);
         }
-
-        if (SET_DEBUG_POINTER)
-            passRenderer.setDebugPointer(this);
 
         passRenderer.setPipeline(gfxPipeline);
 
