@@ -22,7 +22,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
-${GfxShaderLibrary.monochromeNTSC}
+${GfxShaderLibrary.MonochromeNTSC}
 ${GfxShaderLibrary.fxaa}
 
 void main() {

@@ -136,10 +136,7 @@ const float g_EnvmapScale = 1.0;
 // Utilities.
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.invlerp}
-
-vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
-    return t_Pos.xy * t_SB.xy + t_SB.zw;
-}
+${GfxShaderLibrary.CalcScaleBias}
 
 vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
     return (2.0 * (dot(t_NormalWorld, t_PositionToEye)) * t_NormalWorld) - (dot(t_NormalWorld, t_NormalWorld) * t_PositionToEye);
@@ -246,6 +243,26 @@ export class ToneMapParams {
     @dfShow()
     @dfRange(0.0, 16.0)
     public toneMapScale = 1.0;
+
+    public autoExposureMin = 0.5;
+    public autoExposureMax = 2.0;
+    public percentBrightPixels = 0.02;
+    public percentTarget = 0.60;
+    public minAvgLum = 0.03;
+    public adjustRate = 1.0;
+    public accelerateDownRate = 3.0;
+    public bloomScale = 1.0;
+
+    public copySettings(o: ToneMapParams): void {
+        this.autoExposureMin = o.autoExposureMin;
+        this.autoExposureMax = o.autoExposureMax;
+        this.percentBrightPixels = o.percentBrightPixels;
+        this.percentTarget = o.percentTarget;
+        this.minAvgLum = o.minAvgLum;
+        this.adjustRate = o.adjustRate;
+        this.accelerateDownRate = o.accelerateDownRate;
+        this.bloomScale = o.bloomScale;
+    }
 }
 
 function fillSceneParams(d: Float32Array, offs: number, view: Readonly<SourceEngineView>, toneMapParams: Readonly<ToneMapParams>, fogParams: Readonly<FogParams>): number {
@@ -280,10 +297,9 @@ interface Parameter {
 }
 
 class ParameterTexture {
-    public ref: string | null = null;
     public texture: VTF | null = null;
 
-    constructor(public isSRGB: boolean = false, public isEnvmap: boolean = false) {
+    constructor(public isSRGB: boolean = false, public isEnvmap: boolean = false, public ref: string | null = null) {
     }
 
     public parse(S: string): void {
@@ -2847,10 +2863,10 @@ class Material_Water extends BaseMaterial {
         p['$bumptransform']                = new ParameterMatrix();
         p['$envmap']                       = new ParameterTexture(true, true);
         p['$envmapframe']                  = new ParameterNumber(0);
-        p['$refracttexture']               = new ParameterTexture(true, false);
+        p['$refracttexture']               = new ParameterTexture(true, false, '_rt_WaterRefraction');
         p['$refracttint']                  = new ParameterColor(1, 1, 1);
-        p['$reflecttexture']               = new ParameterTexture(true, false);
         p['$refractamount']                = new ParameterNumber(0);
+        p['$reflecttexture']               = new ParameterTexture(true, false, '_rt_WaterReflection');
         p['$reflecttint']                  = new ParameterColor(1, 1, 1);
         p['$reflectamount']                = new ParameterNumber(0.8);
         p['$scroll1']                      = new ParameterVector(3);
@@ -2858,6 +2874,7 @@ class Material_Water extends BaseMaterial {
         p['$cheapwaterstartdistance']      = new ParameterNumber(500.0);
         p['$cheapwaterenddistance']        = new ParameterNumber(1000.0);
 
+        p['$forcecheap']                   = new ParameterBoolean(false, false);
         p['$forceenvmap']                  = new ParameterBoolean(false, false);
 
         p['$flowmap']                      = new ParameterTexture(false, false);
@@ -2882,8 +2899,7 @@ class Material_Water extends BaseMaterial {
         p['$fogcolor']                     = new ParameterColor(0, 0, 0);
 
         // Hacky way to get RT depth
-        p['$depthtexture']                 = new ParameterTexture(false, false);
-        this.paramGetTexture('$depthtexture').ref = '_rt_Depth';
+        p['$depthtexture']                 = new ParameterTexture(false, false, '_rt_Depth');
     }
 
     private recacheProgram(cache: GfxRenderCache): void {
@@ -2966,7 +2982,8 @@ class Material_Water extends BaseMaterial {
         }
 
         const forceEnvMap = this.paramGetBoolean('$forceenvmap');
-        const useExpensiveReflect = renderContext.currentView.useExpensiveWater && !forceEnvMap;
+        const forceCheap = this.paramGetBoolean('$forcecheap');
+        const useExpensiveReflect = renderContext.currentView.useExpensiveWater && !forceEnvMap && !forceCheap;
 
         let reflectAmount = this.paramGetNumber('$reflectamount');
         if (!useExpensiveReflect)

@@ -91,7 +91,7 @@ class EggBloomThresholdProgram extends EggBloomBaseProgram {
     public frag: string = `
 ${EggBloomBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.saturate}
-${GfxShaderLibrary.monochromeNTSC}
+${GfxShaderLibrary.MonochromeNTSC}
 ${GXShaderLibrary.TevOverflow}
 
 in vec2 v_TexCoord;

@@ -10,7 +10,7 @@ import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMa
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer } from './Main';
-import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum, ToneMapParams } from './Materials';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
@@ -2554,6 +2554,57 @@ class env_sprite_clientside extends env_sprite {
     public static classname = `env_sprite_clientside`;
 }
 
+class env_tonemap_controller extends BaseEntity {
+    public static classname = `env_tonemap_controller`;
+
+    private toneMapParams = new ToneMapParams();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('setbloomscale', this.input_setbloomscale.bind(this));
+        this.registerInput('setautoexposuremin', this.input_setautoexposuremin.bind(this));
+        this.registerInput('setautoexposuremax', this.input_setautoexposuremax.bind(this));
+        this.registerInput('settonemaprate', this.input_settonemaprate.bind(this));
+        this.registerInput('settonemappercenttarget', this.input_settonemappercenttarget.bind(this));
+        this.registerInput('settonemappercentbrightpixels', this.input_settonemappercentbrightpixels.bind(this));
+        this.registerInput('settonemapminavglum', this.input_settonemapminavglum.bind(this));
+    }
+
+    private input_setbloomscale(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.bloomScale = Number(value);
+    }
+
+    private input_setautoexposuremin(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.autoExposureMin = Number(value);
+    }
+
+    private input_setautoexposuremax(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.autoExposureMax = Number(value);
+    }
+
+    private input_settonemaprate(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.adjustRate = Number(value);
+    }
+
+    private input_settonemappercenttarget(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.percentTarget = Number(value) / 100.0;
+    }
+
+    private input_settonemappercentbrightpixels(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.percentBrightPixels = Number(value) / 100.0;
+    }
+
+    private input_settonemapminavglum(entitySystem: EntitySystem, value: string): void {
+        this.toneMapParams.minAvgLum = Number(value) / 100.0;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+        renderContext.toneMapParams.copySettings(this.toneMapParams);
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2610,6 +2661,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_sprite);
         this.registerFactory(env_glow);
         this.registerFactory(env_sprite_clientside);
+        this.registerFactory(env_tonemap_controller);
     }
 
     public registerFactory(factory: EntityFactory): void {

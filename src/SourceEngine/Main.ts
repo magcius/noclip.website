@@ -32,6 +32,7 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
+import { LuminanceHistogram } from "./LuminanceHistogram";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -1294,6 +1295,7 @@ function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpa
 
 export class SourceRenderer implements SceneGfx {
     private postProgram = new FullscreenPostProgram();
+    private luminanceHistogram: LuminanceHistogram;
     public linearSampler: GfxSampler;
     public pointSampler: GfxSampler;
     public renderHelper: GfxRenderHelper;
@@ -1337,6 +1339,8 @@ export class SourceRenderer implements SceneGfx {
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
         });
+
+        this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
     }
 
     public setLateBindingTexture(binding: LateBindingTexture, texture: GfxTexture, sampler: GfxSampler): void {
@@ -1526,12 +1530,16 @@ export class SourceRenderer implements SceneGfx {
         this.mainViewRenderer.pushPasses(this, builder, mainColorDesc);
         const mainColorTargetID = assertExists(this.mainViewRenderer.outputColorTargetID);
 
+        this.renderHelper.pushTemplateRenderInst();
+        this.luminanceHistogram.pushPasses(renderInstManager, builder, mainColorTargetID);
+        this.luminanceHistogram.updateToneMapParams(this.renderContext.toneMapParams, this.renderContext.globalDeltaTime);
+        renderInstManager.popTemplateRenderInst();
+
         const mainColorGammaDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
         mainColorGammaDesc.copyDimensions(mainColorDesc);
         const mainColorGammaTargetID = builder.createRenderTargetID(mainColorGammaDesc, 'Main Color (Gamma)');
 
         const cache = this.renderContext.renderCache;
-
         builder.pushPass((pass) => {
             // Now do a fullscreen color-correction pass to output to our UNORM backbuffer.
             pass.setDebugName('Color Correction & Gamma Correction');

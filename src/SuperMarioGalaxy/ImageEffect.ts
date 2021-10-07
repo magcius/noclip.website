@@ -26,7 +26,7 @@ const scratchVec3 = vec3.create();
 
 const ImageEffectShaderLib = `
 ${GfxShaderLibrary.saturate}
-${GfxShaderLibrary.monochromeNTSC}
+${GfxShaderLibrary.MonochromeNTSC}
 ${GXShaderLibrary.TevOverflow}
 
 vec2 BlurAspect(PD_SAMPLER_2D(t_Texture)) {

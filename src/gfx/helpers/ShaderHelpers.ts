@@ -60,6 +60,12 @@ vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
 }
 `;
 
+export const CalcScaleBias: string = `
+vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
+    return t_Pos.xy * t_SB.xy + t_SB.zw;
+}
+`;
+
 export function makeFullscreenVS(z: number = 1.0, w: number = 1.0): string {
     return `
 out vec2 v_TexCoord;
@@ -89,10 +95,17 @@ void main() {
 }
 `;
 
-export const monochromeNTSC: string = `
+export const MonochromeNTSC: string = `
 float MonochromeNTSC(vec3 t_Color) {
-    // NTSC primaries.
+    // NTSC primaries. Note that this is designed for gamma-space values.
     return dot(t_Color.rgb, vec3(0.299, 0.587, 0.114));
+}
+`;
+
+export const MonochromeNTSCLinear: string = `
+float MonochromeNTSCLinear(vec3 t_Color) {
+    // NTSC primaries. Note that this is designed for linear-space values.
+    return dot(t_Color.rgb, vec3(0.2125, 0.7154, 0.0721));
 }
 `;
 

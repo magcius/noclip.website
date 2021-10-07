@@ -374,7 +374,7 @@ interface TextOptions {
 export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: Color = Magenta, options: TextOptions = {}): void {
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
-    ctx.textAlign = 'start';
+    ctx.textAlign = options.align ?? 'start';
     ctx.font = options.font ?? '14pt monospace';
 
     if (options.outline) {
@@ -387,7 +387,6 @@ export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y:
 
     ctx.shadowColor = options.shadowColor ?? colorToCSS(OpaqueBlack, color.a);
     ctx.shadowBlur = options.shadowBlur ?? 0;
-    ctx.textAlign = options.align ?? 'start';
     ctx.fillText(text, x, y);
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 0;
