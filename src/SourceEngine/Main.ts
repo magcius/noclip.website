@@ -575,123 +575,6 @@ const enum RenderObjectKind {
     Entities    = 1 << 1,
     StaticProps = 1 << 2,
     DetailProps = 1 << 3,
-    DebugCube   = 1 << 4,
-}
-
-class DebugCubeProgram extends DeviceProgram {
-    public static ub_ObjectParams = 0;
-
-    public vert: string = `
-layout(std140) uniform ub_ObjectParams {
-    Mat4x4 u_ProjectionViewModel;
-    vec4 u_AmbientCube[6];
-};
-
-layout(location = ${MaterialProgramBase.a_Position}) attribute vec4 a_Position;
-out vec3 v_Color;
-
-void main() {
-    gl_Position = Mul(u_ProjectionViewModel, vec4(a_Position.xyz, 1.0));
-    v_Color = u_AmbientCube[int(a_Position.w)].rgb;
-}
-`;
-
-    public frag: string = `
-in vec3 v_Color;
-
-void main() {
-    gl_FragColor = vec4(v_Color, 1.0);
-}
-`;
-}
-
-export class DebugCube {
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
-    private program = new DebugCubeProgram();
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
-        const vertData = new Float32Array([
-            // left
-            -1, -1, -1,  0,
-            -1, -1,  1,  0,
-            -1,  1, -1,  0,
-            -1,  1,  1,  0,
-            // right
-             1, -1, -1,  1,
-             1,  1, -1,  1,
-             1, -1,  1,  1,
-             1,  1,  1,  1,
-            // top
-            -1, -1, -1,  2,
-             1, -1, -1,  2,
-            -1, -1,  1,  2,
-             1, -1,  1,  2,
-            // bottom
-            -1,  1, -1,  3,
-            -1,  1,  1,  3,
-             1,  1, -1,  3,
-             1,  1,  1,  3,
-            // front
-            -1, -1, -1,  4,
-            -1,  1, -1,  4,
-             1, -1, -1,  4,
-             1,  1, -1,  4,
-            // bottom
-            -1, -1,  1,  5,
-             1, -1,  1,  5,
-            -1,  1,  1,  5,
-             1,  1,  1,  5,
-        ]);
-        const indxData = new Uint16Array([
-            0, 1, 2, 1, 3, 2,
-            4, 5, 6, 5, 7, 6,
-            8, 9, 10, 9, 11, 10,
-            12, 13, 14, 13, 15, 14,
-            16, 17, 18, 17, 19, 18,
-            20, 21, 22, 21, 23, 22,
-        ]);
-
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indxData.buffer);
-
-        this.inputLayout = cache.createInputLayout({
-            vertexAttributeDescriptors: [{ format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 0, location: 0, }],
-            vertexBufferDescriptors: [{ byteStride: 4*4, frequency: GfxVertexBufferFrequency.PerVertex, }],
-            indexBufferFormat: GfxFormat.U16_R,
-        });
-
-        this.inputState = device.createInputState(this.inputLayout,
-            [{ buffer: this.vertexBuffer, byteOffset: 0 }],
-            { buffer: this.indexBuffer, byteOffset: 0 },
-        );
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, view: SourceEngineView, position: ReadonlyVec3, ambientCube: AmbientCube): void {
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 1 }]);
-        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(this.program));
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(6*6);
-        view.mainList.submitRenderInst(renderInst);
-        let offs = renderInst.allocateUniformBuffer(DebugCubeProgram.ub_ObjectParams, 16+4*6);
-        const d = renderInst.mapUniformBufferF32(DebugCubeProgram.ub_ObjectParams);
-
-        const scale = 15;
-        mat4.fromRotationTranslationScale(scratchMatrix, quat.create(), position, [scale, scale, scale]);
-        mat4.mul(scratchMatrix, view.clipFromWorldMatrix, scratchMatrix);
-        offs += fillMatrix4x4(d, offs, scratchMatrix);
-        for (let i = 0; i < 6; i++)
-            offs += fillColor(d, offs, ambientCube[i]);
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.vertexBuffer);
-        device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
-    }
 }
 
 export class BSPRenderer {
@@ -704,7 +587,6 @@ export class BSPRenderer {
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
     public liveLeafSet = new Set<number>();
-    private debugCube: DebugCube;
     private startLightmapPageIndex: number = 0;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
@@ -755,8 +637,6 @@ export class BSPRenderer {
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
                 this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, bsp, leaf, detailMaterial));
         }
-
-        this.debugCube = new DebugCube(device, cache);
     }
 
     public getWorldSpawn(): worldspawn {
@@ -813,17 +693,6 @@ export class BSPRenderer {
             }
         }
 
-        if (!!(kinds & RenderObjectKind.DebugCube)) {
-            for (const leafidx of this.liveLeafSet) {
-                const leaf = this.bsp.leaflist[leafidx];
-                if ((leaf as any).debug) {
-                    drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, leaf.bbox);
-                    for (const sample of leaf.ambientLightSamples)
-                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, renderContext.currentView, sample.pos, sample.ambientCube);
-                }
-            }
-        }
-
         /*
         for (let i = 0; i < this.bsp.worldlights.length; i++) {
             drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos, '' + i);
@@ -838,7 +707,6 @@ export class BSPRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
-        this.debugCube.destroy(device);
 
         for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
             this.detailPropLeafRenderers[i].destroy(device);
@@ -1083,7 +951,7 @@ class SourceWorldViewRenderer {
     public drawSkybox3D = true;
     public drawWorld = true;
     public drawIndirect = true;
-    public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities | RenderObjectKind.DebugCube;
+    public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities;
     public pvsEnabled = true;
     public pvsFallback = true;
 
@@ -1180,7 +1048,7 @@ class SourceWorldViewRenderer {
                 else
                     this.mainView.fogParams.maxdensity = 0.0;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, renderer.pvsScratch, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps));
             }
         }
 
@@ -1315,7 +1183,7 @@ export class SourceRenderer implements SceneGfx {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.drawIndirect = false;
         this.reflectViewRenderer.pvsFallback = false;
-        this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
+        this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps);
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
