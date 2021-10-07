@@ -168,7 +168,7 @@ interface DataFetcherOptions {
 export class DataFetcher {
     public requests: DataFetcherRequest[] = [];
     public doneRequestCount: number = 0;
-    public maxParallelRequests: number = 2;
+    public maxParallelRequests: number = 10;
     public aborted: boolean = false;
     public useDevelopmentStorage: boolean | null = null;
 
