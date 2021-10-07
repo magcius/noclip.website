@@ -1,15 +1,13 @@
 
-import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { fillColor, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
@@ -22,7 +20,7 @@ import { TextureMapping } from "../TextureHolder";
 import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
-import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
+import { BSPFile, Model, Surface } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
@@ -33,6 +31,7 @@ import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 import { LuminanceHistogram } from "./LuminanceHistogram";
+import { fillColor, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -872,6 +871,7 @@ export class SourceRenderContext {
     public showToolMaterials = false;
     public showTriggerDebug = false;
     public showFog = true;
+    public showBloom = true;
     public showExpensiveWater = true;
     public showDecalMaterials = true;
 
@@ -911,38 +911,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },      // 12
     ] },
 ];
-
-const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 0, numSamplers: 2, samplerEntries: [
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n3D, formatKind: GfxSamplerFormatKind.Float, },
-    ] },
-];
-
-class FullscreenPostProgram extends DeviceProgram {
-    public both = `
-precision mediump float;
-precision lowp sampler3D;
-
-uniform sampler2D u_FramebufferColor;
-uniform sampler3D u_ColorCorrectTexture;
-`;
-    public vert: string = GfxShaderLibrary.fullscreenVS;
-    public frag: string = `
-in vec2 v_TexCoord;
-
-void main() {
-    vec4 t_Color = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord);
-    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
-
-    vec3 t_Size = vec3(textureSize(TEXTURE(u_ColorCorrectTexture), 0));
-    vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
-    t_Color.rgb = texture(SAMPLER_3D(u_ColorCorrectTexture), t_TexCoord).rgb;
-
-    gl_FragColor = t_Color;
-}
-`;
-}
 
 // Renders the entire world (2D skybox, 3D skybox, etc.) given a specific camera location.
 // It's distinct from a view, which is camera settings, which there can be multiple of in a world renderer view.
@@ -1161,8 +1129,153 @@ function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpa
     projectionMatrixConvertClipSpaceNearZ(m, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 }
 
+const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 0, numSamplers: 3, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n3D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+    ] },
+];
+
+class FullscreenPostProgram extends DeviceProgram {
+    public both = `
+precision mediump float;
+precision lowp sampler3D;
+
+uniform sampler2D u_FramebufferColor;
+uniform sampler3D u_ColorCorrectTexture;
+uniform sampler2D u_BloomColor;
+`;
+    public vert = GfxShaderLibrary.fullscreenVS;
+    public frag = `
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Color = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord);
+    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
+
+#ifdef USE_BLOOM
+    t_Color.rgb += texture(SAMPLER_2D(u_BloomColor), v_TexCoord).rgb;
+#endif
+
+    vec3 t_Size = vec3(textureSize(TEXTURE(u_ColorCorrectTexture), 0));
+    vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
+    t_Color.rgb = texture(SAMPLER_3D(u_ColorCorrectTexture), t_TexCoord).rgb;
+
+    gl_FragColor = t_Color;
+}
+`;
+}
+
+class BloomDownsampleProgram extends DeviceProgram {
+    public both = `
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[2];
+};
+
+#define u_BloomTint (u_Misc[0].rgb)
+#define u_BloomExp  (u_Misc[0].a)
+`;
+
+    public vert = GfxShaderLibrary.fullscreenVS;
+    public frag = `
+uniform sampler2D u_FramebufferColor;
+in vec2 v_TexCoord;
+
+vec3 LinearToGamma(in vec3 t_Sample) {
+    return pow(t_Sample.rgb, vec3(1.0 / 2.2));
+}
+
+void main() {
+    // 4 taps, since we're going directly to a 1/4 FB.
+    //
+    //   Orig        NW          NE         SW        SE
+    // _________  _________  _________  _________  _________
+    // |_|_|_|_|  |\|/|_|_|  |_|_|\|/|  |_|_|_|_|  |_|_|_|_|
+    // |_|\|/|_|  |/|\|_|_|  |_|_|/|\|  |_|_|_|_|  |_|_|_|_|
+    // |_|/|\|_|  |_|_|_|_|  |_|_|_|_|  |\|/|_|_|  |_|_|\|/|
+    // |_|_|_|_|  |_|_|_|_|  |_|_|_|_|  |/|\|_|_|  |_|_|/|\|
+    //
+    // v_TexCoord.xy is located at the center of the first X. We want to use bilinear filtering
+    // to blend the four pixels in the top left, top right, bottom left, bottom right, etc.
+
+    vec4 nw = textureOffset(SAMPLER_2D(u_FramebufferColor), v_TexCoord.xy, ivec2(-1, -1));
+    vec4 ne = textureOffset(SAMPLER_2D(u_FramebufferColor), v_TexCoord.xy, ivec2(1, -1));
+    vec4 sw = textureOffset(SAMPLER_2D(u_FramebufferColor), v_TexCoord.xy, ivec2(-1, 1));
+    vec4 se = textureOffset(SAMPLER_2D(u_FramebufferColor), v_TexCoord.xy, ivec2(1, 1));
+
+    // Blend should happen in gamma space. Unfortunately, this is done before color correction / gamma,
+    // so we need to undo the sRGB-to-linear conversion done by the sampler.
+    nw.rgb = LinearToGamma(nw.rgb);
+    ne.rgb = LinearToGamma(ne.rgb);
+    sw.rgb = LinearToGamma(sw.rgb);
+    se.rgb = LinearToGamma(se.rgb);
+    vec3 color = (nw.rgb + ne.rgb + sw.rgb + se.rgb) / 4.0;
+
+    // Apply tint & exp (maybe should be in cbuffer?)
+    color = pow(color.rgb, vec3(u_BloomExp)) * dot(color.rgb, u_BloomTint);
+
+    gl_FragColor.rgba = vec4(color.rgb, 1.0);
+}    
+`;
+}
+
+class BloomBlurProgram extends DeviceProgram {
+    public both = `
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[2];
+};
+
+#define u_BloomScale (u_Misc[1].x)
+`;
+
+    public vert = GfxShaderLibrary.fullscreenVS;
+    public frag = `
+uniform sampler2D u_FramebufferColor;
+in vec2 v_TexCoord;
+
+vec3 Tap(float t_TapWidth) {
+    vec2 t_InvResolution = 1.0 / vec2(textureSize(TEXTURE(u_FramebufferColor), 0));
+
+    vec2 t_TapCoord0 = v_TexCoord.xy;
+    vec2 t_TapCoord1 = v_TexCoord.xy;
+#ifdef BLUR_Y
+    t_TapCoord0.y -= t_TapWidth * t_InvResolution.y;
+    t_TapCoord1.y += t_TapWidth * t_InvResolution.y;
+#else
+    t_TapCoord0.x -= t_TapWidth * t_InvResolution.x;
+    t_TapCoord1.x += t_TapWidth * t_InvResolution.x;
+#endif
+
+    vec3 t_Sample0 = texture(SAMPLER_2D(u_FramebufferColor), t_TapCoord0.xy).rgb;
+    vec3 t_Sample1 = texture(SAMPLER_2D(u_FramebufferColor), t_TapCoord1.xy).rgb;
+    return (t_Sample0.rgb + t_Sample1.rgb);
+}
+
+void main() {
+    vec3 t_Accum = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord).rgb * 0.2013;
+    t_Accum += Tap(1.3366) * 0.2185;
+    t_Accum += Tap(3.4295) * 0.0821;
+    t_Accum += Tap(5.4264) * 0.0461;
+    t_Accum += Tap(7.4359) * 0.0262;
+    t_Accum += Tap(9.4436) * 0.0162;
+    t_Accum += Tap(11.4401) * 0.0102;
+
+#ifdef BLUR_Y
+    t_Accum *= u_BloomScale;
+#endif
+
+    gl_FragColor.rgba = vec4(t_Accum.rgb, 1.0);
+}
+`;
+
+    constructor(y: boolean) {
+        super();
+        this.setDefineBool('BLUR_Y', y);
+    }
+}
+
 export class SourceRenderer implements SceneGfx {
-    private postProgram = new FullscreenPostProgram();
     private luminanceHistogram: LuminanceHistogram;
     public linearSampler: GfxSampler;
     public pointSampler: GfxSampler;
@@ -1258,6 +1371,12 @@ export class SourceRenderer implements SceneGfx {
             this.renderContext.showFog = v;
         };
         renderHacksPanel.contents.appendChild(enableFog.elem);
+        const enableBloom = new UI.Checkbox('Enable Bloom', true);
+        enableBloom.onchanged = () => {
+            const v = enableBloom.checked;
+            this.renderContext.showBloom = v;
+        };
+        renderHacksPanel.contents.appendChild(enableBloom.elem);
         const enableColorCorrection = new UI.Checkbox('Enable Color Correction', true);
         enableColorCorrection.onchanged = () => {
             const v = enableColorCorrection.checked;
@@ -1379,8 +1498,93 @@ export class SourceRenderer implements SceneGfx {
         renderContext.colorCorrection.prepareToRender(device);
     }
 
+    private pushBloomPasses(builder: GfxrGraphBuilder, mainColorTargetID: number): number | null {
+        if (!this.renderContext.showBloom)
+            return null;
+
+        const toneMapParams = this.renderContext.toneMapParams;
+        let bloomScale = toneMapParams.bloomScale;
+        if (bloomScale <= 0.0)
+            return null;
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const cache = this.renderContext.renderCache;
+
+        const bloomDownsampleProgram = cache.createProgram(new BloomDownsampleProgram());
+        const bloomBlurXProgram = cache.createProgram(new BloomBlurProgram(false));
+        const bloomBlurYProgram = cache.createProgram(new BloomBlurProgram(true));
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setBindingLayouts(bindingLayoutsPost);
+        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+        renderInst.drawPrimitives(3);
+
+        let offs = renderInst.allocateUniformBuffer(0, 8);
+        const d = renderInst.mapUniformBufferF32(0);
+        offs += fillColor(d, offs, toneMapParams.bloomTint, toneMapParams.bloomExp);
+        offs += fillVec4(d, offs, bloomScale);
+
+        const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
+
+        const downsampleColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+        downsampleColorDesc.setDimensions(mainColorTargetDesc.width >>> 2, mainColorTargetDesc.height >>> 2, 1);
+        const downsampleColorTargetID = builder.createRenderTargetID(downsampleColorDesc, 'Bloom Buffer');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Downsample');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+
+            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(mainColorResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(bloomDownsampleProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(cache, passRenderer);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur X');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+
+            const downsampleResolveTextureID = builder.resolveRenderTarget(downsampleColorTargetID);
+            pass.attachResolveTexture(downsampleResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(bloomBlurXProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(cache, passRenderer);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur Y');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+
+            const downsampleResolveTextureID = builder.resolveRenderTarget(downsampleColorTargetID);
+            pass.attachResolveTexture(downsampleResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(bloomBlurYProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(cache, passRenderer);
+            });
+        });
+
+        return downsampleColorTargetID;
+    }
+
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
+        const cache = this.renderContext.renderCache;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         for (let i = 0; i < this.textureMapping.length; i++)
@@ -1401,13 +1605,13 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         this.luminanceHistogram.pushPasses(renderInstManager, builder, mainColorTargetID);
         this.luminanceHistogram.updateToneMapParams(this.renderContext.toneMapParams, this.renderContext.globalDeltaTime);
+        const bloomColorTargetID = this.pushBloomPasses(builder, mainColorTargetID);
         renderInstManager.popTemplateRenderInst();
 
         const mainColorGammaDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
         mainColorGammaDesc.copyDimensions(mainColorDesc);
         const mainColorGammaTargetID = builder.createRenderTargetID(mainColorGammaDesc, 'Main Color (Gamma)');
 
-        const cache = this.renderContext.renderCache;
         builder.pushPass((pass) => {
             // Now do a fullscreen color-correction pass to output to our UNORM backbuffer.
             pass.setDebugName('Color Correction & Gamma Correction');
@@ -1416,16 +1620,25 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
-            const postRenderInst = this.renderHelper.renderInstManager.newRenderInst();
+            const postProgram = new FullscreenPostProgram();
+
+            let bloomResolveTextureID: number | null = null;
+            if (bloomColorTargetID !== null) {
+                bloomResolveTextureID = builder.resolveRenderTarget(bloomColorTargetID);
+                pass.attachResolveTexture(bloomResolveTextureID);
+                postProgram.setDefineBool('USE_BLOOM', true);
+            }
+
+            const postRenderInst = renderInstManager.newRenderInst();
             postRenderInst.setBindingLayouts(bindingLayoutsPost);
             postRenderInst.setInputLayoutAndState(null, null);
-            const postProgram = cache.createProgram(this.postProgram);
-            postRenderInst.setGfxProgram(postProgram);
+            postRenderInst.setGfxProgram(cache.createProgram(postProgram));
             postRenderInst.setMegaStateFlags(fullscreenMegaState);
             postRenderInst.drawPrimitives(3);
 
             pass.exec((passRenderer, scope) => {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.textureMapping[2].gfxTexture = bloomResolveTextureID !== null ? scope.getResolveTextureForID(bloomResolveTextureID) : null;
                 this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
                 postRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 postRenderInst.drawOnPass(cache, passRenderer);

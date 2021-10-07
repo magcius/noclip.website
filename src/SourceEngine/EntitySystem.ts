@@ -2557,8 +2557,6 @@ class env_sprite_clientside extends env_sprite {
 class env_tonemap_controller extends BaseEntity {
     public static classname = `env_tonemap_controller`;
 
-    private toneMapParams = new ToneMapParams();
-
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
@@ -2572,36 +2570,31 @@ class env_tonemap_controller extends BaseEntity {
     }
 
     private input_setbloomscale(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.bloomScale = Number(value);
+        entitySystem.renderContext.toneMapParams.bloomScale = Number(value);
     }
 
     private input_setautoexposuremin(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.autoExposureMin = Number(value);
+        entitySystem.renderContext.toneMapParams.autoExposureMin = Number(value);
     }
 
     private input_setautoexposuremax(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.autoExposureMax = Number(value);
+        entitySystem.renderContext.toneMapParams.autoExposureMax = Number(value);
     }
 
     private input_settonemaprate(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.adjustRate = Number(value);
+        entitySystem.renderContext.toneMapParams.adjustRate = Number(value);
     }
 
     private input_settonemappercenttarget(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.percentTarget = Number(value) / 100.0;
+        entitySystem.renderContext.toneMapParams.percentTarget = Number(value) / 100.0;
     }
 
     private input_settonemappercentbrightpixels(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.percentBrightPixels = Number(value) / 100.0;
+        entitySystem.renderContext.toneMapParams.percentBrightPixels = Number(value) / 100.0;
     }
 
     private input_settonemapminavglum(entitySystem: EntitySystem, value: string): void {
-        this.toneMapParams.minAvgLum = Number(value) / 100.0;
-    }
-
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
-        super.movement(entitySystem, renderContext);
-        renderContext.toneMapParams.copySettings(this.toneMapParams);
+        entitySystem.renderContext.toneMapParams.minAvgLum = Number(value) / 100.0;
     }
 }
 

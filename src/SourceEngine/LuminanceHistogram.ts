@@ -274,9 +274,10 @@ export class LuminanceHistogram {
                 targetBar(computedTarget, 'rgb(0, 255, 0)');
             ctx.restore();
 
+            // Axes
             ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x, y + height);
+            ctx.moveTo(x - 5, y);
+            ctx.lineTo(x - 5, y + height);
             ctx.lineTo(x + width, y + height);
             ctx.stroke();
 
@@ -306,7 +307,7 @@ export class LuminanceHistogram {
             ctx.fill();
             drawScreenSpaceText(ctx, x, tickBarY + 30, '' + toneMapParams.autoExposureMin, White, { outline: 2, align: 'left' });
             drawScreenSpaceText(ctx, x + width, tickBarY + 30, '' + toneMapParams.autoExposureMax, White, { outline: 2, align: 'right' });
-
+            drawScreenSpaceText(ctx, x, tickBarY + 60, `Bloom Scale: ${toneMapParams.bloomScale}`, White, { outline: 2, align: 'left' });
             ctx.restore();
         }
 

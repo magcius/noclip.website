@@ -252,6 +252,8 @@ export class ToneMapParams {
     public adjustRate = 1.0;
     public accelerateDownRate = 3.0;
     public bloomScale = 1.0;
+    public bloomTint = colorNewFromRGBA(0.3, 0.59, 0.11);
+    public bloomExp = 2.2;
 
     public copySettings(o: ToneMapParams): void {
         this.autoExposureMin = o.autoExposureMin;
