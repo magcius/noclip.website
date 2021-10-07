@@ -264,9 +264,12 @@ export class BaseEntity {
         assert(this.spawnState === SpawnState.ReadyForSpawn);
         this.spawnState = SpawnState.FetchingResources;
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
-        this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
-        this.modelStudio.setSkin(renderContext, this.skin);
-        this.updateLightingData();
+        // The Stanley Parable appears to ship models/apartment/picture_frame.mdl without a corresponding VVD/VTX file.
+        if (modelData.bodyPartData.length !== 0) {
+            this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
+            this.modelStudio.setSkin(renderContext, this.skin);
+            this.updateLightingData();
+        }
         this.spawnState = SpawnState.ReadyForSpawn;
     }
 
@@ -2023,6 +2026,7 @@ class color_correction extends BaseEntity {
 
         this.layer = lutData.createTypedArray(Uint8Array);
         renderContext.colorCorrection.addLayer(this.layer);
+        this.updateWeight(renderContext);
     }
 
     private calcWeight(renderContext: SourceRenderContext): number {
@@ -2041,14 +2045,17 @@ class color_correction extends BaseEntity {
         }
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
-        super.movement(entitySystem, renderContext);
-
+    private updateWeight(renderContext: SourceRenderContext): void {
         if (this.layer === null)
             return;
 
         const weight = this.calcWeight(renderContext);
         renderContext.colorCorrection.setLayerWeight(this.layer, weight);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+        this.updateWeight(renderContext);
     }
 }
 

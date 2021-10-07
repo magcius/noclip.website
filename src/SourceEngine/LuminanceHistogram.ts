@@ -19,7 +19,19 @@ import { ToneMapParams } from "./Materials";
 
 const scratchVec4 = vec4.create();
 
-// General strategy: Use a large number of occlusion queries to emulate a test for the amount of pixels in each bucket.
+// General strategy: Use a large number of conservative occlusion queries to emulate a test for the amount of pixels
+// in each bucket, each one on a small square piece of the framebuffer (known as a "quad"). This lets us know which
+// buckets a quad can be in. We then use the rest of the Valve HDR algorithm, except we operate such that each "quad"
+// is a pixel.
+//
+// Tweakables:
+//
+//   * queriesPerFrame is the number of occlusion queries that should be submitted per frame. In my testing,
+//     increasing this did not substantially hurt performance, but it could be lowered at the cost of making the
+//     latency of the algorithm more extreme.
+//
+//   * The grid layout of squares. You can visualize the squares by turning on debugDrawSquares, and the grid
+//     layout is decided in updateLayout().
 
 class LuminanceThreshProgram extends DeviceProgram {
     public both = `

@@ -1496,7 +1496,8 @@ export class StudioModelData {
                                 const numBones = vtxView.getUint16(vtxStripIdx + 0x10, true);
 
                                 const stripFlags: OptimizeStripFlags = vtxView.getUint8(vtxStripIdx + 0x12);
-                                assert(stripFlags === OptimizeStripFlags.IS_TRILIST);
+                                // TODO(jstpierre): Retopologize strips
+                                // assert(stripFlags === OptimizeStripFlags.IS_TRILIST);
 
                                 const numBoneStateChanges = vtxView.getUint32(vtxStripIdx + 0x13, true);
                                 const boneStateChangeOffset = vtxView.getUint32(vtxStripIdx + 0x17, true);

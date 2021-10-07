@@ -868,11 +868,12 @@ export class SourceRenderContext {
     public renderCache: GfxRenderCache;
 
     // Public settings
+    public enableFog = true;
+    public enableBloom = true;
+    public enableAutoExposure = true;
+    public enableExpensiveWater = true;
     public showToolMaterials = false;
     public showTriggerDebug = false;
-    public showFog = true;
-    public showBloom = true;
-    public showExpensiveWater = true;
     public showDecalMaterials = true;
 
     public debugStatistics = new DebugStatistics();
@@ -1011,7 +1012,7 @@ class SourceWorldViewRenderer {
 
                 // Calculate our fog parameters from the local player's fog controller.
                 const localPlayer = bspRenderer.entitySystem.getLocalPlayer();
-                if (localPlayer.currentFogController !== null && renderer.renderContext.showFog)
+                if (localPlayer.currentFogController !== null && renderer.renderContext.enableFog)
                     localPlayer.currentFogController.fillFogParams(this.mainView.fogParams);
                 else
                     this.mainView.fogParams.maxdensity = 0.0;
@@ -1368,15 +1369,21 @@ export class SourceRenderer implements SceneGfx {
         const enableFog = new UI.Checkbox('Enable Fog', true);
         enableFog.onchanged = () => {
             const v = enableFog.checked;
-            this.renderContext.showFog = v;
+            this.renderContext.enableFog = v;
         };
         renderHacksPanel.contents.appendChild(enableFog.elem);
         const enableBloom = new UI.Checkbox('Enable Bloom', true);
         enableBloom.onchanged = () => {
             const v = enableBloom.checked;
-            this.renderContext.showBloom = v;
+            this.renderContext.enableBloom = v;
         };
         renderHacksPanel.contents.appendChild(enableBloom.elem);
+        const enableAutoExposure = new UI.Checkbox('Enable Auto-Exposure', true);
+        enableAutoExposure.onchanged = () => {
+            const v = enableAutoExposure.checked;
+            this.renderContext.enableAutoExposure = v;
+        };
+        renderHacksPanel.contents.appendChild(enableAutoExposure.elem);
         const enableColorCorrection = new UI.Checkbox('Enable Color Correction', true);
         enableColorCorrection.onchanged = () => {
             const v = enableColorCorrection.checked;
@@ -1386,7 +1393,7 @@ export class SourceRenderer implements SceneGfx {
         const useExpensiveWater = new UI.Checkbox('Use Expensive Water', true);
         useExpensiveWater.onchanged = () => {
             const v = useExpensiveWater.checked;
-            this.renderContext.showExpensiveWater = v;
+            this.renderContext.enableExpensiveWater = v;
         };
         renderHacksPanel.contents.appendChild(useExpensiveWater.elem);
         const showToolMaterials = new UI.Checkbox('Show Tool-only Materials', false);
@@ -1449,7 +1456,7 @@ export class SourceRenderer implements SceneGfx {
         this.mainViewRenderer.prepareToRender(this);
 
         // Reflection is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
-        if (this.renderContext.showExpensiveWater && this.mainViewRenderer.drawWorld) {
+        if (this.renderContext.enableExpensiveWater && this.mainViewRenderer.drawWorld) {
             const bspRenderer = this.bspRenderers[0], bsp = bspRenderer.bsp;
             bspRenderer.models[0].gatherLiveSets(null, null, bspRenderer.liveLeafSet, this.pvsScratch, this.mainViewRenderer.mainView);
             const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos, bspRenderer.liveLeafSet);
@@ -1499,7 +1506,7 @@ export class SourceRenderer implements SceneGfx {
     }
 
     private pushBloomPasses(builder: GfxrGraphBuilder, mainColorTargetID: number): number | null {
-        if (!this.renderContext.showBloom)
+        if (!this.renderContext.enableBloom)
             return null;
 
         const toneMapParams = this.renderContext.toneMapParams;
@@ -1542,6 +1549,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(bloomDownsampleProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.textureMapping[0].gfxSampler = this.linearSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(cache, passRenderer);
             });
@@ -1558,6 +1566,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(bloomBlurXProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
+                this.textureMapping[0].gfxSampler = this.linearSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(cache, passRenderer);
             });
@@ -1574,6 +1583,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(bloomBlurYProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
+                this.textureMapping[0].gfxSampler = this.linearSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(cache, passRenderer);
             });
@@ -1603,8 +1613,14 @@ export class SourceRenderer implements SceneGfx {
         const mainColorTargetID = assertExists(this.mainViewRenderer.outputColorTargetID);
 
         this.renderHelper.pushTemplateRenderInst();
-        this.luminanceHistogram.pushPasses(renderInstManager, builder, mainColorTargetID);
-        this.luminanceHistogram.updateToneMapParams(this.renderContext.toneMapParams, this.renderContext.globalDeltaTime);
+
+        if (this.renderContext.enableAutoExposure) {
+            this.luminanceHistogram.pushPasses(renderInstManager, builder, mainColorTargetID);
+            this.luminanceHistogram.updateToneMapParams(this.renderContext.toneMapParams, this.renderContext.globalDeltaTime);
+        } else {
+            this.renderContext.toneMapParams.toneMapScale = 1.0;
+        }
+
         const bloomColorTargetID = this.pushBloomPasses(builder, mainColorTargetID);
         renderInstManager.popTemplateRenderInst();
 
@@ -1638,7 +1654,9 @@ export class SourceRenderer implements SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.textureMapping[0].gfxSampler = this.linearSampler;
                 this.textureMapping[2].gfxTexture = bloomResolveTextureID !== null ? scope.getResolveTextureForID(bloomResolveTextureID) : null;
+                this.textureMapping[2].gfxSampler = this.linearSampler;
                 this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
                 postRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 postRenderInst.drawOnPass(cache, passRenderer);
