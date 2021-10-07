@@ -24,7 +24,6 @@ specifiers:
   pako: ^1.0.7
   pngjs: ^3.4.0
   puppeteer: ^1.16.0
-  raw-loader: ^4.0.2
   reflect-metadata: ^0.1.13
   thread-loader: ^3.0.4
   ts-loader: ^9.2.5
@@ -63,7 +62,6 @@ devDependencies:
   ignore-loader: 0.1.2
   pngjs: 3.4.0
   puppeteer: 1.20.0
-  raw-loader: 4.0.2_webpack@5.51.1
   thread-loader: 3.0.4_webpack@5.51.1
   ts-loader: 9.2.5_typescript@4.4.2+webpack@5.51.1
   ts-node: 10.2.1_cbdbdeba9190040688bacbabfa5b6f67
@@ -2629,17 +2627,6 @@ packages:
       http-errors: 1.7.2
       iconv-lite: 0.4.24
       unpipe: 1.0.0
-    dev: true
-
-  /raw-loader/4.0.2_webpack@5.51.1:
-    resolution: {integrity: sha512-ZnScIV3ag9A4wPX/ZayxL/jZH+euYb6FcUinPcgiQW0+UBtEv0O6Q3lGd3cqJ+GHH+rksEv3Pj99oxJ3u3VIKA==}
-    engines: {node: '>= 10.13.0'}
-    peerDependencies:
-      webpack: ^4.0.0 || ^5.0.0
-    dependencies:
-      loader-utils: 2.0.0
-      schema-utils: 3.1.1
-      webpack: 5.51.1_webpack-cli@4.8.0
     dev: true
 
   /readable-stream/2.3.7:
