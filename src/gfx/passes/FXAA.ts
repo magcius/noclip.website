@@ -4,18 +4,10 @@ import { TextureMapping } from "../../TextureHolder";
 import { nArray } from "../../util";
 import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
-import { fillVec4 } from "../helpers/UniformBufferHelpers";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../render/GfxRenderGraph";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
 class FXAAProgram extends DeviceProgram {
-    public both = `
-layout(std140) uniform ub_Params {
-    vec4 u_Misc[1];
-};
-#define u_InvResolution (u_Misc[0].xy)
-`;
-
     public vert = GfxShaderLibrary.fullscreenVS;
 
     public frag = `
@@ -23,10 +15,11 @@ uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 ${GfxShaderLibrary.MonochromeNTSC}
-${GfxShaderLibrary.fxaa}
+${GfxShaderLibrary.FXAA}
 
 void main() {
-    gl_FragColor.rgba = FXAA(PP_SAMPLER_2D(u_Texture), v_TexCoord.xy, u_InvResolution.xy);
+    vec2 t_InvResolution = 1.0 / vec2(textureSize(TEXTURE(u_Texture), 0));
+    gl_FragColor.rgba = FXAA(PP_SAMPLER_2D(u_Texture), v_TexCoord.xy, t_InvResolution);
 }
 `;
 }
@@ -52,10 +45,6 @@ export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderH
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
         renderInst.drawPrimitives(3);
-
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
-        fillVec4(d, offs, 1.0 / renderInput.backbufferWidth, 1.0 / renderInput.backbufferHeight);
 
         const fxaaProgram = new FXAAProgram();
         const gfxProgram = renderHelper.renderCache.createProgram(fxaaProgram);
