@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind, GfxTextureUsage } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 
@@ -468,7 +468,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _resolveDepthStencilDrawFramebuffer: WebGLFramebuffer;
     private _renderPassDrawFramebuffer: WebGLFramebuffer;
     private _readbackFramebuffer: WebGLFramebuffer;
-    private _blackTexture!: WebGLTexture;
+
+    private _fallbackTexture2D: WebGLTexture;
+    private _fallbackTexture2DDepth: WebGLTexture;
+    private _fallbackTexture2DArray: WebGLTexture;
+    private _fallbackTexture3D: WebGLTexture;
+    private _fallbackTextureCube: WebGLTexture;
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGL2';
@@ -514,9 +519,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._renderPassDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._readbackFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
 
-        this._blackTexture = this.ensureResourceExists(gl.createTexture());
-        gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+        this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
+        this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
+        this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
+        this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
 
         // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.Less;
@@ -534,6 +540,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (configuration.trackResources)
             this._resourceCreationTracker = new ResourceCreationTracker();
+    }
+
+    private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): WebGLTexture {
+        const depth = dimension === GfxTextureDimension.Cube ? 6 : 1;
+        const pixelFormat = GfxFormat.U8_RGBA_NORM;
+        const texture = this.createTexture({
+            dimension, pixelFormat, usage: GfxTextureUsage.Sampled,
+            width: 1, height: 1, depth, numLevels: 1,
+        });
+        this.uploadTextureData(texture, 0, [new Uint8Array(4 * depth)]);
+        return getPlatformTexture(texture);
     }
 
     private _checkLimits(): void {
@@ -1279,7 +1296,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private uploadTextureDataInternal(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[], levelDatasOffs: number, levelDatasSize: number): void {
+    public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
         const gl = this.gl;
        
         const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
@@ -1291,13 +1308,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentTextures[0] = null;
         gl.bindTexture(gl_target, gl_texture);
         let w = width, h = height, d = depth;
-        const maxMipLevel = Math.min(firstMipLevel + levelDatasSize, numLevels);
+        const maxMipLevel = Math.min(firstMipLevel + levelDatas.length, numLevels);
 
         const gl_format = this.translateTextureFormat(pixelFormat);
 
-        for (let i = 0; i < maxMipLevel; i++) {
+        for (let i = 0, levelDatasIdx = 0; i < maxMipLevel; i++) {
             if (i >= firstMipLevel) {
-                const levelData = levelDatas[levelDatasOffs++] as ArrayBufferView;
+                const levelData = levelDatas[levelDatasIdx++] as ArrayBufferView;
                 const compByteSize = isCompressed ? 1 : getFormatCompByteSize(pixelFormat);
                 const sliceElementSize = (levelData.byteLength / compByteSize) / depth;
 
@@ -1336,10 +1353,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             w = Math.max((w / 2) | 0, 1);
             h = Math.max((h / 2) | 0, 1);
         }
-    }
-
-    public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
-        this.uploadTextureDataInternal(texture, firstMipLevel, levelDatas, 0, levelDatas.length);
     }
 
     public readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void {
@@ -1773,6 +1786,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
+    private _getFallbackTexture(samplerEntry: GfxBindingLayoutSamplerDescriptorP_GL): WebGLTexture {
+        const gl = this.gl;
+        const gl_target = samplerEntry.gl_target;
+        if (gl_target === gl.TEXTURE_2D)
+            return this._fallbackTexture2D;
+        else if (gl_target === gl.TEXTURE_2D_ARRAY)
+            return this._fallbackTexture2DArray;
+        else if (gl_target === gl.TEXTURE_3D)
+            return this._fallbackTexture3D;
+        else if (gl_target === gl.TEXTURE_CUBE_MAP)
+            return this._fallbackTextureCube;
+        else
+            throw "whoops";
+    }
+
     public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {
         const gl = this.gl;
 
@@ -1829,8 +1857,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     // assert(samplerEntry.gl_target === gl_target);
                     // assert(samplerEntry.formatKind === formatKind);
                 } else {
-                    // TODO(jstpierre): Fallback textures for other dimensions.
-                    gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
+                    gl.bindTexture(samplerEntry.gl_target, this._getFallbackTexture(samplerEntry));
                 }
                 this._currentTextures[samplerIndex] = gl_texture;
             }
