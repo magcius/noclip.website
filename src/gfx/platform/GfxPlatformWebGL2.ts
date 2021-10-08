@@ -470,7 +470,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _readbackFramebuffer: WebGLFramebuffer;
 
     private _fallbackTexture2D: WebGLTexture;
-    private _fallbackTexture2DDepth: WebGLTexture;
     private _fallbackTexture2DArray: WebGLTexture;
     private _fallbackTexture3D: WebGLTexture;
     private _fallbackTextureCube: WebGLTexture;
@@ -620,18 +619,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.RGB32F;
         case GfxFormat.F32_RGBA:
             return WebGL2RenderingContext.RGBA32F;
-        case GfxFormat.U16_R:
-            return WebGL2RenderingContext.R16UI;
-        case GfxFormat.U16_R_NORM:
-            return this._EXT_texture_norm16!.R16_EXT;
-        case GfxFormat.U16_RG_NORM:
-            return this._EXT_texture_norm16!.RG16_EXT;
-        case GfxFormat.U16_RGBA_NORM:
-            return this._EXT_texture_norm16!.RGBA16_EXT;
-        case GfxFormat.U32_R:
-            return WebGL2RenderingContext.R32UI;
-        case GfxFormat.U16_RGBA_5551:
-            return WebGL2RenderingContext.RGB5_A1;
         case GfxFormat.U8_R_NORM:
             return WebGL2RenderingContext.R8;
         case GfxFormat.U8_RG_NORM:
@@ -647,6 +634,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case GfxFormat.U8_RGBA_SRGB:
         case GfxFormat.U8_RGBA_RT_SRGB:
             return WebGL2RenderingContext.SRGB8_ALPHA8;
+        case GfxFormat.U16_R:
+            return WebGL2RenderingContext.R16UI;
+        case GfxFormat.U16_R_NORM:
+            return this._EXT_texture_norm16!.R16_EXT;
+        case GfxFormat.U16_RG_NORM:
+            return this._EXT_texture_norm16!.RG16_EXT;
+        case GfxFormat.U16_RGBA_NORM:
+            return this._EXT_texture_norm16!.RGBA16_EXT;
+        case GfxFormat.U16_RGBA_5551:
+            return WebGL2RenderingContext.RGB5_A1;
+        case GfxFormat.U32_R:
+            return WebGL2RenderingContext.R32UI;
         case GfxFormat.S8_RGBA_NORM:
             return WebGL2RenderingContext.RGBA8_SNORM;
         case GfxFormat.S8_RG_NORM:

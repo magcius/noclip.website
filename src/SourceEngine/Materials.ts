@@ -119,19 +119,13 @@ layout(std140) uniform ub_SkinningParams {
 #define u_FogEnd         (u_SceneMisc[2].y)
 #define u_FogMaxDensity  (u_SceneMisc[2].z)
 
-#define HDR 1
-#if HDR
 const float g_LightmapScale = 16.0;
 
 // NOTE(jstpierre): This appears to be 16.0 in the original engine, because they used to use a 4.12
 // 16-bit 4.12 fixed point format for environment maps. When encountering an R16G16B16A16F texture,
 // it will effectively divide by 16.0 when loading the texture. We don't do that, so we don't need
-// any light scale here. If we ever encounter an integer texture, we might need to do that...
+// any scale here. If we ever encounter an integer texture, we might need to do that...
 const float g_EnvmapScale = 1.0;
-#else
-const float g_LightmapScale = 4.59479341998814; // pow(2.0, 2.2)
-const float g_EnvmapScale = 1.0;
-#endif
 
 // Utilities.
 ${GfxShaderLibrary.saturate}
@@ -3804,22 +3798,35 @@ export class LightCache {
 //#region Lightmap / Lighting data
 class LightmapPage {
     public gfxTexture: GfxTexture;
-    public data: Uint16Array;
+    public data: Uint8Array | Uint16Array;
     public uploadDirty = false;
+    public fixedPoint: number;
+    public max: number;
 
     constructor(device: GfxDevice, public page: LightmapPackerPage) {
         const width = this.page.width, height = this.page.height, numSlices = 4;
+
+        let pixelFormat: GfxFormat;
+        if (device.queryTextureFormatSupported(GfxFormat.U16_RGBA_NORM, width, height)) {
+            pixelFormat = GfxFormat.U16_RGBA_NORM;
+            this.max = 0xFFFF;
+            this.data = new Uint16Array(width * height * numSlices * 4);
+        } else {
+            pixelFormat = GfxFormat.U8_RGBA_NORM;
+            this.max = 0xFF;
+            this.data = new Uint8Array(width * height * numSlices * 4);
+        }
+        this.fixedPoint = (this.max + 1) / 16.0;
+
         this.gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray,
             usage: GfxTextureUsage.Sampled,
-            pixelFormat: GfxFormat.U16_RGBA_NORM,
+            pixelFormat,
             width: page.width,
             height: page.height,
             depth: numSlices,
             numLevels: 1,
         });
-
-        this.data = new Uint16Array(width * height * numSlices * 4);
 
         const fillEmptySpaceWithPink = false;
         if (fillEmptySpaceWithPink) {
@@ -3923,22 +3930,23 @@ function gammaToLinear(v: number): number {
     return Math.pow(v, gamma);
 }
 
-function linearToUint16(v: number): number {
-    return clamp(Math.round(v * 4096.0), 0.0, 65535.0);
+function linearToFixedPoint(v: number, fixedPoint: number, max: number): number {
+    return clamp(Math.round(v * fixedPoint), 0.0, max);
 }
 
 function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>, src: Float32Array, srcOffs: number): void {
     const dst = dstPage.data;
     const dstWidth = dstPage.page.width;
+    const fixedPoint = dstPage.fixedPoint, max = dstPage.max;
 
     for (let dstY = 0; dstY < location.height; dstY++) {
         for (let dstX = 0; dstX < location.width; dstX++) {
             const sr = src[srcOffs++], sg = src[srcOffs++], sb = src[srcOffs++];
             let dstOffs = ((location.pagePosY + dstY) * dstWidth + location.pagePosX + dstX) * 4;
 
-            dst[dstOffs++] = linearToUint16(sr);
-            dst[dstOffs++] = linearToUint16(sg);
-            dst[dstOffs++] = linearToUint16(sb);
+            dst[dstOffs++] = linearToFixedPoint(sr, fixedPoint, max);
+            dst[dstOffs++] = linearToFixedPoint(sg, fixedPoint, max);
+            dst[dstOffs++] = linearToFixedPoint(sb, fixedPoint, max);
             dstOffs++;
         }
     }
@@ -3947,14 +3955,15 @@ function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<SurfaceLi
 function lightmapPackRuntimeWhite(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>): void {
     const dst = dstPage.data;
     const dstWidth = dstPage.page.width;
+    const max = dstPage.max;
 
     for (let dstY = 0; dstY < location.height; dstY++) {
         for (let dstX = 0; dstX < location.width; dstX++) {
             let dstOffs = ((location.pagePosY + dstY) * dstWidth + location.pagePosX + dstX) * 4;
 
-            dst[dstOffs++] = 0xFF;
-            dst[dstOffs++] = 0xFF;
-            dst[dstOffs++] = 0xFF;
+            dst[dstOffs++] = max;
+            dst[dstOffs++] = max;
+            dst[dstOffs++] = max;
             dstOffs++;
         }
     }
@@ -3966,6 +3975,7 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Su
     const srcSize = srcTexelCount * 3;
     const dstWidth = dstPage.page.width, dstHeight = dstPage.page.height;
     const dstSize = dstWidth * dstHeight * 4;
+    const fixedPoint = dstPage.fixedPoint, max = dstPage.max;
 
     let srcOffs0 = srcOffs, srcOffs1 = srcOffs + srcSize * 1, srcOffs2 = srcOffs + srcSize * 2, srcOffs3 = srcOffs + srcSize * 3;
     for (let dstY = 0; dstY < location.height; dstY++) {
@@ -3976,9 +3986,9 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Su
             const s0r = src[srcOffs0++], s0g = src[srcOffs0++], s0b = src[srcOffs0++];
 
             // Lightmap 0 is easy (unused tho).
-            dst[dstOffs0++] = linearToUint16(s0r);
-            dst[dstOffs0++] = linearToUint16(s0g);
-            dst[dstOffs0++] = linearToUint16(s0b);
+            dst[dstOffs0++] = linearToFixedPoint(s0r, fixedPoint, max);
+            dst[dstOffs0++] = linearToFixedPoint(s0g, fixedPoint, max);
+            dst[dstOffs0++] = linearToFixedPoint(s0b, fixedPoint, max);
             dstOffs0++;
 
             // Average the bumped colors to normalize (this math is very wrong, but it's what Valve appears to do)
@@ -3997,19 +4007,19 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Su
             if (rb !== 0.0)
                 rb = s0b / rb;
 
-            dst[dstOffs1++] = linearToUint16(s1r * rs);
-            dst[dstOffs1++] = linearToUint16(s1g * rg);
-            dst[dstOffs1++] = linearToUint16(s1b * rb);
+            dst[dstOffs1++] = linearToFixedPoint(s1r * rs, fixedPoint, max);
+            dst[dstOffs1++] = linearToFixedPoint(s1g * rg, fixedPoint, max);
+            dst[dstOffs1++] = linearToFixedPoint(s1b * rb, fixedPoint, max);
             dstOffs1++;
 
-            dst[dstOffs2++] = linearToUint16(s2r * rs);
-            dst[dstOffs2++] = linearToUint16(s2g * rg);
-            dst[dstOffs2++] = linearToUint16(s2b * rb);
+            dst[dstOffs2++] = linearToFixedPoint(s2r * rs, fixedPoint, max);
+            dst[dstOffs2++] = linearToFixedPoint(s2g * rg, fixedPoint, max);
+            dst[dstOffs2++] = linearToFixedPoint(s2b * rb, fixedPoint, max);
             dstOffs2++;
 
-            dst[dstOffs3++] = linearToUint16(s3r * rs);
-            dst[dstOffs3++] = linearToUint16(s3g * rg);
-            dst[dstOffs3++] = linearToUint16(s3b * rb);
+            dst[dstOffs3++] = linearToFixedPoint(s3r * rs, fixedPoint, max);
+            dst[dstOffs3++] = linearToFixedPoint(s3g * rg, fixedPoint, max);
+            dst[dstOffs3++] = linearToFixedPoint(s3b * rb, fixedPoint, max);
             dstOffs3++;
         }
     }

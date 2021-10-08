@@ -384,7 +384,7 @@ function translateIndexFormat(format: GfxFormat | null): GPUIndexFormat | undefi
         throw "whoops";
 }
 
-function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GPUInputStepMode {
+function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GPUVertexStepMode {
     if (frequency === GfxVertexBufferFrequency.PerVertex)
         return 'vertex';
     else if (frequency === GfxVertexBufferFrequency.PerInstance)
@@ -456,7 +456,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private gfxDepthStencilAttachment: GfxTextureSharedP_WebGPU | null = null;
     private gfxDepthStencilResolveTo: GfxTextureSharedP_WebGPU | null = null;
-    private debugPointer: any;
 
     constructor() {
         this.gpuColorAttachments = [{
