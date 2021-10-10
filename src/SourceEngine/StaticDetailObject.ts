@@ -611,6 +611,9 @@ export class StaticPropRenderer {
         if (!visible)
             return;
 
+        if ((this as any).debug)
+            this.materialParams.lightCache!.debugDrawLights(renderContext.currentView);
+
         computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
         getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);

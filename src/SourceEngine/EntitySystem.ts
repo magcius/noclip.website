@@ -145,6 +145,7 @@ export class BaseEntity {
         this.registerInput('disable', this.input_disable.bind(this));
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
+        this.registerInput('use', this.input_use.bind(this));
 
         this.output_onuser1.parse(this.entity.onuser1);
         this.output_onuser2.parse(this.entity.onuser1);
@@ -466,6 +467,10 @@ export class BaseEntity {
         }
     }
 
+    public use(entitySystem: EntitySystem): void {
+        // Do nothing by default.
+    }
+
     protected dispatchAnimEvent(entitySystem: EntitySystem, event: number, options: string): void {
         if (event === 1100) { // SCRIPT_EVENT_FIRE_INPUT
             this.fireInput(entitySystem, options, '');
@@ -486,6 +491,10 @@ export class BaseEntity {
 
     private input_kill(): void {
         this.remove();
+    }
+
+    private input_use(entitySystem: EntitySystem): void {
+        this.use(entitySystem);
     }
 
     private input_fireuser1(entitySystem: EntitySystem, value: string): void {
@@ -802,6 +811,9 @@ abstract class BaseDoor extends BaseToggle {
         this.registerInput('close', this.input_close.bind(this));
         this.registerInput('open', this.input_open.bind(this));
         this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('lock', this.input_lock.bind(this));
+        this.registerInput('unlock', this.input_unlock.bind(this));
+        this.registerInput('setspeed', this.input_setspeed.bind(this));
 
         const spawnpos = Number(fallbackUndefined(this.entity.spawnpos, '0'));
 
@@ -814,6 +826,28 @@ abstract class BaseDoor extends BaseToggle {
             this.toggleState = ToggleState.Top;
         else
             this.toggleState = ToggleState.Bottom;
+    }
+
+    private activate(entitySystem: EntitySystem): void {
+        if (this.toggleState === ToggleState.Top)
+            this.goToBottom(entitySystem);
+        else if (this.toggleState === ToggleState.Bottom || this.toggleState === ToggleState.GoingToBottom)
+            this.goToTop(entitySystem);
+    }
+
+    public use(entitySystem: EntitySystem): void {
+        let allowUse = false;
+
+        // TODO(jstpierre): SF_DOOR_NEW_USE_RULES
+        if (this.toggleState === ToggleState.Bottom)
+            allowUse = true;
+
+        if (allowUse) {
+            if (this.locked)
+                return;
+
+            this.activate(entitySystem);
+        }
     }
 
     protected abstract moveToOpened(entitySystem: EntitySystem): void;
@@ -871,6 +905,18 @@ abstract class BaseDoor extends BaseToggle {
             this.goToTop(entitySystem);
         else if (this.toggleState === ToggleState.Bottom)
             this.goToBottom(entitySystem);
+    }
+
+    private input_setspeed(entitySystem: EntitySystem, value: string): void {
+        this.speed = Number(value);
+    }
+
+    private input_lock(entitySystem: EntitySystem): void {
+        this.locked = true;
+    }
+
+    private input_unlock(entitySystem: EntitySystem): void {
+        this.locked = false;
     }
 }
 
@@ -2718,6 +2764,23 @@ export class EntitySystem {
         const triggerTime = this.currentTime + action.delay;
         const activator = this.currentActivator;
         this.outputQueue.push({ sender, activator, action, triggerTime, value });
+    }
+
+    // For console debugging.
+    private queueOutput(targetName: string, field: string, value: EntityMessageValue): void {
+        const ent = this.findEntityByTargetName(targetName);
+        if (ent === null)
+            return;
+
+        const output = new EntityOutput();
+        output.parse((ent as any).entity[field]);
+        output.fire(this, this.getLocalPlayer(), value);
+    }
+
+    // For console debugging.
+    private queueOutputAction(S: string, value: EntityMessageValue): void {
+        const action = parseEntityOutputAction(S);
+        this.queueEntityOutputAction(action, this.getLocalPlayer(), value);
     }
 
     public findEntityByType<T extends BaseEntity>(type: EntityFactory<T>, start: T | null = null): T | null {

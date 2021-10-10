@@ -226,7 +226,6 @@ void OutputLinearColor(in vec4 t_Color) {
     // Simple tone mapping.
     t_Color.rgb *= u_ToneMapScale;
 
-    // We do gamma correction in post now, as we need linear blending.
     o_Color0.rgba = t_Color.rgba;
 }
 #endif
@@ -622,6 +621,7 @@ function fillGammaColor(d: Float32Array, offs: number, c: Color, a: number = c.a
 }
 
 const blackFogParams = new FogParams(TransparentBlack);
+const noToneMapParams = new ToneMapParams();
 
 export abstract class BaseMaterial {
     private visible = true;
@@ -641,6 +641,7 @@ export abstract class BaseMaterial {
     protected proxyDriver: MaterialProxyDriver | null = null;
     protected texCoord0Scale = vec2.create();
     protected isAdditive = false;
+    protected isToneMapped = true;
 
     constructor(public vmt: VMT) {
         this.initParameters();
@@ -1021,11 +1022,12 @@ export abstract class BaseMaterial {
             this.proxyDriver.update(renderContext, this.entityParams);
     }
 
-    protected setupFogParams(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
-        if (this.isAdditive) {
-            // We need to swap out the fog for additive materials, so allocate a new scene params...
-            fillSceneParamsOnRenderInst(renderInst, renderContext.currentView, renderContext.toneMapParams, blackFogParams);
-        }
+    protected setupOverrideSceneParams(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        const fogParams = this.isAdditive ? blackFogParams : renderContext.currentView.fogParams;
+        const toneMapParams = this.isToneMapped ? renderContext.toneMapParams : noToneMapParams;
+
+        if (fogParams !== renderContext.currentView.fogParams || toneMapParams !== renderContext.toneMapParams)
+            fillSceneParamsOnRenderInst(renderInst, renderContext.currentView, toneMapParams, blackFogParams);
     }
 
     public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex?: number): void;
@@ -1153,6 +1155,7 @@ layout(std140) uniform ub_ObjectParams {
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
 #define u_SpecExponentFactor (u_Misc[0].z)
+#define u_SeamlessScale      (u_Misc[0].w)
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1559,10 +1562,30 @@ vec4 UnpackNormalMap(vec4 t_Sample) {
     return t_Sample;
 }
 
+vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
+    bool use_seamless = ${this.getDefineBool(`USE_SEAMLESS`)};
+    if (use_seamless) {
+        // Seamless ignores the base texture coordinate, and instead blends three copies
+        // of the same texture based on world position (similar to tri-planar).
+
+        vec3 t_BaseTexCoord = v_PositionWorld.xyz * u_SeamlessScale;
+
+        // Weights should sum to 1.
+        vec3 t_Weights = v_TangentSpaceBasis2.xyz * v_TangentSpaceBasis2.xyz;
+        vec4 t_Sample = vec4(0.0);
+        t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.zy) * t_Weights.x;
+        t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.xz) * t_Weights.y;
+        t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.xy) * t_Weights.z;
+        return t_Sample;
+    } else {
+        return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord.xy);
+    }
+}
+
 void mainPS() {
     vec4 t_Albedo, t_BlendedAlpha;
 
-    vec4 t_BaseTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
+    vec4 t_BaseTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
 
     bool use_basetexture2 = ${this.getDefineBool(`USE_BASETEXTURE2`)};
 
@@ -1578,7 +1601,7 @@ void mainPS() {
 
     if (use_basetexture2) {
         // Blend in BaseTexture2 using blend factor.
-        vec4 t_BaseTexture2 = DebugColorTexture(texture(SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
+        vec4 t_BaseTexture2 = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
         t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactorWorld);
     } else {
         t_Albedo = t_BaseTexture;
@@ -1598,7 +1621,8 @@ void mainPS() {
 
     vec3 t_EnvmapFactor = vec3(1.0);
 #ifdef USE_BUMPMAP
-    vec4 t_BumpmapSample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap), v_TexCoord2.xy));
+    // TODO(jstpierre): It seems like $bumptransform might not even be respected in lightmappedgeneric shaders?
+    vec4 t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), v_TexCoord2.xy));
 
     bool use_bumpmap2 = ${this.getDefineBool(`USE_BUMPMAP2`)};
     if (use_bumpmap2) {
@@ -1956,6 +1980,7 @@ class Material_Generic extends BaseMaterial {
         p['$frame2']                       = new ParameterNumber(0.0);
         p['$blendmodulatetexture']         = new ParameterTexture(true);
         p['$blendmasktransform']           = new ParameterMatrix();
+        p['$seamless_scale']               = new ParameterNumber(0.0);
 
         // Phong (Skin)
         p['$phong']                        = new ParameterBoolean(false, false);
@@ -2100,6 +2125,9 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_BLEND_MODULATE', true);
         }
     
+        if (this.paramGetNumber('$seamless_scale') > 0.0)
+            this.program.setDefineBool('USE_SEAMLESS', true);
+
         // Modulation color is used differently between lightmapped and non-lightmapped.
         // In vertexlit / unlit, then the modulation color is multiplied in with the texture (and possibly blended).
         // In lightmappedgeneric, then the modulation color is used as the diffuse lightmap scale, and contains the
@@ -2140,6 +2168,7 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_ALPHATEST', true);
         } else if (this.shaderType === GenericShaderType.DecalModulate) {
             this.isTranslucent = true;
+            this.isToneMapped = false;
 
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
@@ -2212,7 +2241,7 @@ class Material_Generic extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings, renderContext, lightmapPageIndex);
 
-        this.setupFogParams(renderContext, renderInst);
+        this.setupOverrideSceneParams(renderContext, renderInst);
 
         // TODO(jstpierre): Carve down this allocation a bit.
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
@@ -2287,7 +2316,8 @@ class Material_Generic extends BaseMaterial {
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
         const specExponentFactor = this.wantsPhongExponentTexture ? this.paramGetNumber('$phongexponentfactor') : this.paramGetNumber('$phongexponent');
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, specExponentFactor);
+        const seamlessScale = this.paramGetNumber('$seamless_scale');
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, specExponentFactor, seamlessScale);
 
         this.recacheProgram(renderContext.renderCache);
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
@@ -2398,7 +2428,7 @@ class Material_Modulate extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
-        this.setupFogParams(renderContext, renderInst);
+        this.setupOverrideSceneParams(renderContext, renderInst);
 
         let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 8);
         const d = renderInst.mapUniformBufferF32(ModulateProgram.ub_ObjectParams);
@@ -2505,7 +2535,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
-        this.setupFogParams(renderContext, renderInst);
+        this.setupOverrideSceneParams(renderContext, renderInst);
 
         let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
@@ -2772,6 +2802,10 @@ void mainPS() {
     }
 
     vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract), SampleFramebufferCoord(t_RefractTexCoord));
+
+    // Our refraction framebuffer has been tone-mapped. Divide back out to get linear.
+    t_RefractSample.rgb /= u_ToneMapScale;
+
     t_RefractColor.rgb = t_RefractSample.rgb * u_RefractTint.rgb;
 
     t_RefractColor.rgb = mix(t_RefractColor.rgb, t_WaterFogColor.rgb, t_RefractFogAmount);
@@ -2797,6 +2831,10 @@ void mainPS() {
         t_ReflectTexCoord.y = 1.0 - t_ReflectTexCoord.y;
 
         vec4 t_ReflectSample = texture(SAMPLER_2D(u_TextureReflect), SampleFramebufferCoord(t_ReflectTexCoord));
+
+        // Our reflection framebuffer has been tone-mapped. Divide back out to get linear.
+        t_ReflectSample.rgb /= u_ToneMapScale;
+
         t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
     } else {
         vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection) * g_EnvmapScale;
@@ -2949,7 +2987,7 @@ class Material_Water extends BaseMaterial {
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
 
-        this.setupFogParams(renderContext, renderInst);
+        this.setupOverrideSceneParams(renderContext, renderInst);
 
         resetTextureMappings(textureMappings);
 
@@ -2957,9 +2995,9 @@ class Material_Water extends BaseMaterial {
         this.paramGetTexture('$normalmap').fillTextureMapping(textureMappings[1], this.paramGetInt('$bumpframe'));
         this.paramGetTexture('$reflecttexture').fillTextureMapping(textureMappings[2], 0);
 
-        this.paramGetTexture('$basetexture').fillTextureMapping(textureMappings[4], this.paramGetInt('$frame'));
-        this.paramGetTexture('$flowmap').fillTextureMapping(textureMappings[5], this.paramGetInt('$flowmapframe'));
-        this.paramGetTexture('$flow_noise_texture').fillTextureMapping(textureMappings[6], 0);
+        this.paramGetTexture('$basetexture').fillTextureMapping(textureMappings[3], this.paramGetInt('$frame'));
+        this.paramGetTexture('$flowmap').fillTextureMapping(textureMappings[4], this.paramGetInt('$flowmapframe'));
+        this.paramGetTexture('$flow_noise_texture').fillTextureMapping(textureMappings[5], 0);
 
         renderContext.lightmapManager.fillTextureMapping(textureMappings[10], lightmapPageIndex);
         this.paramGetTexture('$envmap').fillTextureMapping(textureMappings[11], this.paramGetInt('$envmapframe'));
@@ -3275,7 +3313,7 @@ class Material_Refract extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
-        this.setupFogParams(renderContext, renderInst);
+        this.setupOverrideSceneParams(renderContext, renderInst);
 
         let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
@@ -3473,15 +3511,17 @@ function worldLightInsideRadius(light: WorldLight, delta: ReadonlyVec3): boolean
 
 function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): number {
     if (light.type === WorldLightType.Surface) {
-        if (!worldLightInsideRadius(light, delta))
+        const sqdist = vec3.squaredLength(delta);
+        if (light.radius > 0.0 && sqdist > light.radius**2)
             return 0.0;
         return 1.0 / Math.max(1.0, vec3.squaredLength(delta));
     } else if (light.type === WorldLightType.Point || light.type === WorldLightType.Spotlight) {
-        if (!worldLightInsideRadius(light, delta))
+        const sqdist = vec3.squaredLength(delta);
+        if (light.radius > 0.0 && sqdist > light.radius**2)
             return 0.0;
 
         // Compute quadratic attn falloff.
-        const sqdist = vec3.squaredLength(delta), dist = Math.sqrt(sqdist);
+        const dist = Math.sqrt(sqdist);
         const denom = (1.0*light.distAttenuation[0] + dist*light.distAttenuation[1] + sqdist*light.distAttenuation[2]);
         return 1.0 / denom;
     } else if (light.type === WorldLightType.SkyLight) {
@@ -3679,7 +3719,6 @@ const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3Un
 export class LightCache {
     private leaf: number = -1;
     public envCubemap: Cubemap | null;
-    public debug: boolean = false;
 
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
     private ambientCube: AmbientCube = newAmbientCube();
@@ -3741,8 +3780,7 @@ export class LightCache {
             vec3.sub(scratchVec3, light.pos, this.pos);
             const ratio = worldLightDistanceFalloff(light, scratchVec3);
             vec3.normalize(scratchVec3, scratchVec3);
-            const angularRatio = worldLightAngleFalloff(light, scratchVec3, scratchVec3);
-            const intensity = ratio * angularRatio * vec3.dot(light.intensity, ntscGrayscale);
+            const intensity = ratio * vec3.dot(light.intensity, ntscGrayscale);
 
             if (intensity <= 0.0)
                 continue;

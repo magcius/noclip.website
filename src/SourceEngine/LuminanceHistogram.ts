@@ -320,6 +320,8 @@ export class LuminanceHistogram {
             drawScreenSpaceText(ctx, x, tickBarY + 30, '' + toneMapParams.autoExposureMin, White, { outline: 2, align: 'left' });
             drawScreenSpaceText(ctx, x + width, tickBarY + 30, '' + toneMapParams.autoExposureMax, White, { outline: 2, align: 'right' });
             drawScreenSpaceText(ctx, x, tickBarY + 60, `Bloom Scale: ${toneMapParams.bloomScale}`, White, { outline: 2, align: 'left' });
+            if (!(window.main.scene as any).renderContext.materialCache.isUsingHDR())
+                drawScreenSpaceText(ctx, x, tickBarY + 90, `Map does not have HDR samples!`, Red, { outline: 2 });
             ctx.restore();
         }
 
