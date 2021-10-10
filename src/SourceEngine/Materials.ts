@@ -616,7 +616,7 @@ function fillGammaColor(d: Float32Array, offs: number, c: Color, a: number = c.a
     d[offs++] = gammaToLinear(c.r);
     d[offs++] = gammaToLinear(c.g);
     d[offs++] = gammaToLinear(c.b);
-    d[offs++] = gammaToLinear(a);
+    d[offs++] = a;
     return 4;
 }
 
