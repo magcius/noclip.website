@@ -939,19 +939,33 @@ class SourceWorldViewRenderer {
         const leaf = bsp.findLeafForPoint(view.cameraPos);
 
         const pvs = view.pvs;
+        const numclusters = bsp.visibility.numclusters;
         if (leaf !== null && leaf.cluster !== 0xFFFF) {
-            if (parentView !== null)
-                pvs.copy(parentView.pvs);
-            pvs.or(bsp.visibility.pvs[leaf.cluster]);
+            const cluster = bsp.visibility.pvs[leaf.cluster];
+            if (parentView !== null) {
+                for (let i = 0; i < numclusters; i++)
+                    pvs.words[i] = cluster.words[i] | parentView.pvs.words[i];
+            } else {
+                for (let i = 0; i < numclusters; i++)
+                    pvs.words[i] = cluster.words[i];
+            }
             return true;
         } else if (fallback) {
-            pvs.fill(true);
+            for (let i = 0; i < numclusters; i++)
+                pvs.words[i] = 0xFFFFFFFF;
             return true;
         } else if (parentView !== null) {
-            pvs.copy(parentView.pvs);
-            return pvs.hasAnyBit();
+            let hasBit = false;
+            for (let i = 0; i < numclusters; i++) {
+                pvs.words[i] = parentView.pvs.words[i];
+                if (pvs.words[i])
+                    hasBit = true;
+            }
+            return hasBit;
         } else {
-            pvs.fill(false);
+            // No need to clear.
+            // for (let i = 0; i < numclusters; i++)
+            //     pvs.words[i] = 0;
             return false;
         }
     }
@@ -1002,11 +1016,8 @@ class SourceWorldViewRenderer {
             for (let i = 0; i < renderer.bspRenderers.length; i++) {
                 const bspRenderer = renderer.bspRenderers[i];
 
-                const validPVS = this.calcPVSForView(this.mainView, bspRenderer.bsp, this.pvsFallback, parentViewRenderer !== null ? parentViewRenderer.mainView : null);
-                if (!validPVS) {
-                    // No valid PVS. If the fallback system is enabled, mark everything visible,
-                    // otherwise, just skip this view.
-                }
+                if (!this.calcPVSForView(this.mainView, bspRenderer.bsp, this.pvsFallback, parentViewRenderer !== null ? parentViewRenderer.mainView : null))
+                    continue;
 
                 // Calculate our fog parameters from the local player's fog controller.
                 const localPlayer = bspRenderer.entitySystem.getLocalPlayer();
