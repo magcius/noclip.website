@@ -623,8 +623,8 @@ void main() {
 
 export class DepthOfFieldBlur extends ImageEffectBase {
     public intensity: number = 1.0;
-    public blurMaxDist: number = 0xF8;
-    public blurMinDist: number = 0xF2;
+    public blurMaxDist: number | null = null;
+    public blurMinDist: number | null = null;
 
     private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
 
@@ -677,8 +677,8 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         const d = renderInst.mapUniformBufferF32(0);
 
         const intensity = this.intensity * this.strength;
-        const blurMaxDist = this.blurMaxDist / 0xFF;
-        const blurMinDist = this.blurMinDist / 0xFF;
+        const blurMaxDist = fallback(this.blurMaxDist, 0xF8) / 0xFF;
+        const blurMinDist = fallback(this.blurMinDist, 0xF2) / 0xFF;
         offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IS_DEPTH_REVERSED ? 1.0 : 0.0);
     }
 
@@ -887,11 +887,11 @@ class ImageEffectStateDepthOfField extends ImageEffectState {
         this.getEffect(sceneObjHolder)!.intensity = v;
     }
 
-    public setBlurMaxDist(sceneObjHolder: SceneObjHolder, v: number): void {
+    public setBlurMaxDist(sceneObjHolder: SceneObjHolder, v: number | null): void {
         this.getEffect(sceneObjHolder)!.blurMaxDist = v;
     }
 
-    public setBlurMinDist(sceneObjHolder: SceneObjHolder, v: number): void {
+    public setBlurMinDist(sceneObjHolder: SceneObjHolder, v: number | null): void {
         this.getEffect(sceneObjHolder)!.blurMinDist = v;
     }
 }
@@ -1088,8 +1088,8 @@ export class SimpleBloomArea extends ImageEffectArea {
 
 export class DepthOfFieldArea extends ImageEffectArea {
     public intensity: number;
-    public blurMaxDist: number;
-    public blurMinDist: number;
+    public blurMaxDist: number | null;
+    public blurMinDist: number | null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
         super(zoneAndLayer, sceneObjHolder, ImageEffectType.DepthOfField, infoIter, formType);
@@ -1097,8 +1097,8 @@ export class DepthOfFieldArea extends ImageEffectArea {
         createDepthOfFieldBlur(sceneObjHolder);
 
         this.intensity = fallback(getJMapInfoArg1(infoIter), 0xFF) / 0xFF;
-        this.blurMaxDist = getJMapInfoArg2(infoIter)!;
-        this.blurMinDist = getJMapInfoArg3(infoIter)!;
+        this.blurMaxDist = getJMapInfoArg2(infoIter);
+        this.blurMinDist = getJMapInfoArg3(infoIter);
     }
 }
 
