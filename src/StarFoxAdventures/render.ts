@@ -253,6 +253,7 @@ export class SFARenderer implements Viewer.SceneGfx {
                 this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 renderLists.waters.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
 
+                renderLists.waters.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 renderLists.world[1].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 renderLists.world[2].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
