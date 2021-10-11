@@ -3,18 +3,24 @@ import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers';
+import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer } from './Main';
-import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum, ToneMapParams } from './Materials';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType } from './Main';
+import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
+import { VTF } from './VTF';
 
 type EntityMessageValue = string;
 
@@ -258,7 +264,7 @@ export class BaseEntity {
             vec3.copy(this.lightingOrigin, materialParams.position);
         }
 
-        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin);
+        materialParams.lightCache = new LightCache(this.bspRenderer, this.lightingOrigin);
     }
 
     private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
@@ -469,6 +475,11 @@ export class BaseEntity {
 
     public use(entitySystem: EntitySystem): void {
         // Do nothing by default.
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.modelStudio !== null)
+            this.modelStudio.destroy(device);
     }
 
     protected dispatchAnimEvent(entitySystem: EntitySystem, event: number, options: string): void {
@@ -2651,6 +2662,146 @@ class env_tonemap_controller extends BaseEntity {
     }
 }
 
+export class env_projectedtexture extends BaseEntity {
+    public static classname = `env_projectedtexture`;
+
+    private fovY: number;
+    private nearZ: number;
+
+    public farZ: number;
+    public frustumView = new SourceEngineView();
+    public texture: VTF | null = null;
+    public textureFrame: number = 0;
+    public lightColor = colorNewCopy(White);
+    public brightnessScale: number = 1.0;
+    public depthTexture = new GfxrTemporalTexture();
+    private depthTextureValid = false;
+    private lastInstCount = -1;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.frustumView.viewType = SourceEngineViewType.ShadowMap;
+
+        this.fovY = Number(entity.lightfov);
+        this.nearZ = Number(entity.nearz);
+        this.farZ = Number(entity.farz);
+        vmtParseColor(this.lightColor, entity.lightcolor);
+        this.brightnessScale = Number(entity.brightnessscale);
+
+        const enum SpawnFlags {
+            ENABLED = 0x01,
+        };
+        const spawnflags: SpawnFlags = Number(entity.spawnflags);
+        this.enabled = !!(spawnflags & SpawnFlags.ENABLED);
+
+        this.fetchTexture(renderContext, entity.texturename);
+
+        this.registerInput('turnon', this.input_turnon.bind(this));
+        this.registerInput('turnoff', this.input_turnoff.bind(this));
+    }
+
+    private calcViewMatrix(dst: mat4): void {
+        this.getAbsOriginAndAngles(scratchVec3a, scratchVec3b);
+
+        mat4.identity(dst);
+        mat4.rotateX(dst, dst, -MathConstants.TAU / 4);
+        mat4.rotateZ(dst, dst, MathConstants.TAU / 4);
+
+        mat4.rotateX(dst, dst, -scratchVec3b[2]);
+        mat4.rotateY(dst, dst, -scratchVec3b[0]);
+        mat4.rotateZ(dst, dst, -scratchVec3b[1]);
+
+        vec3.negate(scratchVec3a, scratchVec3a);
+        mat4.translate(dst, dst, scratchVec3a);
+    }
+
+    private updateFrustumView(renderContext: SourceRenderContext): void {
+        this.calcViewMatrix(this.frustumView.viewFromWorldMatrix);
+        const nearXY = Math.tan(MathConstants.DEG_TO_RAD * 0.5 * this.fovY) * this.nearZ;
+        projectionMatrixForFrustum(this.frustumView.clipFromViewMatrix, -nearXY, nearXY, -nearXY, nearXY, this.nearZ, this.farZ);
+        projectionMatrixReverseDepth(this.frustumView.clipFromViewMatrix);
+        const clipSpaceNearZ = renderContext.device.queryVendorInfo().clipSpaceNearZ;
+        projectionMatrixConvertClipSpaceNearZ(this.frustumView.clipFromViewMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+        this.frustumView.clipSpaceNearZ = clipSpaceNearZ;
+        this.frustumView.finishSetup();
+    }
+
+    private async fetchTexture(renderContext: SourceRenderContext, textureName: string) {
+        const materialCache = renderContext.materialCache;
+        this.texture = await materialCache.fetchVTF(textureName, true);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        if (!this.shouldDraw())
+            return;
+
+        this.updateFrustumView(renderContext);
+    }
+
+    public preparePasses(renderer: SourceRenderer, renderInstManager: GfxRenderInstManager): void {
+        const renderContext = renderer.renderContext;
+        renderContext.currentView = this.frustumView;
+
+        for (let i = 0; i < renderer.bspRenderers.length; i++) {
+            const bspRenderer = renderer.bspRenderers[i];
+
+            if (!this.frustumView.calcPVS(bspRenderer.bsp, false))
+                continue;
+
+            bspRenderer.prepareToRenderView(renderContext, renderInstManager);
+        }
+
+        // Use the inst count as an approximation for which objects have been drawn into the shadow map.
+        // Doesn't work if the objects move...
+        const instCount = renderContext.currentView.mainList.renderInsts.length;
+        if (this.lastInstCount === instCount) {
+            this.frustumView.reset();
+        } else {
+            this.depthTextureValid = false;
+        }
+
+        renderContext.currentView = null!;
+    }
+
+    public pushPasses(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder): void {
+        if (this.depthTextureValid)
+            return;
+
+        const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+        depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
+        depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+
+        const depthTargetID = builder.createRenderTargetID(depthTargetDesc, `Projected Texture Depth - ${this.targetName}`);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName(`Projected Texture Depth - ${this.targetName}`);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, depthTargetID);
+
+            pass.exec((passRenderer) => {
+                this.lastInstCount = this.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        this.depthTexture.setDescription(renderInstManager.gfxRenderCache.device, depthTargetDesc);
+        builder.resolveRenderTargetToExternalTexture(depthTargetID, this.depthTexture.getTextureForResolving());
+
+        this.depthTextureValid = true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.depthTexture.destroy(device);
+    }
+
+    private input_turnon(): void {
+        this.enabled = true;
+    }
+
+    private input_turnoff(): void {
+        this.enabled = false;
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2708,6 +2859,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_glow);
         this.registerFactory(env_sprite_clientside);
         this.registerFactory(env_tonemap_controller);
+        this.registerFactory(env_projectedtexture);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -2892,6 +3044,11 @@ export class EntitySystem {
 
     public getLocalPlayer(): player {
         return this.findEntityByTargetName('!player')! as player;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.entities.length; i++)
+            this.entities[i].destroy(device);
     }
 }
 

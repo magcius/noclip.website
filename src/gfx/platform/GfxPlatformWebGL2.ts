@@ -470,6 +470,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _readbackFramebuffer: WebGLFramebuffer;
 
     private _fallbackTexture2D: WebGLTexture;
+    private _fallbackTexture2DDepth: WebGLTexture;
     private _fallbackTexture2DArray: WebGLTexture;
     private _fallbackTexture3D: WebGLTexture;
     private _fallbackTextureCube: WebGLTexture;
@@ -519,6 +520,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._readbackFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
 
         this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
+        this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
@@ -543,12 +545,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): WebGLTexture {
         const depth = dimension === GfxTextureDimension.Cube ? 6 : 1;
-        const pixelFormat = GfxFormat.U8_RGBA_NORM;
+        const pixelFormat = formatKind === GfxSamplerFormatKind.Depth ? GfxFormat.D24 : GfxFormat.U8_RGBA_NORM;
         const texture = this.createTexture({
             dimension, pixelFormat, usage: GfxTextureUsage.Sampled,
             width: 1, height: 1, depth, numLevels: 1,
         });
-        this.uploadTextureData(texture, 0, [new Uint8Array(4 * depth)]);
+        if (formatKind === GfxSamplerFormatKind.Float)
+            this.uploadTextureData(texture, 0, [new Uint8Array(4 * depth)]);
         return getPlatformTexture(texture);
     }
 
@@ -930,6 +933,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.samplerParameterf(gl_sampler, gl.TEXTURE_MIN_LOD, descriptor.minLOD);
         if (descriptor.maxLOD !== undefined)
             gl.samplerParameterf(gl_sampler, gl.TEXTURE_MAX_LOD, descriptor.maxLOD);
+        if (descriptor.compareMode !== undefined) {
+            gl.samplerParameteri(gl_sampler, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+            gl.samplerParameteri(gl_sampler, gl.TEXTURE_COMPARE_FUNC, descriptor.compareMode);
+        }
 
         const maxAnisotropy = descriptor.maxAnisotropy ?? 1;
         if (maxAnisotropy > 1 && this._EXT_texture_filter_anisotropic !== null) {
@@ -1787,9 +1794,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _getFallbackTexture(samplerEntry: GfxBindingLayoutSamplerDescriptorP_GL): WebGLTexture {
         const gl = this.gl;
-        const gl_target = samplerEntry.gl_target;
+        const gl_target = samplerEntry.gl_target, formatKind = samplerEntry.formatKind;
         if (gl_target === gl.TEXTURE_2D)
-            return this._fallbackTexture2D;
+            return formatKind === GfxSamplerFormatKind.Depth ? this._fallbackTexture2DDepth : this._fallbackTexture2D;
         else if (gl_target === gl.TEXTURE_2D_ARRAY)
             return this._fallbackTexture2DArray;
         else if (gl_target === gl.TEXTURE_3D)

@@ -489,7 +489,7 @@ export class Frustum {
         return this.intersectSphere(v, radius) !== IntersectionState.FULLY_OUTSIDE;
     }
 
-    public containsPoint(v: vec3): boolean {
+    public containsPoint(v: ReadonlyVec3): boolean {
         for (let i = 0; i < 6; i++)
             if (this.planes[i].distance(v[0], v[1], v[2]) > 0)
                 return false;

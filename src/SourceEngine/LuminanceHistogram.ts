@@ -364,13 +364,15 @@ export class LuminanceHistogram {
                 return null;
 
             const bucketQuadsPct = bucket.calcSum() / totalQuads;
+            if (bucketQuadsPct <= 0)
+                continue;
+
             const bucketQuadsThreshold = threshold - quadsTestedPct;
             const bucketLuminanceRange = bucket.maxLuminance - bucket.minLuminance;
 
             if (bucketQuadsPct >= bucketQuadsThreshold) {
-                if (snapLuminance !== null && bucket.minLuminance <= snapLuminance && bucket.maxLuminance >= snapLuminance) {
+                if (snapLuminance !== null && bucket.minLuminance <= snapLuminance && bucket.maxLuminance >= snapLuminance)
                     return snapLuminance;
-                }
 
                 const thresholdRatio = bucketQuadsThreshold / bucketQuadsPct;
                 const border = clamp(1.0 - (rangeTestedPct + (bucketLuminanceRange * thresholdRatio)), bucket.minLuminance, bucket.maxLuminance);

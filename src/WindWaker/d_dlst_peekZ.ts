@@ -9,6 +9,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
+// TODO(jstpierre): Port the PeekZ system to occlusion queries?
 export class PeekZResult {
     public normalizedX: number;
     public normalizedY: number;

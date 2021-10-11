@@ -13,7 +13,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, projectionMatrixForFrustum, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -21,8 +21,8 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem, sky_camera, worldspawn } from "./EntitySystem";
-import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState } from "./Materials";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem, env_projectedtexture, sky_camera, worldspawn } from "./EntitySystem";
+import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
@@ -31,7 +31,8 @@ import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 import { LuminanceHistogram } from "./LuminanceHistogram";
-import { fillColor, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -325,7 +326,7 @@ export class BSPSurfaceRenderer {
     constructor(public surface: Surface) {
     }
 
-    public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager, startLightmapPageIndex: number): void {
+    public bindMaterial(materialInstance: BaseMaterial, startLightmapPageIndex: number): void {
         this.materialInstance = materialInstance;
 
         this.lightmapPageIndex = startLightmapPageIndex + this.surface.lightmapPageIndex;
@@ -348,10 +349,11 @@ export class BSPSurfaceRenderer {
 
         const view = renderContext.currentView;
 
-        if (this.surface.bbox !== null) {
-            if (!view.frustum.contains(transformAABB(this.surface.bbox, modelMatrix)))
-                return;
-        }
+        const bbox = transformAABB(this.surface.bbox, modelMatrix);
+        if (!view.frustum.contains(bbox))
+            return;
+
+        this.materialInstance.calcProjectedLight(renderContext, bbox);
 
         for (let i = 0; i < this.lightmaps.length; i++) {
             const lightmap = this.lightmaps[i];
@@ -436,7 +438,7 @@ export class BSPModelRenderer {
             materialInstance.wantsTexCoord0Scale = surface.wantsTexCoord0Scale;
 
             await materialInstance.init(renderContext);
-            surfaceRenderer.bindMaterial(materialInstance, renderContext.lightmapManager, startLightmapPageIndex);
+            surfaceRenderer.bindMaterial(materialInstance, startLightmapPageIndex);
         }));
     }
 
@@ -517,6 +519,11 @@ export class BSPModelRenderer {
     }
 }
 
+export const enum SourceEngineViewType {
+    MainView,
+    ShadowMap,
+};
+
 // A "View" is effectively camera settings, but in Source engine space.
 export class SourceEngineView {
     // aka viewMatrix
@@ -541,6 +548,8 @@ export class SourceEngineView {
     public fogParams = new FogParams();
     public useExpensiveWater = false;
     public pvs = new BitMap(65536);
+
+    public viewType: SourceEngineViewType = SourceEngineViewType.MainView;
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
@@ -567,6 +576,42 @@ export class SourceEngineView {
     public reset(): void {
         this.mainList.reset();
         this.indirectList.reset();
+    }
+
+    public calcPVS(bsp: BSPFile, fallback: boolean, parentView: SourceEngineView | null = null): boolean {
+        // Compute PVS from view.
+        const leaf = bsp.findLeafForPoint(this.cameraPos);
+
+        const pvs = this.pvs;
+        const numclusters = bsp.visibility.numclusters;
+        if (leaf !== null && leaf.cluster !== 0xFFFF) {
+            const cluster = bsp.visibility.pvs[leaf.cluster];
+            if (parentView !== null) {
+                for (let i = 0; i < numclusters; i++)
+                    pvs.words[i] = cluster.words[i] | parentView.pvs.words[i];
+            } else {
+                for (let i = 0; i < numclusters; i++)
+                    pvs.words[i] = cluster.words[i];
+            }
+            return true;
+        } else if (fallback) {
+            for (let i = 0; i < numclusters; i++)
+                pvs.words[i] = 0xFFFFFFFF;
+            return true;
+        } else if (parentView !== null) {
+            let hasBit = false;
+            for (let i = 0; i < numclusters; i++) {
+                pvs.words[i] = parentView.pvs.words[i];
+                if (pvs.words[i])
+                    hasBit = true;
+            }
+            return hasBit;
+        } else {
+            // No need to clear.
+            // for (let i = 0; i < numclusters; i++)
+            //     pvs.words[i] = 0;
+            return false;
+        }
     }
 }
 
@@ -629,7 +674,7 @@ export class BSPRenderer {
         // Spawn static objects.
         if (this.bsp.staticObjects !== null)
             for (const staticProp of this.bsp.staticObjects.staticProps)
-                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this.bsp, staticProp));
+                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this, staticProp));
 
         // Spawn detail objects.
         if (this.bsp.detailObjects !== null) {
@@ -658,7 +703,7 @@ export class BSPRenderer {
             this.staticPropRenderers[i].movement(renderContext);
     }
 
-    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, kinds: RenderObjectKind): void {
+    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, kinds: RenderObjectKind = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
@@ -712,6 +757,7 @@ export class BSPRenderer {
             this.detailPropLeafRenderers[i].destroy(device);
         for (let i = 0; i < this.staticPropRenderers.length; i++)
             this.staticPropRenderers[i].destroy(device);
+        this.entitySystem.destroy(device);
     }
 }
 
@@ -867,6 +913,7 @@ export class SourceRenderContext {
     public colorCorrection: SourceColorCorrection;
     public toneMapParams = new ToneMapParams();
     public renderCache: GfxRenderCache;
+    public currentProjectedLight: env_projectedtexture | null = null;
 
     // Public settings
     public enableFog = true;
@@ -876,6 +923,7 @@ export class SourceRenderContext {
     public showToolMaterials = false;
     public showTriggerDebug = false;
     public showDecalMaterials = true;
+    public shadowMapSize = 512;
 
     public debugStatistics = new DebugStatistics();
 
@@ -897,7 +945,7 @@ export class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 13, samplerEntries: [
+    { numUniformBuffers: 3, numSamplers: 14, samplerEntries: [
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 0
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 1
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 2
@@ -911,6 +959,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
         { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, }, // 10
         { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },     // 11
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },      // 12
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 13
     ] },
 ];
 
@@ -934,42 +983,6 @@ class SourceWorldViewRenderer {
     constructor(public name: string) {
     }
 
-    private calcPVSForView(view: SourceEngineView, bsp: BSPFile, fallback: boolean, parentView: SourceEngineView | null = null): boolean {
-        // Compute PVS from view.
-        const leaf = bsp.findLeafForPoint(view.cameraPos);
-
-        const pvs = view.pvs;
-        const numclusters = bsp.visibility.numclusters;
-        if (leaf !== null && leaf.cluster !== 0xFFFF) {
-            const cluster = bsp.visibility.pvs[leaf.cluster];
-            if (parentView !== null) {
-                for (let i = 0; i < numclusters; i++)
-                    pvs.words[i] = cluster.words[i] | parentView.pvs.words[i];
-            } else {
-                for (let i = 0; i < numclusters; i++)
-                    pvs.words[i] = cluster.words[i];
-            }
-            return true;
-        } else if (fallback) {
-            for (let i = 0; i < numclusters; i++)
-                pvs.words[i] = 0xFFFFFFFF;
-            return true;
-        } else if (parentView !== null) {
-            let hasBit = false;
-            for (let i = 0; i < numclusters; i++) {
-                pvs.words[i] = parentView.pvs.words[i];
-                if (pvs.words[i])
-                    hasBit = true;
-            }
-            return hasBit;
-        } else {
-            // No need to clear.
-            // for (let i = 0; i < numclusters; i++)
-            //     pvs.words[i] = 0;
-            return false;
-        }
-    }
-
     public prepareToRender(renderer: SourceRenderer, parentViewRenderer: SourceWorldViewRenderer | null): void {
         this.enabled = true;
         const renderContext = renderer.renderContext, renderInstManager = renderer.renderHelper.renderInstManager;
@@ -984,7 +997,7 @@ class SourceWorldViewRenderer {
 
         renderContext.currentView = this.skyboxView;
 
-        if (renderer.skyboxRenderer !== null && this.drawSkybox2D)
+        if (this.drawSkybox2D && renderer.skyboxRenderer !== null)
             renderer.skyboxRenderer.prepareToRender(renderContext, renderInstManager, this.skyboxView);
 
         if (this.drawSkybox3D) {
@@ -1003,7 +1016,7 @@ class SourceWorldViewRenderer {
                 skyCamera.fillFogParams(this.skyboxView.fogParams);
 
                 // If our skybox is not in a useful spot, then don't render it.
-                if (!this.calcPVSForView(this.skyboxView, bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))
+                if (!this.skyboxView.calcPVS(bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))
                     continue;
 
                 bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
@@ -1016,7 +1029,7 @@ class SourceWorldViewRenderer {
             for (let i = 0; i < renderer.bspRenderers.length; i++) {
                 const bspRenderer = renderer.bspRenderers[i];
 
-                if (!this.calcPVSForView(this.mainView, bspRenderer.bsp, this.pvsFallback, parentViewRenderer !== null ? parentViewRenderer.mainView : null))
+                if (!this.mainView.calcPVS(bspRenderer.bsp, this.pvsFallback, parentViewRenderer !== null ? parentViewRenderer.mainView : null))
                     continue;
 
                 // Calculate our fog parameters from the local player's fog controller.
@@ -1026,7 +1039,7 @@ class SourceWorldViewRenderer {
                 else
                     this.mainView.fogParams.maxdensity = 0.0;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask);
             }
         }
 
@@ -1440,6 +1453,30 @@ export class SourceRenderer implements SceneGfx {
         return [renderHacksPanel];
     }
 
+    private calcProjectedLight(): void {
+        let bestDistance = Infinity;
+        let bestProjectedLight: env_projectedtexture | null = null;
+
+        for (let i = 0; i < this.bspRenderers.length; i++) {
+            const bspRenderer = this.bspRenderers[i];
+            let projectedLight: env_projectedtexture | null = null;
+            while (projectedLight = bspRenderer.entitySystem.findEntityByType<env_projectedtexture>(env_projectedtexture, projectedLight)) {
+                if (!projectedLight.enabled || !projectedLight.alive)
+                    continue;
+
+                projectedLight.getAbsOrigin(scratchVec3);
+                const dist = vec3.squaredDistance(this.mainViewRenderer.mainView.cameraPos, scratchVec3);
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestProjectedLight = projectedLight;
+                }
+            }
+        }
+
+        this.renderContext.currentProjectedLight = bestProjectedLight;
+    }
+
+    private overrideView: SourceEngineView | null = null;
     public prepareToRender(viewerInput: ViewerRenderInput): void {
         const renderContext = this.renderContext, device = renderContext.device;
 
@@ -1449,8 +1486,14 @@ export class SourceRenderer implements SceneGfx {
         renderContext.debugStatistics.reset();
 
         // Update the main view early, since that's what movement/entities will use
-        this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
+        if (this.overrideView !== null) {
+            this.mainViewRenderer.mainView.copy(this.overrideView);
+            this.mainViewRenderer.mainView.finishSetup();
+        } else {
+            this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
+        }
 
+        this.calcProjectedLight();
         this.movement();
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -1458,6 +1501,9 @@ export class SourceRenderer implements SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
+
+        if (renderContext.currentProjectedLight !== null)
+            renderContext.currentProjectedLight.preparePasses(this, renderInstManager);
 
         this.mainViewRenderer.prepareToRender(this, null);
 
@@ -1600,7 +1646,7 @@ export class SourceRenderer implements SceneGfx {
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-        const cache = this.renderContext.renderCache;
+        const renderContext = this.renderContext, cache = renderContext.renderCache;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         for (let i = 0; i < this.textureMapping.length; i++)
@@ -1610,6 +1656,10 @@ export class SourceRenderer implements SceneGfx {
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
+
+        // Render the depth map first if necessary
+        if (renderContext.currentProjectedLight !== null)
+            renderContext.currentProjectedLight.pushPasses(renderContext, renderInstManager, builder);
 
         // Render reflection view first.
         if (this.reflectViewRenderer.enabled)

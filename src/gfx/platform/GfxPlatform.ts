@@ -147,6 +147,7 @@ export interface GfxSamplerDescriptor {
     minLOD?: number;
     maxLOD?: number;
     maxAnisotropy?: number;
+    compareMode?: GfxCompareMode;
 }
 
 export interface GfxRenderTargetDescriptor {

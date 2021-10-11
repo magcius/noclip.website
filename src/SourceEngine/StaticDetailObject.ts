@@ -4,7 +4,7 @@ import { assert, readString } from "../util";
 import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { Color, colorClampLDR, colorCopy, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
-import { SourceRenderContext, SourceEngineView } from "./Main";
+import { SourceRenderContext, SourceEngineView, BSPRenderer } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
@@ -551,11 +551,11 @@ export class StaticPropRenderer {
     private materialParams = new EntityMaterialParameters();
     private lightingOrigin = vec3.create();
 
-    constructor(renderContext: SourceRenderContext, private bsp: BSPFile, private staticProp: StaticProp) {
-        this.createInstance(renderContext, bsp);
+    constructor(renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, private staticProp: StaticProp) {
+        this.createInstance(renderContext, bspRenderer);
     }
 
-    private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {
+    private async createInstance(renderContext: SourceRenderContext, bspRenderer: BSPRenderer) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
 
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
@@ -566,7 +566,7 @@ export class StaticPropRenderer {
             vec3.copy(this.lightingOrigin, this.staticProp.lightingOrigin);
         else
             transformVec3Mat4w1(this.lightingOrigin, scratchMatrix, modelData.illumPosition);
-        this.materialParams.lightCache = new LightCache(bsp, this.lightingOrigin);
+        this.materialParams.lightCache = new LightCache(bspRenderer, this.lightingOrigin);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
         this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);
@@ -575,7 +575,7 @@ export class StaticPropRenderer {
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
             // TODO(HDR)
-            const spPrefix = (false && this.bsp.usingHDR) ? `sp_hdr` : `sp`;
+            const spPrefix = (false && this.bspRenderer.bsp.usingHDR) ? `sp_hdr` : `sp`;
             const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
             if (staticLightingData !== null) {
                 this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);

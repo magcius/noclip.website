@@ -88,8 +88,7 @@ export interface Surface {
     lightmapData: SurfaceLightmapData[];
     lightmapPageIndex: number;
 
-    // displacement info
-    bbox: AABB | null;
+    bbox: AABB;
 }
 
 const enum TexinfoFlags {
@@ -219,7 +218,7 @@ class MeshVertex {
 
 interface DisplacementResult {
     vertex: MeshVertex[];
-    aabb: AABB;
+    bbox: AABB;
 }
 
 function buildDisplacement(disp: DispInfo, corners: ReadonlyVec3[], disp_verts: Float32Array, texMapping: TexinfoMapping): DisplacementResult {
@@ -343,7 +342,7 @@ function buildDisplacement(disp: DispInfo, corners: ReadonlyVec3[], disp_verts: 
         }
     }
 
-    return { vertex, aabb };
+    return { vertex, bbox: aabb };
 }
 
 function fetchVertexFromBuffer(dst: MeshVertex, vertexData: Float32Array, i: number): void {
@@ -402,6 +401,7 @@ interface OverlaySurface {
 
 interface OverlayResult {
     surfaces: OverlaySurface[];
+    bbox: AABB;
 }
 
 function buildOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
@@ -495,6 +495,8 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
     const surfacePoints = nArray(3, () => new MeshVertex());
     const surfacePlane = new Plane();
 
+    const bbox = new AABB();
+
     for (let i = 0; i < overlayInfo.faces.length; i++) {
         const face = overlayInfo.faces[i];
         const surfaceInfo = faceToSurfaceInfo[face];
@@ -552,6 +554,7 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
 
                 // Offset the normal just a smidgen...
                 vec3.scaleAndAdd(v.position, v.position, v.normal, 0.1);
+                bbox.unionPoint(v.position);
             }
 
             // We're done! Append the overlay plane to the list.
@@ -592,7 +595,7 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
         i--;
     }
 
-    return { surfaces };
+    return { surfaces, bbox };
 }
 
 function magicint(S: string): number {
@@ -1493,13 +1496,15 @@ export class BSPFile {
                 assert(indexCount === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                surface = { texName, onNode, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, bbox: result.aabb };
+                surface = { texName, onNode, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, bbox: result.bbox };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
 
                 vertexCount = disp.vertexCount;
             } else {
+                const bbox = new AABB();
+
                 const vertex = nArray(numedges, () => new MeshVertex());
                 for (let j = 0; j < numedges; j++) {
                     const v = vertex[j];
@@ -1509,6 +1514,7 @@ export class BSPFile {
                     v.position[0] = vertexes[vertIndex * 3 + 0];
                     v.position[1] = vertexes[vertIndex * 3 + 1];
                     v.position[2] = vertexes[vertIndex * 3 + 2];
+                    bbox.unionPoint(v.position);
 
                     // Normal
                     const vertnormalBase = face.vertnormalBase;
@@ -1562,8 +1568,10 @@ export class BSPFile {
                 surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, bbox: null };
+                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, bbox };
                     this.surfaces.push(surface);
+                } else {
+                    surface.bbox.union(surface.bbox, bbox);
                 }
 
                 surface.indexCount += indexCount;
@@ -1589,7 +1597,7 @@ export class BSPFile {
                 // Displacements don't come with surface leaf information.
                 // Use the bbox to mark ourselves in the proper leaves...
                 assert(faceleaflist.length === 0);
-                this.markLeafSet(faceleaflist, surface.bbox!);
+                this.markLeafSet(faceleaflist, surface.bbox);
             }
 
             addSurfaceToLeaves(faceleaflist, face.index, surfaceIndex);
@@ -1671,7 +1679,7 @@ export class BSPFile {
                 dstIndexBase += vertexCount;
 
                 const texName = tex.texName;
-                const surface: Surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, bbox: null };
+                const surface: Surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, bbox: overlayResult.bbox };
 
                 const surfaceIndex = this.surfaces.push(surface) - 1;
                 // Currently, overlays are part of the first model. We need to track origin surfaces / models if this differs...

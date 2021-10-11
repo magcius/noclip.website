@@ -610,16 +610,21 @@ export class GfxRenderInstList {
         }
     }
 
-    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): number {
         this.ensureSorted();
 
+        let numDrawn = 0;
         if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
             for (let i = 0; i < this.renderInsts.length; i++)
-                this.renderInsts[i].drawOnPass(cache, passRenderer);
+                if (this.renderInsts[i].drawOnPass(cache, passRenderer))
+                    numDrawn++;
         } else {
             for (let i = this.renderInsts.length - 1; i >= 0; i--)
-                this.renderInsts[i].drawOnPass(cache, passRenderer);
+                if (this.renderInsts[i].drawOnPass(cache, passRenderer))
+                    numDrawn++;
         }
+
+        return numDrawn;
     }
 
     public reset(): void {
@@ -631,9 +636,10 @@ export class GfxRenderInstList {
      * using {@param device} and {@param cache} to create any device-specific resources
      * necessary to complete the draws.
      */
-    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        this.drawOnPassRendererNoReset(cache, passRenderer);
+    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): number {
+        const numDrawn = this.drawOnPassRendererNoReset(cache, passRenderer);
         this.reset();
+        return numDrawn;
     }
 }
 //#endregion
