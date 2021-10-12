@@ -17,6 +17,7 @@ import { SFAAnimationController } from './animation';
 import { MaterialFactory, HeatShimmerMaterial } from './materials';
 import { radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
+import { Downsampler } from './downsampler';
 import { getMatrixAxisZ } from '../MathHelpers';
 
 export interface SceneRenderContext {
@@ -130,7 +131,8 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
 
-    private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sourceColorResolveTextureID: number, sourceDepthTargetID: number, sceneCtx: SceneRenderContext) {        // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
+    private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sourceColorResolveTextureID: number, sourceDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
         // to obtain a local SceneParams buffer
         const template = this.renderHelper.pushTemplateRenderInst();
 
@@ -221,15 +223,34 @@ export class SFARenderer implements Viewer.SceneGfx {
         });
     }
 
+    private downsampler?: Downsampler;
+
+    private downsampleTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: number, sceneCtx: SceneRenderContext): number {
+        if (this.downsampler === undefined)
+            this.downsampler = new Downsampler(this.renderHelper.getCache());
+
+        return this.downsampler.render(builder, renderInstManager, this.mainColorDesc.width, this.mainColorDesc.height,
+            () => {
+                return this.temporalTexture.getTextureForSampling();
+            }
+        );
+    }
+
     private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        const downsampleTargetID = this.downsampleTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
+
         builder.pushPass((pass) => {
             pass.setDebugName('World Opaques');
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                // TODO: downscale temporal texture by 8x and/or apply blur
-                this.temporalTextureMapping.gfxTexture = this.temporalTexture.getTextureForSampling();
+
+            // TODO: needs resolveRenderTarget?
+            const downsampleResolveID = builder.resolveRenderTarget(downsampleTargetID);
+            pass.attachResolveTexture(downsampleResolveID);
+
+            pass.exec((passRenderer, scope) => {
+                this.temporalTextureMapping.gfxTexture = scope.getResolveTextureForID(downsampleResolveID);
                 renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
 
                 renderLists.world[0].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
