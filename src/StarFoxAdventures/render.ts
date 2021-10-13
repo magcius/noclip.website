@@ -19,6 +19,7 @@ import { radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
 import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
+import { drawScreenSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -237,7 +238,9 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        const blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
+        let blurTargetID: number | undefined;
+        if (renderLists.world[0].hasLateSamplerBinding('temporal-texture-downscale-8x'))
+            blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
 
         builder.pushPass((pass) => {
             pass.setDebugName('World Opaques');
@@ -245,12 +248,17 @@ export class SFARenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            const blurResolveID = builder.resolveRenderTarget(blurTargetID);
-            pass.attachResolveTexture(blurResolveID);
+            let blurResolveID: number;
+            if (blurTargetID !== undefined) {
+                blurResolveID = builder.resolveRenderTarget(blurTargetID);
+                pass.attachResolveTexture(blurResolveID);
+            }
 
             pass.exec((passRenderer, scope) => {
-                this.temporalTextureMapping.gfxTexture = scope.getResolveTextureForID(blurResolveID);
-                renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
+                if (blurTargetID !== undefined) {
+                    this.temporalTextureMapping.gfxTexture = scope.getResolveTextureForID(blurResolveID);
+                    renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
+                }
 
                 renderLists.world[0].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 renderLists.furs.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);

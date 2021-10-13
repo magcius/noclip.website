@@ -16,7 +16,10 @@ import { GXShaderLibrary } from "../gx/gx_material";
 // In the original game, this effect is achieved by downsampling the framebuffer to 1/8 size.
 // We improve on this effect by implementing a blur filter.
 //
-// This code borrows heavily from Super Mario Galaxy's bloom effect.
+// This code implements Marius Bjorge's "dual filter" described at 
+// <https://community.arm.com/cfs-file/__key/communityserver-blogs-components-weblogfiles/00-00-00-20-66/siggraph2015_2D00_mmg_2D00_marius_2D00_slides.pdf>.
+// This filter is similar to the Kawase filter, but works by downsampling to progressively
+// smaller buffers, then upsampling again.
 
 const BindingsDefinition = `
 uniform sampler2D u_Texture;
