@@ -4,26 +4,26 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SourceFileSystem } from "./Main";
 import { createScene } from "./Scenes";
 
-const pathBase = `TeamFortress2`;
+const tf2PathBase = `TeamFortress2`;
 
 class TeamFortress2SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
+        const filesystem = await context.dataShare.ensureObject(`${tf2PathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             // According to gameinfo.txt, it first mounts TF2 and then HL2.
             await Promise.all([
-                filesystem.createVPKMount(`${pathBase}/tf/tf2_textures`),
-                filesystem.createVPKMount(`${pathBase}/tf/tf2_misc`),
-                filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
+                filesystem.createVPKMount(`${tf2PathBase}/tf/tf2_textures`),
+                filesystem.createVPKMount(`${tf2PathBase}/tf/tf2_misc`),
+                filesystem.createVPKMount(`${tf2PathBase}/hl2/hl2_textures`),
+                filesystem.createVPKMount(`${tf2PathBase}/hl2/hl2_misc`),
             ]);
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/tf/maps/${this.id}.bsp`);
+        return createScene(context, filesystem, this.id, `${tf2PathBase}/tf/maps/${this.id}.bsp`);
     }
 }
 
@@ -32,20 +32,24 @@ class GarrysModSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const pathBase2 = `GarrysMod`;
+        const gmPathBase = `GarrysMod`;
+        const ep1PathBase = `HalfLife2Ep1`;
+        const ep2PathBase = `HalfLife2Ep2`;
 
-        const filesystem = await context.dataShare.ensureObject(`${pathBase2}/SourceFileSystem`, async () => {
+        const filesystem = await context.dataShare.ensureObject(`${gmPathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await Promise.all([
-                filesystem.createVPKMount(`${pathBase2}/garrysmod`),
-                filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
+                filesystem.createVPKMount(`${gmPathBase}/garrysmod`),
+                filesystem.createVPKMount(`${ep1PathBase}/ep1_pak`),
+                filesystem.createVPKMount(`${ep2PathBase}/ep2_pak`),
+                filesystem.createVPKMount(`${tf2PathBase}/hl2/hl2_textures`),
+                filesystem.createVPKMount(`${tf2PathBase}/hl2/hl2_misc`),
             ]);
 
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase2}/maps/${this.id}.bsp`);
+        return createScene(context, filesystem, this.id, `${gmPathBase}/maps/${this.id}.bsp`);
     }
 }
 
@@ -191,6 +195,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('itemtest'),
     "Garry's Mod",
     new GarrysModSceneDesc('gm_construct'),
+    // new GarrysModSceneDesc('gm_fork'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

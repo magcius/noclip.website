@@ -11,7 +11,7 @@ import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelper
 import { fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GXShaderLibrary } from "../gx/gx_material";
 import { DeviceProgram } from "../Program";
@@ -242,7 +242,7 @@ export class EggDrawPathBloom {
     private target4ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private target8ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
-    public pushPassesBloom(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainResolveTextureID: number): void {
+    public pushPassesBloom(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainResolveTextureID: GfxrResolveTextureID): void {
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
 
         this.target2ColorDesc.setDimensions(mainColorTargetDesc.width >>> 1, mainColorTargetDesc.height >>> 1, 1);
@@ -560,7 +560,7 @@ export class EggDrawPathDOF {
 
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
-    private pushPassesDOF_DrawMode2(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: number, mainDepthTargetID: number, mainResolveTextureID: number): void {
+    private pushPassesDOF_DrawMode2(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, mainResolveTextureID: GfxrResolveTextureID): void {
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
 
         this.target2ColorDesc.setDimensions(mainColorTargetDesc.width >>> 1, mainColorTargetDesc.height >>> 1, 1);
@@ -653,7 +653,7 @@ export class EggDrawPathDOF {
         });
     }
 
-    public pushPassesDOF(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: number, mainDepthTargetID: number, mainResolveTextureID: number): void {
+    public pushPassesDOF(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, mainResolveTextureID: GfxrResolveTextureID): void {
         if (this.drawMode === DOFDrawMode.DrawMode2)
             this.pushPassesDOF_DrawMode2(builder, renderInstManager, camera, mainColorTargetID, mainDepthTargetID, mainResolveTextureID);
     }

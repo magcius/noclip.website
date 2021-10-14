@@ -9,7 +9,7 @@ import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform";
 import { GfxProgram, GfxQueryPool } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { clamp, invlerp, lerp, saturate } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
@@ -350,7 +350,10 @@ export class LuminanceHistogram {
         }
     }
 
-    private findLocationOfPercentBrightPixels(threshold: number, snapLuminance: number | null): number | null {
+    // For details on the algorithm, see https://cdn.cloudflare.steamstatic.com/apps/valve/2008/GDC2008_PostProcessingInTheOrangeBox.pdf#page=26
+    // The numbers have since been tweaked: Source seems to use settings now to keep 2% of the pixels above the 60% threshold target.
+
+    private findLocationOfPercentBrightPixels(threshold: number, stickyBin: number | null): number | null {
         let totalQuads = 0;
         for (let i = 0; i < this.buckets.length; i++)
             totalQuads += this.buckets[i].calcSum();
@@ -371,8 +374,10 @@ export class LuminanceHistogram {
             const bucketLuminanceRange = bucket.maxLuminance - bucket.minLuminance;
 
             if (bucketQuadsPct >= bucketQuadsThreshold) {
-                if (snapLuminance !== null && bucket.minLuminance <= snapLuminance && bucket.maxLuminance >= snapLuminance)
-                    return snapLuminance;
+                if (stickyBin !== null && bucket.minLuminance <= stickyBin && bucket.maxLuminance >= stickyBin) {
+                    // "Sticky" bin -- prevents us from oscillating small amounts of lights.
+                    return stickyBin;
+                }
 
                 const thresholdRatio = bucketQuadsThreshold / bucketQuadsPct;
                 const border = clamp(1.0 - (rangeTestedPct + (bucketLuminanceRange * thresholdRatio)), bucket.minLuminance, bucket.maxLuminance);
@@ -386,6 +391,23 @@ export class LuminanceHistogram {
         return null;
     }
 
+    public updateToneMapParams(toneMapParams: ToneMapParams, deltaTime: number): void {
+        let locationOfTarget = this.findLocationOfPercentBrightPixels(toneMapParams.percentBrightPixels, toneMapParams.percentTarget);
+        if (locationOfTarget === null)
+            locationOfTarget = toneMapParams.percentTarget;
+        locationOfTarget = Math.max(0.001, locationOfTarget);
+
+        let target = (toneMapParams.percentTarget / locationOfTarget) * toneMapParams.toneMapScale;
+
+        // Also 
+        const locationOfAverage = this.findLocationOfPercentBrightPixels(0.5, null);
+        if (locationOfAverage !== null)
+            target = Math.max(target, toneMapParams.minAvgLum / locationOfAverage);
+
+        this.updateToneMapScale(toneMapParams, target, deltaTime);
+        this.debugDraw(toneMapParams);
+    }
+
     private updateToneMapScale(toneMapParams: ToneMapParams, targetScale: number, deltaTime: number): void{
         targetScale = clamp(targetScale, toneMapParams.autoExposureMin, toneMapParams.autoExposureMax);
         this.toneMapScaleHistory.unshift(targetScale);
@@ -397,13 +419,11 @@ export class LuminanceHistogram {
             return;
 
         let sum = 0.0;
-        const center = this.toneMapScaleHistoryCount / 2;
         for (let i = 0; i < this.toneMapScaleHistoryCount; i++) {
             // I think this is backwards -- it generates the weights 1.0, 0.8, 0.6, 0.4, 0.2, 0.0, 0.2, 0.4, 0.6, 0.8...
             // const weight = Math.abs(i - center) / center;
-
-            // sum of weights is count / 2, aka center
-            const weight = Math.abs(center - i) / (center**2);
+            // I think we should just roll off the weights from 0...1
+            const weight = (this.toneMapScaleHistoryCount - i) / 55;
             sum += (weight * this.toneMapScaleHistory[i]);
         }
 
@@ -422,23 +442,7 @@ export class LuminanceHistogram {
         toneMapParams.toneMapScale = lerp(toneMapParams.toneMapScale, goalScale, t);
     }
 
-    public updateToneMapParams(toneMapParams: ToneMapParams, deltaTime: number): void {
-        let locationOfTarget = this.findLocationOfPercentBrightPixels(toneMapParams.percentBrightPixels, toneMapParams.percentTarget);
-        if (locationOfTarget === null)
-            locationOfTarget = toneMapParams.percentTarget;
-        locationOfTarget = Math.max(0.001, locationOfTarget);
-
-        let target = (toneMapParams.percentTarget / locationOfTarget) * toneMapParams.toneMapScale;
-
-        const locationOfAverage = this.findLocationOfPercentBrightPixels(0.5, null);
-        if (locationOfAverage !== null)
-            target = Math.max(target, toneMapParams.minAvgLum / locationOfAverage);
-
-        this.updateToneMapScale(toneMapParams, target, deltaTime);
-        this.debugDraw(toneMapParams);
-    }
-
-    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: number): void {
+    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {
         this.updateFromFinishedFrames(renderInstManager.gfxRenderCache.device);
 
         const colorTargetDesc = builder.getRenderTargetDescription(colorTargetID);

@@ -11,7 +11,7 @@ import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullC
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { clamp, computeModelMatrixS, getMatrixTranslation, projectionMatrixForFrustum, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
@@ -47,6 +47,11 @@ export class CustomMount {
     }
 }
 
+function normalizeZip(zip: ZipFile): void {
+    for (let i = 0; i < zip.length; i++)
+        zip[i].filename = zip[i].filename.replace(/\\/g, '/');  
+}
+
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public zip: ZipFile[] = [];
@@ -63,9 +68,16 @@ export class SourceFileSystem {
         this.vpk[i] = await createVPKMount(this.dataFetcher, path);
     }
 
+    public addPakFile(pakfile: ZipFile): void {
+        normalizeZip(pakfile);
+        this.pakfiles.push(pakfile);
+    }
+
     public async createZipMount(path: string) {
         const data = await this.dataFetcher.fetchData(path);
-        this.zip.push(parseZipFile(data));
+        const zip = parseZipFile(data);
+        normalizeZip(zip);
+        this.zip.push(zip);
     }
 
     public resolvePath(path: string, ext: string): string {
@@ -978,7 +990,7 @@ class SourceWorldViewRenderer {
     public skyboxView = new SourceEngineView();
     public enabled = false;
 
-    public outputColorTargetID: number | null = null;
+    public outputColorTargetID: GfxrRenderTargetID | null = null;
 
     constructor(public name: string) {
     }
@@ -1095,7 +1107,7 @@ class SourceWorldViewRenderer {
                 const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
                 pass.attachResolveTexture(mainDepthResolveTextureID);
 
-                let reflectColorResolveTextureID: number | null = null;
+                let reflectColorResolveTextureID: GfxrResolveTextureID | null = null;
                 if (renderer.reflectViewRenderer.outputColorTargetID !== null) {
                     reflectColorResolveTextureID = builder.resolveRenderTarget(renderer.reflectViewRenderer.outputColorTargetID);
                     pass.attachResolveTexture(reflectColorResolveTextureID);
@@ -1557,7 +1569,7 @@ export class SourceRenderer implements SceneGfx {
         renderContext.colorCorrection.prepareToRender(device);
     }
 
-    private pushBloomPasses(builder: GfxrGraphBuilder, mainColorTargetID: number): number | null {
+    private pushBloomPasses(builder: GfxrGraphBuilder, mainColorTargetID: GfxrRenderTargetID): GfxrRenderTargetID | null {
         if (!this.renderContext.enableBloom)
             return null;
 
@@ -1694,7 +1706,7 @@ export class SourceRenderer implements SceneGfx {
 
             const postProgram = new FullscreenPostProgram();
 
-            let bloomResolveTextureID: number | null = null;
+            let bloomResolveTextureID: GfxrResolveTextureID | null = null;
             if (bloomColorTargetID !== null) {
                 bloomResolveTextureID = builder.resolveRenderTarget(bloomColorTargetID);
                 pass.attachResolveTexture(bloomResolveTextureID);

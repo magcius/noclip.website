@@ -4,7 +4,7 @@ import { TextureMapping } from "../../TextureHolder";
 import { nArray } from "../../util";
 import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
-import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
 class FXAAProgram extends DeviceProgram {
@@ -25,12 +25,10 @@ void main() {
 }
 
 interface RenderInput {
-    backbufferWidth: number;
-    backbufferHeight: number;
 }
 
 const textureMapping = nArray(1, () => new TextureMapping());
-export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: number): void {
+export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: GfxrRenderTargetID): void {
     builder.pushPass((pass) => {
         pass.setDebugName('FXAA');
         pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);

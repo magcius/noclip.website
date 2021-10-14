@@ -17,7 +17,7 @@ import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 import { GXShaderLibrary } from "../gx/gx_material";
@@ -273,7 +273,7 @@ export class BloomEffect extends ImageEffectBase {
         offs += fillVec4(d, offs, bloomIntensity, threshold, intensity1, intensity2);
     }
 
-    public pushPassesBloom(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number): void {
+    public pushPassesBloom(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
         if (!this.isOn())
             return;
 
@@ -515,7 +515,7 @@ export class BloomEffectSimple extends ImageEffectBase {
         offs += fillVec4(d, offs, maskFilter, threshold, intensity);
     }
 
-    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
+    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
         if (!this.isOn())
             return;
 
@@ -682,7 +682,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IS_DEPTH_REVERSED ? 1.0 : 0.0);
     }
 
-    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
+    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
         if (!this.isOn())
             return;
 

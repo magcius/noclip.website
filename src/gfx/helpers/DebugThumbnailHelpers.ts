@@ -5,7 +5,7 @@ import { GfxShaderLibrary } from '../helpers/ShaderHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInstManager';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription } from '../render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../render/GfxRenderGraph';
 
 import { lerp, saturate, smoothstep } from '../../MathHelpers';
 import { GfxRenderHelper } from '../render/GfxRenderHelper';
@@ -90,7 +90,7 @@ export class DebugThumbnailDrawer {
         return smoothstep(this.anim[i]);
     }
 
-    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mouseLocation: MouseLocation): void {
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mouseLocation: MouseLocation): void {
         if (!this.enabled)
             return;
 
@@ -101,8 +101,8 @@ export class DebugThumbnailDrawer {
         const inputPasses = builderDebug.getPasses();
 
         // Add our passes.
-        const resolveTextureIDs: number[] = [];
-        const renderTargetIDs: number[] = [];
+        const resolveTextureIDs: GfxrResolveTextureID[] = [];
+        const renderTargetIDs: GfxrRenderTargetID[] = [];
         const debugLabels: [string, string][] = [];
 
         for (let i = 0; i < inputPasses.length; i++) {

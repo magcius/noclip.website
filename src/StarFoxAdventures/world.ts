@@ -4,7 +4,7 @@ import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
@@ -261,7 +261,7 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    private renderAtmosphere(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sceneCtx: SceneRenderContext) {
+    private renderAtmosphere(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
         if (tex === null || tex === undefined)
@@ -354,7 +354,7 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, sceneCtx: SceneRenderContext) {
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         this.renderAtmosphere(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
 
         builder.pushPass((pass) => {

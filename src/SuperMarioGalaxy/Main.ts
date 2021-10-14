@@ -46,7 +46,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
 import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
@@ -450,7 +450,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        let shadowColorTargetID: number;
+        let shadowColorTargetID: GfxrRenderTargetID;
         builder.pushPass((pass) => {
             pass.setDebugName('Shadow Volumes');
 

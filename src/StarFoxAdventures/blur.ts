@@ -1,6 +1,6 @@
 import { DeviceProgram } from "../Program";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxWrapMode, GfxTexture, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../TextureHolder";
@@ -113,7 +113,7 @@ export class BlurFilter {
         offs += fillVec4(d, offs, 0.5 / targetDesc.width, 0.5 / targetDesc.height, 0.0, 0.0);
     }
 
-    private renderBlurPass(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, name: string, program: GfxProgram, inputDesc: GfxrRenderTargetDescription, inputID: number, outputID: number, texture?: GfxTexture | null) {
+    private renderBlurPass(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, name: string, program: GfxProgram, inputDesc: GfxrRenderTargetDescription, inputID: GfxrRenderTargetID | null, outputID: GfxrRenderTargetID, texture?: GfxTexture | null) {
         let renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
         renderInst.setMegaStateFlags(fullscreenMegaState);
@@ -125,9 +125,9 @@ export class BlurFilter {
             pass.setDebugName(name);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, outputID);
 
-            let resolveID: number;
+            let resolveID: GfxrResolveTextureID;
             if (texture === undefined) {
-                resolveID = builder.resolveRenderTarget(inputID);
+                resolveID = builder.resolveRenderTarget(inputID!);
                 pass.attachResolveTexture(resolveID);
             }
 
@@ -144,7 +144,7 @@ export class BlurFilter {
         });
     }
 
-    public render(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, inputWidth: number, inputHeight: number, getTexture: () => GfxTexture | null): number {
+    public render(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, inputWidth: number, inputHeight: number, getTexture: () => GfxTexture | null): GfxrRenderTargetID {
         this.targetDesc.setDimensions(inputWidth, inputHeight, 1);
         this.target2Desc.setDimensions(inputWidth >>> 1, inputHeight >>> 1, 1);
         this.target4Desc.setDimensions(this.target2Desc.width >>> 1, this.target2Desc.height >>> 1, 1);
@@ -155,7 +155,7 @@ export class BlurFilter {
         const blur8TargetID = builder.createRenderTargetID(this.target8Desc, 'Blur 1/8');
         const outputTargetID = builder.createRenderTargetID(this.targetDesc, 'Blur Output');
 
-        this.renderBlurPass(builder, renderInstManager, 'Blur Down To 1/2', this.blurDownProgram, this.targetDesc, 0, blur2TargetID, getTexture());
+        this.renderBlurPass(builder, renderInstManager, 'Blur Down To 1/2', this.blurDownProgram, this.targetDesc, null, blur2TargetID, getTexture());
         this.renderBlurPass(builder, renderInstManager, 'Blur Down To 1/4', this.blurDownProgram, this.target2Desc, blur2TargetID, blur4TargetID);
         this.renderBlurPass(builder, renderInstManager, 'Blur Down To 1/8', this.blurDownProgram, this.target4Desc, blur4TargetID, blur8TargetID);
         this.renderBlurPass(builder, renderInstManager, 'Blur Up To 1/4', this.blurUpProgram, this.target8Desc, blur8TargetID, blur4TargetID);

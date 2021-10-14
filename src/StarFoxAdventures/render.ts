@@ -7,7 +7,7 @@ import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode }
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CameraController } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8, White } from '../Color';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
@@ -132,7 +132,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
 
-    private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sourceColorResolveTextureID: number, sourceDepthTargetID: number, sceneCtx: SceneRenderContext) {
+    private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sourceColorResolveTextureID: GfxrResolveTextureID, sourceDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
         // to obtain a local SceneParams buffer
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -226,7 +226,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     private blurFilter?: BlurFilter;
 
-    private blurTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: number, sceneCtx: SceneRenderContext): number {
+    private blurTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
         if (this.blurFilter === undefined)
             this.blurFilter = new BlurFilter(this.renderHelper.getCache());
 
@@ -237,8 +237,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         );
     }
 
-    private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        let blurTargetID: number | undefined;
+    private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
+        let blurTargetID: GfxrRenderTargetID | undefined;
         if (renderLists.world[0].hasLateSamplerBinding('temporal-texture-downscale-8x'))
             blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
 
@@ -248,7 +248,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            let blurResolveID: number;
+            let blurResolveID: GfxrResolveTextureID;
             if (blurTargetID !== undefined) {
                 blurResolveID = builder.resolveRenderTarget(blurTargetID);
                 pass.attachResolveTexture(blurResolveID);

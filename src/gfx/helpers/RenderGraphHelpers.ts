@@ -2,7 +2,7 @@
 import { GfxColor, GfxFormat } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../render/GfxRenderGraph";
 import { pushFXAAPass } from "../passes/FXAA";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
@@ -69,7 +69,7 @@ export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: 
     return desc;
 }
 
-export function pushAntialiasingPostProcessPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: number): void {
+export function pushAntialiasingPostProcessPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: GfxrRenderTargetID): void {
     if (renderInput.antialiasingMode === AntialiasingMode.FXAA) {
         pushFXAAPass(builder, renderHelper, renderInput, mainColorTargetID);
     }

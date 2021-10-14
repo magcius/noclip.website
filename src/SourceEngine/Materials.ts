@@ -467,11 +467,8 @@ class ParameterVector {
 
     public parse(S: string): void {
         const numbers = vmtParseVector(S);
-        if (this.internal.length !== 0)
-            assert(numbers.length === this.internal.length || numbers.length === 1);
-        else
+        if (this.internal.length === 0)
             this.internal.length = numbers.length;
-
         for (let i = 0; i < this.internal.length; i++)
             this.internal[i] = new ParameterNumber(i > numbers.length - 1 ? numbers[0] : numbers[i]);
     }
