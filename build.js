@@ -16,7 +16,7 @@ await esbuild.build({
   entryPoints: ['src/main.ts'],
   bundle: true,
   outdir: outDir,
-  external: ['fs', 'path'],
+  external: ['fs', 'path', 'iconv-lite'],
   loader: {
     '.glsl': 'text',
     '.png': 'dataurl',
