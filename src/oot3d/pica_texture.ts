@@ -408,7 +408,6 @@ export function getTextureFormatFromGLFormat(glFormat: TextureFormatGL): Texture
     case TextureFormatGL.ETC1:     return TextureFormat.ETC1;
     case TextureFormatGL.ETC1A4:   return TextureFormat.ETC1A4;
     case TextureFormatGL.RGBA4444: return TextureFormat.RGBA4444;
-    case TextureFormatGL.RGBA4444: return TextureFormat.RGBA4444;
     case TextureFormatGL.RGBA5551: return TextureFormat.RGBA5551;
     case TextureFormatGL.RGB565:   return TextureFormat.RGB565;
     case TextureFormatGL.A8:       return TextureFormat.A8;
