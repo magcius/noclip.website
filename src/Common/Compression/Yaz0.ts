@@ -18,6 +18,7 @@
 
 import { assert, readString } from '../../util';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
+import wasmInit from '../../noclip_support';
 
 // Simple software version for environments without WebAssembly.
 export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
@@ -83,7 +84,7 @@ let _decompressor: Yaz0DecompressorWASM | null = null;
 
 export async function getWASM(): Promise<Yaz0DecompressorWASM> {
     if (_decompressor === null) {
-        const { yaz0dec } = await import('../../../rust/pkg/index');
+        const { yaz0dec } = await wasmInit();
         _decompressor = new Yaz0DecompressorWASM(yaz0dec);
     }
 

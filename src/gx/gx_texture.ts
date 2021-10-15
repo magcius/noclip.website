@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
 import { align, assertExists } from '../util';
+import wasmInit from '../noclip_support';
 
 export interface TextureInputGX {
     name: string;
@@ -155,7 +156,7 @@ export function getFormatName(format: GX.TexFormat, paletteFormat?: GX.TexPalett
 }
 
 async function decodeRust(texture: TextureInputGX): Promise<DecodedTexture> {
-    const { decode_texture, PixelFormat, PaletteFormat } = await import("../../rust/pkg/index");
+    const { decode_texture, PixelFormat, PaletteFormat } = await wasmInit();
     const fmt =
         texture.format === GX.TexFormat.I4 ? PixelFormat.I4 :
         texture.format === GX.TexFormat.I8 ? PixelFormat.I8 :

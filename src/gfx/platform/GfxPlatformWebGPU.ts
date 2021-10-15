@@ -4,7 +4,7 @@ import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSampler
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
-import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index";
+import wasmInit, { Module } from '../../noclip_support';
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -325,7 +325,7 @@ function translateBlendState(attachmentState: GfxAttachmentState): GPUBlendState
 }
 
 function translateColorState(attachmentState: GfxAttachmentState, format: GfxFormat): GPUColorTargetState {
-    return { 
+    return {
         format: translateTextureFormat(format),
         blend: translateBlendState(attachmentState),
         writeMask: attachmentState.channelWriteMask,
@@ -813,7 +813,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         'texture-compression-bc',
     ];
 
-    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
+    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: Module['glsl_compile']) {
         this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
         this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
@@ -918,7 +918,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuTextureView = gpuTexture.createView({
             dimension: translateViewDimension(descriptor.dimension),
         });
-        const texture: GfxTextureSharedP_WebGPU = { 
+        const texture: GfxTextureSharedP_WebGPU = {
             pixelFormat: descriptor.pixelFormat,
             width: descriptor.width,
             height: descriptor.height,
@@ -1496,6 +1496,6 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (!context)
         return null;
 
-    const { glsl_compile } = await import('../../../rust/pkg/index');
+    const { glsl_compile } = await wasmInit();
     return new GfxImplP_WebGPU(adapter, device, canvas, context, glsl_compile);
 }

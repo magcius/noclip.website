@@ -5,6 +5,7 @@ import { BRTI } from "./bntx";
 import { GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture";
 import { assert } from "../util";
+import wasmInit from '../noclip_support';
 
 export function getFormatBlockWidth(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
@@ -115,7 +116,7 @@ export interface SwizzledSurface {
 }
 
 export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array> {
-    const { tegra_deswizzle, CompressionType } = await import("../../rust/pkg/index");
+    const { tegra_deswizzle, CompressionType } = await wasmInit();
     const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
     const compressionType =
         channelFormat === ChannelFormat.Bc1 ? CompressionType.Bc1 :
