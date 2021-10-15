@@ -24,7 +24,7 @@ await esbuild.build({
   minify: true,
   define: {
     __COMMIT_HASH: JSON.stringify(gitRevision()),
-    'process.env.NODE_ENV': 'development', // TODO prod flag?
+    'process.env.NODE_ENV': '"development"', // TODO prod flag?
   },
   treeShaking: true,
   sourcemap: true,
