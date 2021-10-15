@@ -195,7 +195,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('itemtest'),
     "Garry's Mod",
     new GarrysModSceneDesc('gm_construct'),
-    // new GarrysModSceneDesc('gm_fork'),
+    new GarrysModSceneDesc('gm_fork'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

@@ -36,4 +36,4 @@ const sceneDescs = [
     new HalfLife2LostCoastSceneDesc('test_hardware'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };
