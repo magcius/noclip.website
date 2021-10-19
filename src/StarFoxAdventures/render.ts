@@ -91,7 +91,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.renderLists = {
-            // atmosphere: new GfxRenderInstList(),
             skyscape: new GfxRenderInstList(),
             world: nArray(3, () => new GfxRenderInstList()),
             waters: new GfxRenderInstList(),
