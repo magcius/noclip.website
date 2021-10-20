@@ -1,40 +1,23 @@
 import { mat4, vec3 } from 'gl-matrix';
-import * as UI from '../ui';
-import { DataFetcher } from '../DataFetcher';
-import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
-import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render';
-import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
-import { colorNewFromRGBA, Color, colorCopy } from '../Color';
-import { computeViewMatrix } from '../Camera';
 
-import { SFA_GAME_INFO, GameInfo } from './scenes';
-import { loadRes, ResourceCollection } from './resource';
-import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext } from './objects';
-import { EnvfxManager } from './envfx';
-import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst, setGXMaterialOnRenderInst } from './render';
-import { MapInstance, loadMap } from './maps';
-import { dataSubarray, readVec3, vecPitch } from './util';
-import { ModelRenderContext } from './models';
-import { MaterialFactory } from './materials';
-import { SFAAnimationController } from './animation';
-import { SFABlockFetcher } from './blocks';
+import { ObjectRenderContext } from './objects';
+import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from './render';
+import { vecPitch } from './util';
 import { getCamPos } from './util';
 import { World } from './world';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
-const scratchMtx0 = mat4.create();
 const scratchVec0 = vec3.create();
-const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchSceneParams = new SceneParams();
 
 export class Sky {

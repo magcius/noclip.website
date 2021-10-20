@@ -4,33 +4,27 @@ import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
+import { GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
-import { TDDraw } from "../SuperMarioGalaxy/DDraw";
-import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData } from '../gx/gx_render';
+import { PacketParams, fillSceneParamsDataOnTemplate, SceneParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { getMatrixAxisZ } from '../MathHelpers';
 import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { computeViewMatrix } from '../Camera';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
-import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext } from './objects';
+import { ObjectManager, ObjectInstance, ObjectUpdateContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst, setGXMaterialOnRenderInst } from './render';
+import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { MapInstance, loadMap } from './maps';
-import { dataSubarray, readVec3, vecPitch } from './util';
+import { dataSubarray, readVec3 } from './util';
 import { ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
-import { getCamPos } from './util';
 import { Sky } from './Sky';
 
-const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 
 interface Light {
@@ -136,9 +130,7 @@ export class World {
 }
 
 const scratchMtx0 = mat4.create();
-const scratchVec0 = vec3.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
-const scratchSceneParams = new SceneParams();
 
 class WorldRenderer extends SFARenderer {
     private timeSelect: UI.Slider;
