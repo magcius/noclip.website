@@ -5,7 +5,7 @@ import { World } from "../world";
 
 export class SFAClass {
     // Called when loading objects
-    public constructor(obj: ObjectInstance, data: DataView) { }
+    constructor(obj: ObjectInstance, data: DataView) { }
     // Called when adding objects to world, after all objects have been loaded
     public mount(obj: ObjectInstance, world: World): void { }
     // Called when removing objects from world

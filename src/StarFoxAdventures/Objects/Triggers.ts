@@ -42,7 +42,7 @@ const scratchVec1 = vec3.create();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
 
-export class Trigger extends SFAClass {
+export class TriggerObj extends SFAClass {
     private actions: Action[];
     private prevPoint?: vec3;
     private triggerData?: TrigPlnData;

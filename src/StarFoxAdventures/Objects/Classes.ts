@@ -1,15 +1,13 @@
 import { commonClass, commonSetup, decorClass, templeClass } from './Common';
-import { Trigger } from './Triggers';
+import { TriggerObj } from './Triggers';
+import { LightObj } from './Lights';
 import { ObjectInstance, ObjectUpdateContext } from '../objects';
 import { angle16ToRads, readUint32 } from '../util';
 import { World } from '../world';
 import { getRandomInt } from '../../SuperMarioGalaxy/ActorUtil';
 import { StandardMaterial } from '../materials';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import * as GX_Material from '../../gx/gx_material';
 import * as GX from '../../gx/gx_enum';
-import { vec3 } from 'gl-matrix';
-import { Color, colorNewFromRGBA } from '../../Color';
 import { SFAClass } from './SFAClass';
 
 export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
@@ -148,7 +146,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             // FIXME: some curve modes have a roll parameter at 0x38
         }
     },
-    [294]: Trigger,
+    [294]: TriggerObj,
     [296]: class extends SFAClass {
         constructor(obj: ObjectInstance, data: DataView) {
             super(obj, data);
@@ -699,46 +697,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             obj.roll = angle16ToRads(getRandomInt(0, 0xffff));
         }
     },
-    [681]: class extends SFAClass { // LGTPointLig
-        private color: Color;
-        private distAtten: vec3;
-
-        constructor(obj: ObjectInstance, data: DataView) {
-            super(obj, data);
-            commonSetup(obj, data, 0x18, 0x19);
-
-            const spotFunc = data.getUint8(0x21); // TODO: this value is passed to GXInitSpotLight
-            if (spotFunc === 0)
-                obj.setModelNum(0);
-            else
-                obj.setModelNum(1);
-
-            // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
-            // TODO: Some types of light use other formulae
-            const refDistance = data.getUint16(0x22);
-            const refBrightness = 0.75;
-            const kfactor = 0.5 * (1.0 - refBrightness);
-            this.distAtten = vec3.fromValues(
-                1.0,
-                kfactor / (refBrightness * refDistance),
-                kfactor / (refBrightness * refDistance * refDistance)
-                );
-
-            this.color = colorNewFromRGBA(
-                data.getUint8(0x1a) / 0xff,
-                data.getUint8(0x1b) / 0xff,
-                data.getUint8(0x1c) / 0xff,
-                1.0
-            );
-        }
-        public mount(obj: ObjectInstance, world: World) {
-            world.lights.add({
-                position: obj.getPosition(),
-                color: this.color,
-                distAtten: this.distAtten,
-            })
-        }
-    },
+    [681]: LightObj, // LGTPointLgt
     [682]: commonClass(0x18, 0x19),
     [683]: class extends commonClass(0x18, 0x19, 0x34) { // LGTProjecte
         public mount(obj: ObjectInstance, world: World) {

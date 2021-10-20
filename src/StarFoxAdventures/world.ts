@@ -27,7 +27,7 @@ import { Sky } from './Sky';
 
 const packetParams = new PacketParams();
 
-interface Light {
+export interface Light {
     position: vec3;
     color: Color;
     distAtten: vec3;
