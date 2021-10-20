@@ -21,6 +21,7 @@ import { SceneContext, Destroyable } from '../SceneBase';
 import { createModelInstance } from './scenes';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 const sjisDecoder = new TextDecoder('sjis')!;
 
@@ -302,7 +303,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    private setIndirectTextureOverride(): void {
+    private setIndirectTextureOverride(device: GfxDevice): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
             // In options.szs, the seaindirect appears to have more than one sampler named "indirectdummy". WTF?
             const samplers = this.modelInstances[i].tex1Data.tex1.samplers;
@@ -312,7 +313,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
                     m.lateBinding = 'opaque-scene-texture';
                     m.width = EFB_WIDTH;
                     m.height = EFB_HEIGHT;
-                    m.flipY = true;
+                    m.flipY = gfxDeviceNeedsFlipY(device);
                 }
             }
         }
@@ -330,7 +331,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.setIndirectTextureOverride();
+        this.setIndirectTextureOverride(device);
         this.prepareToRender(device, viewerInput);
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);

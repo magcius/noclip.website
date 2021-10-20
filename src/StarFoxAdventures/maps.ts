@@ -37,9 +37,8 @@ export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: 
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const sub = (blockInfo >>> 17) & 0x3F;
     const mod = (blockInfo >>> 23);
-    if (mod == 0xff) {
+    if (mod == 0xff)
         return null;
-    }
     return {mod, sub};
 }
 
@@ -165,15 +164,22 @@ export class MapInstance {
                 }
 
                 try {
-                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
-                    if (blockRenderer) {
-                        row.push(blockRenderer);
+                    const blockModel = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
+                    if (blockModel) {
+                        row.push(new ModelInstance(blockModel));
                     }
                 } catch (e) {
                     console.warn(`Skipping block at ${x},${z} due to exception:`);
                     console.error(e);
                 }
             }
+        }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let row of this.blocks) {
+            for (let model of row)
+                model?.destroy(device);
         }
     }
 }

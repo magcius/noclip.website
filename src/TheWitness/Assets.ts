@@ -1,17 +1,17 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZ4 from "../Common/Compression/LZ4";
-import { assert, nArray } from "../util";
-import { ZipFile, parseZipFile } from "../ZipFile";
-import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { assert, nArray, nullify } from "../util";
+import { ZipFile, parseZipFile, decompressZipFileEntry } from "../ZipFile";
+import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { Color } from "../Color";
-import { _T, GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
 import { Entity } from "./Entity";
 import { load_entities } from "./Entity_Types";
 import { Stream_read_Color, Stream, Stream_read_Vector3, Stream_read_Vector2, Stream_read_Vector4 } from "./Stream";
 import { AABB } from "../Geometry";
-import { vec3, vec2, vec4 } from "gl-matrix";
+import { vec3, vec2, ReadonlyVec4 } from "gl-matrix";
 import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat";
 import { Destroyable } from "../SceneBase";
@@ -40,9 +40,11 @@ const enum Asset_Format {
 }
 
 type AssetT<T extends Asset_Type> =
-    T extends Asset_Type.World ? Entity[] :
-    T extends Asset_Type.Mesh ? Mesh_Asset :
     T extends Asset_Type.Texture ? Texture_Asset :
+    T extends Asset_Type.Lightmap ? Lightmap_Asset :
+    T extends Asset_Type.Mesh ? Mesh_Asset :
+    T extends Asset_Type.Raw ? ArrayBufferSlice :
+    T extends Asset_Type.World ? Entity[] :
     never;
 
 const enum Texture_Asset_Flags {
@@ -53,13 +55,16 @@ const enum Texture_Asset_Flags {
 }
 
 const enum D3DFormat {
-    DXT1 = 'DXT1',
-    DXT5 = 'DXT5',
-    ATI1 = 'ATI1',
-    ATI2 = 'ATI2',
+    DXT1 = 0x31545844,
+    DXT5 = 0x35545844,
+    ATI1 = 0x31495441,
+    ATI2 = 0x32495441,
+    A8R8G8B8 = 0x15,
+    X8R8G8B8 = 0x16,
+    L16      = 0x51,
 }
 
-function get_gfx_format(format: string, srgb: boolean): GfxFormat {
+function get_gfx_format(format: D3DFormat, srgb: boolean): GfxFormat {
     if (format === D3DFormat.DXT1)
         return srgb ? GfxFormat.BC1_SRGB : GfxFormat.BC1;
     else if (format === D3DFormat.DXT5)
@@ -68,12 +73,26 @@ function get_gfx_format(format: string, srgb: boolean): GfxFormat {
         return GfxFormat.BC4_UNORM;
     else if (format === D3DFormat.ATI2)
         return GfxFormat.BC5_UNORM;
+    else if (format === D3DFormat.A8R8G8B8)
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (format === D3DFormat.X8R8G8B8)
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (format === D3DFormat.L16)
+        return GfxFormat.U16_R_NORM;
     else
         throw "whoops";
 }
 
 function is_block_compressed(format: D3DFormat): boolean {
-    return true;
+    if (format === D3DFormat.DXT1)
+        return true;
+    else if (format === D3DFormat.DXT5)
+        return true;
+    else if (format === D3DFormat.ATI1)
+        return true;
+    else if (format === D3DFormat.ATI2)
+        return true;
+    return false;
 }
 
 function get_mipmap_size(format: D3DFormat, width: number, height: number, depth: number): number {
@@ -89,18 +108,28 @@ function get_mipmap_size(format: D3DFormat, width: number, height: number, depth
             return count * 8;
         else if (format === D3DFormat.ATI2)
             return count * 16;
+        else
+            throw "whoops";
+    } else {
+        const num_pixels = width * height * depth;
+        if (format === D3DFormat.A8R8G8B8)
+            return num_pixels * 4;
+        else if (format === D3DFormat.X8R8G8B8)
+            return num_pixels * 4;
+        else if (format === D3DFormat.L16)
+            return num_pixels * 2;
+        else
+            throw "whoops";
     }
-
-    throw "whoops";
 }
 
-class Texture_Asset {
+export class Texture_Asset {
     private width: number;
     private height: number;
     private depth: number;
     private mipmap_count: number;
     private flags: Texture_Asset_Flags;
-    private average_color: Color;
+    public average_color: Color;
 
     private texture: GfxTexture;
 
@@ -114,9 +143,9 @@ class Texture_Asset {
         this.mipmap_count = stream.readUint16();
         this.flags = stream.readUint32() as Texture_Asset_Flags;
         this.average_color = Stream_read_Color(stream);
-    
+
         // Texture_Asset_D3D
-        const d3d_format = stream.readByteString(4) as D3DFormat;
+        const d3d_format = stream.readUint32();
 
         let dimension: GfxTextureDimension;
 
@@ -138,11 +167,16 @@ class Texture_Asset {
         });
         device.setResourceName(this.texture, name);
 
-        const levelData: Uint8Array[] = [];
+        const levelData: ArrayBufferView[] = [];
         let w = this.width, h = this.height, d = this.depth;
         for (let i = 0; i < this.mipmap_count; i++) {
             const sliceBytes = get_mipmap_size(d3d_format, w, h, d);
-            levelData.push(stream.readBytes(sliceBytes).createTypedArray(Uint8Array));
+            const bytes = stream.readBytes(sliceBytes);
+            if (d3d_format === D3DFormat.L16) {
+                levelData.push(bytes.createTypedArray(Uint16Array));
+            } else {
+                levelData.push(bytes.createTypedArray(Uint8Array));
+            }
             w = Math.max((w >>> 1), 1);
             h = Math.max((h >>> 1), 1);
             d = Math.max((d >>> 1), 1);
@@ -165,6 +199,55 @@ function load_texture_asset(device: GfxDevice, version: number, buffer: ArrayBuf
     return new Texture_Asset(device, version, stream, name);
 }
 
+export class Lightmap_Asset {
+    public width: number;
+    public height: number;
+    public color_range: number;
+
+    private texture: GfxTexture;
+
+    constructor(device: GfxDevice, version: number, stream: Stream, name: string) {
+        const checksum = stream.readUint32();
+        this.width = stream.readUint16();
+        this.height = stream.readUint16();
+
+        // This might be missing on newer versions?
+        const vertex_count = stream.readUint32();
+
+        const generator_version = stream.readUint32();
+        const bounce_count = stream.readUint32();
+        const quality_level = stream.readUint32();
+        const time_lo = stream.readUint32();
+        const time_hi = stream.readUint32();
+
+        const pixel_data_size = stream.readUint32();
+        this.color_range = stream.readFloat32();
+        const d3d_format = stream.readUint32();
+        const ogles_internal_format = stream.readUint32();
+        const ogles_type = stream.readUint32();
+
+        this.texture = device.createTexture(makeTextureDescriptor2D(get_gfx_format(d3d_format, false), this.width, this.height, 1));
+        device.setResourceName(this.texture, name);
+
+        const levelData: Uint8Array[] = [];
+        levelData.push(stream.readBytes(pixel_data_size).createTypedArray(Uint8Array));
+        device.uploadTextureData(this.texture, 0, levelData);
+    }
+
+    public fillTextureMapping(m: TextureMapping): void {
+        m.gfxTexture = this.texture;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.texture);
+    }
+}
+
+function load_lightmap_asset(device: GfxDevice, version: number, buffer: ArrayBufferSlice, name: string): Lightmap_Asset {
+    const stream = new Stream(buffer);
+    return new Lightmap_Asset(device, version, stream, name);
+}
+
 function Stream_read_Bounding_Box(stream: Stream): AABB {
     const min = Stream_read_Vector3(stream);
     const max = Stream_read_Vector3(stream);
@@ -182,19 +265,21 @@ function Stream_read_Bounding_Sphere(stream: Stream): Bounding_Sphere {
     return { center, radius };
 }
 
-const enum Material_Type {
+export const enum Material_Type {
     Standard, Deprecated_Terrain, Foliage, Lake, Reflective, Video, Gadget, Blended, Distant,
     Video_Window, Refract, Distant_Foliage, Translucent, Pool, Panel_Face, Shadow_Only, Grate,
     Blocker, Giant_Panel, Hedge, Blended3, Tinted, Decal, Deprecated_Blended_Decal, Vegetation,
     Grass_Blocker, Occluder, Deprecated_Trunk, Cable, Collision_Only, Deprecated_Tree_Collision_Only,
     Deprecated_Blended4, Cloud, Laser, Laser_Halo_Deprecated, Puzzle, Force_Bridge, Foam_Decal,
     Screen, Eyelid, Underwater,
+
+    Sky, // noclip extension
 }
 
-const enum Material_Flags {
+export const enum Material_Flags {
     Dynamic_Substitute                       = 0x00000001,
-    Two_Sided_Deprecated                     = 0x00000002,
     Casts_Shadow                             = 0x00000002,
+    Two_Sided_Deprecated                     = 0x00000002,
     Lightmapped                              = 0x00000004,
     Remove_During_Reduction                  = 0x00000010,
     Do_Not_Use_When_Computing_Normals        = 0x00000020,
@@ -225,18 +310,18 @@ export interface Render_Material {
     texture_map_names: (string | null)[];
     normal_map_names: (string | null)[];
     blend_map_names: (string | null)[];
-    color: vec4;
-    specular_parameters: vec4;
-    foliage_parameters: vec4;
-    blend_ranges: vec4;
-    tint_factors: vec4;
+    color: Color;
+    specular_parameters: ReadonlyVec4;
+    foliage_parameters: ReadonlyVec4;
+    blend_ranges: ReadonlyVec4;
+    tint_factors: ReadonlyVec4;
 }
 
 function unpack_Render_Material(stream: Stream): Render_Material {
     const name = stream.readPString()!;
     const material_type = stream.readUint32() as Material_Type;
     const flags = stream.readUint32() as Material_Flags;
-    const usage_detail = stream.readUint32();
+    const usage_detail = stream.readUint32() | 0;
 
     const texture_map_names: (string | null)[] = [];
     const normal_map_names: (string | null)[] = [];
@@ -247,7 +332,7 @@ function unpack_Render_Material(stream: Stream): Render_Material {
         blend_map_names[i] = stream.readPString();
     }
 
-    const color = Stream_read_Vector4(stream);
+    const color = Stream_read_Color(stream);
     const specular_parameters = Stream_read_Vector4(stream);
     const foliage_parameters = Stream_read_Vector4(stream);
     const blend_ranges = Stream_read_Vector4(stream);
@@ -510,7 +595,7 @@ export class Mesh_Asset {
     public collision_mesh: Collision_Mesh;
     public skeleton: Skeleton | null;
 
-    public device_mesh_array: Device_Mesh[] = [];
+    public device_mesh_array: Device_Mesh[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, version: number, stream: Stream, name: string) {
         this.checksum = stream.readUint32();
@@ -520,6 +605,7 @@ export class Mesh_Asset {
         this.sphere = Stream_read_Bounding_Sphere(stream);
         this.lightmap_size = Stream_read_Vector2(stream);
         const material_array = unpack_Array(stream, unpack_Render_Material);
+
         const sub_mesh_array = unpack_Array(stream, unpack_Sub_Mesh_Asset);
         const z_sub_mesh_array = unpack_Array(stream, unpack_Sub_Mesh_Asset);
 
@@ -542,6 +628,10 @@ function load_mesh_asset(device: GfxDevice, cache: GfxRenderCache, version: numb
 }
 
 function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCache, asset_type_: T, buffer: ArrayBufferSlice, name: string): AssetT<T> {
+    type ResT = AssetT<T>;
+    if (asset_type_ === Asset_Type.Raw)
+        return buffer as ResT;
+
     let headerView = buffer.createDataView();
     const asset_type = headerView.getUint32(0x00, true) as T;
     assert(asset_type_ === asset_type);
@@ -559,9 +649,10 @@ function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCac
         buffer = LZ4.decompress(buffer, uncompressed_size);
     }
 
-    type ResT = AssetT<T>;
     if (asset_type === Asset_Type.Texture) {
         return load_texture_asset(device, version, buffer, name) as ResT;
+    } else if (asset_type === Asset_Type.Lightmap) {
+        return load_lightmap_asset(device, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.Mesh) {
         return load_mesh_asset(device, cache, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.World) {
@@ -594,41 +685,43 @@ function get_processed_filename(type: Asset_Type, source_name: string, options_h
 }
 
 export class Asset_Manager {
-    private bundles: ZipFile[] = [];
     public cache: GfxRenderCache;
     private destroyables: Destroyable[] = [];
     private asset_cache = new Map<string, any>();
+    private data_cache = new Map<string, ArrayBufferSlice>();
 
     constructor(public device: GfxDevice) {
         this.cache = new GfxRenderCache(device);
     }
 
-    public add_bundle(bundle: ZipFile) {
-        this.bundles.push(bundle);
+    public add_bundle(bundle: ZipFile, filename?: string) {
+        if (filename)
+            (bundle as any).filename = filename;
 
         // XXX(jstpierre): This is a hack to load all assets. Eventually go through and implement the cluster system.
-        for (let i = 0; i < bundle.length; i++)
-            if (bundle[i].filename.endsWith('.pkg'))
-                this.add_bundle(parseZipFile(bundle[i].data));
-    }
+        for (let i = 0; i < bundle.length; i++) {
+            const entry = bundle[i];
+            const data = decompressZipFileEntry(entry);
 
-    private find_asset_data(processed_filename: string): ArrayBufferSlice {
-        // find it in one of our bundles
-        for (let i = 0; i < this.bundles.length; i++) {
-            const bundle = this.bundles[i];
-            for (let j = 0; j < bundle.length; j++)
-                if (bundle[j].filename === processed_filename)
-                    return bundle[j].data;
+            if (entry.filename.endsWith('.pkg')) {
+                this.add_bundle(parseZipFile(data), entry.filename);
+            } else {
+                this.data_cache.set(entry.filename, data);
+            }
         }
-
-        throw "whoops";
     }
 
-    public load_asset<T extends Asset_Type>(type: T, source_name: string, options_hash: number = 0): AssetT<T> {
+    private find_asset_data(processed_filename: string): ArrayBufferSlice | null {
+        return nullify(this.data_cache.get(processed_filename));
+    }
+
+    public load_asset<T extends Asset_Type>(type: T, source_name: string, options_hash: number = 0): AssetT<T> | null {
         const processed_filename = get_processed_filename(type, source_name, options_hash);
         if (this.asset_cache.has(processed_filename))
             return this.asset_cache.get(processed_filename) as AssetT<T>;
         const asset_data = this.find_asset_data(processed_filename);
+        if (asset_data === null)
+            return null;
         const asset = load_asset(this.device, this.cache, type, asset_data, source_name);
         if ('destroy' in asset)
             this.destroyables.push(asset as Destroyable);

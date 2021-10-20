@@ -2,11 +2,11 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
+import { clampRange, projectionMatrixForFrustum, computeUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
-import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
@@ -98,10 +98,10 @@ export class Camera {
 
     public updateProjectionMatrix(): void {
         if (this.isOrthographic)
-            computeProjectionMatrixFromCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
+            projectionMatrixForCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
         else
-            computeProjectionMatrixFromFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
-        reverseDepthForProjectionMatrix(this.projectionMatrix);
+            projectionMatrixForFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
+        projectionMatrixReverseDepth(this.projectionMatrix);
         projectionMatrixConvertClipSpaceNearZ(this.projectionMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.updateClipFromWorld();
@@ -297,6 +297,17 @@ export interface CameraControllerClass {
 
 // Movement speeds have been designed for a 60fps experience.
 const FPS = 1000/60;
+
+function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
+    // Quantize to nearest world axis.
+    const x = m[0], y = m[1], z = m[2], speed = vec3.length(m);
+    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > Math.abs(z))
+        vec3.set(dst, speed * Math.sign(x), 0, 0);
+    else if (Math.abs(y) > Math.abs(x) && Math.abs(y) > Math.abs(z))
+        vec3.set(dst, 0, speed * Math.sign(y), 0);
+    else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
+        vec3.set(dst, 0, 0, speed * Math.sign(z));
+}
 
 export class FPSCameraController implements CameraController {
     public camera: Camera;
@@ -690,7 +701,7 @@ export class XRCameraController {
             camera.aspect = aspect;
 
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
-            reverseDepthForProjectionMatrix(camera.projectionMatrix);
+            projectionMatrixReverseDepth(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();
 

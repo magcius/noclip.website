@@ -16,8 +16,6 @@ class GridPlaneProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public both = `
-precision mediump float;
-
 layout(std140) uniform ub_Params {
     Mat4x4 u_Projection;
     Mat4x3 u_ModelView;
@@ -42,8 +40,6 @@ void main() {
 `;
 
     public frag = `
-precision highp float;
-
 in vec2 v_SurfCoord;
 
 ${GfxShaderLibrary.saturate}

@@ -3,7 +3,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
-import { SceneObjHolder } from "./Main";
+import { ModelCache, SceneObjHolder } from "./Main";
 import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -27,7 +27,8 @@ export class ParticleResourceHolder {
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
     public autoEffectList: JMapInfoIter;
 
-    constructor(effectArc: RARC.JKRArchive) {
+    constructor(modelCache: ModelCache) {
+        const effectArc = modelCache.getArchive('ParticleData/Effect.arc')!;
         const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`)!);
         effectNames.mapRecords((iter, i) => {
             const name = assertExists(iter.getValueString('name'));
@@ -1010,14 +1011,12 @@ export class EffectSystem extends NameObj {
     public particleEmitterHolder: ParticleEmitterHolder;
     public emitterManager: JPA.JPAEmitterManager;
     public drawInfo = new JPA.JPADrawInfo();
-    private emitterCount = 0;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'EffectSystem');
 
         const device = sceneObjHolder.modelCache.device;
-        const effectArc = sceneObjHolder.modelCache.getArchive('ParticleData/Effect.arc')!;
-        this.particleResourceHolder = new ParticleResourceHolder(effectArc);
+        this.particleResourceHolder = sceneObjHolder.modelCache.ensureParticleResourceHolder();
 
         // These numbers are from GameScene::initEffect.
         const maxParticleCount = 0x1800;
@@ -1107,7 +1106,6 @@ export class EffectSystem extends NameObj {
     }
 
     public destroy(device: GfxDevice): void {
-        this.particleResourceHolder.destroy(device);
         this.emitterManager.destroy(device);
     }
 }

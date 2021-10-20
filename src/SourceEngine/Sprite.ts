@@ -16,7 +16,9 @@ function calcSpriteOrientation(dst: mat4, orientation: string, view: SourceEngin
         getMatrixAxisZ(scratchVec3a, view.worldFromViewMatrix);
         computeMatrixForForwardDir(dst, scratchVec3a, Vec3Zero);
     } else {
-        debugger;
+        // Unimplemented.
+        getMatrixAxisZ(scratchVec3a, view.worldFromViewMatrix);
+        computeMatrixForForwardDir(dst, scratchVec3a, Vec3Zero);
     }
 }
 
@@ -37,17 +39,23 @@ export class SpriteInstance {
         const spriteOrigin = this.materialInstance.paramGetVector('$spriteorigin');
         const renderMode: RenderMode = this.materialInstance.paramGetInt('$rendermode');
 
-        const dist = vec3.distance(renderContext.currentView.cameraPos, this.origin);
         let distAlpha = 1.0, distScale = 1.0;
 
-        distAlpha = saturate(1200**2 / dist**2);
+        if (renderMode === RenderMode.Glow || renderMode === RenderMode.WorldGlow) {
+            const dist = vec3.distance(renderContext.currentView.cameraPos, this.origin);
 
-        if (renderMode !== RenderMode.WorldGlow)
-            distScale = dist / 200;
+            distAlpha = saturate(1200**2 / dist**2);
+
+            if (renderMode !== RenderMode.WorldGlow)
+                distScale = dist / 200;
+        }
+
+        if (distScale <= 0.0 || distAlpha <= 0.0)
+            return;
 
         // Set up model matrix for sprite.
         const renderInst = renderInstManager.newRenderInst();
-        renderContext.particleStaticRes.setQuadOnRenderInst(renderInst);
+        renderContext.materialCache.staticResources.particleStaticResource.setQuadOnRenderInst(renderInst);
 
         this.materialInstance.paramSetNumber('$alpha', distAlpha);
         this.materialInstance.setOnRenderInst(renderContext, renderInst);
@@ -62,7 +70,7 @@ export class SpriteInstance {
         const scaleX = scale * tex.width * 0.5, scaleY = scale * tex.height * 0.5;
         scaleMatrix(scratchMat4a, scratchMat4a, scaleX, scaleY);
 
-        // TODO(jstpierre): Origin
+        // TODO(jstpierre): $spriteorigin
 
         this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
 

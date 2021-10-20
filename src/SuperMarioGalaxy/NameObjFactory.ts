@@ -8,7 +8,7 @@ import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
 import { ZoneAndLayer } from './LiveActor';
 import { SceneObjHolder } from "./Main";
 import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, Mogucchi, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator, RainCloud } from "./Actors/MiscActor";
-import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj } from './Actors/MapObj';
+import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller } from './Actors/MapObj';
 import { Butler, CollectTico, HoneyBee, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, RosettaChair, SignBoard, Tico, TicoAstro, TicoComet, TicoRail } from './Actors/NPC';
 import { createDeathCube, createHazeCube, createMercatorCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
 import { NameObj, GameBits } from './NameObj';
@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, Petari, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
+import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, Petari, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 
 export interface NameObjFactory {
@@ -101,6 +101,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("SweetDecoratePartsOrange",       SimpleEnvironmentObj),
 
     // Enemies
+    _("BigBirikyu",                     Birikyu),
+    _("Birikyu",                        BirikyuWithFace),
     _("BallBeamer",                     BallBeamer),
     _("RingBeamer",                     RingBeamer),
     _("Dossun",                         Dossun),
@@ -128,6 +130,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Kanina",                         Kanina),
     _("KaninaRed",                      Kanina),
     _("SpaceMine",                      SpaceMine),
+    _("Gesso",                          Gesso),
 
     // TODO(jstpierre): Figure out what to do with this
     N("Petari"),
@@ -180,6 +183,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("CrystalCageS",                   CrystalCage),
     _("CrystalCageM",                   CrystalCage),
     _("CrystalCageL",                   CrystalCage),
+    _("DashRing",                       DashRing),
     _("DriftWood",                      DriftWood),
     _("EarthenPipe",                    EarthenPipe),
     _("EarthenPipeInWater",             EarthenPipe),
@@ -226,6 +230,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("WanwanRollingGold",              RockCreator),
     _("ScrewSwitch",                    ScrewSwitch),
     _("ScrewSwitchReverse",             ScrewSwitchReverse),
+    _("SeaBottomTriplePropeller",       SeaBottomTriplePropeller),
     _("ShellfishCoin",                  Shellfish),
     _("ShellfishYellowChip",            Shellfish),
     _("ShootingStar",                   ShootingStar),
@@ -400,7 +405,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("DarkHopperPlanetPartsC",         SimpleMapObj),
     _("DarkHopperPlanetPartsD",         SimpleMapObj),
     _("MiniMechaKoopaPartsFan",         SimpleMapObj),
-    _("RockRoadCirclA",                 SimpleMapObj),
+    _("RockRoadCircleA",                SimpleMapObj),
     _("HellBallGuidePartsA",            SimpleMapObj),
     _("IceSlipRoad",                    SimpleMapObj),
     _("SurfingRaceTutorialParts",       SimpleMapObj),

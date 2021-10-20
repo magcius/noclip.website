@@ -12,7 +12,7 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRende
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
 import { nArray, assert, assertExists, fallbackUndefined } from '../util';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from 'gl-matrix';
 import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
@@ -854,16 +854,13 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 
     mat4.identity(dst);
 
-    const sinP = 0.5 * sinR - 0.5;
-    const cosP = -0.5 * cosR;
-
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS *  sinR;
-    dst[12] = scaleS * (cosP - sinP - translationS);
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * (cosP + sinP + translationT) + 1.0;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1.0;
 }
 
 function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {

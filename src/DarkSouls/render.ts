@@ -331,14 +331,7 @@ layout(location = ${DKSProgram.a_Bitangent}) in vec4 a_Bitangent;
 
 #define UNORM_TO_SNORM(xyz) ((xyz - 0.5) * 2.0)
 
-vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
-    // Pull out the squared scaling.
-    vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
-    vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
-    vec3 t_Col2 = Mat4x3GetCol2(t_Matrix);
-    vec4 t_SqScale = vec4(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2), 1.0);
-    return normalize(Mul(t_Matrix, t_Value / t_SqScale));
-}
+${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
     vec4 t_PositionWorld = Mul(_Mat4x4(u_WorldFromLocal[0]), vec4(a_Position, 1.0));
@@ -449,7 +442,7 @@ ${specularEpi}
 
         const bumpmapEpi = `
     vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
-    vec3 t_NormalDirWorld = CalcNormalWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
+    vec3 t_NormalDirWorld = CalcTangentToWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 `;
 
         if (bumpmap1 !== null && bumpmap2 !== null) {
@@ -513,8 +506,8 @@ vec3 DecodeNormalMap(vec3 t_NormalMapIn) {
     return normalize(t_NormalMap.xyz);
 }
 
-vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
-    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 + t_MapNormal.zzz * t_Basis2;
+vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
 }
 
 // https://gamedev.stackexchange.com/a/59808
@@ -1104,7 +1097,8 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstScatter.HGg = scatterBank.getF32(scatterID, `lsHGg`);
     dstScatter.betaRay = scatterBank.getF32(scatterID, `lsBetaRay`);
     dstScatter.betaMie = scatterBank.getF32(scatterID, `lsBetaMie`);
-    dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
+    // dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
+    dstScatter.blendCoeff = 0.2;
 }
 
 const bboxScratch = new AABB();
@@ -1151,8 +1145,6 @@ export class PartInstance {
             this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, view, this.modelMatrix, this.materialDrawConfig);
     }
 }
-
-const scratchMat4a = mat4.create();
 
 function fillSceneParamsData(d: Float32Array, view: CameraView, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);

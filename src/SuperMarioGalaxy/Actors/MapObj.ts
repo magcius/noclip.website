@@ -10,8 +10,8 @@ import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeMod
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
 import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, connectToSceneEnemy, makeMtxTRFromQuatVec, isValidSwitchA, isOnSwitchA, turnDirectionToTargetRadians, quatGetAxisX, quatGetAxisY, connectToClippedMapParts } from '../ActorUtil';
-import { getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
-import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
+import { registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
 import { initMultiFur } from '../Fur';
@@ -2404,7 +2404,7 @@ export class LargeChain extends LiveActor<LargeChainNrv> {
         connectToSceneMapObjMovement(sceneObjHolder, this);
 
         if (tryRegisterDemoCast(sceneObjHolder, this, infoIter)) {
-            registerDemoActionNerveFunction(sceneObjHolder, this, LargeChainNrv.Break);
+            registerDemoActionNerve(sceneObjHolder, this, LargeChainNrv.Break);
         }
 
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
@@ -4411,5 +4411,81 @@ export class SimpleClipPartsObj extends MapObjActor {
 
     protected initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // TODO(jstpierre)
+    }
+}
+
+export class DashRing extends LiveActor {
+    private axisZ = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'DashRing');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'DashRing');
+        connectToSceneMapObj(sceneObjHolder, this);
+
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'body', 4, 1000.0, Vec3Zero);
+
+        // Yes, this is correct.
+        calcUpVec(this.axisZ, this);
+
+        startBck(this, 'Loop');
+        startBrk(this, 'Loop');
+    }
+
+    public calcAndSetBaseMtx(): void {
+        makeMtxFrontNoSupportPos(this.modelInstance!.modelMatrix, this.axisZ, this.translation);
+    }
+}
+
+const enum SeaBottomTriplePropellerNrv { Wait, Break, }
+export class SeaBottomTriplePropeller extends LiveActor<SeaBottomTriplePropellerNrv> {
+    private propellerParts: CollisionParts[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'SeaBottomTriplePropeller');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'SeaBottomTriplePropeller');
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
+
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+
+        initCollisionParts(sceneObjHolder, this, 'PropellerCap', bodySensor);
+
+        for (let i = 0; i < 3; i++) {
+            const jointMtx = assertExists(getJointMtxByName(this, `Propeller${i + 1}`));
+            this.propellerParts[i] = createCollisionPartsFromLiveActor(sceneObjHolder, this, 'Propeller', bodySensor, jointMtx, CollisionScaleType.AutoScale);
+            validateCollisionParts(sceneObjHolder, this.propellerParts[i]);
+        }
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        // AudSeKeeper
+
+        if (tryRegisterDemoCast(sceneObjHolder, this, infoIter))
+            registerDemoActionNerve(sceneObjHolder, this, SeaBottomTriplePropellerNrv.Break);
+
+        this.initNerve(SeaBottomTriplePropellerNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaBottomTriplePropellerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === SeaBottomTriplePropellerNrv.Wait) {
+            if (isFirstStep(this))
+                startBck(this, 'SeaBottomTriplePropeller');
+        } else if (currentNerve === SeaBottomTriplePropellerNrv.Break) {
+            this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        super.calcAnim(sceneObjHolder);
+
+        for (let i = 0; i < this.propellerParts.length; i++)
+            this.propellerParts[i].setMtxFromHost();
     }
 }

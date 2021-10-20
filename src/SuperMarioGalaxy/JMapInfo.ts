@@ -49,6 +49,36 @@ export function getJMapInfoGroupId(infoIter: JMapInfoIter): number | null {
 
 type Callback<T> = (jmp: JMapInfoIter, i: number) => T;
 
+function makeTable(bcsv: BCSV.Bcsv): HTMLTableElement {
+    const table = document.createElement('table');
+    table.border = '1';
+
+    const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+
+    {
+        const tr = document.createElement('tr');
+        tbody.appendChild(tr);
+        bcsv.fields.forEach((field) => {
+            const th = document.createElement('th');
+            th.textContent = field.debugName;
+            tr.appendChild(th);
+        });
+    }
+
+    bcsv.records.forEach((record) => {
+        const tr = document.createElement('tr');
+        tbody.appendChild(tr);
+        record.forEach((record) => {
+            const td = document.createElement('td');
+            td.textContent = record.toString();
+            tr.appendChild(td);
+        });
+    });
+
+    return table;
+}
+
 export class JMapInfoIter {
     constructor(public filename: string | null, public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
     }
@@ -99,7 +129,7 @@ export class JMapInfoIter {
         const debugFloater = ui.debugFloaterHolder.makeFloatingPanel(fallback(this.filename, 'BCSV'));
         debugFloater.contents.style.overflow = 'auto';
 
-        const table = BCSV.makeTable(this.bcsv);
+        const table = makeTable(this.bcsv);
         debugFloater.contents.appendChild(table);
     }
 }

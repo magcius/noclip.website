@@ -1562,13 +1562,13 @@ export class JPABaseEmitter {
             }
         } else {
             angle = workData.volumeSweep * get_r_zh(this.random) * MathConstants.TAU;
-            x = (Math.PI * 0.5) + (get_r_zh(this.random) * Math.PI);
+            x = (get_rndm_f(this.random) * Math.PI);
         }
 
         let distance = get_rndm_f(this.random);
         if (!!(bem1.emitFlags & EmitFlags.FixedDensity)) {
             // Fixed density
-            distance = 1.0 - (distance * distance * distance);
+            distance = 1.0 - (distance ** 3.0);
         }
 
         const size = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);

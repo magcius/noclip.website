@@ -9,7 +9,7 @@ import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj, isInAreaObj } from "./AreaObj";
@@ -996,6 +996,17 @@ export function makeMtxSideUp(dst: mat4, side: ReadonlyVec3, up: ReadonlyVec3): 
     setMtxAxisXYZ(dst, sideNorm, upNorm, front);
 }
 
+export function makeMtxSideFront(dst: mat4, side: ReadonlyVec3, front: ReadonlyVec3): void {
+    const up = scratchVec3b;
+    const sideNorm = scratchVec3a;
+    const frontNorm = scratchVec3c;
+    vec3.normalize(sideNorm, side);
+    vec3.cross(up, sideNorm, front);
+    vec3.normalize(up, up);
+    vec3.cross(frontNorm, sideNorm, up);
+    setMtxAxisXYZ(dst, sideNorm, up, frontNorm);
+}
+
 export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3, pos: ReadonlyVec3): void {
     makeMtxFrontSide(dst, front, side);
     setMatrixTranslation(dst, pos);
@@ -1056,7 +1067,6 @@ export function clampVecAngleDeg(dst: vec3, axis: ReadonlyVec3, clampDeg: number
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
     // v0 and v1 are normalized.
 
-    // TODO(jstpierre): There's probably a better way to do this that doesn't involve an atan2.
     vec3.cross(scratch, v0, v1);
     const sin = vec3.length(scratch);
     if (sin > MathConstants.EPSILON) {
@@ -1490,6 +1500,10 @@ export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec
     const m = scratchMatrix;
     makeMtxTRFromActor(m, actor);
     calcMtxAxis(axisX, axisY, axisZ, m);
+}
+
+export function calcSideVec(v: vec3, actor: LiveActor): void {
+    getMatrixAxisX(v, assertExists(actor.getBaseMtx()));
 }
 
 export function calcUpVec(v: vec3, actor: LiveActor): void {

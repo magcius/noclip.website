@@ -123,4 +123,9 @@ export class ResourceCollection {
         await self.init(dataFetcher);
         return self;
     }
+
+    public destroy(device: GfxDevice) {
+        this.texFetcher.destroy(device);
+        this.modelFetcher.destroy(device);
+    }
 }

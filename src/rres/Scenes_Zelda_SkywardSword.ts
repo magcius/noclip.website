@@ -21,6 +21,7 @@ import { ColorKind } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import { colorNewCopy, White } from '../Color';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -170,7 +171,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         const systemRRES = BRRES.parse(systemArchive.findFileData('g3d/model.brres')!);
         this.textureHolder.addRRESTextures(device, systemRRES);
 
-        this.textureHolder.setTextureOverride('DummyWater', { gfxTexture: null, lateBinding: 'opaque-scene-texture', width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true })
+        const flipY = gfxDeviceNeedsFlipY(device);
+        this.textureHolder.setTextureOverride('DummyWater', { gfxTexture: null, lateBinding: 'opaque-scene-texture', width: EFB_WIDTH, height: EFB_HEIGHT, flipY })
         // Override the "Add" textures with a black texture to prevent things from being overly bright.
         this.blackTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
 

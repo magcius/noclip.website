@@ -611,7 +611,7 @@ function findDemoExecutor(sceneObjHolder: SceneObjHolder, actor: LiveActor): Dem
     return null;
 }
 
-export function registerDemoActionNerveFunction<T extends number>(sceneObjHolder: SceneObjHolder, actor: LiveActor<T>, nerve: T, partName: string | null = null): void {
+export function registerDemoActionNerve<T extends number>(sceneObjHolder: SceneObjHolder, actor: LiveActor<T>, nerve: T, partName: string | null = null): void {
     const executor = findDemoExecutor(sceneObjHolder, actor);
     if (executor === null)
         return;

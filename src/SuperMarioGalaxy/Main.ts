@@ -3,14 +3,14 @@ import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, fallback, spliceBisectRight } from '../util';
 import { DataFetcher, AbortedCallback } from '../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, projectionMatrixForCuboid } from '../MathHelpers';
 import { texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
@@ -24,7 +24,7 @@ import { JSystemFileReaderHelper } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
-import { EffectSystem } from './EffectSystem';
+import { EffectSystem, ParticleResourceHolder } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
@@ -51,6 +51,8 @@ import { TransparentBlack } from '../Color';
 import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
 import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -84,6 +86,7 @@ export const enum SpecialTextureType {
 class SpecialTextureBinder {
     private mirrorSampler: GfxSampler;
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
+    private needsFlipY = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.mirrorSampler = cache.createSampler({
@@ -98,6 +101,8 @@ class SpecialTextureBinder {
 
         this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
         this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.mirrorSampler);
+
+        this.needsFlipY = gfxDeviceNeedsFlipY(device);
     }
 
     private registerSpecialTextureType(textureType: SpecialTextureType, gfxSampler: GfxSampler): void {
@@ -109,7 +114,7 @@ class SpecialTextureBinder {
     public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
         m.width = EFB_WIDTH;
         m.height = EFB_HEIGHT;
-        m.flipY = true;
+        m.flipY = this.needsFlipY;
         m.lateBinding = textureType;
     }
 
@@ -145,7 +150,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    private clipAreaMaskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
+    private maskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
@@ -315,7 +320,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         sceneObjHolder.renderParams.sceneParamsOffs3D = sceneParamsOffs3D;
 
         const sceneParamsOffs2D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
-        computeProjectionMatrixFromCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        projectionMatrixForCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        projectionMatrixConvertClipSpaceNearZ(scratchMatrix, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs2D, sceneParams);
         sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
@@ -365,6 +371,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
+        this.maskDesc.copyDimensions(this.mainColorDesc);
+        this.maskDesc.colorClearColor = TransparentBlack;
+
         if (sceneObjHolder.fallOutFieldDraw !== null && sceneObjHolder.clipAreaHolder !== null && sceneObjHolder.clipAreaHolder.isActive && this.hasAnyDrawBuffer(DrawBufferType.ClippedMapParts)) {
             builder.pushPass((pass) => {
                 pass.setDebugName('Clipped Map Parts');
@@ -380,10 +389,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
             });
 
-            this.clipAreaMaskDesc.copyDimensions(this.mainColorDesc);
-            this.clipAreaMaskDesc.colorClearColor = TransparentBlack;
-
-            const clipAreaMaskTargetID = builder.createRenderTargetID(this.clipAreaMaskDesc, 'Clip Area Mask');
+            const clipAreaMaskTargetID = builder.createRenderTargetID(this.maskDesc, 'Clip Area Mask');
 
             builder.pushPass((pass) => {
                 pass.setDebugName('Clipped Map Parts Mask');
@@ -440,9 +446,30 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.MapObjStrongLight);
                 this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
                 this.drawOpa(passRenderer, 0x1F); // player light?
+            });
+        });
 
+        let shadowColorTargetID: number;
+        builder.pushPass((pass) => {
+            pass.setDebugName('Shadow Volumes');
+
+            shadowColorTargetID = builder.createRenderTargetID(this.maskDesc, 'Shadow Volume Mask');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            pass.exec((passRenderer) => {
                 this.execute(passRenderer, DrawType.ShadowVolume);
+            });
 
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Opaque after Shadow');
+
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
                 // executeDrawBufferListNormalOpaBeforeSilhouette()
                 this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObj);
                 this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
@@ -451,7 +478,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Main Opaque');
-            const shadowColorTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            const shadowColorTextureID = builder.resolveRenderTarget(shadowColorTargetID);
             pass.attachResolveTexture(shadowColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -659,7 +686,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        sceneObjHolder.drawSyncManager.endFrame(device, renderInstManager, builder, mainDepthTargetID);
+        sceneObjHolder.drawSyncManager.endFrame(renderInstManager, builder, mainDepthTargetID);
 
         renderInstManager.popTemplateRenderInst();
 
@@ -725,6 +752,8 @@ export class ModelCache {
     public extraDataCache = new Map<string, ArrayBufferSlice>();
     public cache: GfxRenderCache;
     public textureListHolder = new TextureListHolder();
+    public gameSystemFontHolder: GameSystemFontHolder | null = null;
+    public particleResourceHolder: ParticleResourceHolder | null = null;
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
         this.cache = new GfxRenderCache(device);
@@ -821,11 +850,24 @@ export class ModelCache {
         return resourceHolder;
     }
 
-    public getLayoutHolder(gameSystemFontHolder: GameSystemFontHolder, layoutName: string): LayoutHolder {
+    private ensureGameSystemFontHolder(): GameSystemFontHolder {
+        if (this.gameSystemFontHolder === null)
+            this.gameSystemFontHolder = new GameSystemFontHolder(this);
+        return this.gameSystemFontHolder;
+    }
+
+    public ensureParticleResourceHolder(): ParticleResourceHolder {
+        if (this.particleResourceHolder === null)
+            this.particleResourceHolder = new ParticleResourceHolder(this);
+        return this.particleResourceHolder;
+    }
+
+    public getLayoutHolder(layoutName: string): LayoutHolder {
         if (this.archiveLayoutHolder.has(layoutName))
             return this.archiveLayoutHolder.get(layoutName)!;
 
         const arc = this.getLayoutData(layoutName);
+        const gameSystemFontHolder = this.ensureGameSystemFontHolder();
         const layoutHolder = new LayoutHolder(this.device, this.cache, gameSystemFontHolder, layoutName, arc);
         this.archiveLayoutHolder.set(layoutName, layoutHolder);
         return layoutHolder;
@@ -837,6 +879,10 @@ export class ModelCache {
             resourceHolder.destroy(device);
         for (const layoutHolder of this.archiveLayoutHolder.values())
             layoutHolder.destroy(device);
+        if (this.particleResourceHolder !== null)
+            this.particleResourceHolder.destroy(device);
+        if (this.gameSystemFontHolder !== null)
+            this.gameSystemFontHolder.destroy(device);
     }
 }
 
@@ -922,7 +968,7 @@ export const enum SceneObj {
     BloomEffectSimple              = 0x1F,
     ScreenBlurEffect               = 0x20,
     DepthOfFieldBlur               = 0x21,
-    ScreenWipeHolder               = 0x22,
+    SceneWipeHolder                = 0x22,
     PlayerActionGuidance           = 0x23,
     ScenePlayingResult             = 0x24,
     LensFlareDirector              = 0x25,
@@ -1014,7 +1060,6 @@ export const enum SceneObj {
 
     // Noclip additions
     GalaxyNameSortTable            = 0xA0,
-    GameSystemFontHolder           = 0xA1,
 }
 
 export class SceneObjHolder {
@@ -1070,7 +1115,6 @@ export class SceneObjHolder {
 
     // noclip additions -- some of these are singletons in the original game.
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
-    public gameSystemFontHolder: GameSystemFontHolder | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
@@ -1169,8 +1213,6 @@ export class SceneObjHolder {
             return this.galaxyMapController;
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             return this.galaxyNameSortTable;
-        else if (sceneObj === SceneObj.GameSystemFontHolder)
-            return this.gameSystemFontHolder;
         return null;
     }
 
@@ -1228,7 +1270,7 @@ export class SceneObjHolder {
         else if (sceneObj === SceneObj.ClipAreaDropHolder)
             this.clipAreaDropHolder = new ClipAreaDropHolder(this);
         else if (sceneObj === SceneObj.FallOutFieldDraw)
-            assert(false); // this.fallOutFieldDraw = new FallOutFieldDraw(this); // Handled by createFallOutFieldDraw
+            assert(false); // Handled by createFallOutFieldDraw
         else if (sceneObj === SceneObj.ClipAreaHolder)
             this.clipAreaHolder = new ClipAreaHolder(this);
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
@@ -1251,8 +1293,6 @@ export class SceneObjHolder {
             this.galaxyMapController = new GalaxyMapController(this);
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             this.galaxyNameSortTable = new GalaxyNameSortTable(this);
-        else if (sceneObj === SceneObj.GameSystemFontHolder)
-            this.gameSystemFontHolder = new GameSystemFontHolder(this);
     }
 
     public requestArchives(): void {
@@ -1740,7 +1780,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             return new ModelCache(device, this.pathBase, context.dataFetcher);
         });
 
-        const renderHelper = new GXRenderHelperGfx(device, context);
+        const renderHelper = new GXRenderHelperGfx(device, context, modelCache.cache);
         context.destroyablePool.push(renderHelper);
 
         const galaxyName = this.galaxyName;

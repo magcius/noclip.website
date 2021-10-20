@@ -260,8 +260,7 @@ export class J3DTexMtxAnm {
         } else {
             const centerS = this.animationEntry.centerS;
             const centerT = this.animationEntry.centerT;
-            const centerQ = this.animationEntry.centerQ;
-            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT);
         }
     }
 }

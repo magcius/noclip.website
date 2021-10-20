@@ -66,6 +66,12 @@ type EntityInputFunc = (entitySystem: EntitySystem, value: EntityMessageValue) =
 const scratchMat4a = mat4.create();
 const scratchMat4b = mat4.create();
 
+const enum SpawnState {
+    FetchingResources,
+    ReadyForSpawn,
+    Spawned,
+}
+
 // Some part of this is definitely BaseAnimating, maybe split at some point?
 export class BaseEntity {
     public modelBSP: BSPModelRenderer | null = null;
@@ -88,7 +94,7 @@ export class BaseEntity {
     public modelMatrix = mat4.create();
     public alive = true;
     public enabled = true;
-    public ready = true;
+    public spawnState = SpawnState.ReadyForSpawn;
 
     public inputs = new Map<string, EntityInputFunc>();
 
@@ -164,7 +170,7 @@ export class BaseEntity {
     }
 
     public shouldDraw(): boolean {
-        return this.visible && this.enabled && this.alive && this.ready;
+        return this.visible && this.enabled && this.alive && this.spawnState === SpawnState.Spawned;
     }
 
     private findSequenceLabel(label: string): number {
@@ -191,6 +197,8 @@ export class BaseEntity {
             this.seqdefaultindex = this.findSequenceLabel(this.entity.defaultanim);
             this.playseqindex(this.seqdefaultindex);
         }
+
+        this.spawnState = SpawnState.Spawned;
     }
 
     protected ensureMaterialParams(): EntityMaterialParameters {
@@ -253,16 +261,18 @@ export class BaseEntity {
     }
 
     private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
-        this.ready = false;
+        assert(this.spawnState === SpawnState.ReadyForSpawn);
+        this.spawnState = SpawnState.FetchingResources;
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.modelStudio.setSkin(renderContext, this.skin);
         this.updateLightingData();
-        this.ready = true;
+        this.spawnState = SpawnState.ReadyForSpawn;
     }
 
     private async fetchSpriteModel(renderContext: SourceRenderContext, modelName: string) {
-        this.ready = false;
+        assert(this.spawnState === SpawnState.ReadyForSpawn);
+        this.spawnState = SpawnState.FetchingResources;
         const materialName = modelName.replace('.spr', '.vmt');
         const materialCache = renderContext.materialCache;
         const materialInstance = await materialCache.createMaterialInstance(materialName);
@@ -270,7 +280,7 @@ export class BaseEntity {
         materialInstance.entityParams = this.ensureMaterialParams();
         await materialInstance.init(renderContext);
         this.modelSprite = new SpriteInstance(renderContext, materialInstance);
-        this.ready = true;
+        this.spawnState = SpawnState.ReadyForSpawn;
     }
 
     private updateStudioPose(): void {
@@ -597,6 +607,7 @@ export class sky_camera extends BaseEntity {
     public area: number = -1;
     public scale: number = 1;
     public modelMatrix = mat4.create();
+    private fogEnabled: boolean;
     private fogStart: number;
     private fogEnd: number;
     private fogMaxDensity: number;
@@ -614,6 +625,7 @@ export class sky_camera extends BaseEntity {
             this.scale * -this.localOrigin[1],
             this.scale * -this.localOrigin[2]);
 
+        this.fogEnabled = !!Number(this.entity.fogenable);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
@@ -625,7 +637,7 @@ export class sky_camera extends BaseEntity {
     public fillFogParams(dst: FogParams): void {
         dst.start = this.fogStart;
         dst.end = this.fogEnd;
-        dst.maxdensity = this.fogMaxDensity;
+        dst.maxdensity = this.fogEnabled ? this.fogMaxDensity : 0;
         // TODO(jstpierre): Color blending
         colorCopy(dst.color, this.fogColor1);
     }
@@ -1134,9 +1146,12 @@ class func_areaportalwindow extends BaseEntity {
         super.spawn(entitySystem);
 
         // We don't support areaportals yet, so just hide the replacement target entity.
-        const targetEntity = entitySystem.findEntityByTargetName(this.entity.target);
-        if (targetEntity !== null)
-            targetEntity.visible = false;
+        const targetName = this.entity.target;
+        if (targetName) {
+            const targetEntity = entitySystem.findEntityByTargetName(this.entity.target);
+            if (targetEntity !== null)
+                targetEntity.visible = false;
+        }
     }
 }
 
@@ -1662,7 +1677,7 @@ class trigger_multiple extends BaseEntity {
             if (this.enabled) {
                 if (this.isPlayerTouching !== isPlayerTouching) {
                     this.isPlayerTouching = isPlayerTouching;
-    
+
                     if (this.isPlayerTouching)
                         this.onStartTouch(entitySystem);
                     else
@@ -1763,6 +1778,7 @@ class trigger_look extends trigger_once {
 
 class env_fog_controller extends BaseEntity {
     public static classname = `env_fog_controller`;
+    private fogEnabled: boolean;
     private fogStart: number;
     private fogEnd: number;
     private fogMaxDensity: number;
@@ -1782,6 +1798,7 @@ class env_fog_controller extends BaseEntity {
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
         this.isMaster = !!(spawnflags & SpawnFlags.IsMaster);
 
+        this.fogEnabled = !!Number(this.entity.fogenable);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
         vmtParseColor(this.fogColor2, this.entity.fogcolor2);
         this.fogDirection = vmtParseVector(this.entity.fogdir);
@@ -1815,7 +1832,7 @@ class env_fog_controller extends BaseEntity {
     public fillFogParams(dst: FogParams): void {
         dst.start = this.fogStart;
         dst.end = this.fogEnd;
-        dst.maxdensity = this.fogMaxDensity;
+        dst.maxdensity = this.fogEnabled ? this.fogMaxDensity : 0;
         // TODO(jstpierre): Color blending
         colorCopy(dst.color, this.fogColor1);
     }
@@ -2119,6 +2136,8 @@ class point_template extends BaseEntity {
     public templateEntities: BaseEntity[] = [];
 
     public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
         for (let i = 1; i <= 16; i++) {
             const templateKeyName = `template${leftPad('' + i, 2)}`;
             const templateEntityName = this.entity[templateKeyName];
@@ -2193,15 +2212,11 @@ class env_entity_maker extends BaseEntity {
 
         // Have our new map datas. Spawn them, and then move them relative to our matrix.
 
-        let startIndex = entitySystem.entities.length;
-        for (let i = 0; i < mapDatas.length; i++)
-            entitySystem.createEntity(mapDatas[i]);
-
         const worldFromThis = this.updateModelMatrix();
         const worldFromTemplate = template.updateModelMatrix();
 
-        for (let i = startIndex; i < entitySystem.entities.length; i++) {
-            const entity = entitySystem.entities[i];
+        for (let i = 0; i < mapDatas.length; i++) {
+            const entity = entitySystem.createEntity(mapDatas[i]);
 
             // Position entity in world.
             const worldFromEntity = entity.updateModelMatrix();
@@ -2210,8 +2225,6 @@ class env_entity_maker extends BaseEntity {
             mat4.mul(scratchMat4a, worldFromThis, scratchMat4a); // worldFromEntity
             computePosQAngleModelMatrix(scratchVec3a, scratchVec3b, scratchMat4a);
             entity.setAbsOriginAndAngles(scratchVec3a, scratchVec3b);
-
-            entity.spawn(entitySystem);
         }
     }
 
@@ -2393,7 +2406,7 @@ class env_steam extends BaseEntity {
             return;
 
         const view = renderContext.currentView;
-        const particleStaticRes = renderContext.particleStaticRes;
+        const particleStaticRes = renderContext.materialCache.staticResources.particleStaticResource;
         for (let i = 0; i < this.particlePool.length; i++) {
             const p = this.particlePool[i];
             const lifeT = (p.life / this.particleLifetime);
@@ -2479,7 +2492,7 @@ class env_sprite extends BaseEntity {
             Once    = 0x02,
         };
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
-        this.visible = !!(spawnflags & SpawnFlags.StartOn);
+        this.visible = this.targetName === null || !!(spawnflags & SpawnFlags.StartOn);
         this.once = !!(spawnflags & SpawnFlags.Once);
     }
 
@@ -2537,6 +2550,10 @@ class env_glow extends env_sprite {
     public static classname = `env_glow`;
 }
 
+class env_sprite_clientside extends env_sprite {
+    public static classname = `env_sprite_clientside`;
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2592,6 +2609,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_steam);
         this.registerFactory(env_sprite);
         this.registerFactory(env_glow);
+        this.registerFactory(env_sprite_clientside);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -2612,11 +2630,11 @@ export class EntityFactoryRegistry {
 
 export class EntitySystem {
     public entities: BaseEntity[] = [];
+    public entityCreateQueue: BaseEntity[] = [];
     public currentTime = 0;
     public nextDynamicTemplateSpawnIndex = 0;
     public debugger = new EntityMessageDebugger();
     private outputQueue: QueuedOutputEvent[] = [];
-    private needsSpawn = true;
     private currentActivator: BaseEntity | null = null;
 
     constructor(public renderContext: SourceRenderContext, public bspRenderer: BSPRenderer) {
@@ -2702,20 +2720,35 @@ export class EntitySystem {
                 this.outputQueue.splice(i--, 1);
     }
 
-    private isReady(): boolean {
-        for (let i = 0; i < this.entities.length; i++)
-            if (!this.entities[i].ready)
-                return false;
-        return true;
+    private getSpawnStateAction(): SpawnState {
+        let spawnState = SpawnState.Spawned;
+        for (let i = 0; i < this.entities.length; i++) {
+            if (this.entities[i].spawnState === SpawnState.FetchingResources)
+                return SpawnState.FetchingResources;
+            else if (this.entities[i].spawnState === SpawnState.ReadyForSpawn)
+                spawnState = SpawnState.ReadyForSpawn;
+        }
+        return spawnState;
+    }
+
+    private flushCreateQueue(): void {
+        if (this.entityCreateQueue.length > 0) {
+            this.entities.push(... this.entityCreateQueue);
+            this.entityCreateQueue.length = 0;
+        }
     }
 
     public movement(renderContext: SourceRenderContext): void {
-        if (this.needsSpawn && this.isReady()) {
-            for (let i = 0; i < this.entities.length; i++)
-                this.entities[i].spawn(this);
-            this.needsSpawn = false;
-        } else if (this.needsSpawn) {
+        this.flushCreateQueue();
+
+        const spawnStateAction = this.getSpawnStateAction();
+        if (spawnStateAction === SpawnState.FetchingResources) {
+            // Still fetching; nothing to do.
             return;
+        } else if (spawnStateAction === SpawnState.ReadyForSpawn) {
+            for (let i = 0; i < this.entities.length; i++)
+                if (this.entities[i].spawnState === SpawnState.ReadyForSpawn)
+                    this.entities[i].spawn(this);
         }
 
         this.processOutputQueue();
@@ -2728,16 +2761,18 @@ export class EntitySystem {
                 this.entities[i].movement(this, renderContext);
     }
 
-    public createEntity(bspEntity: BSPEntity): void {
+    public createEntity(bspEntity: BSPEntity): BaseEntity {
         const registry = this.renderContext.entityFactoryRegistry;
         const entity = registry.createEntity(this, this.renderContext, this.bspRenderer, bspEntity);
-        this.entities.push(entity);
+        this.entityCreateQueue.push(entity);
+        return entity;
     }
 
-    public createAndSpawnEntities(entities: BSPEntity[]): void {
-        for (let i = 0; i < entities.length; i++)
-            this.createEntity(entities[i]);
-        this.needsSpawn = true;
+    public createAndSpawnEntities(bspEntities: BSPEntity[]): void {
+        for (let i = 0; i < bspEntities.length; i++)
+            this.createEntity(bspEntities[i]);
+
+        this.flushCreateQueue();
     }
 
     public getLocalPlayer(): player {

@@ -486,6 +486,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
     }
 }
 
+// NOTE(jstpierre): The original game uses framebuffer alpha to store the clip mask, but we just use a separate R8 target.
 export class ClipAreaHolder extends LiveActorGroup<ClipArea> {
     public isActive: boolean = true;
 
@@ -504,9 +505,6 @@ export class ClipAreaHolder extends LiveActorGroup<ClipArea> {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.GEQUAL, false);
         mb.setUsePnMtxIdx(false);
-        // We use an R8 target instead of framebuffer alpha... maybe shadows should do the same thing too...
-        mb.setColorUpdate(true);
-        mb.setAlphaUpdate(false);
 
         mb.setCullMode(GX.CullMode.FRONT);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
@@ -788,7 +786,7 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
-            
+
             pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
@@ -806,6 +804,8 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
+
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
         builder.pushPass((pass) => {

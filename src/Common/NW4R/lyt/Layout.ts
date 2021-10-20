@@ -1271,7 +1271,7 @@ export class LayoutPicture extends LayoutPane {
         const baseX = this.getBasePositionX();
         const baseY = this.getBasePositionY();
         const baseZ = 0.0;
-    
+
         const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
         ddraw.begin(GX.Command.DRAW_QUADS, 1);
         drawQuad(ddraw, baseX, baseY, baseZ, this.width, -this.height, vertexColors, alpha, this.texCoords);

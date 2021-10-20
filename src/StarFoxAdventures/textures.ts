@@ -9,15 +9,25 @@ import { GameInfo } from './scenes';
 import { loadRes } from './resource';
 import { readUint32 } from './util';
 
-export interface SFATexture {
-    gfxTexture: GfxTexture;
-    gfxSampler: GfxSampler;
-    width: number;
-    height: number;
+export class SFATexture {
+    constructor(public gfxTexture: GfxTexture, public gfxSampler: GfxSampler, public width: number, public height: number) {
+    }
+
+    public destroy(device: GfxDevice) {
+        device.destroySampler(this.gfxSampler);
+        device.destroyTexture(this.gfxTexture);
+    }
 }
 
-export interface SFATextureArray {
-    textures: SFATexture[];
+export class SFATextureArray {
+    constructor(public textures: SFATexture[]) {
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let texture of this.textures) {
+            texture.destroy(device);
+        }
+    }
 }
 
 export abstract class TextureFetcher {
@@ -31,6 +41,7 @@ export abstract class TextureFetcher {
             return null;
         }
     }
+    public abstract destroy(device: GfxDevice): void;
 }
 
 function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boolean): SFATexture {
@@ -65,12 +76,12 @@ function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boole
         maxLOD: 100,
     });
 
-    return {
+    return new SFATexture(
         gfxTexture,
         gfxSampler,
-        width: textureInput.width,
-        height: textureInput.height,
-    };
+        textureInput.width,
+        textureInput.height,
+    );
 }
 
 function isValidTextureTabValue(tabValue: number) {
@@ -107,17 +118,17 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
         if (arrayLength === 1) {
             const compData = bin.slice(binOffs);
             const uncompData = loadRes(compData);
-            return { textures: [loadTexture(device, uncompData, isBeta)] };
+            return new SFATextureArray([loadTexture(device, uncompData, isBeta)]);
         } else {
-            const result = { textures: [] as SFATexture[] };
+            const result = [];
             const binDv = bin.createDataView();
             for (let i = 0; i < arrayLength; i++) {
                 const texOffs = readUint32(binDv, binOffs, i);
                 const compData = bin.slice(binOffs + texOffs);
                 const uncompData = loadRes(compData);
-                result.textures.push(loadTexture(device, uncompData, isBeta));
+                result.push(loadTexture(device, uncompData, isBeta));
             }
-            return result;
+            return new SFATextureArray(result);
         }
     } else {
         console.warn(`Texture id 0x${id.toString(16)} (tab value 0x${hexzero(tabValue, 8)}) not found in table. Using first valid texture.`);
@@ -170,14 +181,12 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
 
     device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-    return {
-        textures: [{
-            gfxTexture,
-            gfxSampler,
-            width: 2,
-            height: 2,
-        }]
-    }
+    return new SFATextureArray([new SFATexture(
+        gfxTexture,
+        gfxSampler,
+        2,
+        2,
+    )]);
 }
 
 class TextureFile {
@@ -208,6 +217,12 @@ class TextureFile {
 
         return this.textures[num];
     }
+
+    public destroy(device: GfxDevice) {
+        for (let texture of this.textures) {
+            texture?.destroy(device);
+        }
+    }
 }
 
 async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPath: string, isBeta: boolean): Promise<TextureFile | null> {
@@ -236,11 +251,25 @@ export class FakeTextureFetcher extends TextureFetcher {
 
     public async loadSubdirs(subdirs: string[]) {
     }
+
+    public destroy(device: GfxDevice) {
+        for (let texture of this.textures) {
+            texture.destroy(device);
+        }
+        this.textures = [];
+    }
 }
 
-interface SubdirTextureFiles {
-    tex0: TextureFile | null;
-    tex1: TextureFile | null;
+class SubdirTextureFiles {
+    constructor(public tex0: TextureFile | null, public tex1: TextureFile | null) {
+    }
+
+    public destroy(device: GfxDevice) {
+        this.tex0?.destroy(device);
+        this.tex0 = null;
+        this.tex1?.destroy(device);
+        this.tex1 = null;
+    }
 }
 
 export class SFATextureFetcher extends TextureFetcher {
@@ -284,7 +313,7 @@ export class SFATextureFetcher extends TextureFetcher {
                     `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
             ]);
 
-            this.subdirTextureFiles[subdir] = { tex0, tex1 };
+            this.subdirTextureFiles[subdir] = new SubdirTextureFiles(tex0, tex1);
 
             // XXX: These maps need additional textures to be loaded
             if (subdir === 'clouddungeon') {
@@ -344,5 +373,14 @@ export class SFATextureFetcher extends TextureFetcher {
         }
 
         return {texNum, file: null};
+    }
+
+    public destroy(device: GfxDevice) {
+        this.texpre?.destroy(device);
+        for (let subdir in this.subdirTextureFiles) {
+            this.subdirTextureFiles[subdir].destroy(device);
+        }
+        this.subdirTextureFiles = {};
+        this.fakes.destroy(device);
     }
 }

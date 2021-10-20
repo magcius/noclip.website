@@ -9,7 +9,7 @@ import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, projectionMatrixForCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert, nArray } from "../util";
@@ -23,7 +23,8 @@ import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { colorFromRGBA } from "../Color";
 import { TextureMapping } from "../TextureHolder";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform";
+import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 
 export function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -318,10 +319,8 @@ abstract class ShadowSurfaceDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setUsePnMtxIdx(false);
-        mb.setColorUpdate(false);
-        mb.setAlphaUpdate(true);
 
-        this.material = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
+        this.material = new GXMaterialHelperGfx(mb.finish('ShadowSurfaceDrawer'));
     }
 }
 
@@ -336,10 +335,10 @@ function drawCircle(ddraw: TDDraw, pos: ReadonlyVec3, axis: ReadonlyVec3, radius
 
     ddraw.begin(GX.Command.DRAW_TRIANGLE_FAN);
     ddraw.position3vec3(pos);
-    for (let i = 0; i < pointCount; i++) {
+    for (let i = 0; i <= pointCount; i++) {
         vec3.scaleAndAdd(scratchVec3b, pos, scratchVec3a, radius);
-        transformVec3Mat4w0(scratchVec3b, scratchMat4a, scratchVec3b);
         ddraw.position3vec3(scratchVec3b);
+        transformVec3Mat4w0(scratchVec3a, scratchMat4a, scratchVec3a);
     }
     ddraw.end();
 }
@@ -351,7 +350,6 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowSurfaceCircle', controller);
-        debugger;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
@@ -363,8 +361,12 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x80 / 0xFF;
+        this.material.setOnRenderInst(device, cache, template);
+
+        materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
 
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
@@ -373,7 +375,8 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
-        this.ddraw.endAndUpload(renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
+        renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -409,8 +412,6 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.GEQUAL, false);
         mb.setUsePnMtxIdx(usePnMtxIdx);
-        mb.setColorUpdate(false);
-        mb.setAlphaUpdate(true);
 
         mb.setCullMode(GX.CullMode.FRONT);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
@@ -437,7 +438,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x40 / 0xFF;
+        materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.loadDrawModelMtx(packetParams, viewerInput);
@@ -817,20 +818,17 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
-        front.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(front);
         this.materialFront.setOnRenderInst(device, cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
-        back.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(back);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
-
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst.reset();
     }
 
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
@@ -922,20 +920,17 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
-        front.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(front);
         this.materialFront.setOnRenderInst(device, cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
-        back.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(back);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
-
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst.reset();
     }
 
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
@@ -1026,6 +1021,7 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
 }
 
 // NOTE(jstpierre): This is not how it's normally done. fillSilhouetteColor is called directly from the main list, normally.
+// NOTE(jstpierre): The original game uses framebuffer alpha to store the shadow buffer, but we just use a separate R8 target.
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
@@ -1035,25 +1031,28 @@ class AlphaShadow extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'AlphaShadow');
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
 
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
+        // TODO(jstpierre): Replace this with a single FS tri?
         const mb = new GXMaterialBuilder(`fillSilhouetteColor`);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
         mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.KONST, GX.CA.A0, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
+        mb.setTevSwapMode(0, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R]);
         mb.setZMode(true, GX.CompareType.ALWAYS, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setUsePnMtxIdx(false);
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
 
-        computeProjectionMatrixFromCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 1, 0, 0, 10);
+        projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, sceneObjHolder.viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
@@ -1082,6 +1081,12 @@ class AlphaShadow extends NameObj {
         colorFromRGBA(materialParams.u_Color[ColorKind.K0], 0.0, 0.0, 0.0, 1 / 0xFF);
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0.0, 0.0, 0.0, 0.5);
         materialParams.m_TextureMapping[0].copy(this.textureMapping);
+
+        mat4.identity(materialParams.u_TexMtx[0]);
+        if (this.textureMapping.flipY) {
+            materialParams.u_TexMtx[0][5] = -1;
+            materialParams.u_TexMtx[0][13] = 1;
+        }
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();
@@ -1221,16 +1226,6 @@ function setUpShadowVolumeFromCSV(volume: ShadowVolumeDrawer, infoIter: JMapInfo
     volume.cutDropShadow = volumeCut !== 0;
 }
 
-function createShadowSurfaceCircleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
-    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeSurface();
-
-    const drawer = new ShadowSurfaceCircle(sceneObjHolder, controller);
-    drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
-    controller.shadowDrawer = drawer;
-}
-
 function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
     controller.setDropTypeNormal();
@@ -1305,9 +1300,11 @@ function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: Li
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
-        createShadowSurfaceCircleFromCSV(sceneObjHolder, actor, infoIter);
+        // Never used
     } else if (shadowType === 'SurfaceOval') {
+        // Only used in Meramera
     } else if (shadowType === 'SurfaceBox') {
+        // Never used
     } else if (shadowType === 'VolumeSphere') {
         createShadowVolumeSphereFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOval') {
@@ -1319,7 +1316,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeBox') {
         createShadowVolumeBoxFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeFlatModel') {
-        debugger;
+        // Only used in SkeletalFishGuard
     } else if (shadowType === 'VolumeLine') {
         createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {

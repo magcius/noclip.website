@@ -25,7 +25,7 @@ import * as Viewer from '../../viewer';
 import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, validateCollisionParts } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
-import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
+import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFurPlanet } from '../Fur';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple } from '../HitSensor';
@@ -364,7 +364,7 @@ export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
         this.initNerve(HatchWaterPlanetNrv.Wait);
 
         if (tryRegisterDemoCast(sceneObjHolder, this, infoIter))
-            registerDemoActionNerveFunction(sceneObjHolder, this, HatchWaterPlanetNrv.Open);
+            registerDemoActionNerve(sceneObjHolder, this, HatchWaterPlanetNrv.Open);
 
         this.makeActorAppeared(sceneObjHolder);
     }
@@ -1683,12 +1683,27 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         setBindTriangleFilter(this, isWallCodeNoAction);
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'message', 1, 0.0, Vec3Zero);
+        initShadowVolumeSphere(sceneObjHolder, this, 30.0);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            listenStageSwitchOnOffAppear(sceneObjHolder, this, this.appearPreShooting.bind(this), null);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
 
         this.calcAndSetBaseMtxBase();
 
         calcUpVec(this.axisY, this);
 
         startBpk(this, 'ShootingStar');
+    }
+
+    private appearPreShooting(sceneObjHolder: SceneObjHolder): void {
+        this.makeActorAppeared(sceneObjHolder);
+        this.setNerve(ShootingStarNrv.PreShooting);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
@@ -2590,6 +2605,7 @@ class SpinDriverPathDrawer extends LiveActor {
         const spinDriverPathDrawInit = sceneObjHolder.spinDriverPathDrawInit!;
         const materialHelper = spinDriverPathDrawInit.materialHelper;
 
+        materialParams.clear();
         if (this.color === SpinDriverColor.Normal)
             spinDriverPathDrawInit.normalColorTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         else if (this.color === SpinDriverColor.Green)
@@ -3545,7 +3561,6 @@ class WarpPodPathDrawer {
 
         // Material.
         const mb = new GXMaterialBuilder('WarpPodPathDrawer');
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ONE, GX.CC.TEXA, GX.CC.ZERO);
@@ -3597,6 +3612,7 @@ class WarpPodPathDrawer {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        materialParams.clear();
         this.testColor.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
@@ -3997,6 +4013,7 @@ export class WaterPlant extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
         const materialHelper = waterPlantDrawInit.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -4359,6 +4376,13 @@ export class SwingRope extends LiveActor {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        initShadowSurfaceCircle(sceneObjHolder, this, 50.0);
+        onCalcShadow(this);
+        // TODO(jstpierre): Manual drop position / setShadowDropPosPositionPtr
+        setShadowDropLength(this, null, 2000);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     private initPoints(): void {
@@ -4416,6 +4440,7 @@ export class SwingRope extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
         swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = swingRopeGroup.materialHelper;
@@ -4653,6 +4678,7 @@ export class Trapeze extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
         trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = trapezeRopeDrawInit.materialHelper;
@@ -4842,6 +4868,7 @@ export class Creeper extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -5040,6 +5067,7 @@ class OceanRingDrawer {
         setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
         loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera, viewerInput.viewport);
 
+        materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
         sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
@@ -5121,6 +5149,7 @@ class OceanRingPipeOutside extends LiveActor {
         renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
         renderInst.drawIndexes(this.pipe.indexCount);
 
+        materialParams.clear();
         this.waterPipeIndirect.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.waterPipeHighLight.fillTextureMapping(materialParams.m_TextureMapping[1]);
 
@@ -5818,6 +5847,7 @@ export class Flag extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
 
@@ -6019,8 +6049,6 @@ export class ElectricRailHolder extends NameObj {
                     continue;
 
                 materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport, packetParams);
-
-                // TODO(jstpierre): Do this in one TDDraw?
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
@@ -6653,7 +6681,7 @@ export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
             calcRailEndPos(this.endPos, this);
             this.initNerve(OceanFloaterLandPartsNrv.Wait);
             if (tryRegisterDemoCast(sceneObjHolder, this, infoIter)) {
-                registerDemoActionNerveFunction(sceneObjHolder, this, OceanFloaterLandPartsNrv.Move);
+                registerDemoActionNerve(sceneObjHolder, this, OceanFloaterLandPartsNrv.Move);
                 this.hasDemo = true;
             }
 
@@ -8924,6 +8952,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x7CA9BDFF);

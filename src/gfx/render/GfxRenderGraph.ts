@@ -1,5 +1,6 @@
 
 import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
+import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 import { assert, assertExists } from "../platform/GfxPlatformUtil";
 
 // GfxrRenderGraph is a simple, automatically managed "frame graph".
@@ -78,6 +79,11 @@ export interface GfxrPass {
     attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void;
 
     /**
+     * Attach the occlusion query pool used by this rendering pass.
+     */
+    attachOcclusionQueryPool(queryPool: GfxQueryPool): void;
+
+    /**
      * Set the viewport used by this rendering pass.
      */
     setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void;
@@ -124,11 +130,14 @@ class PassImpl implements GfxrPass {
     public descriptor: GfxRenderPassDescriptor = {
         colorAttachment: [],
         colorResolveTo: [],
+        colorStore: [],
         depthStencilAttachment: null,
         depthStencilResolveTo: null,
+        depthStencilStore: true,
         colorClearColor: ['load'],
         depthClearValue: 'load',
         stencilClearValue: 'load',
+        occlusionQueryPool: null,
     };
 
     public viewportX: number = 0;
@@ -152,10 +161,6 @@ class PassImpl implements GfxrPass {
         this.debugThumbnails[attachmentSlot] = true;
     }
 
-    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.viewport = viewport;
-    }
-
     public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void {
         assert(this.renderTargetIDs[attachmentSlot] === undefined);
         this.renderTargetIDs[attachmentSlot] = renderTargetID;
@@ -163,6 +168,14 @@ class PassImpl implements GfxrPass {
 
     public attachResolveTexture(resolveTextureID: number): void {
         this.resolveTextureInputIDs.push(resolveTextureID);
+    }
+
+    public attachOcclusionQueryPool(queryPool: GfxQueryPool): void {
+        this.descriptor.occlusionQueryPool = queryPool;
+    }
+
+    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.viewport = viewport;
     }
 
     public resolveToExternalTexture(attachmentSlot: GfxrAttachmentSlot, texture: GfxTexture): void {
@@ -181,13 +194,29 @@ class PassImpl implements GfxrPass {
 }
 
 export interface GfxrPassScope {
+    /**
+     * Retrieve the resolve texture resource for a given resolve texture ID. This is guaranteed to be
+     * a single-sampled texture which can be bound to a shader's texture binding.
+     *
+     * @param id A resolve texture ID, as returned by {@see GfxrGraphBuilder::resolveRenderTarget},
+     * {@see GfxrGraphBuilder::resolveRenderTargetPassAttachmentSlot}, or
+     * {@see GfxrGraphBuilder::resolveRenderTargetToExternalTexture}.
+     */
     getResolveTextureForID(id: number): GfxTexture;
+
+    /**
+     * Retrieve the underlying render target resource for a given attachment slot {@param slot}.
+     */
     getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null;
-    getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
+
+    /**
+     * Retrieve the underlying texture resource for a given attachment slot {@param slot}. This is not
+     * guaranteed to be a single-sampled texture; to resolve the resource, see {@see getResolveTextureForID}.
+     */
+     getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
 }
 
-// TODO(jstpierre): These classes might go away...
-
+// These classes might go away...
 class GraphImpl {
     [Symbol.species]?: 'GfxrGraph';
 
@@ -703,6 +732,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             pass.renderTargets[slot] = colorRenderTarget;
             pass.descriptor.colorAttachment[slot] = colorRenderTarget !== null ? colorRenderTarget.attachment : null;
             pass.descriptor.colorResolveTo[slot] = this.determineResolveToTexture(graph, pass, slot);
+            pass.descriptor.colorStore[slot] = this.renderTargetOutputCount[colorRenderTargetID] > 1;
             pass.descriptor.colorClearColor[slot] = (colorRenderTarget !== null && colorRenderTarget.needsClear) ? graph.renderTargetDescriptions[colorRenderTargetID].colorClearColor : 'load';
         }
 
@@ -710,6 +740,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         pass.renderTargets[GfxrAttachmentSlot.DepthStencil] = depthStencilRenderTarget;
         pass.descriptor.depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
         pass.descriptor.depthStencilResolveTo = this.determineResolveToTexture(graph, pass, GfxrAttachmentSlot.DepthStencil);
+        pass.descriptor.depthStencilStore = this.renderTargetOutputCount[depthStencilRenderTargetID] > 1;
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
@@ -817,12 +848,14 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         this.currentPass = pass;
 
         const renderPass = this.device.createRenderPass(pass.descriptor);
+        renderPass.beginDebugGroup(pass.debugName);
 
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
 
         if (pass.execFunc !== null)
             pass.execFunc(renderPass, this);
 
+        renderPass.endDebugGroup();
         this.device.submitPass(renderPass);
 
         if (pass.postFunc !== null)

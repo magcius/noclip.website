@@ -1217,6 +1217,11 @@ export class ObjectInstance {
             }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
     }
+
+    public destroy(device: GfxDevice) {
+        this.modelInst?.destroy(device);
+        this.modelInst = null;
+    }
 }
 
 export class ObjectManager {

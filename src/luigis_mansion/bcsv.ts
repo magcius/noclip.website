@@ -217,33 +217,3 @@ export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, na
         return null;
     return record[index] as T;
 }
-
-export function makeTable(bcsv: Bcsv): HTMLTableElement {
-    const table = document.createElement('table');
-    table.border = '1';
-
-    const tbody = document.createElement('tbody');
-    table.appendChild(tbody);
-
-    {
-        const tr = document.createElement('tr');
-        tbody.appendChild(tr);
-        bcsv.fields.forEach((field) => {
-            const th = document.createElement('th');
-            th.textContent = field.debugName;
-            tr.appendChild(th);
-        });
-    }
-
-    bcsv.records.forEach((record) => {
-        const tr = document.createElement('tr');
-        tbody.appendChild(tr);
-        record.forEach((record) => {
-            const td = document.createElement('td');
-            td.textContent = record.toString();
-            tr.appendChild(td);
-        });
-    });
-
-    return table;
-}

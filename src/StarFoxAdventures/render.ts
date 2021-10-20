@@ -316,6 +316,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.materialFactory.destroy(device);
         this.renderHelper.destroy();
         this.temporalTexture.destroy(device);
     }

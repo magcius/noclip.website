@@ -10,7 +10,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { fillColor, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
@@ -31,8 +31,7 @@ import { createVPKMount, VPKMount } from "./VPK";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
-import { reverseDepthForProjectionMatrix } from "../gfx/helpers/ReversedDepthHelpers";
-import { ParticleStaticResource } from "./Particles_Simple";
+import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -86,6 +85,10 @@ export class SourceFileSystem {
         }
 
         path = path.replace(/\.\//g, '');
+
+        while (path.includes('//'))
+            path = path.replace(/\/\//g, '/');
+
         return path;
     }
 
@@ -241,15 +244,19 @@ export class SkyboxRenderer {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialProgramBase.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialProgramBase.a_TangentS, bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerInstance, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
+            { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
 
         this.bindMaterial(renderContext);
@@ -324,7 +331,7 @@ export class BSPSurfaceRenderer {
         this.lightmapPageIndex = startLightmapPageIndex + this.surface.lightmapPageIndex;
         for (let i = 0; i < this.surface.lightmapData.length; i++) {
             const lightmapData = this.surface.lightmapData[i];
-            this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap, this.lightmapPageIndex));
+            this.lightmaps.push(new SurfaceLightmap(lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap, this.lightmapPageIndex));
         }
     }
 
@@ -682,6 +689,7 @@ export class DebugCube {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
     }
 }
 
@@ -989,7 +997,6 @@ export class SourceRenderContext {
     public currentView: SourceEngineView;
     public colorCorrection: SourceColorCorrection;
     public renderCache: GfxRenderCache;
-    public particleStaticRes: ParticleStaticResource;
 
     // Public settings
     public showToolMaterials = false;
@@ -1006,29 +1013,47 @@ export class SourceRenderContext {
         this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);
         this.studioModelCache = new StudioModelCache(this, this.filesystem);
         this.colorCorrection = new SourceColorCorrection(device, this.renderCache);
-        this.particleStaticRes = new ParticleStaticResource(device, this.renderCache);
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderCache.destroy();
         this.lightmapManager.destroy(device);
         this.materialCache.destroy(device);
         this.studioModelCache.destroy(device);
         this.colorCorrection.destroy(device);
-        this.particleStaticRes.destroy(device);
     }
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 10 },
+    { numUniformBuffers: 3, numSamplers: 13, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 0
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 1
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 2
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 3
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 4
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 5
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 6
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 7
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 8
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },      // 9
+        { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, }, // 10
+        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },     // 11
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },      // 12
+    ] },
 ];
 
 const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 0, numSamplers: 2 },
+    { numUniformBuffers: 0, numSamplers: 2, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n3D, formatKind: GfxSamplerFormatKind.Float, },
+    ] },
 ];
 
 class FullscreenPostProgram extends DeviceProgram {
     public both = `
-precision mediump float; precision lowp sampler3D;
+precision mediump float;
+precision lowp sampler3D;
+
 uniform sampler2D u_FramebufferColor;
 uniform sampler3D u_ColorCorrectTexture;
 `;
@@ -1040,7 +1065,7 @@ void main() {
     vec4 t_Color = texture(SAMPLER_2D(u_FramebufferColor), v_TexCoord);
     t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
 
-    vec3 t_Size = vec3(textureSize(u_ColorCorrectTexture, 0));
+    vec3 t_Size = vec3(textureSize(TEXTURE(u_ColorCorrectTexture), 0));
     vec3 t_TexCoord = t_Color.rgb * ((t_Size - 1.0) / t_Size) + (0.5 / t_Size);
     t_Color.rgb = texture(SAMPLER_3D(u_ColorCorrectTexture), t_TexCoord).rgb;
 
@@ -1219,7 +1244,7 @@ class SourceWorldViewRenderer {
                     renderer.setLateBindingTexture(LateBindingTexture.FramebufferColor, scope.getResolveTextureForID(mainColorResolveTextureID), renderer.linearSampler);
                     renderer.setLateBindingTexture(LateBindingTexture.FramebufferDepth, scope.getResolveTextureForID(mainDepthResolveTextureID), renderer.pointSampler);
 
-                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : renderer.renderContext.materialCache.systemTextures.opaqueBlackTexture2D;
+                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : renderer.renderContext.materialCache.staticResources.opaqueBlackTexture2D;
                     renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, renderer.linearSampler);
 
                     renderer.executeOnPass(passRenderer, this.mainView.indirectList);
@@ -1248,7 +1273,7 @@ const scratchPlane = new Plane();
 function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpaceNearZ: GfxClipSpaceNearZ): void {
     // Convert back to "standard OpenGL" clip space.
     projectionMatrixConvertClipSpaceNearZ(m, GfxClipSpaceNearZ.NegativeOne, clipSpaceNearZ);
-    reverseDepthForProjectionMatrix(m);
+    projectionMatrixReverseDepth(m);
 
     vec4.set(scratchVec4a, Math.sign(plane.n[0]), Math.sign(plane.n[1]), 1.0, 1.0);
     mat4.invert(scratchMatrix, m);
@@ -1262,7 +1287,7 @@ function modifyProjectionMatrixForObliqueClipping(m: mat4, plane: Plane, clipSpa
     m[14] = scratchVec4b[3] - m[15];
 
     // Convert back to "device space"
-    reverseDepthForProjectionMatrix(m);
+    projectionMatrixReverseDepth(m);
     projectionMatrixConvertClipSpaceNearZ(m, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 }
 

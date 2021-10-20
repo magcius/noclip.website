@@ -9,6 +9,7 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { IS_DEVELOPMENT } from "../../BuildVersion";
+import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -460,7 +461,14 @@ export class GfxRenderInst {
 
         const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
+        if (depthStencilAttachmentDescriptor !== null) {
+            if (sampleCount === -1)
+                sampleCount = depthStencilAttachmentDescriptor.sampleCount;
+            else
+                assert(sampleCount == depthStencilAttachmentDescriptor.sampleCount);
+        }
 
+        assert(sampleCount > 0);
         this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 
@@ -576,14 +584,16 @@ export class GfxRenderInstList {
             this.renderInsts[i].resolveLateSamplerBinding(name, binding);
     }
 
-    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        if (this.renderInsts.length === 0)
-            return;
-
+    public ensureSorted(): void {
         if (this.usePostSort) {
-            this.renderInsts.sort(this.compareFunction!);
+            if (this.renderInsts.length !== 0)
+                this.renderInsts.sort(this.compareFunction!);
             this.usePostSort = false;
         }
+    }
+
+    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+        this.ensureSorted();
 
         if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
             for (let i = 0; i < this.renderInsts.length; i++)
@@ -732,7 +742,6 @@ export class GfxRenderInstManager {
 
     public destroy(): void {
         this.instPool.destroy();
-        this.gfxRenderCache.destroy();
     }
 
     /**

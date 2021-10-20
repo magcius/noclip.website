@@ -7,6 +7,7 @@ import { assert, assertExists } from "../util";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export class PeekZResult {
     public normalizedX: number;
@@ -86,7 +87,7 @@ export class PeekZManager {
         this.ensureCurrentFrame(device);
     }
 
-    private ensureResources(device: GfxDevice): void {
+    private ensureResources(cache: GfxRenderCache): void {
         // Kick off pipeline compilation ASAP.
         if (this.fullscreenCopyProgram === null) {
             const fullscreenFS: string = `
@@ -100,14 +101,14 @@ void main() {
     o_Output = uint(color.r * 4294967295.0);
 }
 `;
-            const fullscreenProgramDescriptor = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, fullscreenFS);
-            this.fullscreenCopyProgram = device.createProgramSimple(fullscreenProgramDescriptor);
+            const fullscreenProgramDescriptor = preprocessProgram_GLSL(cache.device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, fullscreenFS);
+            this.fullscreenCopyProgram = cache.createProgramSimple(fullscreenProgramDescriptor);
         }
 
         if (this.depthSampler === null) {
             // According to the GLES spec, depth textures *must* be filtered as NEAREST.
             // https://github.com/google/angle/blob/49a53d684affafc0bbaa2d4c2414113fe95329ce/src/libANGLE/Texture.cpp#L362-L383
-            this.depthSampler = device.createSampler({
+            this.depthSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
                 mipFilter: GfxMipFilterMode.NoMip,
@@ -119,14 +120,14 @@ void main() {
         }
     }
 
-    private stealCurrentFrameAndCheck(device: GfxDevice): PeekZFrame | null {
+    private stealCurrentFrameAndCheck(cache: GfxRenderCache): PeekZFrame | null {
         const frame = this.currentFrame;
         this.currentFrame = null;
 
         if (frame === null)
             return null;
 
-        this.ensureResources(device);
+        this.ensureResources(cache);
 
         if (this.submittedFrames.length >= this.maxSubmittedFrames) {
             // Too many frames in flight, discard this one.
@@ -159,8 +160,9 @@ void main() {
         this.submittedFrames.push(frame);
     }
 
-    public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
-        const frame = this.stealCurrentFrameAndCheck(device);
+    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
+        const cache = renderInstManager.gfxRenderCache, device = cache.device;
+        const frame = this.stealCurrentFrameAndCheck(cache);
         if (frame === null)
             return;
 
@@ -221,9 +223,5 @@ void main() {
             this.submittedFrames[i].destroy(device);
         for (let i = 0; i < this.framePool.length; i++)
             this.framePool[i].destroy(device);
-        if (this.fullscreenCopyProgram !== null)
-            device.destroyProgram(this.fullscreenCopyProgram);
-        if (this.depthSampler !== null)
-            device.destroySampler(this.depthSampler);
     }
 }

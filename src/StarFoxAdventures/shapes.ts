@@ -89,8 +89,12 @@ class MyShapeHelper {
 
     public destroy(device: GfxDevice): void {
         device.destroyInputState(this.inputState);
+        // Do not destroy inputLayout; it is owned by the render cache.
         if (this.zeroBuffer !== null)
             device.destroyBuffer(this.zeroBuffer);
+        for (let buffer of this.vertexBuffers)
+            device.destroyBuffer(buffer);
+        device.destroyBuffer(this.indexBuffer);
     }
 }
 
@@ -200,6 +204,13 @@ export class ShapeGeometry {
 
         material.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
     }
+    
+    public destroy(device: GfxDevice) {
+        if (this.shapeHelper !== null) {
+            this.shapeHelper.destroy(device);
+            this.shapeHelper = null;
+        }
+    }
 }
 
 export interface MaterialOptions {
@@ -289,5 +300,9 @@ export class Shape {
         const renderInst = renderInstManager.newRenderInst();
         this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette, overrideSortDepth, overrideSortLayer);
         renderInstManager.submitRenderInst(renderInst);
+    }
+    
+    public destroy(device: GfxDevice) {
+        this.geom.destroy(device);
     }
 }

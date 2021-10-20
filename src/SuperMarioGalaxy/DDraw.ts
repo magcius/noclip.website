@@ -27,11 +27,24 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
         throw "whoops";
 }
 
-class TDDrawVtxSpec {
+abstract class TDDrawBase {
     private vcd: GX_VtxDesc[] = [];
     private vat: GX_VtxAttrFmt[][] = [[]];
     protected loadedVertexLayout: LoadedVertexLayout | null = null;
     protected inputLayout: GfxInputLayout | null = null;
+    protected inputState: GfxInputState | null = null;
+    protected vertexBuffer: GfxBuffer | null = null;
+    protected indexBuffer: GfxBuffer | null = null; null = null;
+
+    // Global information
+    protected currentVertex: number;
+    protected currentIndex: number;
+    protected indexData: Uint16Array;
+    protected vertexData: DataView;
+
+    // Current primitive information
+    protected currentPrimVertex: number;
+    protected currentPrim: GX.Command;
 
     constructor() {
         for (let i = GX.Attr.POS; i <= GX.Attr.TEX7; i++) {
@@ -83,75 +96,9 @@ class TDDrawVtxSpec {
         this.createLoadedVertexLayout();
         this.createInputLayoutInternal(cache);
     }
-}
 
-export class TDDraw extends TDDrawVtxSpec {
-    public frequencyHint = GfxBufferFrequencyHint.Dynamic;
-
-    private inputState: GfxInputState | null = null;
-    private vertexBuffer: GfxBuffer | null = null;
-    private indexBuffer: GfxBuffer | null = null;
-    private recreateVertexBuffer: boolean = true;
-    private recreateIndexBuffer: boolean = true;
-
-    // Global information
-    private currentVertex: number;
-    private currentIndex: number;
-    private startIndex: number;
-    private indexData: Uint16Array;
-    private vertexData: DataView;
-
-    // Current primitive information
-    private currentPrimVertex: number;
-    private currentPrim: GX.Command;
-
-    constructor() {
-        super();
-        this.vertexData = new DataView(new ArrayBuffer(0x400));
-        this.indexData = new Uint16Array(0x100);
-    }
-
-    private ensureVertexBufferData(newByteSize: number): void {
-        if (newByteSize > this.vertexData.byteLength) {
-            const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
-            const newData = new Uint8Array(newByteSizeAligned);
-            newData.set(new Uint8Array(this.vertexData.buffer));
-            this.vertexData = new DataView(newData.buffer);
-            this.recreateVertexBuffer = true;
-        }
-    }
-
-    private ensureIndexBufferData(newSize: number): void {
-        if (newSize > this.indexData.length) {
-            const newSizeAligned = align(newSize, this.indexData.byteLength);
-            const newData = new Uint16Array(newSizeAligned);
-            newData.set(this.indexData);
-            this.indexData = newData;
-            this.recreateIndexBuffer = true;
-        }
-    }
-
-    private getOffs(v: number, attr: GX.Attr): number {
-        const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        return v*stride + this.loadedVertexLayout!.vertexAttributeOffsets[attr];
-    }
-
-    private writeUint8(offs: number, v: number): void {
-        this.vertexData.setUint8(offs, v);
-    }
-
-    private writeFloat32(offs: number, v: number): void {
-        const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
-        this.vertexData.setFloat32(offs, v, e);
-    }
-
-    public beginDraw(): void {
-        this.createLoadedVertexLayout();
-
-        this.currentVertex = -1;
-        this.currentIndex = 0;
-        this.startIndex = 0;
-    }
+    protected abstract ensureIndexBufferData(newSize: number): void;
+    protected abstract ensureVertexBufferData(newSize: number): void;
 
     public allocVertices(num: number): void {
         const vertexCount = this.currentVertex + 1 + num;
@@ -167,12 +114,18 @@ export class TDDraw extends TDDrawVtxSpec {
         this.ensureIndexBufferData(getTriangleIndexCountForTopologyIndexCount(topology, vertexCount));
     }
 
-    public begin(type: GX.Command, num: number | null = null): void {
-        this.currentPrim = type;
-        this.currentPrimVertex = -1;
+    protected getOffs(v: number, attr: GX.Attr): number {
+        const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
+        return v*stride + this.loadedVertexLayout!.vertexAttributeOffsets[attr];
+    }
 
-        if (num !== null)
-            this.allocPrimitives(type, num);
+    protected writeUint8(offs: number, v: number): void {
+        this.vertexData.setUint8(offs, v);
+    }
+
+    protected writeFloat32(offs: number, v: number): void {
+        const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
+        this.vertexData.setFloat32(offs, v, e);
     }
 
     public position3f32(x: number, y: number, z: number): void {
@@ -223,6 +176,14 @@ export class TDDraw extends TDDrawVtxSpec {
         this.color4rgba8(attr, c.r * 0xFF, c.g * 0xFF, c.b * 0xFF, c.a * 0xFF);
     }
 
+    public begin(type: GX.Command, num: number | null = null): void {
+        this.currentPrim = type;
+        this.currentPrimVertex = -1;
+
+        if (num !== null)
+            this.allocPrimitives(type, num);
+    }
+
     public end(): void {
         const gfxTopo = getGfxToplogyFromCommand(this.currentPrim);
         const numIndices = getTriangleIndexCountForTopologyIndexCount(gfxTopo, this.currentPrimVertex + 1);
@@ -231,6 +192,49 @@ export class TDDraw extends TDDrawVtxSpec {
         const numVertices = this.currentPrimVertex + 1;
         convertToTrianglesRange(this.indexData, this.currentIndex, gfxTopo, baseVertex, numVertices);
         this.currentIndex += numIndices;
+    }
+}
+
+export class TDDraw extends TDDrawBase {
+    private frequencyHint = GfxBufferFrequencyHint.Dynamic;
+
+    private recreateVertexBuffer: boolean = true;
+    private recreateIndexBuffer: boolean = true;
+
+    private startIndex: number;
+
+    constructor() {
+        super();
+        this.vertexData = new DataView(new ArrayBuffer(0x400));
+        this.indexData = new Uint16Array(0x100);
+    }
+
+    protected ensureVertexBufferData(newByteSize: number): void {
+        if (newByteSize > this.vertexData.byteLength) {
+            const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
+            const newData = new Uint8Array(newByteSizeAligned);
+            newData.set(new Uint8Array(this.vertexData.buffer));
+            this.vertexData = new DataView(newData.buffer);
+            this.recreateVertexBuffer = true;
+        }
+    }
+
+    protected ensureIndexBufferData(newSize: number): void {
+        if (newSize > this.indexData.length) {
+            const newSizeAligned = align(newSize, this.indexData.byteLength);
+            const newData = new Uint16Array(newSizeAligned);
+            newData.set(this.indexData);
+            this.indexData = newData;
+            this.recreateIndexBuffer = true;
+        }
+    }
+
+    public beginDraw(): void {
+        this.createLoadedVertexLayout();
+
+        this.currentVertex = -1;
+        this.currentIndex = 0;
+        this.startIndex = 0;
     }
 
     private flushDeviceObjects(cache: GfxRenderCache): void {
@@ -280,16 +284,24 @@ export class TDDraw extends TDDrawVtxSpec {
         }
     }
 
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
+    }
+
     public canMakeRenderInst(): boolean {
         return this.currentIndex > this.startIndex;
+    }
+
+    public next(): void {
+        this.startIndex = this.currentIndex;
     }
 
     public makeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
         this.flushDeviceObjects(renderInstManager.gfxRenderCache);
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
-        this.startIndex = this.currentIndex;
+        this.setOnRenderInst(renderInst);
+        this.next();
         return renderInst;
     }
 
@@ -331,22 +343,8 @@ export class TDDraw extends TDDrawVtxSpec {
 
 // Static Draw helper for places where we might want to make TDDraw into a buffer
 // that does not change very much.
-export class TSDraw extends TDDrawVtxSpec {
-    public frequencyHint = GfxBufferFrequencyHint.Static;
-
-    private inputState: GfxInputState | null = null;
-    private vertexBuffer: GfxBuffer | null = null;
-    private indexBuffer: GfxBuffer | null = null;
-
-    // Global information
-    private currentVertex: number;
-    private currentIndex: number;
-    private indexData: Uint16Array;
-    private vertexData: DataView;
-
-    // Current primitive information
-    private currentPrimVertex: number;
-    private currentPrim: GX.Command;
+export class TSDraw extends TDDrawBase {
+    private frequencyHint = GfxBufferFrequencyHint.Static;
 
     constructor() {
         super();
@@ -354,7 +352,7 @@ export class TSDraw extends TDDrawVtxSpec {
         this.indexData = new Uint16Array(0x100);
     }
 
-    private ensureVertexBufferData(newByteSize: number): void {
+    protected ensureVertexBufferData(newByteSize: number): void {
         if (newByteSize > this.vertexData.byteLength) {
             const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
             const newData = new Uint8Array(newByteSizeAligned);
@@ -363,27 +361,13 @@ export class TSDraw extends TDDrawVtxSpec {
         }
     }
 
-    private ensureIndexBufferData(newSize: number): void {
+    protected ensureIndexBufferData(newSize: number): void {
         if (newSize > this.indexData.length) {
             const newSizeAligned = align(newSize, this.indexData.byteLength);
             const newData = new Uint16Array(newSizeAligned);
             newData.set(this.indexData);
             this.indexData = newData;
         }
-    }
-
-    private getOffs(v: number, attr: GX.Attr): number {
-        const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        return v*stride + this.loadedVertexLayout!.vertexAttributeOffsets[attr];
-    }
-
-    private writeUint8(offs: number, v: number): void {
-        this.vertexData.setUint8(offs, v);
-    }
-
-    private writeFloat32(offs: number, v: number): void {
-        const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
-        this.vertexData.setFloat32(offs, v, e);
     }
 
     public beginDraw(): void {
@@ -393,82 +377,6 @@ export class TSDraw extends TDDrawVtxSpec {
 
         this.currentVertex = -1;
         this.currentIndex = 0;
-    }
-
-    public allocVertices(num: number): void {
-        const vertexCount = this.currentVertex + 1 + num;
-        const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        this.ensureVertexBufferData(vertexCount * stride);
-    }
-
-    public allocPrimitives(type: GX.Command, num: number): void {
-        const vertexCount = this.currentVertex + 1 + num;
-        const topology = getGfxToplogyFromCommand(type);
-        const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        this.ensureVertexBufferData(vertexCount * stride);
-        this.ensureIndexBufferData(getTriangleIndexCountForTopologyIndexCount(topology, vertexCount));
-    }
-
-    public begin(type: GX.Command, num: number | null = null): void {
-        this.currentPrim = type;
-        this.currentPrimVertex = -1;
-
-        if (num !== null)
-            this.allocPrimitives(type, num);
-    }
-
-    public position3f32(x: number, y: number, z: number): void {
-        ++this.currentVertex;
-        ++this.currentPrimVertex;
-        this.allocVertices(0);
-
-        const offs = this.getOffs(this.currentVertex, GX.Attr.POS);
-        this.writeFloat32(offs + 0x00, x);
-        this.writeFloat32(offs + 0x04, y);
-        this.writeFloat32(offs + 0x08, z);
-    }
-
-    public position3vec3(v: ReadonlyVec3): void {
-        this.position3f32(v[0], v[1], v[2]);
-    }
-
-    public normal3f32(x: number, y: number, z: number): void {
-        const offs = this.getOffs(this.currentVertex, GX.Attr.NRM);
-        this.writeFloat32(offs + 0x00, x);
-        this.writeFloat32(offs + 0x04, y);
-        this.writeFloat32(offs + 0x08, z);
-    }
-
-    public normal3vec3(v: ReadonlyVec3): void {
-        this.normal3f32(v[0], v[1], v[2]);
-    }
-
-    public texCoord2f32(attr: GX.Attr, s: number, t: number): void {
-        const offs = this.getOffs(this.currentVertex, attr);
-        this.writeFloat32(offs + 0x00, s);
-        this.writeFloat32(offs + 0x04, t);
-    }
-
-    public color4rgba8(attr: GX.Attr, r: number, g: number, b: number, a: number): void {
-        const offs = this.getOffs(this.currentVertex, attr);
-        this.writeUint8(offs + 0x00, r);
-        this.writeUint8(offs + 0x01, g);
-        this.writeUint8(offs + 0x02, b);
-        this.writeUint8(offs + 0x03, a);
-    }
-
-    public color4color(attr: GX.Attr, c: Color): void {
-        this.color4rgba8(attr, c.r * 0xFF, c.g * 0xFF, c.b * 0xFF, c.a * 0xFF);
-    }
-
-    public end(): void {
-        const gfxTopo = getGfxToplogyFromCommand(this.currentPrim);
-        const numIndices = getTriangleIndexCountForTopologyIndexCount(gfxTopo, this.currentPrimVertex + 1);
-        this.ensureIndexBufferData(this.currentIndex + numIndices);
-        const baseVertex = this.currentVertex - this.currentPrimVertex;
-        const numVertices = this.currentPrimVertex + 1;
-        convertToTrianglesRange(this.indexData, this.currentIndex, gfxTopo, baseVertex, numVertices);
-        this.currentIndex += numIndices;
     }
 
     private flushDeviceObjects(cache: GfxRenderCache): void {

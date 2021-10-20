@@ -234,17 +234,17 @@ function translateCullMode(renderWhichFaces: number): GfxCullMode {
 
 function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
     dst[0] = texScaleS * scaleS *  cosR;
-    dst[1] = texScaleT * scaleT * -sinR * (texScaleS / texScaleT);
-    dst[2] = texScaleS * scaleS *  sinR * (texScaleT / texScaleS);
+    dst[1] = texScaleS * scaleT * -sinR;
+    dst[2] = texScaleT * scaleS *  sinR;
     dst[3] = texScaleT * scaleT *  cosR;
     dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
-    dst[5] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[5] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1.0;
 }
 
 function calcTexMtx_Max(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
     dst[0] = texScaleS * scaleS *  cosR;
-    dst[1] = texScaleT * scaleT * -sinR * (texScaleS / texScaleT);
-    dst[2] = texScaleS * scaleS *  sinR * (texScaleT / texScaleS);
+    dst[1] = texScaleS * scaleT * -sinR;
+    dst[2] = texScaleT * scaleS *  sinR;
     dst[3] = texScaleT * scaleT *  cosR;
     dst[4] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
     dst[5] = (scaleT *  sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
