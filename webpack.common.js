@@ -28,7 +28,7 @@ module.exports = {
       },
       {
         test: /\.glsl$/,
-        loader: 'raw-loader',
+        type: 'asset/source',
       },
       {
         test: /\.d\.ts$/,

@@ -5,7 +5,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
 
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fallback, mod, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
@@ -722,7 +722,7 @@ export class FallOutFieldDraw extends NameObj {
         offs += fillVec4(d, offs, this.invert ? 1.0 : 0.0);
     }
 
-    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, clipAreaMaskTargetID: number): void {
+    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, clipAreaMaskTargetID: GfxrRenderTargetID): void {
         const clipAreaMaskTargetDesc = builder.getRenderTargetDescription(clipAreaMaskTargetID);
 
         this.target2ColorDesc.setDimensions(clipAreaMaskTargetDesc.width >>> 1, clipAreaMaskTargetDesc.height >>> 1, 1);

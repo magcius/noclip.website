@@ -60,6 +60,12 @@ vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
 }
 `;
 
+export const CalcScaleBias: string = `
+vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
+    return t_Pos.xy * t_SB.xy + t_SB.zw;
+}
+`;
+
 export function makeFullscreenVS(z: number = 1.0, w: number = 1.0): string {
     return `
 out vec2 v_TexCoord;
@@ -89,14 +95,21 @@ void main() {
 }
 `;
 
-export const monochromeNTSC: string = `
+export const MonochromeNTSC: string = `
 float MonochromeNTSC(vec3 t_Color) {
-    // NTSC primaries.
+    // NTSC primaries. Note that this is designed for gamma-space values.
     return dot(t_Color.rgb, vec3(0.299, 0.587, 0.114));
 }
 `;
 
-export const fxaa: string = `
+export const MonochromeNTSCLinear: string = `
+float MonochromeNTSCLinear(vec3 t_Color) {
+    // NTSC primaries. Note that this is designed for linear-space values.
+    return dot(t_Color.rgb, vec3(0.2125, 0.7154, 0.0721));
+}
+`;
+
+export const FXAA: string = `
 vec4 FXAA(PD_SAMPLER_2D(t_Texture), in vec2 t_PixelCenter, in vec2 t_InvResolution) {
     // FXAA v2, based on implementations:
     // http://www.geeks3d.com/20110405/fxaa-fast-approximate-anti-aliasing-demo-glsl-opengl-test-radeon-geforce/
@@ -134,7 +147,7 @@ vec4 FXAA(PD_SAMPLER_2D(t_Texture), in vec2 t_PixelCenter, in vec2 t_InvResoluti
         FXAA_REDUCE_MIN);
 
     float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y)) + dirReduce);
-    dir = min(vec2( FXAA_SPAN_MAX,  FXAA_SPAN_MAX), max(vec2(-FXAA_SPAN_MAX, -FXAA_SPAN_MAX), dir * rcpDirMin)) * u_InvResolution.xy;
+    dir = min(vec2( FXAA_SPAN_MAX,  FXAA_SPAN_MAX), max(vec2(-FXAA_SPAN_MAX, -FXAA_SPAN_MAX), dir * rcpDirMin)) * t_InvResolution.xy;
 
     float lumaMin = min(lumaMM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
     float lumaMax = max(lumaMM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));

@@ -384,7 +384,7 @@ function translateIndexFormat(format: GfxFormat | null): GPUIndexFormat | undefi
         throw "whoops";
 }
 
-function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GPUInputStepMode {
+function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GPUVertexStepMode {
     if (frequency === GfxVertexBufferFrequency.PerVertex)
         return 'vertex';
     else if (frequency === GfxVertexBufferFrequency.PerInstance)
@@ -456,14 +456,9 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private gfxDepthStencilAttachment: GfxTextureSharedP_WebGPU | null = null;
     private gfxDepthStencilResolveTo: GfxTextureSharedP_WebGPU | null = null;
-    private debugPointer: any;
 
     constructor() {
-        this.gpuColorAttachments = [{
-            view: null!,
-            loadValue: 'load',
-            storeOp: 'store',
-        }];
+        this.gpuColorAttachments = [];
 
         this.gpuDepthStencilAttachment = {
             view: null!,
@@ -497,14 +492,24 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
                 colorResolveTo = null;
             }
 
+            this.gfxColorAttachment[i] = colorAttachment;
+            this.gfxColorResolveTo[i] = colorResolveTo;
+
             if (colorAttachment !== null) {
+                if (this.gpuColorAttachments[i] === undefined)
+                    this.gpuColorAttachments[i] = {} as GPURenderPassColorAttachment;
+
                 const dstAttachment = this.gpuColorAttachments[i];
                 dstAttachment.view = colorAttachment.gpuTextureView;
                 dstAttachment.loadValue = descriptor.colorClearColor[i];
                 dstAttachment.storeOp = descriptor.colorStore[i] ? 'store' : 'discard';
                 dstAttachment.resolveTarget = undefined;
-                if (colorResolveTo !== null && colorAttachment.sampleCount > 1)
-                    dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
+                if (colorResolveTo !== null) {
+                    if (colorAttachment.sampleCount > 1)
+                        dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
+                    else
+                        dstAttachment.storeOp = 'store';
+                }
             } else {
                 // TODO(jstpierre): Figure out what to do with no sparse attachments.
                 // https://github.com/gpuweb/gpuweb/issues/1250
@@ -513,10 +518,10 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
                 this.gfxColorResolveTo.length = i;
                 break;
             }
-
-            this.gfxColorAttachment[i] = colorAttachment;
-            this.gfxColorResolveTo[i] = colorResolveTo;
         }
+
+        this.gfxDepthStencilAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
+        this.gfxDepthStencilResolveTo = descriptor.depthStencilResolveTo as GfxTextureP_WebGPU;
 
         if (descriptor.depthStencilAttachment !== null) {
             const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
@@ -527,12 +532,13 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             dstAttachment.depthStoreOp = descriptor.depthStencilStore ? 'store' : 'discard';
             dstAttachment.stencilStoreOp = descriptor.depthStencilStore ? 'store' : 'discard';
             this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
+            if (this.gfxDepthStencilResolveTo !== null) {
+                dstAttachment.depthStoreOp = 'store';
+                dstAttachment.stencilStoreOp = 'store';
+            }
         } else {
             this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
-
-        this.gfxDepthStencilAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
-        this.gfxDepthStencilResolveTo = descriptor.depthStencilResolveTo as GfxTextureP_WebGPU;
 
         this.gpuRenderPassDescriptor.occlusionQuerySet = descriptor.occlusionQueryPool !== null ? getPlatformQuerySet(descriptor.occlusionQueryPool) : undefined;
     }
@@ -596,10 +602,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     public drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void {
         this.gpuRenderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
-    }
-
-    public setDebugPointer(value: any): void {
-        this.debugPointer = value;
     }
 
     public beginOcclusionQuery(dstOffs: number): void {

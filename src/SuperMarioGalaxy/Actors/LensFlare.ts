@@ -14,7 +14,7 @@ import { divideByW } from "../../Camera";
 import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
-import { GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph";
+import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 
 function calcRotateY(x: number, y: number): number {
@@ -28,7 +28,7 @@ export class DrawSyncManager {
         this.peekZ.beginFrame(device);
     }
 
-    public endFrame(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
+    public endFrame(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: GfxrRenderTargetID): void {
         this.peekZ.pushPasses(renderInstManager, builder, depthTargetID);
         this.peekZ.peekData(renderInstManager.gfxRenderCache.device);
     }

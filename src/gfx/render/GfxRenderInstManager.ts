@@ -9,32 +9,55 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { IS_DEVELOPMENT } from "../../BuildVersion";
-import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 
-// The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
-// A rough overview of the design:
+// The "Render" subsystem provides high-level scene graph utiltiies, built on top of gfx/platform and gfx/helpers. A
+// rough overview of the design:
 //
-// A GfxRenderInst is basically equivalent to one draw call. It contains everything that should be
-// necessary to draw it, including a few extra helpers like a sort key and a filter key. It is a
-// transient structure that will not persist past "one frame" of the renderer. The intention is to
-// build up a large collection of GfxRenderInst's during scene graph traversal, and then dispatch
-// them in whatever order you want. This allows efficient pass management along with Z sorting.
+// A GfxRenderInst is basically equivalent to one draw call. It contains everything that should be necessary to submit
+// it to the pass. It is also a transient structure that will not persist past "one frame" of the renderer. The
+// intention is to build up a large collection of GfxRenderInst's during scene graph traversal, and then dispatch them
+// in whatever order you want. This allows efficient pass management.
 //
-// All GfxRenderInsts are owned by the GfxRenderInstManager, which stores a pool of them together
-// to cut down on GC allocation cost. At the end of a frame, GfxRenderInstManager::reset() is called,
-// which will reset all allocated GfxRenderInsts.
+// The GfxRenderInst also lets you build your scene out of building independent building blocks like the mega state, the
+// shader program, and the resource bindings. This means that one does not have to worry about building
+// GfxRenderPipeline objects; it is taken care of you behind the scenes. A cache is used to share common pipelines.
 //
-// As a convenience for creation, a stack-based template system can be used which allows one to set
-// up multiple parameters. Templates are just like regular GfxRenderInsts, but they are not added
-// to draw lists automatically, instead, they are only added to the template stack. Regular render
-// insts will copy their initial values from the top of the template stack.
+// To provide different sets of draw calls for different passes, one should use multiple GfxRenderInstList objects. Each
+// object is a list of GfxRenderInst's, where the sort function and sort order can be chosen.
+//
+// For integration with the GfxRenderGraph, most passes should simply consist of calls to
+// GfxRenderInstList::drawOnPassRenderer to dispatch pre-built lists of render lists.
+//
+// All GfxRenderInsts are owned by the GfxRenderInstManager, which stores a pool of them together to cut down on GC
+// allocation costs. At the end of a frame, call GfxRenderInstManager::reset() to reset all allocated GfxRenderInsts.
+//
+// As a convenience for creation, a stack-based template system can be used which allows one to set up multiple
+// parameters. Templates are just like regular GfxRenderInsts, but they are not added to draw lists automatically,
+// instead, they are only added to the template stack. Regular render insts will copy their initial values from the top
+// of the template stack.
+
+// TODO(jstpierre): Possible future investigations
+//
+//   - Remove the high-level PSO concept from the platform layer, and just provide a drawRenderInst() on GfxRenderPass
+//     which does the caching / applies state internally. Maybe provide some extra hooks for cache management? Because
+//     we still need asynchronous pipeline creation for WebGPU... basically, the "backpressure gets harder the further
+//     down the hole you stuff this stuff" problem.
+//
+//   - Actually remove more of the globals, and possibly clean up the template system from a global stack. Templates
+//     will behave poorly for rendering. Perhaps move a lot of the simpler, legacy systems to a subclass or a sub-mode
+//     which can be turned off. Unfortunately, a lot of generic code relies on the globals; would have to clean up
+//     DebugThumbnails / DebugTextDrawer (though that's already a mess...)
+//
+//   - Remove the special behavior of sort keys, and just demand that the inversion happens on the client, through the
+//     GfxRenderInstList sort order field.
 
 //#region Sort Keys
 
-// Suggested values for the "layer" of makeSortKey. These are rough groups, and you can define your own
-// ordering within the rough groups (e.g. you might use BACKGROUND + 1, or BACKGROUND + 2).
-// TRANSLUCENT is meant to be used as a bitflag. It's special as it changes the behavior of the generic sort key
-// functions like makeSortKey and setSortKeyDepth.
+// Suggested values for the "layer" of makeSortKey. These are rough groups, and you can define your own ordering within
+// the rough groups (e.g. you might use BACKGROUND + 1, or BACKGROUND + 2). TRANSLUCENT is meant to be used as a
+// bitflag. It's special as it changes the behavior of the generic sort key functions like makeSortKey and
+// setSortKeyDepth.
+
 export const enum GfxRendererLayer {
     BACKGROUND  = 0x00,
     ALPHA_TEST  = 0x10,
@@ -47,9 +70,9 @@ const MAX_DEPTH = 0x10000;
 const DEPTH_BITS = 16;
 
 export function makeDepthKey(depth: number, flipDepth: boolean, maxDepth: number = MAX_DEPTH) {
-    // Input depth here is: 0 is the closest to the camera, positive values are further away. Negative values (behind camera) are clamped to 0.
-    // normalizedDepth: 0.0 is closest to camera, 1.0 is farthest from camera.
-    // These values are flipped if flipDepth is set.
+    // Input depth here is: 0 is the closest to the camera, positive values are further away. Negative values (behind
+    // camera) are clamped to 0. normalizedDepth: 0.0 is closest to camera, 1.0 is farthest from camera. These values
+    // are flipped if flipDepth is set.
     let normalizedDepth = (clamp(depth, 0, maxDepth) / maxDepth);
     if (flipDepth)
         normalizedDepth = 1.0 - normalizedDepth;
@@ -145,8 +168,6 @@ const enum GfxRenderInstFlags {
     // Which flags are inherited from templates...
     InheritedFlags = Indexed | AllowSkippingIfPipelineNotReady,
 }
-
-const SET_DEBUG_POINTER = IS_DEVELOPMENT;
 
 export class GfxRenderInst {
     public sortKey: number = 0;
@@ -486,9 +507,6 @@ export class GfxRenderInst {
             device.pipelineForceReady(gfxPipeline);
         }
 
-        if (SET_DEBUG_POINTER)
-            passRenderer.setDebugPointer(this);
-
         passRenderer.setPipeline(gfxPipeline);
 
         passRenderer.setInputState(this._inputState);
@@ -592,16 +610,21 @@ export class GfxRenderInstList {
         }
     }
 
-    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): number {
         this.ensureSorted();
 
+        let numDrawn = 0;
         if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
             for (let i = 0; i < this.renderInsts.length; i++)
-                this.renderInsts[i].drawOnPass(cache, passRenderer);
+                if (this.renderInsts[i].drawOnPass(cache, passRenderer))
+                    numDrawn++;
         } else {
             for (let i = this.renderInsts.length - 1; i >= 0; i--)
-                this.renderInsts[i].drawOnPass(cache, passRenderer);
+                if (this.renderInsts[i].drawOnPass(cache, passRenderer))
+                    numDrawn++;
         }
+
+        return numDrawn;
     }
 
     public reset(): void {
@@ -613,9 +636,10 @@ export class GfxRenderInstList {
      * using {@param device} and {@param cache} to create any device-specific resources
      * necessary to complete the draws.
      */
-    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        this.drawOnPassRendererNoReset(cache, passRenderer);
+    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): number {
+        const numDrawn = this.drawOnPassRendererNoReset(cache, passRenderer);
         this.reset();
+        return numDrawn;
     }
 }
 //#endregion
@@ -750,15 +774,6 @@ export class GfxRenderInstManager {
     public disableSimpleMode(): void {
         // This is a one-way street!
         this.simpleRenderInstList = null;
-    }
-
-    /**
-     * Execute all scheduled render insts in {@param list} onto the {@param GfxRenderPass},
-     * using {@param device} and {@param cache} to create any device-specific resources
-     * necessary to complete the draws.
-     */
-    public drawListOnPassRenderer(list: GfxRenderInstList, passRenderer: GfxRenderPass): void {
-        list.drawOnPassRenderer(this.gfxRenderCache, passRenderer);
     }
     //#region Legacy render inst list management API.
 

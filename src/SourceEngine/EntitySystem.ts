@@ -3,18 +3,24 @@ import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers';
+import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer } from './Main';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
+import { VTF } from './VTF';
 
 type EntityMessageValue = string;
 
@@ -145,6 +151,7 @@ export class BaseEntity {
         this.registerInput('disable', this.input_disable.bind(this));
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
+        this.registerInput('use', this.input_use.bind(this));
 
         this.output_onuser1.parse(this.entity.onuser1);
         this.output_onuser2.parse(this.entity.onuser1);
@@ -257,16 +264,19 @@ export class BaseEntity {
             vec3.copy(this.lightingOrigin, materialParams.position);
         }
 
-        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, this.lightingOrigin);
+        materialParams.lightCache = new LightCache(this.bspRenderer, this.lightingOrigin);
     }
 
     private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
         assert(this.spawnState === SpawnState.ReadyForSpawn);
         this.spawnState = SpawnState.FetchingResources;
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
-        this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
-        this.modelStudio.setSkin(renderContext, this.skin);
-        this.updateLightingData();
+        // The Stanley Parable appears to ship models/apartment/picture_frame.mdl without a corresponding VVD/VTX file.
+        if (modelData.bodyPartData.length !== 0) {
+            this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
+            this.modelStudio.setSkin(renderContext, this.skin);
+            this.updateLightingData();
+        }
         this.spawnState = SpawnState.ReadyForSpawn;
     }
 
@@ -463,6 +473,15 @@ export class BaseEntity {
         }
     }
 
+    public use(entitySystem: EntitySystem): void {
+        // Do nothing by default.
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.modelStudio !== null)
+            this.modelStudio.destroy(device);
+    }
+
     protected dispatchAnimEvent(entitySystem: EntitySystem, event: number, options: string): void {
         if (event === 1100) { // SCRIPT_EVENT_FIRE_INPUT
             this.fireInput(entitySystem, options, '');
@@ -483,6 +502,10 @@ export class BaseEntity {
 
     private input_kill(): void {
         this.remove();
+    }
+
+    private input_use(entitySystem: EntitySystem): void {
+        this.use(entitySystem);
     }
 
     private input_fireuser1(entitySystem: EntitySystem, value: string): void {
@@ -799,6 +822,9 @@ abstract class BaseDoor extends BaseToggle {
         this.registerInput('close', this.input_close.bind(this));
         this.registerInput('open', this.input_open.bind(this));
         this.registerInput('toggle', this.input_toggle.bind(this));
+        this.registerInput('lock', this.input_lock.bind(this));
+        this.registerInput('unlock', this.input_unlock.bind(this));
+        this.registerInput('setspeed', this.input_setspeed.bind(this));
 
         const spawnpos = Number(fallbackUndefined(this.entity.spawnpos, '0'));
 
@@ -811,6 +837,28 @@ abstract class BaseDoor extends BaseToggle {
             this.toggleState = ToggleState.Top;
         else
             this.toggleState = ToggleState.Bottom;
+    }
+
+    private activate(entitySystem: EntitySystem): void {
+        if (this.toggleState === ToggleState.Top)
+            this.goToBottom(entitySystem);
+        else if (this.toggleState === ToggleState.Bottom || this.toggleState === ToggleState.GoingToBottom)
+            this.goToTop(entitySystem);
+    }
+
+    public use(entitySystem: EntitySystem): void {
+        let allowUse = false;
+
+        // TODO(jstpierre): SF_DOOR_NEW_USE_RULES
+        if (this.toggleState === ToggleState.Bottom)
+            allowUse = true;
+
+        if (allowUse) {
+            if (this.locked)
+                return;
+
+            this.activate(entitySystem);
+        }
     }
 
     protected abstract moveToOpened(entitySystem: EntitySystem): void;
@@ -868,6 +916,18 @@ abstract class BaseDoor extends BaseToggle {
             this.goToTop(entitySystem);
         else if (this.toggleState === ToggleState.Bottom)
             this.goToBottom(entitySystem);
+    }
+
+    private input_setspeed(entitySystem: EntitySystem, value: string): void {
+        this.speed = Number(value);
+    }
+
+    private input_lock(entitySystem: EntitySystem): void {
+        this.locked = true;
+    }
+
+    private input_unlock(entitySystem: EntitySystem): void {
+        this.locked = false;
     }
 }
 
@@ -2023,6 +2083,7 @@ class color_correction extends BaseEntity {
 
         this.layer = lutData.createTypedArray(Uint8Array);
         renderContext.colorCorrection.addLayer(this.layer);
+        this.updateWeight(renderContext);
     }
 
     private calcWeight(renderContext: SourceRenderContext): number {
@@ -2041,14 +2102,17 @@ class color_correction extends BaseEntity {
         }
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
-        super.movement(entitySystem, renderContext);
-
+    private updateWeight(renderContext: SourceRenderContext): void {
         if (this.layer === null)
             return;
 
         const weight = this.calcWeight(renderContext);
         renderContext.colorCorrection.setLayerWeight(this.layer, weight);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+        this.updateWeight(renderContext);
     }
 }
 
@@ -2554,6 +2618,190 @@ class env_sprite_clientside extends env_sprite {
     public static classname = `env_sprite_clientside`;
 }
 
+class env_tonemap_controller extends BaseEntity {
+    public static classname = `env_tonemap_controller`;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('setbloomscale', this.input_setbloomscale.bind(this));
+        this.registerInput('setautoexposuremin', this.input_setautoexposuremin.bind(this));
+        this.registerInput('setautoexposuremax', this.input_setautoexposuremax.bind(this));
+        this.registerInput('settonemaprate', this.input_settonemaprate.bind(this));
+        this.registerInput('settonemappercenttarget', this.input_settonemappercenttarget.bind(this));
+        this.registerInput('settonemappercentbrightpixels', this.input_settonemappercentbrightpixels.bind(this));
+        this.registerInput('settonemapminavglum', this.input_settonemapminavglum.bind(this));
+    }
+
+    private input_setbloomscale(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.bloomScale = Number(value);
+    }
+
+    private input_setautoexposuremin(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.autoExposureMin = Number(value);
+    }
+
+    private input_setautoexposuremax(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.autoExposureMax = Number(value);
+    }
+
+    private input_settonemaprate(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.adjustRate = Number(value);
+    }
+
+    private input_settonemappercenttarget(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.percentTarget = Number(value) / 100.0;
+    }
+
+    private input_settonemappercentbrightpixels(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.percentBrightPixels = Number(value) / 100.0;
+    }
+
+    private input_settonemapminavglum(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.toneMapParams.minAvgLum = Number(value) / 100.0;
+    }
+}
+
+export class env_projectedtexture extends BaseEntity {
+    public static classname = `env_projectedtexture`;
+
+    private fovY: number;
+    private nearZ: number;
+
+    public farZ: number;
+    public frustumView = new SourceEngineView();
+    public texture: VTF | null = null;
+    public textureFrame: number = 0;
+    public lightColor = colorNewCopy(White);
+    public brightnessScale: number = 1.0;
+    public depthTexture = new GfxrTemporalTexture();
+    private depthTextureValid = false;
+    private lastInstCount = -1;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.frustumView.viewType = SourceEngineViewType.ShadowMap;
+
+        this.fovY = Number(entity.lightfov);
+        this.nearZ = Number(entity.nearz);
+        this.farZ = Number(entity.farz);
+        vmtParseColor(this.lightColor, entity.lightcolor);
+        this.brightnessScale = Number(entity.brightnessscale);
+
+        const enum SpawnFlags {
+            ENABLED = 0x01,
+        };
+        const spawnflags: SpawnFlags = Number(entity.spawnflags);
+        this.enabled = !!(spawnflags & SpawnFlags.ENABLED);
+
+        this.fetchTexture(renderContext, entity.texturename);
+
+        this.registerInput('turnon', this.input_turnon.bind(this));
+        this.registerInput('turnoff', this.input_turnoff.bind(this));
+    }
+
+    private calcViewMatrix(dst: mat4): void {
+        this.getAbsOriginAndAngles(scratchVec3a, scratchVec3b);
+
+        mat4.identity(dst);
+        mat4.rotateX(dst, dst, -MathConstants.TAU / 4);
+        mat4.rotateZ(dst, dst, MathConstants.TAU / 4);
+
+        mat4.rotateX(dst, dst, -scratchVec3b[2]);
+        mat4.rotateY(dst, dst, -scratchVec3b[0]);
+        mat4.rotateZ(dst, dst, -scratchVec3b[1]);
+
+        vec3.negate(scratchVec3a, scratchVec3a);
+        mat4.translate(dst, dst, scratchVec3a);
+    }
+
+    private updateFrustumView(renderContext: SourceRenderContext): void {
+        this.calcViewMatrix(this.frustumView.viewFromWorldMatrix);
+        const nearXY = Math.tan(MathConstants.DEG_TO_RAD * 0.5 * this.fovY) * this.nearZ;
+        projectionMatrixForFrustum(this.frustumView.clipFromViewMatrix, -nearXY, nearXY, -nearXY, nearXY, this.nearZ, this.farZ);
+        projectionMatrixReverseDepth(this.frustumView.clipFromViewMatrix);
+        const clipSpaceNearZ = renderContext.device.queryVendorInfo().clipSpaceNearZ;
+        projectionMatrixConvertClipSpaceNearZ(this.frustumView.clipFromViewMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+        this.frustumView.clipSpaceNearZ = clipSpaceNearZ;
+        this.frustumView.finishSetup();
+    }
+
+    private async fetchTexture(renderContext: SourceRenderContext, textureName: string) {
+        const materialCache = renderContext.materialCache;
+        this.texture = await materialCache.fetchVTF(textureName, true);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        if (!this.shouldDraw())
+            return;
+
+        this.updateFrustumView(renderContext);
+    }
+
+    public preparePasses(renderer: SourceRenderer, renderInstManager: GfxRenderInstManager): void {
+        const renderContext = renderer.renderContext;
+        renderContext.currentView = this.frustumView;
+
+        for (let i = 0; i < renderer.bspRenderers.length; i++) {
+            const bspRenderer = renderer.bspRenderers[i];
+
+            if (!this.frustumView.calcPVS(bspRenderer.bsp, false))
+                continue;
+
+            bspRenderer.prepareToRenderView(renderContext, renderInstManager);
+        }
+
+        // Use the inst count as an approximation for which objects have been drawn into the shadow map.
+        // Doesn't work if the objects move...
+        const instCount = renderContext.currentView.mainList.renderInsts.length;
+        if (this.lastInstCount === instCount) {
+            this.frustumView.reset();
+        } else {
+            this.depthTextureValid = false;
+        }
+
+        renderContext.currentView = null!;
+    }
+
+    public pushPasses(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder): void {
+        if (this.depthTextureValid)
+            return;
+
+        const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+        depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
+        depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+
+        const depthTargetID = builder.createRenderTargetID(depthTargetDesc, `Projected Texture Depth - ${this.targetName}`);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName(`Projected Texture Depth - ${this.targetName}`);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, depthTargetID);
+
+            pass.exec((passRenderer) => {
+                this.lastInstCount = this.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        this.depthTexture.setDescription(renderInstManager.gfxRenderCache.device, depthTargetDesc);
+        builder.resolveRenderTargetToExternalTexture(depthTargetID, this.depthTexture.getTextureForResolving());
+
+        this.depthTextureValid = true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.depthTexture.destroy(device);
+    }
+
+    private input_turnon(): void {
+        this.enabled = true;
+    }
+
+    private input_turnoff(): void {
+        this.enabled = false;
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2610,6 +2858,8 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_sprite);
         this.registerFactory(env_glow);
         this.registerFactory(env_sprite_clientside);
+        this.registerFactory(env_tonemap_controller);
+        this.registerFactory(env_projectedtexture);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -2666,6 +2916,23 @@ export class EntitySystem {
         const triggerTime = this.currentTime + action.delay;
         const activator = this.currentActivator;
         this.outputQueue.push({ sender, activator, action, triggerTime, value });
+    }
+
+    // For console debugging.
+    private queueOutput(targetName: string, field: string, value: EntityMessageValue): void {
+        const ent = this.findEntityByTargetName(targetName);
+        if (ent === null)
+            return;
+
+        const output = new EntityOutput();
+        output.parse((ent as any).entity[field]);
+        output.fire(this, this.getLocalPlayer(), value);
+    }
+
+    // For console debugging.
+    private queueOutputAction(S: string, value: EntityMessageValue): void {
+        const action = parseEntityOutputAction(S);
+        this.queueEntityOutputAction(action, this.getLocalPlayer(), value);
     }
 
     public findEntityByType<T extends BaseEntity>(type: EntityFactory<T>, start: T | null = null): T | null {
@@ -2777,6 +3044,11 @@ export class EntitySystem {
 
     public getLocalPlayer(): player {
         return this.findEntityByTargetName('!player')! as player;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.entities.length; i++)
+            this.entities[i].destroy(device);
     }
 }
 

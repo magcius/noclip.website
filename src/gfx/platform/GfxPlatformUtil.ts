@@ -200,11 +200,14 @@ export function gfxSamplerDescriptorEquals(a: Readonly<GfxSamplerDescriptor>, b:
     return (
         a.wrapS === b.wrapS &&
         a.wrapT === b.wrapT &&
+        a.wrapQ === b.wrapQ &&
         a.minFilter === b.minFilter &&
         a.magFilter === b.magFilter &&
         a.mipFilter === b.mipFilter &&
         a.minLOD === b.minLOD &&
-        a.maxLOD === b.maxLOD
+        a.maxLOD === b.maxLOD &&
+        a.maxAnisotropy === b.maxAnisotropy &&
+        a.compareMode === b.compareMode
     );
 }
 

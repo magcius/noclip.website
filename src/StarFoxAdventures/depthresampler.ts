@@ -3,7 +3,7 @@ import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
@@ -52,7 +52,7 @@ export class DepthResampler {
         })
     }
 
-    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, depthInputTargetID: number): number {
+    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, depthInputTargetID: GfxrRenderTargetID): GfxrRenderTargetID {
         const inputTargetDesc = builder.getRenderTargetDescription(depthInputTargetID);
 
         this.targetDesc.setDimensions(inputTargetDesc.width, inputTargetDesc.height, 1);

@@ -176,9 +176,7 @@ layout(std140) uniform ub_MaterialParams {
 #define u_SpecularRoughness (u_BakeLightScaleAndRoughness.a)
 #define u_IndirectMag (u_Misc[0].xy)
 
-vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
-    return t_Pos.xy * t_SB.xy + t_SB.zw;
-}
+${GfxShaderLibrary.CalcScaleBias}
 
 uniform sampler2D u_TextureAlbedo0;   // _a0
 uniform sampler2D u_TextureSpecMask;  // _s0

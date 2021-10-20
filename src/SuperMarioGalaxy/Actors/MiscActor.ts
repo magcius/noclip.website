@@ -28,7 +28,7 @@ import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFurPlanet } from '../Fur';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
@@ -292,7 +292,8 @@ export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
     }
 }
 
-export class BlackHole extends LiveActor {
+const enum BlackHoleNrv { Wait }
+export class BlackHole extends LiveActor<BlackHoleNrv> {
     private blackHoleModel: ModelObj;
     private effectHostMtx = mat4.create();
 
@@ -300,29 +301,60 @@ export class BlackHole extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
-        connectToSceneCollisionMapObj(sceneObjHolder, this);
-        this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
-        this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
-        setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
 
-        startBck(this, `BlackHoleRange`);
-        startBtk(this, `BlackHoleRange`);
-        startBtk(this.blackHoleModel, `BlackHole`);
+        let sensorRadius: number;
+        if (this.name === 'BlackHoleCube') {
+            // TODO(jstpierre): CubeBox
+            sensorRadius = vec3.length(this.scale) * 500.0;
+        } else {
+            sensorRadius = this.scale[0] * 500.0;
+        }
 
         let rangeScale: number;
         const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
         if (arg0 < 0) {
             // If this is a cube, we behave slightly differently wrt. scaling.
-            if (this.name !== 'BlackHoleCube')
-                rangeScale = this.scale[0];
-            else
+            if (this.name === 'BlackHoleCube')
                 rangeScale = 1.0;
+            else
+                rangeScale = this.scale[0];
         } else {
             rangeScale = arg0 / 1000.0;
         }
 
+        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
+        this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
+        connectToSceneMapObj(sceneObjHolder, this);
         this.updateModelScale(rangeScale, rangeScale);
+
+        this.initHitSensor();
+        addHitSensorEye(sceneObjHolder, this, 'body', 0x10, sensorRadius, Vec3Zero);
+
+        this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
+        setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
+
+        this.initNerve(BlackHoleNrv.Wait);
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
+
+        if (this.isNerve(BlackHoleNrv.Wait)) {
+            // TODO(jstpierre): Extra cube box check
+            sendArbitraryMsg(sceneObjHolder, MessageType.InhaleBlackHole, otherSensor, thisSensor);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: BlackHoleNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === BlackHoleNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, `BlackHoleRange`);
+                startBtk(this, `BlackHoleRange`);
+                startBtk(this.blackHoleModel, `BlackHole`);
+            }
+        }
     }
 
     protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
@@ -418,6 +450,12 @@ export function appearCoinPop(sceneObjHolder: SceneObjHolder, host: NameObj, pos
     sceneObjHolder.coinHolder!.appearCoinPop(sceneObjHolder, host, position, count);
 }
 
+export function appearCoinPopToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, direction: ReadonlyVec3, count: number): void {
+    if (sceneObjHolder.coinHolder === null)
+        return;
+    sceneObjHolder.coinHolder!.appearCoinPopToDirection(sceneObjHolder, host, position, direction, count);
+}
+
 class CoinHostInfo {
     public declaredCount = 0;
     public aliveCount = 0;
@@ -491,6 +529,13 @@ export class CoinHolder extends LiveActorGroup<Coin> {
     public appearCoinPop(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, count: number): void {
         calcGravityVector(sceneObjHolder, this, position, scratchVec3a);
         vec3.scale(scratchVec3a, scratchVec3a, -25.0);
+        const speed = count === 1 ? 0.0 : 4.0;
+        this.appearCoin(sceneObjHolder, host, position, scratchVec3a, count, -1, -1, speed);
+    }
+
+    public appearCoinPopToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, direction: ReadonlyVec3, count: number): void {
+        vec3.normalize(scratchVec3a, direction);
+        vec3.scale(scratchVec3a, scratchVec3a, -25.0)
         const speed = count === 1 ? 0.0 : 4.0;
         this.appearCoin(sceneObjHolder, host, position, scratchVec3a, count, -1, -1, speed);
     }
@@ -858,10 +903,14 @@ class Coin extends LiveActor<CoinNrv> {
     }
 
     public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
-        if (messageType === MessageType.Item_Hide)
+        if (messageType === MessageType.Item_Hide) {
             return this.requestHide(sceneObjHolder);
-        else if (messageType === MessageType.Item_Show)
+        } else if (messageType === MessageType.Item_Show) {
             return this.requestShow(sceneObjHolder);
+        } else if (messageType === MessageType.InhaleBlackHole) {
+            this.makeActorDead(sceneObjHolder);
+            return true;
+        }
 
         return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }

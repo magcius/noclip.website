@@ -83,9 +83,7 @@ uniform sampler2D u_LightMap1;
 
 uniform sampler2D u_TerrainColor;
 
-vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
-    return t_Pos.xy * t_SB.xy + t_SB.zw;
-}
+${GfxShaderLibrary.CalcScaleBias}
 
 vec3 UnpackNormalMap(in vec4 t_NormalMapSample) {
     vec3 t_Normal;

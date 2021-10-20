@@ -241,6 +241,9 @@ function patchBMD(bmd: BMD): void {
 
     // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
     // This should only be done on opaque objects.
+    // TODO(jstpierre): This was used to clear the shadows in NoShadowed pass, but that doesn't
+    // work anymore given that we moved shadows to their own alpha RT now. Likely need multiple
+    // draws. Boo :/
     for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
         const mat = bmd.mat3.materialEntries[i];
         if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)

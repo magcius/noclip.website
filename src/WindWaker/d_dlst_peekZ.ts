@@ -4,11 +4,12 @@ import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { assert, assertExists } from "../util";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
+// TODO(jstpierre): Port the PeekZ system to occlusion queries?
 export class PeekZResult {
     public normalizedX: number;
     public normalizedY: number;
@@ -160,7 +161,7 @@ void main() {
         this.submittedFrames.push(frame);
     }
 
-    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
+    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: GfxrRenderTargetID): void {
         const cache = renderInstManager.gfxRenderCache, device = cache.device;
         const frame = this.stealCurrentFrameAndCheck(cache);
         if (frame === null)

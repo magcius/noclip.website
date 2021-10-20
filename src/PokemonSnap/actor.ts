@@ -1308,7 +1308,6 @@ class Poliwag extends Actor {
             case 0x802DC05C: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 2; break;
             case 0x802DC2F4: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 3; break;
             case 0x802DC6BC: this.motionData.storedValues[1] = this.motionData.path!.length - 1; break;
-            case 0x802DCBB8: this.currBlock = this.spawn.behavior - 4; break;
             case 0x802DCC6C: {
                 if (this.currBlock === 1) {
                     getPathPoint(this.translation, this.motionData.path!, this.motionData.path!.times[this.pathIndex]);
