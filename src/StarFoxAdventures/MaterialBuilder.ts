@@ -1,19 +1,12 @@
 import { mat4 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
-import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams, ColorKind, PacketParams, GXMaterialHelperGfx } from '../gx/gx_render';
-import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { TextureMapping } from '../TextureHolder';
-import { texProjCameraSceneTex } from '../Camera';
 
-import { SFATexture, TextureFetcher } from './textures';
-import { dataSubarray, mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor } from './util';
-import { FurFactory } from './fur';
-import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White } from '../Color';
-import { SceneRenderContext } from './render';
+import { Color, colorCopy, White } from '../Color';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 
 // Declare opaque types, as described in <https://evertpot.com/opaque-ts-types/>.
@@ -22,19 +15,19 @@ import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInst
 // these types can be passed as plain numbers with zero friction).
 
 declare const isTevStage: unique symbol;
-type TevStage = number & { [isTevStage]: true }
+export type TevStage = number & { [isTevStage]: true }
 declare const isIndTexStage: unique symbol;
-type IndTexStage = number & { [isIndTexStage]: true }
+export type IndTexStage = number & { [isIndTexStage]: true }
 declare const isTexMap: unique symbol;
 export type TexMap = number & { [isTexMap]: true }
 declare const isTexCoord: unique symbol;
 export type TexCoord = number & { [isTexCoord]: true }
 declare const isPostTexMtx: unique symbol;
-type PostTexMtx = number & { [isPostTexMtx]: true }
+export type PostTexMtx = number & { [isPostTexMtx]: true }
 declare const isIndTexMtx: unique symbol;
-type IndTexMtx = number & { [isIndTexMtx]: true }
+export type IndTexMtx = number & { [isIndTexMtx]: true }
 declare const isKonstColor: unique symbol;
-type KonstColor = number & { [isKonstColor]: true }
+export type KonstColor = number & { [isKonstColor]: true }
 
 function getGXIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
     return GX.IndTexStageID.STAGE0 + indTexStage;
