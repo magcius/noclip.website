@@ -144,7 +144,7 @@ export class ShapeGeometry {
         this.hasFineSkinning = hasFineSkinning;
     }
 
-    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
         matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera, overrideSortDepth?: number, overrideSortLayer?: number)
     {
         if (this.shapeHelper === null) {
@@ -201,8 +201,10 @@ export class ShapeGeometry {
             else
                 mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, matrixPalette[this.pnMatrixMap[i]]);
         }
+    }
 
-        material.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
+    public getPacketParams() {
+        return this.packetParams;
     }
     
     public destroy(device: GfxDevice) {
@@ -219,7 +221,6 @@ export interface MaterialOptions {
 }
 
 export class ShapeMaterial {
-    private materialParams = new MaterialParams();
     private matCtx: MaterialRenderContext | undefined;
 
     public constructor(private material: SFAMaterial) {
@@ -230,7 +231,7 @@ export class ShapeMaterial {
         this.material = material;
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, packetParams: PacketParams, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
         if (this.matCtx === undefined) {
             this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
@@ -248,37 +249,7 @@ export class ShapeMaterial {
         computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
 
-        for (let i = 0; i < 8; i++) {
-            const tex = this.material.getTexture(i);
-            if (tex !== undefined)
-                tex.setOnTextureMapping(this.materialParams.m_TextureMapping[i], this.matCtx);
-            else
-                this.materialParams.m_TextureMapping[i].reset();
-        }
-
-        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-
-        this.material.setupMaterialParams(this.materialParams, this.matCtx);
-
-        // XXX: test lighting
-        colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White); // TODO
-        modelCtx.setupLights(this.materialParams.u_Lights, modelCtx);
-
-        if (matOptions.overrideIndMtx !== undefined) {
-            for (let i = 0; i < 3; i++) {
-                if (matOptions.overrideIndMtx[i] !== undefined)
-                    mat4.copy(this.materialParams.u_IndTexMtx[i], matOptions.overrideIndMtx[i]!);
-            }
-        }
-
-        const materialHelper = this.material.getGXMaterialHelper();
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
-    }
-
-    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
-        const materialHelper = this.material.getGXMaterialHelper();
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        this.material.setOnRenderInst(device, renderInstManager, renderInst, packetParams, this.matCtx);
     }
 }
 
@@ -292,8 +263,8 @@ export class Shape {
     }
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions);
+        this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
+        this.material.setOnRenderInst(device, renderInstManager, renderInst, this.geom.getPacketParams(), modelMatrix, modelCtx, matOptions);
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {

@@ -40,7 +40,6 @@ export interface SFARenderLists {
 
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
-const scratchMaterialParams = new MaterialParams();
 const scratchPacketParams = new PacketParams();
 
 export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams) {
@@ -186,15 +185,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             outdoorAmbientColor: White,
             furLayer: 0,
         };
-        this.heatShimmerMaterial!.setupMaterialParams(scratchMaterialParams, matCtx);
-        for (let i = 0; i < 8; i++) {
-            const tex = this.heatShimmerMaterial!.getTexture(i);
-            if (tex !== undefined)
-                tex.setOnTextureMapping(scratchMaterialParams.m_TextureMapping[i], matCtx);
-            else
-                scratchMaterialParams.m_TextureMapping[i].reset();
-        }
-        setGXMaterialOnRenderInst(device, renderInstManager, this.heatShimmerMaterial!.getGXMaterialHelper(), renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
+        this.heatShimmerMaterial!.setOnRenderInst(device, renderInstManager, renderInst, scratchPacketParams, matCtx);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 

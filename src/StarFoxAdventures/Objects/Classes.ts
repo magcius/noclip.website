@@ -5,10 +5,11 @@ import { ObjectInstance, ObjectUpdateContext } from '../objects';
 import { angle16ToRads, readUint32 } from '../util';
 import { World } from '../world';
 import { getRandomInt } from '../../SuperMarioGalaxy/ActorUtil';
-import { StandardMaterial } from '../materials';
+import { MaterialRenderContext, StandardMaterial } from '../materials';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import * as GX from '../../gx/gx_enum';
 import { SFAClass } from './SFAClass';
+import { MaterialBuilder } from '../MaterialBuilder';
 
 export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
     [77]: commonClass(0x3d, 0x3e),
@@ -662,11 +663,9 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             for (let i = 0; i < mats.length; i++) {
                 const mat = mats[i];
                 if (mat !== undefined && mat instanceof StandardMaterial) {
-                    mat.setBlendOverride({
-                        setup: (mb: GXMaterialBuilder) => {
-                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
-                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
-                        },
+                    mat.setBlendOverride((mb: MaterialBuilder<MaterialRenderContext>) => {
+                        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+                        mb.setZMode(true, GX.CompareType.LEQUAL, false);
                     });
                     mat.rebuild();
                 }
@@ -723,11 +722,9 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             for (let i = 0; i < mats.length; i++) {
                 const mat = mats[i];
                 if (mat !== undefined && mat instanceof StandardMaterial) {
-                    mat.setBlendOverride({
-                        setup: (mb: GXMaterialBuilder) => {
-                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
-                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
-                        },
+                    mat.setBlendOverride((mb: MaterialBuilder<MaterialRenderContext>) => {
+                        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+                        mb.setZMode(true, GX.CompareType.LEQUAL, false);
                     });
                     mat.rebuild();
                 }

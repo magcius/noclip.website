@@ -9,7 +9,7 @@ import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { PacketParams, fillSceneParamsDataOnTemplate, SceneParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { colorNewFromRGBA, Color, colorCopy } from '../Color';
+import { colorNewFromRGBA, Color, colorCopy, White } from '../Color';
 import { computeViewMatrix } from '../Camera';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
@@ -248,23 +248,41 @@ class WorldRenderer extends SFARenderer {
             const worldView = scratchMtx0;
             computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
 
+            const refDistance = 100000;
+            const refBrightness = 0.75;
+            const kfactor = 0.5 * (1.0 - refBrightness);
+            const distAtten = vec3.fromValues(
+                1.0,
+                kfactor / (refBrightness * refDistance),
+                kfactor / (refBrightness * refDistance * refDistance)
+                );
+
             // Global specular ambient
             // (TODO)
-            // lights[i].reset();
-            // vec3.set(lights[i].Direction, 1, 1, 1);
-            // colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
-            // vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-            // vec3.copy(lights[i].DistAtten, [1000, 1000, 1000]);
-            // i++;
+            lights[i].reset();
+            vec3.zero(lights[i].Position);
+            vec3.set(lights[i].Direction, 1, -1, 1);
+            colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
+            vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+            vec3.copy(lights[i].DistAtten, distAtten);
+            i++;
+
+            // Other global specular ambient
+            lights[i].reset();
+            vec3.zero(lights[i].Position);
+            vec3.set(lights[i].Direction, 1, 1, 1);
+            colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
+            vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+            vec3.copy(lights[i].DistAtten, distAtten);
+            i++;
     
-            // const ctx = getDebugOverlayCanvas2D();
             for (let light of this.world.lights) {
                 // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
     
                 lights[i].reset();
                 // Light information is specified in view space.
                 vec3.transformMat4(lights[i].Position, light.position, worldView);
-                // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
                 // TODO: use correct parameters
                 colorCopy(lights[i].Color, light.color);
                 vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
