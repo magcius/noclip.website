@@ -11,10 +11,10 @@ import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor } from './u
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack } from '../Color';
 import { SceneRenderContext } from './render';
 import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, getGXTexGenSrc, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
+import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -24,8 +24,6 @@ export interface ShaderLayer {
 }
 
 export interface Shader {
-    isAncient?: boolean;
-    isBeta?: boolean;
     layers: ShaderLayer[],
     flags: number;
     attrFlags: number;
@@ -35,6 +33,12 @@ export interface Shader {
     hasAuxTex2: boolean;
     auxTex2Num: number;
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
+
+    // Model properties
+    isAncient?: boolean;
+    isBeta?: boolean;
+    normalFlags: number;
+    lightFlags: number;
 }
 
 export enum ShaderAttrFlags {
@@ -656,7 +660,6 @@ class StandardMapMaterial extends StandardMaterial {
 
 class StandardObjectMaterial extends StandardMaterial {
     protected rebuildSpecialized() {
-        // Not a map block. Just do basic texturing.
         this.mb.setUsePnMtxIdx(true);
         if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
             const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
@@ -667,12 +670,53 @@ class StandardObjectMaterial extends StandardMaterial {
             this.addTevStageForMultColor0A0();
         // }
 
-        this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
-            colorCopy(dst, ctx.outdoorAmbientColor);
-        });
-        this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
-        // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        if (this.shader.lightFlags & 0x2) {
+            // Override world lighting (e.g. tornadoes)
+            if (this.shader.normalFlags & 0x2 || this.shader.normalFlags & 0x10) {
+                // Light with outdoor ambient only
+                this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
+                    colorCopy(dst, ctx.outdoorAmbientColor);
+                    dst.a = 0.0;
+                });
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+                this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            } else {
+                // No lighting
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else {
+            // TODO: probe lights here?
+            // NO. We don't want to rebuild the material every time lighting conditions change.
+            if (this.shader.lightFlags & 0x9) {
+                // Override mat color (e.g. torch sconces)
+                if (this.shader.lightFlags & 0x1)
+                    this.mb.setMatColor(0, (dst: Color) => { colorCopy(dst, White); });
+                else
+                    this.mb.setMatColor(0, (dst: Color) => { colorCopy(dst, OpaqueBlack); });
+                // TODO: other stuff happens here too
+            } else {
+                if (this.shader.lightFlags & 0xc) {
+                    // Override amb color to black
+                    // this.mb.setAmbColor(0, (dst: Color) => { colorCopy(dst, OpaqueBlack); });
+                    // TODO: remove this
+                    this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
+                        colorCopy(dst, ctx.outdoorAmbientColor);
+                        dst.a = 0.0;
+                    });
+                } else {
+                    this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
+                        colorCopy(dst, ctx.outdoorAmbientColor);
+                        dst.a = 0.0;
+                    });
+                }
+            }
+
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+            // TODO: utilize channel 1
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+
     }
 }
 

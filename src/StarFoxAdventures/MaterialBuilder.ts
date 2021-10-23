@@ -70,9 +70,10 @@ export class SFAMaterialBuilder<RenderContext> {
     private tevStageNum: number;
     private indTexStageNum: number;
     private texCoordNum: number;
+    private texMaps: TexFunc<RenderContext>[];
     private texMtxs: MtxFunc<RenderContext>[];
     private ambColors: ColorFunc<RenderContext>[];
-    private texMaps: TexFunc<RenderContext>[];
+    private matColors: ColorFunc<RenderContext>[];
     private postTexMtxs: MtxFunc<RenderContext>[];
     private indTexMtxs: MtxFunc<RenderContext>[];
     private konstColors: ColorFunc<RenderContext>[];
@@ -89,9 +90,10 @@ export class SFAMaterialBuilder<RenderContext> {
         this.tevStageNum = 0;
         this.indTexStageNum = 0;
         this.texCoordNum = 0;
+        this.texMaps = [];
         this.texMtxs = [];
         this.ambColors = [];
-        this.texMaps = [];
+        this.matColors = [];
         this.postTexMtxs = [];
         this.indTexMtxs = [];
         this.konstColors = [];
@@ -230,6 +232,10 @@ export class SFAMaterialBuilder<RenderContext> {
         this.ambColors[idx] = func;
     }
 
+    public setMatColor(idx: number, func: ColorFunc<RenderContext>) {
+        this.matColors[idx] = func;
+    }
+
     private rebuildGXMaterial() {
         this.gxMaterial = this.mb.finish(this.name);
         this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
@@ -271,6 +277,14 @@ export class SFAMaterialBuilder<RenderContext> {
                 func(params.u_Color[ColorKind.AMB0 + i], ctx);
             else
                 colorCopy(params.u_Color[ColorKind.AMB0 + i], White);
+        }
+
+        for (let i = 0; i < 2; i++) {
+            const func = this.matColors[i];
+            if (func !== undefined)
+                func(params.u_Color[ColorKind.MAT0 + i], ctx);
+            else
+                colorCopy(params.u_Color[ColorKind.MAT0 + i], White);
         }
 
         for (let i = 0; i < 4; i++) {

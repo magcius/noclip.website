@@ -46,7 +46,7 @@ function parseTexId(data: DataView, offs: number, texIds: number[]): number | nu
     return texNum !== 0xffffffff ? texIds[texNum] : null;
 }
 
-function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): ShaderLayer {
+function parseShaderLayer(data: DataView, texIds: number[]): ShaderLayer {
     const scrollingTexMtx = data.getUint8(0x6);
     return {
         texId: parseTexId(data, 0x0, texIds),
@@ -56,7 +56,7 @@ function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): Sh
     };
 }
 
-export function parseShader(data: DataView, fields: ShaderFields, texIds: number[]): Shader {
+export function parseShader(data: DataView, fields: ShaderFields, texIds: number[], normalFlags: number, lightFlags: number): Shader {
     const shader: Shader = {
         layers: [],
         flags: 0,
@@ -66,6 +66,8 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         hasAuxTex2: false,
         auxTex2Num: 0xffffffff,
         furRegionsTexId: null,
+        normalFlags,
+        lightFlags,
     };
 
     let numLayers = data.getUint8(fields.numLayers);
@@ -74,7 +76,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         numLayers = 2;
     }
     for (let i = 0; i < numLayers; i++) {
-        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds, !!fields.isBeta);
+        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds);
         shader.layers.push(layer);
     }
 
