@@ -41,20 +41,17 @@ export interface SFARenderLists {
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
 const scratchPacketParams = new PacketParams();
+const scratchMaterialParams = new MaterialParams();
 
-export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams) {
+export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-    if (noViewMatrix)
-        mat4.identity(packetParams.u_PosMtx[0]);
-    else
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 }
 
-export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams): void {
-    setGXMaterialOnRenderInst(device, renderInstManager, materialHelper, renderInst, viewerInput, noViewMatrix, materialParams, packetParams);
+export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
+    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, packetParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -185,7 +182,10 @@ export class SFARenderer implements Viewer.SceneGfx {
             outdoorAmbientColor: White,
             furLayer: 0,
         };
-        this.heatShimmerMaterial!.setOnRenderInst(device, renderInstManager, renderInst, scratchPacketParams, matCtx);
+        this.heatShimmerMaterial!.setOnMaterialParams(scratchMaterialParams, matCtx);
+
+        scratchPacketParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 

@@ -15,6 +15,7 @@ import { nArray } from '../util';
 
 import { MaterialRenderContext, SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
+import { setGXMaterialOnRenderInst } from './render';
 import { computeModelView } from './util';
 
 class MyShapeHelper {
@@ -230,7 +231,7 @@ export class ShapeMaterial {
         this.material = material;
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, packetParams: PacketParams, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
+    public setOnMaterialParams(params: MaterialParams, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
         if (this.matCtx === undefined) {
             this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
@@ -248,9 +249,18 @@ export class ShapeMaterial {
         computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
 
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, packetParams, this.matCtx);
+        colorCopy(params.u_Color[ColorKind.MAT0], White); // TODO
+        modelCtx.setupLights(params.u_Lights, modelCtx);
+
+        this.material.setOnMaterialParams(params, this.matCtx);
+    }
+
+    public getGXMaterialHelper() {
+        return this.material.getGXMaterialHelper();
     }
 }
+
+const scratchMaterialParams = new MaterialParams();
 
 // The geometry and material of a shape.
 export class Shape {
@@ -263,7 +273,12 @@ export class Shape {
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
         this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, this.geom.getPacketParams(), modelMatrix, modelCtx, matOptions);
+        this.material.setOnMaterialParams(scratchMaterialParams, modelMatrix, modelCtx, matOptions);
+        
+        const packetParams = this.geom.getPacketParams();
+        const materialHelper = this.material.getGXMaterialHelper();
+
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, packetParams);
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {

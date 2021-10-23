@@ -65,9 +65,7 @@ export type TexFunc<RenderContext> = ((dst: TextureMapping, ctx: RenderContext) 
 type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
 type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
 
-const scratchMaterialParams = new MaterialParams();
-
-export class MaterialBuilder<RenderContext> {
+export class SFAMaterialBuilder<RenderContext> {
     private mb: GXMaterialBuilder;
     private tevStageNum: number;
     private indTexStageNum: number;
@@ -237,55 +235,56 @@ export class MaterialBuilder<RenderContext> {
         this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, packetParams: PacketParams, ctx: RenderContext) {
+    public setOnMaterialParams(params: MaterialParams, ctx: RenderContext) {
         if (this.gxMaterial === undefined)
             this.rebuildGXMaterial();
 
         for (let i = 0; i < 8; i++) {
             const func = this.texMaps[i];
             if (func !== undefined)
-                func(scratchMaterialParams.m_TextureMapping[i], ctx);
+                func(params.m_TextureMapping[i], ctx);
             else
-                scratchMaterialParams.m_TextureMapping[i].reset();
+                params.m_TextureMapping[i].reset();
         }
         
         for (let i = 0; i < this.texMtxs.length; i++) {
             const func = this.texMtxs[i];
             if (func !== undefined)
-                func(scratchMaterialParams.u_TexMtx[i], ctx);
+                func(params.u_TexMtx[i], ctx);
         }
 
         for (let i = 0; i < this.indTexMtxs.length; i++) {
             const func = this.indTexMtxs[i];
             if (func !== undefined)
-                func(scratchMaterialParams.u_IndTexMtx[i], ctx);
+                func(params.u_IndTexMtx[i], ctx);
         }
 
         for (let i = 0; i < this.postTexMtxs.length; i++) {
             const func = this.postTexMtxs[i];
             if (func !== undefined)
-                func(scratchMaterialParams.u_PostTexMtx[i], ctx);
+                func(params.u_PostTexMtx[i], ctx);
         }
 
         for (let i = 0; i < 2; i++) {
             const func = this.ambColors[i];
             if (func !== undefined)
-                func(scratchMaterialParams.u_Color[ColorKind.AMB0 + i], ctx);
+                func(params.u_Color[ColorKind.AMB0 + i], ctx);
             else
-                colorCopy(scratchMaterialParams.u_Color[ColorKind.AMB0 + i], White);
+                colorCopy(params.u_Color[ColorKind.AMB0 + i], White);
         }
 
         for (let i = 0; i < 4; i++) {
             const func = this.konstColors[i];
             if (func !== undefined)
-                func(scratchMaterialParams.u_Color[ColorKind.K0 + i], ctx);
+                func(params.u_Color[ColorKind.K0 + i], ctx);
             else
-                colorCopy(scratchMaterialParams.u_Color[ColorKind.K0 + i], White);
+                colorCopy(params.u_Color[ColorKind.K0 + i], White);
         }
+    }
 
-        this.gxMaterialHelper!.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        renderInst.setSamplerBindingsFromTextureMappings(scratchMaterialParams.m_TextureMapping);
-        this.gxMaterialHelper!.allocateMaterialParamsDataOnInst(renderInst, scratchMaterialParams);
-        this.gxMaterialHelper!.allocatePacketParamsDataOnInst(renderInst, packetParams);
+    public getGXMaterialHelper(): GXMaterialHelperGfx {
+        if (this.gxMaterialHelper === undefined)
+            this.rebuildGXMaterial();
+        return this.gxMaterialHelper!;
     }
 }

@@ -9,7 +9,7 @@ import { MaterialRenderContext, StandardMaterial } from '../materials';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import * as GX from '../../gx/gx_enum';
 import { SFAClass } from './SFAClass';
-import { MaterialBuilder } from '../MaterialBuilder';
+import { SFAMaterialBuilder } from '../MaterialBuilder';
 
 export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
     [77]: commonClass(0x3d, 0x3e),
@@ -663,7 +663,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             for (let i = 0; i < mats.length; i++) {
                 const mat = mats[i];
                 if (mat !== undefined && mat instanceof StandardMaterial) {
-                    mat.setBlendOverride((mb: MaterialBuilder<MaterialRenderContext>) => {
+                    mat.setBlendOverride((mb: SFAMaterialBuilder<MaterialRenderContext>) => {
                         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
                         mb.setZMode(true, GX.CompareType.LEQUAL, false);
                     });
@@ -722,7 +722,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             for (let i = 0; i < mats.length; i++) {
                 const mat = mats[i];
                 if (mat !== undefined && mat instanceof StandardMaterial) {
-                    mat.setBlendOverride((mb: MaterialBuilder<MaterialRenderContext>) => {
+                    mat.setBlendOverride((mb: SFAMaterialBuilder<MaterialRenderContext>) => {
                         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
                         mb.setZMode(true, GX.CompareType.LEQUAL, false);
                     });

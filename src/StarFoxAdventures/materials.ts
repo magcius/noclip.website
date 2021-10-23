@@ -1,7 +1,7 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import * as GX from '../gx/gx_enum';
 import { SwapTable } from '../gx/gx_material';
-import { PacketParams } from '../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
@@ -13,7 +13,7 @@ import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { SceneRenderContext } from './render';
-import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, getGXTexGenSrc, MaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, getGXTexGenSrc, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 
 export interface ShaderLayer {
@@ -124,7 +124,8 @@ export interface MaterialRenderContext {
 }
 
 export interface SFAMaterial {
-    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, packetParams: PacketParams, ctx: MaterialRenderContext) => void;
+    setOnMaterialParams: (params: MaterialParams, ctx: MaterialRenderContext) => void;
+    getGXMaterialHelper: () => GXMaterialHelperGfx;
     rebuild: () => void;
 }
 
@@ -138,11 +139,11 @@ interface ScrollingTexMtx {
 const MAX_SCROLL = 0x100000;
 
 export abstract class MaterialBase implements SFAMaterial {
-    protected mb: MaterialBuilder<MaterialRenderContext>;
+    protected mb: SFAMaterialBuilder<MaterialRenderContext>;
     private built: boolean = false;
 
     constructor(public factory: MaterialFactory, private name: string | null = null) {
-        this.mb = new MaterialBuilder(name);
+        this.mb = new SFAMaterialBuilder(name);
     }
 
     public rebuild() {
@@ -154,14 +155,18 @@ export abstract class MaterialBase implements SFAMaterial {
 
     protected abstract rebuildInternal(): void;
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, packetParams: PacketParams, ctx: MaterialRenderContext) {
+    public setOnMaterialParams(params: MaterialParams, ctx: MaterialRenderContext) {
         if (!this.built)
             this.rebuild();
-        this.mb.setOnRenderInst(device, renderInstManager, renderInst, packetParams, ctx);
+        this.mb.setOnMaterialParams(params, ctx);
+    }
+
+    public getGXMaterialHelper() {
+        return this.mb.getGXMaterialHelper();
     }
 }
 
-export type BlendOverride = ((mb: MaterialBuilder<MaterialRenderContext>) => void) | undefined;
+export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => void) | undefined;
 
 export class StandardMaterial extends MaterialBase {
     private cprevIsValid = false;
