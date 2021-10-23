@@ -319,6 +319,7 @@ const FIELDS: any = {
         hasYTranslate: false,
     },
     [ModelVersion.Final]: {
+        isFinal: true,
         isMapBlock: false,
         texOffset: 0x20,
         texCount: 0xf2,
@@ -355,6 +356,7 @@ const FIELDS: any = {
         hasYTranslate: false,
     },
     [ModelVersion.FinalMap]: {
+        isFinal: true,
         isMapBlock: true,
         texOffset: 0x54,
         texCount: 0xa0,
@@ -392,12 +394,17 @@ const enum Opcode {
     End         = 5,
 }
 
+const enum NormalFlags {
+    NBT = 0x8,
+}
+
 export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFactory: MaterialFactory, version: ModelVersion): Model {
     const model = new Model(version);
-
-    let offs = 0;
-
     const fields = FIELDS[version];
+
+    const normalFlags = fields.hasNormals ? data.getUint8(0x24) : 0;
+    const lightFlags = fields.isFinal ? data.getUint16(0xe2) : 0;
+
     model.isMapBlock = !!fields.isMapBlock;
     
     const posOffset = data.getUint32(fields.posOffset);
@@ -406,16 +413,12 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
 
     let nrmBuffer = data;
-    let nrmTypeFlags = 0;
-    let isNbt = false;
     if (fields.hasNormals) {
         const nrmOffset = data.getUint32(fields.nrmOffset);
         const nrmCount = data.getUint16(fields.nrmCount);
         // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
         nrmBuffer = dataSubarray(data, nrmOffset);
-        nrmTypeFlags = data.getUint8(0x24);
-        isNbt = !!(nrmTypeFlags & 8);
-        model.originalNrmBuffer = dataSubarray(data, nrmOffset, nrmCount * (isNbt ? 9 : 3));
+        model.originalNrmBuffer = dataSubarray(data, nrmOffset, nrmCount * ((normalFlags & NormalFlags.NBT) ? 9 : 3));
     }
 
     if (fields.posFineSkinningConfig !== undefined) {
@@ -442,7 +445,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
         if (nrmFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
-            model.fineSkinNBTNormals = !!(nrmTypeFlags & 8);
+            model.fineSkinNBTNormals = !!(normalFlags & NormalFlags.NBT);
 
             const weightsOffs = data.getUint32(fields.nrmFineSkinningWeights);
             const nrmFineSkinningWeights = dataSubarray(data, weightsOffs);
@@ -554,10 +557,10 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     const shaders: Shader[] = [];
 
-    offs = shaderOffset;
+    let offs = shaderOffset;
     for (let i = 0; i < shaderCount; i++) {
         const shaderBin = dataSubarray(data, offs, fields.shaderFields.size);
-        shaders.push(parseShader(shaderBin, fields.shaderFields, texIds));
+        shaders.push(parseShader(shaderBin, fields.shaderFields, texIds, normalFlags, lightFlags));
         offs += fields.shaderFields.size;
     }
 
@@ -610,7 +613,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.Attr.POS] = { buffer: ArrayBufferSlice.fromView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
         if (fields.hasNormals)
-            vtxArrays[GX.Attr.NRM] = { buffer: ArrayBufferSlice.fromView(nrmBuffer!), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+            vtxArrays[GX.Attr.NRM] = { buffer: ArrayBufferSlice.fromView(nrmBuffer!), offs: 0, stride: (normalFlags & NormalFlags.NBT) ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
         vtxArrays[GX.Attr.CLR0] = { buffer: ArrayBufferSlice.fromView(clrBuffer), offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
         for (let t = 0; t < 8; t++)
             vtxArrays[GX.Attr.TEX0 + t] = { buffer: ArrayBufferSlice.fromView(texcoordBuffer), offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
@@ -729,8 +732,12 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
         const setShader = (num: number) => {
             curShader = shaders[num];
-            if (model.materials[num] === undefined)
-                model.materials[num] = materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
+            if (model.materials[num] === undefined) {
+                if (fields.isMapBlock)
+                    model.materials[num] = materialFactory.buildMapMaterial(curShader, texFetcher);
+                else
+                    model.materials[num] = materialFactory.buildObjectMaterial(curShader, texFetcher);
+            }
             curMaterial = model.materials[num];
         }
 

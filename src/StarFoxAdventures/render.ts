@@ -40,22 +40,18 @@ export interface SFARenderLists {
 
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
-const scratchMaterialParams = new MaterialParams();
 const scratchPacketParams = new PacketParams();
+const scratchMaterialParams = new MaterialParams();
 
-export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams) {
+export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-    if (noViewMatrix)
-        mat4.identity(packetParams.u_PosMtx[0]);
-    else
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 }
 
-export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams): void {
-    setGXMaterialOnRenderInst(device, renderInstManager, materialHelper, renderInst, viewerInput, noViewMatrix, materialParams, packetParams);
+export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
+    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, packetParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -91,7 +87,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.renderLists = {
-            // atmosphere: new GfxRenderInstList(),
             skyscape: new GfxRenderInstList(),
             world: nArray(3, () => new GfxRenderInstList()),
             waters: new GfxRenderInstList(),
@@ -121,6 +116,10 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(1 / 3); // Slow down the default camera a bit
+    }
+
+    public setDefaultWorldMatrix(dst: mat4) {
+        mat4.fromYRotation(dst, -Math.PI * 3 / 4); // Aim towards the map by default
     }
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
@@ -187,15 +186,10 @@ export class SFARenderer implements Viewer.SceneGfx {
             outdoorAmbientColor: White,
             furLayer: 0,
         };
-        this.heatShimmerMaterial!.setupMaterialParams(scratchMaterialParams, matCtx);
-        for (let i = 0; i < 8; i++) {
-            const tex = this.heatShimmerMaterial!.getTexture(i);
-            if (tex !== undefined)
-                tex.setOnTextureMapping(scratchMaterialParams.m_TextureMapping[i], matCtx);
-            else
-                scratchMaterialParams.m_TextureMapping[i].reset();
-        }
-        setGXMaterialOnRenderInst(device, renderInstManager, this.heatShimmerMaterial!.getGXMaterialHelper(), renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
+        this.heatShimmerMaterial!.setOnMaterialParams(scratchMaterialParams, matCtx);
+
+        scratchPacketParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 
