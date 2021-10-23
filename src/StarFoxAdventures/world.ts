@@ -216,7 +216,7 @@ class WorldRenderer extends SFARenderer {
 
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
         if (!this.enableAmbient)
-            this.world.envfxMan.setOverrideOutdoorAmbientColor(colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
+            this.world.envfxMan.setOverrideOutdoorAmbientColor(White);
         else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
             

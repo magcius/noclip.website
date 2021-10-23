@@ -168,90 +168,22 @@ export abstract class MaterialBase implements SFAMaterial {
 
 export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => void) | undefined;
 
-export class StandardMaterial extends MaterialBase {
+export abstract class StandardMaterial extends MaterialBase {
     private cprevIsValid = false;
     private aprevIsValid = false;
     private blendOverride?: BlendOverride = undefined;
 
-    constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher, private isMapBlock: boolean) {
+    constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
         super(factory);
     }
+
+    protected abstract rebuildSpecialized(): void;
 
     protected rebuildInternal() {
         this.cprevIsValid = false;
         this.aprevIsValid = false;
-        
-        if (!this.isMapBlock) {
-            // Not a map block. Just do basic texturing.
-            this.mb.setUsePnMtxIdx(true);
-            if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
-                const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-                const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
-                this.addTevStageForTexture(0, texMap, texCoord, false);
-            }
-            // if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
-                this.addTevStageForMultColor0A0();
-            // }
 
-            this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
-                colorCopy(dst, ctx.outdoorAmbientColor);
-            });
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
-            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else {
-            this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
-                // Flipped
-                texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, 1);
-                mat4.mul(dst, dst, matCtx.modelViewMtx);
-                return dst;
-            });
-    
-            if (this.shader.flags & ShaderFlags.Lava)
-                this.addTevStagesForLava();
-            else
-                this.addTevStagesForNonLava();
-    
-            if (this.shader.flags & ShaderFlags.ReflectSkyscape)
-                console.log(`TODO: skyscape reflection?`);
-            else if (this.shader.flags & ShaderFlags.Caustic)
-                this.addTevStagesForCaustic();
-            else {
-                // TODO
-            }
-
-            if (this.shader.isAncient) {
-                // XXX: show vertex colors in ancient maps
-                this.addTevStageForMultColor0A0();
-            }
-        }
-
-        if (this.isMapBlock) {
-            // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood
-            if ((this.shader.flags & 0x1) || (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-                this.mb.setAmbColor(0, undefined); // AMB0 is opaque white
-                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
-                    this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-                else
-                    this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            } else {
-                // AMB0 is the outdoor ambient color
-                this.mb.setAmbColor(0, (dst: Color, matCtx: MaterialRenderContext) => {
-                    colorCopy(dst, matCtx.outdoorAmbientColor);
-                });
-                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            }
-
-            // FIXME: Objects have different rules for ALPHA0 than map blocks
-            if (this.isMapBlock) {
-                this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            }
-
-            if (this.shader.isAncient) {
-                // XXX: show vertex colors in ancient maps
-                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            }
-        }
-        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.rebuildSpecialized();
 
         this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
@@ -275,7 +207,7 @@ export class StandardMaterial extends MaterialBase {
         this.blendOverride = blendOverride;
     }
 
-    private genScrollableTexCoord(texMap: TexMap, scrollingTexMtx?: number): TexCoord {
+    protected genScrollableTexCoord(texMap: TexMap, scrollingTexMtx?: number): TexCoord {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             const postTexMtx = this.mb.genPostTexMtx((dst: mat4) => {
@@ -288,7 +220,7 @@ export class StandardMaterial extends MaterialBase {
         }
     }
     
-    private addTevStagesForIndoorOutdoorBlend(texMap: TexMap, texCoord: TexCoord) {
+    protected addTevStagesForIndoorOutdoorBlend(texMap: TexMap, texCoord: TexCoord) {
         // Stage 0: Multiply vertex color by outdoor ambient color
         const stage0 = this.mb.genTevStage();
         const kcnum = this.mb.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
@@ -315,7 +247,7 @@ export class StandardMaterial extends MaterialBase {
         this.mb.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
     }
 
-    private addTevStagesForTextureWithMode(mode: number, texMap: TexMap, texCoord: TexCoord) {
+    protected addTevStagesForTextureWithMode(mode: number, texMap: TexMap, texCoord: TexCoord) {
         const stage = this.mb.genTevStage();
 
         this.mb.setTevDirect(stage);
@@ -354,7 +286,7 @@ export class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStageForTexture(colorInMode: number, texMap: TexMap, texCoord: TexCoord, multiplyOutdoorAmbient: boolean = false) {
+    protected addTevStageForTexture(colorInMode: number, texMap: TexMap, texCoord: TexCoord, multiplyOutdoorAmbient: boolean = false) {
         const stage = this.mb.genTevStage();
 
         if (multiplyOutdoorAmbient) {
@@ -391,7 +323,7 @@ export class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStageForMultColor0A0() {
+    protected addTevStageForMultColor0A0() {
         // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
         // object renderer might pass different values.
 
@@ -414,7 +346,7 @@ export class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
     
-    private addTevStagesForLava() {
+    protected addTevStagesForLava() {
         const warpParam = 1.0; // TODO: is this animated?
 
         const indTexMtx0 = this.mb.genIndTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
@@ -523,7 +455,7 @@ export class StandardMaterial extends MaterialBase {
         this.mb.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
     }
     
-    private addTevStagesForCaustic() {
+    protected addTevStagesForCaustic() {
         const mapOriginX = 1.0; // TODO: these values are set to ensure caustics don't exhibit seams at block boundaries.
         const mapOriginZ = 1.0; // TODO
 
@@ -624,7 +556,7 @@ export class StandardMaterial extends MaterialBase {
         this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
     }
 
-    private addTevStagesForReflectiveFloor() {
+    protected addTevStagesForReflectiveFloor() {
         // TODO: Proper planar reflections?
         const texMap0 = this.mb.genTexMap(makeTemporalTextureDownscale8x());
         const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
@@ -638,7 +570,7 @@ export class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStagesForNonLava() {
+    protected addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
             const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
             const texCoord0 = this.genScrollableTexCoord(texMap0, this.shader.layers[0].scrollingTexMtx);
@@ -666,6 +598,81 @@ export class StandardMaterial extends MaterialBase {
             if (this.shader.flags & ShaderFlags.Reflective)
                 this.addTevStagesForReflectiveFloor();
         }
+    }
+}
+
+class StandardMapMaterial extends StandardMaterial {
+    protected rebuildSpecialized() {
+        this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
+            // Flipped
+            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, 1);
+            mat4.mul(dst, dst, matCtx.modelViewMtx);
+            return dst;
+        });
+
+        if (this.shader.flags & ShaderFlags.Lava)
+            this.addTevStagesForLava();
+        else
+            this.addTevStagesForNonLava();
+
+        if (this.shader.flags & ShaderFlags.ReflectSkyscape)
+            console.log(`TODO: skyscape reflection?`);
+        else if (this.shader.flags & ShaderFlags.Caustic)
+            this.addTevStagesForCaustic();
+        else {
+            // TODO
+        }
+
+        if (this.shader.isAncient) {
+            // XXX: show vertex colors in ancient maps
+            this.addTevStageForMultColor0A0();
+        }
+
+        // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood
+        if ((this.shader.flags & 0x1) || (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            this.mb.setAmbColor(0, undefined); // AMB0 is opaque white
+            if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            else
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else {
+            // AMB0 is the outdoor ambient color
+            this.mb.setAmbColor(0, (dst: Color, matCtx: MaterialRenderContext) => {
+                colorCopy(dst, matCtx.outdoorAmbientColor);
+            });
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+
+        this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
+        if (this.shader.isAncient) {
+            // XXX: show vertex colors in ancient maps
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+    }
+}
+
+class StandardObjectMaterial extends StandardMaterial {
+    protected rebuildSpecialized() {
+        // Not a map block. Just do basic texturing.
+        this.mb.setUsePnMtxIdx(true);
+        if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
+            const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+            const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
+            this.addTevStageForTexture(0, texMap, texCoord, false);
+        }
+        // if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
+            this.addTevStageForMultColor0A0();
+        // }
+
+        this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
+            colorCopy(dst, ctx.outdoorAmbientColor);
+        });
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+        // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
     }
 }
 
@@ -1120,8 +1127,12 @@ export class MaterialFactory {
         return this.scrollingTexMtxs.length - 1;
     }
 
-    public buildMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
-        return new StandardMaterial(this.device, this, shader, texFetcher, isMapBlock);
+    public buildObjectMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {
+        return new StandardObjectMaterial(this.device, this, shader, texFetcher);
+    }
+
+    public buildMapMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {
+        return new StandardMapMaterial(this.device, this, shader, texFetcher);
     }
     
     public buildWaterMaterial(shader: Shader): SFAMaterial {

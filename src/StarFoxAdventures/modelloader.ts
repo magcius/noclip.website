@@ -729,8 +729,12 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
         const setShader = (num: number) => {
             curShader = shaders[num];
-            if (model.materials[num] === undefined)
-                model.materials[num] = materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
+            if (model.materials[num] === undefined) {
+                if (fields.isMapBlock)
+                    model.materials[num] = materialFactory.buildMapMaterial(curShader, texFetcher);
+                else
+                    model.materials[num] = materialFactory.buildObjectMaterial(curShader, texFetcher);
+            }
             curMaterial = model.materials[num];
         }
 
