@@ -826,8 +826,18 @@ class FurMaterial extends MaterialBase {
 
         const stage1 = this.mb.genTevStage();
         const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
-        // Ind tex matrix 0 is set by the fur renderer. See prepareToRenderFurs.
-        this.mb.setTevIndirect(stage1, indStage0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+        const indTexMtx0 = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            const m00 = (ctx.furLayer + 1) / 16 * 0.5;
+            const m11 = m00;
+            mat4SetRowMajor(dst,
+                m00, 0.0, 0.0, 0.0,
+                0.0, m11, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+            mat4.multiplyScalar(dst, dst, 1 / 4); // scale_exp -2
+        });
+        this.mb.setTevIndirect(stage1, indStage0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getGXIndTexMtxID(indTexMtx0), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
         this.mb.setTevOrder(stage1, texCoord1, texMap1);
         this.mb.setTevKColorSel(stage1, GX.KonstColorSel.KCSEL_4_8);
         this.mb.setTevColorFormula(stage1, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV, GX.CC.CPREV, GX.TevOp.SUB, GX.TevBias.ADDHALF);

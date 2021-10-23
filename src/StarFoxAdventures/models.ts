@@ -104,18 +104,8 @@ export class ModelShapes {
                 mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
-                const m00 = (j + 1) / 16 * 0.5;
-                const m11 = m00;
-                mat4SetRowMajor(scratchMtx1,
-                    m00, 0.0, 0.0, 0.0,
-                    0.0, m11, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 1.0
-                );
-                mat4.multiplyScalar(scratchMtx1, scratchMtx1, 1 / 4); // scale_exp -2
                 // Caution: a different scale_exp may be used when drawing objects
                 fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {
-                    overrideIndMtx: [scratchMtx1],
                     furLayer: j,
                 }, matrixPalette, undefined, BLOCK_FUR_RENDER_LAYER);
             }

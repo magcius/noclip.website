@@ -216,7 +216,6 @@ export class ShapeGeometry {
 }
 
 export interface MaterialOptions {
-    overrideIndMtx?: mat4[];
     furLayer?: number;
 }
 
