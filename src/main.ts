@@ -672,8 +672,12 @@ class Main {
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
             const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
 
-            if (!didLoadCameraState)
-                mat4.identity(camera.worldMatrix);
+            if (!didLoadCameraState) {
+                if (scene.setDefaultWorldMatrix !== undefined)
+                    scene.setDefaultWorldMatrix(camera.worldMatrix);
+                else
+                    mat4.identity(camera.worldMatrix);
+            }
 
             mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }

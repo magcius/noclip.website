@@ -118,6 +118,10 @@ export class SFARenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(1 / 3); // Slow down the default camera a bit
     }
 
+    public setDefaultWorldMatrix(dst: mat4) {
+        mat4.fromYRotation(dst, -Math.PI * 3 / 4); // Aim towards the map by default
+    }
+
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         this.animController.update(viewerInput);
     }

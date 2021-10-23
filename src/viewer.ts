@@ -14,6 +14,7 @@ import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
 import { GlobalSaveManager } from './SaveManager';
+import { mat4 } from 'gl-matrix';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -54,6 +55,7 @@ export interface SceneGfx {
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;
+    setDefaultWorldMatrix?(dst: mat4): void;
     isInteractive?: boolean;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
