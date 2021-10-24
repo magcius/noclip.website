@@ -7,10 +7,9 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
-import { PacketParams, fillSceneParamsDataOnTemplate, SceneParams } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { colorNewFromRGBA, Color, colorCopy, White } from '../Color';
-import { computeViewMatrix } from '../Camera';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -25,8 +24,7 @@ import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { Sky } from './Sky';
 import { WorldLights } from './WorldLights';
-
-const packetParams = new PacketParams();
+import { SFATextureFetcher } from './textures';
 
 export class World {
     public animController: SFAAnimationController;
@@ -127,6 +125,7 @@ const scratchMtx0 = mat4.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 class WorldRenderer extends SFARenderer {
+    public textureHolder: UI.TextureListHolder;
     private timeSelect: UI.Slider;
     private enableAmbient: boolean = true;
     private layerSelect: UI.Slider;
@@ -134,11 +133,12 @@ class WorldRenderer extends SFARenderer {
     private showDevGeometry: boolean = false;
     private showDevObjects: boolean = false;
     private enableLights: boolean = true;
-    private sky: Sky;
+    private sky: Sky; // TODO: move to World?
 
     constructor(private world: World, materialFactory: MaterialFactory) {
         super(world.device, world.animController, materialFactory);
-        packetParams.clear();
+        if (this.world.resColl.texFetcher instanceof SFATextureFetcher)
+            this.textureHolder = this.world.resColl.texFetcher.textureHolder;
         this.sky = new Sky(this.world);
     }
 
@@ -201,6 +201,15 @@ class WorldRenderer extends SFARenderer {
     // XXX: for testing
     public enableFineAnims(enable: boolean = true) {
         this.animController.enableFineSkinAnims = enable;
+    }
+
+    // XXX: for testing
+    public loadTexture(id: number, useTex1: boolean = false) {
+        const texture = this.world.resColl.texFetcher.getTexture(this.world.device, id, useTex1);
+        if (texture !== null && texture.viewerTexture !== undefined)
+            console.log(`Loaded texture "${texture.viewerTexture.name}"`);
+        else
+            console.log(`Failed to load texture`);
     }
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
