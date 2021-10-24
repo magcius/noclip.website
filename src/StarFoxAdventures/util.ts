@@ -75,6 +75,12 @@ export function mat4SetValue(mtx: mat4, row: number, col: number, m: number): vo
     mtx[4 * col + row] = m;
 }
 
+export function mat4SetTranslation(mtx: mat4, x: number, y: number, z: number): void {
+    mat4SetValue(mtx, 0, 3, x);
+    mat4SetValue(mtx, 1, 3, y);
+    mat4SetValue(mtx, 2, 3, z);
+}
+
 const scratchQuat = quat.create();
 const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();

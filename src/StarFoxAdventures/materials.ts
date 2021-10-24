@@ -11,7 +11,7 @@ import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor } from './u
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red } from '../Color';
 import { SceneRenderContext } from './render';
 import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, getGXTexGenSrc, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
@@ -39,6 +39,7 @@ export interface Shader {
     isBeta?: boolean;
     normalFlags: number;
     lightFlags: number;
+    texMtxCount: number;
 }
 
 export enum ShaderAttrFlags {
@@ -699,7 +700,7 @@ class StandardObjectMaterial extends StandardMaterial {
                 if (this.shader.lightFlags & 0xc) {
                     // Override amb color to black
                     // this.mb.setAmbColor(0, (dst: Color) => { colorCopy(dst, OpaqueBlack); });
-                    // TODO: remove this
+                    // FIXME: remove below once lighting is working correctly
                     this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
                         colorCopy(dst, ctx.outdoorAmbientColor);
                         dst.a = 0.0;
@@ -710,9 +711,28 @@ class StandardObjectMaterial extends StandardMaterial {
                         dst.a = 0.0;
                     });
                 }
+
+                // Note: if no probed lights were found, the game uses MAT0=black as an optimization.
+                this.mb.setMatColor(0, (dst: Color) => { colorCopy(dst, White); });
+
+                // TODO: true on ThornTail Hollow egg-thief
+                // if (this.shader.texMtxCount !== 0) {
+                //     console.log(`texMtxCount != 0 detected`);
+                //     this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
+                //         colorCopy(dst, Red);
+                //         dst.a = 0.0;
+                //     });
+                // }
             }
 
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+            this.mb.setChanCtrl(
+                (this.shader.normalFlags & 0x10) ? GX.ColorChannelID.COLOR0A0 : GX.ColorChannelID.COLOR0,
+                true,
+                GX.ColorSrc.REG,
+                (this.shader.normalFlags & 0x2) ? GX.ColorSrc.VTX : GX.ColorSrc.REG,
+                0xff,
+                GX.DiffuseFunction.CLAMP,
+                GX.AttenuationFunction.SPOT);
             // TODO: utilize channel 1
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }

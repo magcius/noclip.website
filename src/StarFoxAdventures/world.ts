@@ -24,15 +24,9 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { Sky } from './Sky';
+import { WorldLights } from './WorldLights';
 
 const packetParams = new PacketParams();
-
-export interface Light {
-    position: vec3;
-    color: Color;
-    distAtten: vec3;
-    // TODO: flags and other parameters...
-}
 
 export class World {
     public animController: SFAAnimationController;
@@ -42,7 +36,7 @@ export class World {
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
-    public lights: Set<Light> = new Set();
+    public worldLights: WorldLights = new WorldLights();
 
     private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
     }
@@ -219,7 +213,9 @@ class WorldRenderer extends SFARenderer {
             this.world.envfxMan.setOverrideOutdoorAmbientColor(White);
         else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
-            
+
+        this.sky.update();
+        
         const updateCtx: ObjectUpdateContext = {
             viewerInput,
         };
@@ -242,60 +238,12 @@ class WorldRenderer extends SFARenderer {
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
-        let i = 0;
-
         if (this.enableLights) {
-            const worldView = scratchMtx0;
-            computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
-
-            // const refDistance = 100000;
-            // const refBrightness = 0.75;
-            // const kfactor = 0.5 * (1.0 - refBrightness);
-            // const distAtten = vec3.fromValues(
-            //     1.0,
-            //     kfactor / (refBrightness * refDistance),
-            //     kfactor / (refBrightness * refDistance * refDistance)
-            //     );
-
-            // Global specular ambient
-            // (TODO)
-            // lights[i].reset();
-            // vec3.zero(lights[i].Position);
-            // vec3.set(lights[i].Direction, 1, -1, 1);
-            // colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
-            // vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-            // vec3.copy(lights[i].DistAtten, distAtten);
-            // i++;
-
-            // Other global specular ambient
-            // lights[i].reset();
-            // vec3.zero(lights[i].Position);
-            // vec3.set(lights[i].Direction, 1, 1, 1);
-            // colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
-            // vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-            // vec3.copy(lights[i].DistAtten, distAtten);
-            // i++;
-    
-            for (let light of this.world.lights) {
-                // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
-    
+            this.world.worldLights.setupLights(lights, modelCtx);
+        } else {
+            for (let i = 0; i < 8; i++)
                 lights[i].reset();
-                // Light information is specified in view space.
-                vec3.transformMat4(lights[i].Position, light.position, worldView);
-                // drawWorldSpacePoint(getDebugOverlayCanvas2D(), modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
-                // TODO: use correct parameters
-                colorCopy(lights[i].Color, light.color);
-                vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-                vec3.copy(lights[i].DistAtten, light.distAtten);
-    
-                i++;
-                if (i >= 8)
-                    break;
-            }
         }
-
-        for (; i < 8; i++)
-            lights[i].reset();
     }
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {

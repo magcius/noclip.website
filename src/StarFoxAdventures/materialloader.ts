@@ -56,7 +56,7 @@ function parseShaderLayer(data: DataView, texIds: number[]): ShaderLayer {
     };
 }
 
-export function parseShader(data: DataView, fields: ShaderFields, texIds: number[], normalFlags: number, lightFlags: number): Shader {
+export function parseShader(data: DataView, fields: ShaderFields, texIds: number[], normalFlags: number, lightFlags: number, texMtxCount: number): Shader {
     const shader: Shader = {
         layers: [],
         flags: 0,
@@ -68,6 +68,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         furRegionsTexId: null,
         normalFlags,
         lightFlags,
+        texMtxCount,
     };
 
     let numLayers = data.getUint8(fields.numLayers);

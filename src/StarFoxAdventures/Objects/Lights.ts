@@ -1,7 +1,8 @@
 import { vec3 } from "gl-matrix";
 import { colorNewFromRGBA } from "../../Color";
 import { ObjectInstance } from "../objects";
-import { Light, World } from "../world";
+import { World } from "../world";
+import { createPointLight, Light, LightType } from "../WorldLights";
 import { commonSetup } from "./Common";
 import { SFAClass } from "./SFAClass";
 
@@ -36,14 +37,14 @@ export class LightObj extends SFAClass {
             1.0
         );
 
-        this.light = { position: obj.getPosition(), color, distAtten };
+        this.light = createPointLight(obj.getPosition(), color, distAtten);
     }
 
     public mount(obj: ObjectInstance, world: World) {
-        world.lights.add(this.light);
+        world.worldLights.addLight(this.light);
     }
 
     public unmount(obj: ObjectInstance, world: World) {
-        world.lights.delete(this.light);
+        world.worldLights.removeLight(this.light);
     }
 }

@@ -673,8 +673,8 @@ class Main {
             const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
 
             if (!didLoadCameraState) {
-                if (scene.setDefaultWorldMatrix !== undefined)
-                    scene.setDefaultWorldMatrix(camera.worldMatrix);
+                if (scene.getDefaultWorldMatrix !== undefined)
+                    scene.getDefaultWorldMatrix(camera.worldMatrix);
                 else
                     mat4.identity(camera.worldMatrix);
             }

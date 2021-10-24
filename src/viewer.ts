@@ -55,7 +55,7 @@ export interface SceneGfx {
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;
-    setDefaultWorldMatrix?(dst: mat4): void;
+    getDefaultWorldMatrix?(dst: mat4): void;
     isInteractive?: boolean;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;

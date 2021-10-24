@@ -551,6 +551,14 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         }
     }
 
+    let texMtxCount = 0;
+    if (fields.hasBones) {
+        if (fields.isBeta)
+            texMtxCount = data.getUint8(fields.texMtxCount);
+        else
+            texMtxCount = data.getUint8(0xfa);
+    }
+    
     const shaderOffset = data.getUint32(fields.shaderOffset);
     const shaderCount = data.getUint8(fields.shaderCount);
     // console.log(`Loading ${shaderCount} shaders from offset 0x${shaderOffset.toString(16)}`);
@@ -560,7 +568,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     let offs = shaderOffset;
     for (let i = 0; i < shaderCount; i++) {
         const shaderBin = dataSubarray(data, offs, fields.shaderFields.size);
-        shaders.push(parseShader(shaderBin, fields.shaderFields, texIds, normalFlags, lightFlags));
+        shaders.push(parseShader(shaderBin, fields.shaderFields, texIds, normalFlags, lightFlags, texMtxCount));
         offs += fields.shaderFields.size;
     }
 
@@ -591,14 +599,6 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     for (let i = 0; i < fields.bitsOffsets.length; i++) {
         bitsOffsets.push(data.getUint32(fields.bitsOffsets[i]));
         bitsByteCounts.push(data.getUint16(fields.bitsByteCounts[i]));
-    }
-
-    let texMtxCount = 0;
-    if (fields.hasBones) {
-        if (fields.isBeta)
-            texMtxCount = data.getUint8(fields.texMtxCount);
-        else
-            texMtxCount = data.getUint8(0xfa);
     }
 
     if (fields.hasYTranslate)
