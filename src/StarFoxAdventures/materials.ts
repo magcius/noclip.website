@@ -64,9 +64,9 @@ export enum ShaderFlags {
     Water = 0x80000000,
 }
 
-export function makeMaterialTexture(texture: SFATexture | null): TexFunc<MaterialRenderContext> {
+export function makeMaterialTexture(texture: SFATexture | null): TexFunc<any> {
     if (texture) {
-        return (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+        return (mapping: TextureMapping) => {
             mapping.reset();
             mapping.gfxTexture = texture.gfxTexture;
             mapping.gfxSampler = texture.gfxSampler;
@@ -75,7 +75,7 @@ export function makeMaterialTexture(texture: SFATexture | null): TexFunc<Materia
             mapping.lodBias = 0.0;
         };
     } else {
-        return (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+        return (mapping: TextureMapping) => {
             mapping.reset();
         };
     }
@@ -1173,7 +1173,7 @@ export class MaterialFactory {
     private furFactory: FurFactory | null = null;
     public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
-    constructor(private device: GfxDevice) {
+    constructor(public device: GfxDevice) {
     }
 
     public update(animController: SFAAnimationController) {

@@ -25,6 +25,7 @@ import { SFABlockFetcher } from './blocks';
 import { Sky } from './Sky';
 import { WorldLights } from './WorldLights';
 import { SFATextureFetcher } from './textures';
+import { AmbientProbe } from './AmbientProbe';
 
 export class World {
     public animController: SFAAnimationController;
@@ -134,12 +135,14 @@ class WorldRenderer extends SFARenderer {
     private showDevObjects: boolean = false;
     private enableLights: boolean = true;
     private sky: Sky; // TODO: move to World?
+    private ambientProbe: AmbientProbe;
 
     constructor(private world: World, materialFactory: MaterialFactory) {
         super(world.device, world.animController, materialFactory);
         if (this.world.resColl.texFetcher instanceof SFATextureFetcher)
             this.textureHolder = this.world.resColl.texFetcher.textureHolder;
         this.sky = new Sky(this.world);
+        this.ambientProbe = new AmbientProbe(this.world, materialFactory);
     }
 
     public createPanels(): UI.Panel[] {
@@ -288,6 +291,10 @@ class WorldRenderer extends SFARenderer {
         
         if (this.world.mapInstance !== null)
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
+
+        // XXX: Let's see that probe
+        const probeInst = this.ambientProbe.render(device, this.renderHelper, renderInstManager, sceneCtx);
+        renderLists.world[0].submitRenderInst(probeInst);
 
         renderInstManager.popTemplateRenderInst();
     }
