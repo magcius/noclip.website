@@ -38,7 +38,7 @@ interface AmbientProbeParams {
     matColorFactors: number[/* 2 */];
 }
 
-function setLightAtten(light: GX_Material.Light, atten: number) {
+function setSpecularLightAtten(light: GX_Material.Light, atten: number) {
     const k0 = 0.5 * atten;
     vec3.set(light.DistAtten, k0, 0.0, 1.0 - k0);
     vec3.set(light.CosAtten, 0.0, 0.0, 1.0);
@@ -48,6 +48,8 @@ export class AmbientProbe {
     private params: AmbientProbeParams[] = nArray(6, () => { return { attenFactors: [0, 0], matColorFactors: [0, 0] }; });
     private ddraw = new TDDraw();
     private mb = new SFAMaterialBuilder('Ambient Probe Material');
+    private debugPanel = window.main.ui.debugFloaterHolder.makeFloatingPanel('Ambient Probes');
+    private debugText: HTMLTextAreaElement;
 
     constructor(private world: World, private materialFactory: MaterialFactory) {
         let k = 0;
@@ -58,6 +60,10 @@ export class AmbientProbe {
             if ((i & 1) !== 0)
                 k++;
         }
+        console.log(`amb probe param set: ${JSON.stringify(this.params, null, '\t')}`);
+
+        this.debugText = document.createElement('textarea');
+        this.debugPanel.contents.appendChild(this.debugText);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
@@ -73,7 +79,7 @@ export class AmbientProbe {
         const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
         const texMap = this.mb.genTexMap(makeMaterialTexture(this.world.resColl.texFetcher.getTexture(this.materialFactory.device, 0x5dc, false)));
         this.mb.setTevOrder(stage0, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, GX.CC.RASA, GX.CC.TEXC);
+        this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, /*GX.CC.RASA*/GX.CC.ONE, GX.CC.TEXC);
         this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
         const stage1 = this.mb.genTevStage();
@@ -90,6 +96,7 @@ export class AmbientProbe {
         this.mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
         this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         this.mb.setCullMode(GX.CullMode.NONE);
+        this.mb.setZMode(false, GX.CompareType.EQUAL, false);
 
         this.mb.setAmbColor(0, (dst: Color) => colorCopy(dst, TransparentBlack));
         this.mb.setAmbColor(1, (dst: Color) => colorCopy(dst, TransparentBlack));
@@ -98,8 +105,8 @@ export class AmbientProbe {
     public render(device: GfxDevice, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxRenderInst {
         // TODO: generate geometry once and reuse it for future renders
         this.ddraw.beginDraw();
-        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
         for (let x = 0; x < 16; x++) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
             const fx0 = 2.0 * x / 15.0 - 1.0;
             const fx1 = 2.0 * (x + 1) / 15.0 - 1.0;
 
@@ -122,8 +129,8 @@ export class AmbientProbe {
                     z1 = Math.sqrt(1.0 - z1);
                 this.ddraw.normal3f32(fx1, fy, z1);
             }
+            this.ddraw.end();
         }
-        this.ddraw.end();
 
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
 
@@ -160,47 +167,41 @@ export class AmbientProbe {
 
         // Light 0: COLOR0
         scratchMaterialParams.u_Lights[0].reset();
-        vec3.scale(scratchMaterialParams.u_Lights[0].Position, skyLight.direction, -100000.0);
         vec3.copy(scratchMaterialParams.u_Lights[0].Direction, skyLight.direction);
-        setLightAtten(scratchMaterialParams.u_Lights[0], ambParams.attenFactors[0]);
+        setSpecularLightAtten(scratchMaterialParams.u_Lights[0], ambParams.attenFactors[0]);
         colorCopy(scratchMaterialParams.u_Lights[0].Color, Red);
 
         // Light 1: COLOR0
         scratchMaterialParams.u_Lights[1].reset();
-        vec3.scale(scratchMaterialParams.u_Lights[1].Position, skyLight.direction, -100000.0);
         vec3.copy(scratchMaterialParams.u_Lights[1].Direction, skyLight.direction);
-        setLightAtten(scratchMaterialParams.u_Lights[1], ambParams.attenFactors[1]);
+        setSpecularLightAtten(scratchMaterialParams.u_Lights[1], ambParams.attenFactors[1]);
         colorCopy(scratchMaterialParams.u_Lights[1].Color, Blue);
 
         // Light 2: ALPHA0
         scratchMaterialParams.u_Lights[2].reset();
         vec3.scale(scratchMaterialParams.u_Lights[2].Position, skyLight.direction, -100000.0);
-        vec3.copy(scratchMaterialParams.u_Lights[2].Direction, skyLight.direction);
-        setLightAtten(scratchMaterialParams.u_Lights[2], ambParams.attenFactors[1]);
         colorCopy(scratchMaterialParams.u_Lights[2].Color, Blue);
         vec3.set(scratchMaterialParams.u_Lights[2].CosAtten, 1.5, 0.0, 0.0);
 
         // Light 3: COLOR1
         scratchMaterialParams.u_Lights[3].reset();
-        vec3.scale(scratchMaterialParams.u_Lights[3].Position, groundLight.direction, -100000.0);
         vec3.copy(scratchMaterialParams.u_Lights[3].Direction, groundLight.direction);
-        setLightAtten(scratchMaterialParams.u_Lights[3], ambParams.attenFactors[0]);
+        setSpecularLightAtten(scratchMaterialParams.u_Lights[3], ambParams.attenFactors[0]);
         colorCopy(scratchMaterialParams.u_Lights[3].Color, Red);
 
         // Light 4: COLOR1
         scratchMaterialParams.u_Lights[4].reset();
-        vec3.scale(scratchMaterialParams.u_Lights[4].Position, groundLight.direction, -100000.0);
         vec3.copy(scratchMaterialParams.u_Lights[4].Direction, groundLight.direction);
-        setLightAtten(scratchMaterialParams.u_Lights[4], ambParams.attenFactors[1]);
+        setSpecularLightAtten(scratchMaterialParams.u_Lights[4], ambParams.attenFactors[1]);
         colorCopy(scratchMaterialParams.u_Lights[4].Color, Blue);
         
         // Light 5: ALPHA1
         scratchMaterialParams.u_Lights[5].reset();
         vec3.scale(scratchMaterialParams.u_Lights[5].Position, groundLight.direction, -100000.0);
-        vec3.copy(scratchMaterialParams.u_Lights[5].Direction, groundLight.direction);
-        setLightAtten(scratchMaterialParams.u_Lights[5], ambParams.attenFactors[1]);
         colorCopy(scratchMaterialParams.u_Lights[5].Color, Blue);
         vec3.set(scratchMaterialParams.u_Lights[5].CosAtten, 0.5, 0.0, 0.0);
+        
+        this.debugText.textContent = `lights: ${JSON.stringify(scratchMaterialParams.u_Lights, null, '  ')}`;
 
         setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.mb.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
 
