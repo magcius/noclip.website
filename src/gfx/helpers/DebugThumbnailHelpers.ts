@@ -152,8 +152,9 @@ export class DebugThumbnailDrawer {
                 rectFlipY(location, desc.height);
 
             const viewport = this.computeViewport(thumbnailDesc, location);
-            const vw = viewport.x2 - viewport.x1, vh = viewport.y2 - viewport.y1;
-            return { t, viewport, location, vw, vh };
+            const vx = Math.max(0, Math.ceil(viewport.x1)), vy = Math.max(0, Math.ceil(viewport.y1));
+            const vw = Math.min(desc.width, Math.floor(viewport.x2 - viewport.x1)), vh = Math.min(desc.height, Math.floor(viewport.y2 - viewport.y1));
+            return { t, location, vx, vy, vw, vh };
         };
 
         const prepareText = (textDrawer: TextDrawer, i: number, anim: ReturnType<typeof prepareAnim>) => {
@@ -184,8 +185,8 @@ export class DebugThumbnailDrawer {
             const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
             this.textureMapping[0].gfxTexture = gfxTexture;
 
-            const { viewport, location, vw, vh } = anim;
-            passRenderer.setViewport(viewport.x1, viewport.y1, vw, vh);
+            const { location, vx, vy, vw, vh } = anim;
+            passRenderer.setViewport(vx, vy, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
