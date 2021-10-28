@@ -2,7 +2,7 @@
 import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers";
+import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp, randomRange } from "../MathHelpers";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
 import { vec2, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
@@ -16,6 +16,8 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
 import { dKy_usonami_set } from './d_kankyo_wether';
+import { Plane } from '../Geometry';
+import { cLib_addCalcAngleS2, cM_atan2s, cM__Short2Rad } from './SComponent';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -280,7 +282,6 @@ export class d_a_sea extends fopAc_ac_c {
     }
 
     public ChkArea(globals: dGlobals, x: number, z: number): boolean {
-        // ChkAreaBeforePos
         if (!this.ChkAreaBeforePos(globals, x, z))
             return false;
 
@@ -288,8 +289,30 @@ export class d_a_sea extends fopAc_ac_c {
     }
 
     public calcWave(globals: dGlobals, x: number, z: number): number {
-        // TODO(jstpierre):
-        return this.baseHeight;
+        const gridSize = 800.0;
+
+        if (this.ChkArea(globals, x, z)) {
+            const xi = ((x - this.drawMinX) / gridSize) | 0;
+            const zi = ((z - this.drawMinZ) / gridSize) | 0;
+            const x0 = this.drawMinX + xi * gridSize, x1 = x0 + gridSize;
+            const z0 = this.drawMinZ + zi * gridSize, z1 = z0 + gridSize;
+
+            const v00 = vec3.create(), v01 = vec3.create(), v10 = vec3.create(), v11 = vec3.create();
+
+            vec3.set(v00, x0, this.heightTable[(zi + 0) * 65 + xi + 0], z0);
+            vec3.set(v01, x0, this.heightTable[(zi + 1) * 65 + xi + 0], z1);
+            vec3.set(v10, x1, this.heightTable[(zi + 0) * 65 + xi + 1], z0);
+            vec3.set(v11, x1, this.heightTable[(zi + 1) * 65 + xi + 1], z1);
+
+            const p = new Plane();
+            if (((x - v01[0] / gridSize) + (z - v10[2]) / gridSize) < 1.0)
+                p.setTri(v00, v01, v10);
+            else
+                p.setTri(v01, v10, v11);
+            return -(p.d + (p.n[0] * x + p.n[2] * z) / p.n[1]);
+        } else {
+            return this.baseHeight;
+        }
     }
 
     private ClrFlat(): void {
@@ -657,4 +680,34 @@ export function dLib_getWaterY(globals: dGlobals, pos: ReadonlyVec3, objAcch: an
 
     const waveY = globals.sea.calcWave(globals, pos[0], pos[2]);
     return waveY;
+}
+
+export class dLib_wave_c {
+    public angleX = (Math.random() * 0x10000) | 0;
+    public angleZ = (Math.random() * 0x10000) | 0;
+    public rotX = 0.0;
+    public rotZ = 0.0;
+    public animX = 0.0;
+    public animZ = 0.0;
+}
+
+export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, swayAmount: number, deltaTimeInFrames: number): void {
+    if (globals.sea === null)
+        return;
+
+    const r = 300.0;
+    const y00 = globals.sea.calcWave(globals, pos[0], pos[2] - r);
+    const y01 = globals.sea.calcWave(globals, pos[0], pos[2] + r);
+    const angleX = cM_atan2s(y01 - y00, r * 2.0);
+    const y10 = globals.sea.calcWave(globals, pos[0] - r, pos[2]);
+    const y11 = globals.sea.calcWave(globals, pos[0] + r, pos[2]);
+    const angleZ = cM_atan2s(y10 - y11, r * 2.0);
+
+    wave.angleX = cLib_addCalcAngleS2(wave.angleX, angleX, 0x0A, 0x200 * deltaTimeInFrames);
+    wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 0x0A, 0x200 * deltaTimeInFrames);
+    wave.animX += 400;
+    wave.animZ += 430;
+    const swayAmountFull = 130.0 + swayAmount;
+    wave.rotX = wave.angleX + swayAmountFull * Math.sin(cM__Short2Rad(wave.animX));
+    wave.rotZ = wave.angleZ + swayAmountFull * Math.cos(cM__Short2Rad(wave.animZ));
 }

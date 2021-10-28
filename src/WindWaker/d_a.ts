@@ -15,7 +15,7 @@ import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
-import { dLib_getWaterY, d_a_sea } from "./d_a_sea";
+import { dLib_getWaterY, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -3290,6 +3290,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     private velocityFwd: number = 0.0;
     private velocityFwdTarget: number = 0.0;
     private pathMovePos = vec3.create();
+    private wave = new dLib_wave_c();
 
     private craneMode: boolean = false;
     private curPathPointIdx: number = 0;
@@ -3336,7 +3337,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             this.model.jointMatrixCalcCallback = this.nodeControl_CB;
         }
 
-        this.setMtx(globals);
+        this.setMtx(globals, 0.0);
 
         // initialize BgW
         // initialize rope / ropeEnd
@@ -3382,8 +3383,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         return this.isSv() || this.isTerry();
     }
 
-    private setMtx(globals: dGlobals): void {
-        // TODO(jstpierre): dLib_waveRot
+    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, 0.0, deltaTimeInFrames);
         vec3.copy(this.model.baseScale, this.scale);
 
         const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
@@ -3395,8 +3396,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const rockAnimX = rockAnimAmpl * Math.cos(rockAnimTheta);
         const rockAnimZ = rockAnimAmpl * Math.sin(rockAnimTheta);
 
-        this.rot[0] = /* wave.rotX + */ waveAnim1X + rockAnimX;
-        this.rot[2] = /* wave.rotZ + */ waveAnim1Z + rockAnimZ;
+        this.rot[0] = this.wave.rotX + waveAnim1X + rockAnimX;
+        this.rot[2] = this.wave.rotZ + waveAnim1Z + rockAnimZ;
 
         MtxTrans(this.pos, false);
         mDoMtx_XrotM(calc_mtx, this.rot[0]);
@@ -3555,7 +3556,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
         this.pos[1] = dLib_getWaterY(globals, this.pos, null);
 
-        this.setMtx(globals);
+        this.setMtx(globals, deltaTimeInFrames);
         this.model.calcAnim();
 
         if (this.isShip()) {
