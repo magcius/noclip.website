@@ -1,16 +1,14 @@
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera';
 import { Blue, Color, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color';
-import { decompressLZ_Normal } from '../Common/Compression/CX';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { ColorKind, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
-import { attenuateVelocity } from '../SuperMarioGalaxy/ActorUtil';
+import { ColorKind, fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { nArray } from '../util';
-import { Viewer } from '../viewer';
 import { SFAMaterialBuilder } from './MaterialBuilder';
 import { makeMaterialTexture, MaterialFactory } from './materials';
 import { SceneRenderContext, setGXMaterialOnRenderInst } from './render';
@@ -20,6 +18,7 @@ import { createGlobalLight, Light } from './WorldLights';
 
 const scratchMaterialParams = new MaterialParams();
 const scratchPacketParams = new PacketParams();
+const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
@@ -44,14 +43,19 @@ function setSpecularLightAtten(light: GX_Material.Light, atten: number) {
     vec3.set(light.CosAtten, 0.0, 0.0, 1.0);
 }
 
+const PROBE_TARGET_DIM = 32;
+const PROBE_PROJECTION_MTX = mat4.create();
+mat4.ortho(PROBE_PROJECTION_MTX, -1.0, 1.0, -1.0, 1.0, 1.0, 15.0);
+
 export class AmbientProbe {
+    private targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private params: AmbientProbeParams[] = nArray(6, () => { return { attenFactors: [0, 0], matColorFactors: [0, 0] }; });
     private ddraw = new TDDraw();
     private mb = new SFAMaterialBuilder('Ambient Probe Material');
-    private debugPanel = window.main.ui.debugFloaterHolder.makeFloatingPanel('Ambient Probes');
-    private debugText: HTMLTextAreaElement;
 
     constructor(private world: World, private materialFactory: MaterialFactory) {
+        this.targetDesc.setDimensions(PROBE_TARGET_DIM, PROBE_TARGET_DIM, 1);
+
         let k = 0;
         for (let i = 0; i < 6; i++) {
             const factors = AMBIENT_PROBE_FACTORS[i];
@@ -60,10 +64,6 @@ export class AmbientProbe {
             if ((i & 1) !== 0)
                 k++;
         }
-        console.log(`amb probe param set: ${JSON.stringify(this.params, null, '\t')}`);
-
-        this.debugText = document.createElement('textarea');
-        this.debugPanel.contents.appendChild(this.debugText);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
@@ -102,7 +102,17 @@ export class AmbientProbe {
         this.mb.setAmbColor(1, (dst: Color) => colorCopy(dst, TransparentBlack));
     }
 
-    public render(device: GfxDevice, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxRenderInst {
+    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
+        // to obtain a local SceneParams buffer
+        const template = renderHelper.pushTemplateRenderInst();
+
+        // Setup to draw in clip space
+        fillSceneParams(scratchSceneParams, PROBE_PROJECTION_MTX, PROBE_TARGET_DIM, PROBE_TARGET_DIM);
+        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
+        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
+        fillSceneParamsData(d, offs, scratchSceneParams);
+
         // TODO: generate geometry once and reuse it for future renders
         this.ddraw.beginDraw();
         for (let x = 0; x < 16; x++) {
@@ -135,15 +145,7 @@ export class AmbientProbe {
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
 
         scratchPacketParams.clear();
-        const viewMtx = scratchMtx0;
-        computeViewMatrix(viewMtx, sceneCtx.viewerInput.camera);
-        const modelViewMtx = scratchMtx1;
-        mat4.fromScaling(modelViewMtx, [100, 100, 100]);
-        mat4.mul(modelViewMtx, viewMtx, modelViewMtx);
-        mat4.copy(scratchPacketParams.u_PosMtx[0], modelViewMtx);
-        const worldViewSR = scratchMtx2;
-        mat4.copy(worldViewSR, viewMtx);
-        mat4SetTranslation(worldViewSR, 0, 0, 0);
+        // FIXME: should lights be adjusted by camera view?
 
         scratchMaterialParams.clear();
         this.mb.setOnMaterialParams(scratchMaterialParams, undefined);
@@ -201,12 +203,22 @@ export class AmbientProbe {
         colorCopy(scratchMaterialParams.u_Lights[5].Color, Blue);
         vec3.set(scratchMaterialParams.u_Lights[5].CosAtten, 0.5, 0.0, 0.0);
         
-        this.debugText.textContent = `lights: ${JSON.stringify(scratchMaterialParams.u_Lights, null, '  ')}`;
-
         setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.mb.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
 
         this.ddraw.endAndUpload(renderInstManager);
 
-        return renderInst;
+        renderInstManager.popTemplateRenderInst();
+
+        const targetID = builder.createRenderTargetID(this.targetDesc, 'Ambient Probe Target');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Ambient Probe');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, targetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
     }
 }

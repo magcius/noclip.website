@@ -4,7 +4,7 @@ import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
+import { GfxrGraphBuilder, GfxrRenderGraph, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -145,6 +145,10 @@ class WorldRenderer extends SFARenderer {
         this.ambientProbe = new AmbientProbe(this.world, materialFactory);
     }
 
+    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        this.ambientProbe.render(device, builder, this.renderHelper, renderInstManager, sceneCtx);
+    }
+
     public createPanels(): UI.Panel[] {
         const timePanel = new UI.Panel();
         timePanel.setTitle(UI.TIME_OF_DAY_ICON, 'Time');
@@ -193,8 +197,19 @@ class WorldRenderer extends SFARenderer {
             this.enableLights = !disableLights.checked;
         }
         layerPanel.contents.append(disableLights.elem);
+        
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
+        showDebugThumbnails.onchanged = () => {
+            const v = showDebugThumbnails.checked;
+            this.renderHelper.debugThumbnails.enabled = v;
+        };
+        renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
 
-        return [timePanel, layerPanel];
+        return [timePanel, layerPanel, renderHacksPanel];
     }
 
     public setEnvfx(envfxactNum: number) {
@@ -291,10 +306,6 @@ class WorldRenderer extends SFARenderer {
         
         if (this.world.mapInstance !== null)
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
-
-        // XXX: Let's see that probe
-        const probeInst = this.ambientProbe.render(device, this.renderHelper, renderInstManager, sceneCtx);
-        renderLists.world[0].submitRenderInst(probeInst);
 
         renderInstManager.popTemplateRenderInst();
     }

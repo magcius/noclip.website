@@ -20,6 +20,7 @@ import { DepthResampler } from './depthresampler';
 import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
 import { drawScreenSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { AmbientProbe } from './AmbientProbe';
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -130,6 +131,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, sceneCtx: SceneRenderContext) {}
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
+    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
 
     private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sourceColorResolveTextureID: GfxrResolveTextureID, sourceDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
@@ -232,6 +234,8 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
+        this.addWorldRenderPassesInner(device, builder, renderInstManager, sceneCtx);
+
         let blurTargetID: GfxrRenderTargetID | undefined;
         if (renderLists.world[0].hasLateSamplerBinding('temporal-texture-downscale-8x'))
             blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
@@ -318,6 +322,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.addWorldRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
         if (this.enableHeatShimmer)
             this.addHeatShimmerRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
+            
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
