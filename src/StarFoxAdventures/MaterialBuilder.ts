@@ -6,7 +6,7 @@ import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams, ColorKind, PacketParams, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
 
-import { Color, colorCopy, White } from '../Color';
+import { Color, colorCopy, TransparentBlack, White } from '../Color';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 
 // Declare opaque types, as described in <https://evertpot.com/opaque-ts-types/>.
@@ -77,6 +77,7 @@ export class SFAMaterialBuilder<RenderContext> {
     private postTexMtxs: MtxFunc<RenderContext>[];
     private indTexMtxs: MtxFunc<RenderContext>[];
     private konstColors: ColorFunc<RenderContext>[];
+    private tevRegColors: ColorFunc<RenderContext>[];
     
     private gxMaterial: GXMaterial | undefined = undefined;
     private gxMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
@@ -97,6 +98,7 @@ export class SFAMaterialBuilder<RenderContext> {
         this.postTexMtxs = [];
         this.indTexMtxs = [];
         this.konstColors = [];
+        this.tevRegColors = [];
         this.gxMaterial = undefined;
         this.gxMaterialHelper = undefined;
     }
@@ -236,6 +238,10 @@ export class SFAMaterialBuilder<RenderContext> {
         this.matColors[idx] = func;
     }
 
+    public setTevRegColor(idx: number, func: ColorFunc<RenderContext>) {
+        this.tevRegColors[idx] = func;
+    }
+
     private rebuildGXMaterial() {
         this.gxMaterial = this.mb.finish(this.name);
         this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
@@ -293,6 +299,14 @@ export class SFAMaterialBuilder<RenderContext> {
                 func(params.u_Color[ColorKind.K0 + i], ctx);
             else
                 colorCopy(params.u_Color[ColorKind.K0 + i], White);
+        }
+
+        for (let i = 0; i < 3; i++) {
+            const func = this.tevRegColors[i];
+            if (func !== undefined)
+                func(params.u_Color[ColorKind.C0 + i], ctx);
+            else
+                colorCopy(params.u_Color[ColorKind.C0 + i], TransparentBlack);
         }
     }
 

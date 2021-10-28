@@ -183,8 +183,8 @@ export abstract class MaterialBase implements SFAMaterial {
 export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => void) | undefined;
 
 export abstract class StandardMaterial extends MaterialBase {
-    private cprevIsValid = false;
-    private aprevIsValid = false;
+    protected cprevIsValid = false;
+    protected aprevIsValid = false;
     private blendOverride?: BlendOverride = undefined;
 
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
@@ -669,16 +669,137 @@ class StandardMapMaterial extends StandardMaterial {
 }
 
 class StandardObjectMaterial extends StandardMaterial {
-    protected rebuildSpecialized() {
-        this.mb.setUsePnMtxIdx(true);
-        if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
-            const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-            const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
-            this.addTevStageForTexture(0, texMap, texCoord, false);
+    private enableProbe0 = true;
+    private enableProbe1 = false;
+    private ambProbeTexCoord?: TexCoord = undefined;
+
+    // Emits REG1 = ambience data
+    private setupAmbientProbe0() {
+        this.ambProbeTexCoord = undefined;
+
+        if (!this.enableProbe0)
+            return;
+
+        this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
+        const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
+            mat4.fromScaling(dst, [-0.5, -0.5, 0.0]);
+            mat4.translate(dst, dst, [0.5, 0.5, 1.0]);
+        });
+        this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
+        const kcolor = this.mb.genKonstColor((dst: Color) => {
+            colorCopy(dst, White); // TODO: intensity can be adjusted per object
+            dst.a = 0.0; // FIXME: is this accurate?
+        })
+        // TODO: there are 6 possible ambient probe textures that can be selected per object
+        // const texMap = this.mb.genTexMap(makeAmbientProbeTexture());
+        const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+        this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
+        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+    }
+
+    // Emits REG2 = ambience data
+    private setupAmbientProbe1(selector: number) {
+        if (!this.enableProbe1) {
+            this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, OpaqueBlack));
+            return;
         }
-        // if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
-            this.addTevStageForMultColor0A0();
-        // }
+
+        const texMap = this.mb.genTexMap(makeAmbientProbeTexture());
+
+        this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, White)); // TODO: set by shader
+
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        if (this.ambProbeTexCoord === undefined) {
+            this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
+            const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
+                mat4.fromScaling(dst, [-0.5, -0.5, 0.0]);
+                mat4.translate(dst, dst, [0.5, 0.5, 1.0]);
+            });
+            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
+            this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+        } else {
+            const indStage = this.mb.genIndTexStage();
+            this.mb.setTevIndirect(stage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+            this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap);
+        }
+
+        if (this.enableProbe0)
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C1, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
+        else
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
+        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.A2, GX.CA.ZERO);
+
+        if (selector & 0x1) // If ground light
+            this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.G]);
+        else // otherwise sky light
+            this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.G]);
+    }
+
+    private addTextureLayerStage(texMap: TexMap, colorInMode: number) {
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        // TODO: support scrollable textures (e.g. eyeballs)
+        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap));
+        this.mb.setTevOrder(stage, texCoord, texMap);
+        this.mb.setTevKColorSel(stage, GX.KonstColorSel.KCSEL_1);
+        this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
+
+        switch (colorInMode) {
+        case 0:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.ZERO);
+            break;
+        case 8:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C1, GX.CC.C2);
+            break;
+        default: // Usually 1
+            this.mb.setTevColorFormula(stage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            break;
+        }
+
+        if (this.aprevIsValid)
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        else
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.KONST, GX.CA.ZERO);
+
+        this.cprevIsValid = true;
+        this.aprevIsValid = true;
+    }
+
+    private setupShaderLayers() {
+        for (let i = 0; i < this.shader.layers.length; i++) {
+            const layer = this.shader.layers[i];
+            if (layer.texId !== null) {
+                const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+                let colorInMode: number;
+                if (i > 0)
+                    colorInMode = this.shader.layers[i - 1].tevMode & 0x7f;
+                else if (this.enableProbe0)
+                    colorInMode = 8;
+                else
+                    colorInMode = 0;
+                this.addTextureLayerStage(texMap, colorInMode);
+            } else {
+                // TODO
+            }
+        }
+    }
+
+    protected rebuildSpecialized() {
+        this.cprevIsValid = false;
+        this.aprevIsValid = false;
+        this.ambProbeTexCoord = undefined;
+
+        this.mb.setUsePnMtxIdx(true);
+
+        this.setupAmbientProbe0();
+        this.setupAmbientProbe1(0);
+
+        this.setupShaderLayers();
 
         if (this.shader.lightFlags & 0x2) {
             // Override world lighting (e.g. tornadoes)
@@ -708,12 +829,12 @@ class StandardObjectMaterial extends StandardMaterial {
             } else {
                 if (this.shader.lightFlags & 0xc) {
                     // Override amb color to black
-                    // this.mb.setAmbColor(0, (dst: Color) => { colorCopy(dst, OpaqueBlack); });
+                    this.mb.setAmbColor(0, (dst: Color) => { colorCopy(dst, OpaqueBlack); });
                     // FIXME: remove below once lighting is working correctly
-                    this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
-                        colorCopy(dst, ctx.outdoorAmbientColor);
-                        dst.a = 0.0;
-                    });
+                    // this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
+                    //     colorCopy(dst, ctx.outdoorAmbientColor);
+                    //     dst.a = 0.0;
+                    // });
                 } else {
                     this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
                         colorCopy(dst, ctx.outdoorAmbientColor);
@@ -746,6 +867,15 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
 
+        // Blend layers and ambient probes
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+        if (this.enableProbe0)
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.C2);
+        else
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.C2);
+        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
     }
 }
 
@@ -1224,11 +1354,7 @@ export class MaterialFactory {
         return this.furFactory;
     }
 
-    public getHalfGrayTexture(): TexFunc<MaterialRenderContext> {
-        // Used to test indirect texturing
-        if (this.halfGrayTexture !== undefined)
-            return this.halfGrayTexture;
-
+    private genColorTexture(r: number, g: number, b: number, a: number): TexFunc<any> {
         const width = 1;
         const height = 1;
         const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
@@ -1252,13 +1378,27 @@ export class MaterialFactory {
             pixels[idx + 3] = a;
         }
 
-        plot(0, 0, 127, 127, 127, 127);
+        plot(0, 0, r, g, b, a);
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        this.halfGrayGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
-        this.halfGrayTexture = makeMaterialTexture(this.halfGrayGfxTexture);
+        return makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+    }
+
+    public getHalfGrayTexture(): TexFunc<MaterialRenderContext> {
+        // Used to test indirect texturing
+        if (this.halfGrayTexture === undefined)
+            this.halfGrayTexture = this.genColorTexture(127, 127, 127, 255);
+
         return this.halfGrayTexture;
+    }
+
+    private opaqueWhiteTexture?: TexFunc<any>;
+
+    public getOpaqueWhiteTexture(): TexFunc<any> {
+        if (this.opaqueWhiteTexture === undefined)
+            this.opaqueWhiteTexture = this.genColorTexture(255, 255, 255, 255);
+        return this.opaqueWhiteTexture;
     }
     
     public getRampTexture(): TexFunc<MaterialRenderContext> {

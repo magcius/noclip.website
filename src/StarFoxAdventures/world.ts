@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderGraph, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
@@ -308,6 +308,7 @@ class WorldRenderer extends SFARenderer {
     }
 
     private ambientProbeTextureMapping = new TextureMapping();
+    private ambientProbeSampler?: GfxSampler;
     private ambientProbeTargetID: GfxrRenderTargetID;
     private ambientProbeResolveID: GfxrResolveTextureID;
 
@@ -322,6 +323,18 @@ class WorldRenderer extends SFARenderer {
 
     protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
         this.ambientProbeTextureMapping.gfxTexture = scope.getResolveTextureForID(this.ambientProbeResolveID);
+        if (this.ambientProbeSampler === undefined) {
+            this.ambientProbeSampler = this.renderHelper.getCache().createSampler({
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
+                minLOD: 0,
+                maxLOD: 100,
+            })
+        }
+        this.ambientProbeTextureMapping.gfxSampler = this.ambientProbeSampler;
         renderList.resolveLateSamplerBinding('ambient-probe', this.ambientProbeTextureMapping);
     }
 
