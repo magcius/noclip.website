@@ -7,7 +7,7 @@ import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode }
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CameraController } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8, White } from '../Color';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
@@ -233,6 +233,9 @@ export class SFARenderer implements Viewer.SceneGfx {
         );
     }
 
+    protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {}
+    protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {}
+
     private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         this.addWorldRenderPassesInner(device, builder, renderInstManager, sceneCtx);
 
@@ -252,11 +255,15 @@ export class SFARenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(blurResolveID);
             }
 
+            this.attachResolveTexturesForWorldOpaques(builder, pass);
+
             pass.exec((passRenderer, scope) => {
                 if (blurTargetID !== undefined) {
                     this.temporalTextureMapping.gfxTexture = scope.getResolveTextureForID(blurResolveID);
                     renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
                 }
+
+                this.resolveLateSamplerBindingsForWorldOpaques(renderLists.world[0], scope);
 
                 renderLists.world[0].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 renderLists.furs.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);

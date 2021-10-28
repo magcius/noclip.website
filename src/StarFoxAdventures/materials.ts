@@ -81,8 +81,8 @@ export function makeMaterialTexture(texture: SFATexture | null): TexFunc<any> {
     }
 }
 
-export function makeOpaqueColorTextureDownscale2x(): TexFunc<MaterialRenderContext> {
-    return (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+export function makeOpaqueColorTextureDownscale2x(): TexFunc<any> {
+    return (mapping: TextureMapping) => {
         mapping.reset();
         mapping.lateBinding = 'opaque-color-texture-downscale-2x';
         mapping.width = 320;
@@ -90,8 +90,8 @@ export function makeOpaqueColorTextureDownscale2x(): TexFunc<MaterialRenderConte
     };
 }
 
-export function makeOpaqueDepthTextureDownscale2x(): TexFunc<MaterialRenderContext> {
-    return (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+export function makeOpaqueDepthTextureDownscale2x(): TexFunc<any> {
+    return (mapping: TextureMapping) => {
         mapping.reset();
         mapping.lateBinding = 'opaque-depth-texture-downscale-2x';
         mapping.width = 320;
@@ -99,12 +99,21 @@ export function makeOpaqueDepthTextureDownscale2x(): TexFunc<MaterialRenderConte
     };
 }
 
-export function makeTemporalTextureDownscale8x(): TexFunc<MaterialRenderContext> {
-    return  (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+export function makeTemporalTextureDownscale8x(): TexFunc<any> {
+    return  (mapping: TextureMapping) => {
         mapping.reset();
         mapping.lateBinding = 'temporal-texture-downscale-8x';
         mapping.width = 80;
         mapping.height = 60;
+    };
+}
+
+export function makeAmbientProbeTexture(): TexFunc<any> {
+    return  (mapping: TextureMapping) => {
+        mapping.reset();
+        mapping.lateBinding = 'ambient-probe';
+        mapping.width = 32;
+        mapping.height = 32;
     };
 }
 

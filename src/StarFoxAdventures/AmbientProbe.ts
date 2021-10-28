@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera';
 import { Blue, Color, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
@@ -102,7 +102,7 @@ export class AmbientProbe {
         this.mb.setAmbColor(1, (dst: Color) => colorCopy(dst, TransparentBlack));
     }
 
-    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
         // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
         // to obtain a local SceneParams buffer
         const template = renderHelper.pushTemplateRenderInst();
@@ -220,5 +220,7 @@ export class AmbientProbe {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+
+        return targetID;
     }
 }

@@ -3,8 +3,8 @@ import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxrGraphBuilder, GfxrRenderGraph, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderGraph, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -26,6 +26,7 @@ import { Sky } from './Sky';
 import { WorldLights } from './WorldLights';
 import { SFATextureFetcher } from './textures';
 import { AmbientProbe } from './AmbientProbe';
+import { TextureMapping } from '../TextureHolder';
 
 export class World {
     public animController: SFAAnimationController;
@@ -145,10 +146,6 @@ class WorldRenderer extends SFARenderer {
         this.ambientProbe = new AmbientProbe(this.world, materialFactory);
     }
 
-    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
-        this.ambientProbe.render(device, builder, this.renderHelper, renderInstManager, sceneCtx);
-    }
-
     public createPanels(): UI.Panel[] {
         const timePanel = new UI.Panel();
         timePanel.setTitle(UI.TIME_OF_DAY_ICON, 'Time');
@@ -201,7 +198,7 @@ class WorldRenderer extends SFARenderer {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        
+
         const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
         showDebugThumbnails.onchanged = () => {
             const v = showDebugThumbnails.checked;
@@ -308,6 +305,24 @@ class WorldRenderer extends SFARenderer {
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    private ambientProbeTextureMapping = new TextureMapping();
+    private ambientProbeTargetID: GfxrRenderTargetID;
+    private ambientProbeResolveID: GfxrResolveTextureID;
+
+    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        this.ambientProbeTargetID = this.ambientProbe.render(device, builder, this.renderHelper, renderInstManager, sceneCtx);
+    }
+
+    protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {
+        this.ambientProbeResolveID = builder.resolveRenderTarget(this.ambientProbeTargetID);
+        pass.attachResolveTexture(this.ambientProbeResolveID);
+    }
+
+    protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
+        this.ambientProbeTextureMapping.gfxTexture = scope.getResolveTextureForID(this.ambientProbeResolveID);
+        renderList.resolveLateSamplerBinding('ambient-probe', this.ambientProbeTextureMapping);
     }
 
     public destroy(device: GfxDevice) {
