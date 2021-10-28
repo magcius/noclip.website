@@ -115,6 +115,8 @@ export interface GfxrPass {
 }
 
 class PassImpl implements GfxrPass {
+    public debugName: string = '';
+
     // Input state used for scheduling.
 
     // RenderTargetAttachmentSlot => renderTargetID
@@ -156,7 +158,6 @@ class PassImpl implements GfxrPass {
     public postFunc: PassPostFunc | null = null;
 
     // Misc. state.
-    public debugName: string;
     public debugThumbnails: boolean[] = [];
 
     public setDebugName(debugName: string): void {
@@ -470,6 +471,11 @@ export interface GfxrRenderGraph {
     destroy(): void;
 }
 
+interface ResolveParam {
+    resolveTo: GfxTexture | null;
+    store: boolean;
+}
+
 export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, GfxrRenderGraphImpl {
     // For scope callbacks.
     private currentPass: PassImpl | null = null;
@@ -690,7 +696,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         }
     }
 
-    private determineResolveToTexture(graph: GraphImpl, pass: PassImpl, slot: GfxrAttachmentSlot): GfxTexture | null {
+    private determineResolveParam(graph: GraphImpl, pass: PassImpl, slot: GfxrAttachmentSlot): ResolveParam {
         const renderTargetID = pass.renderTargetIDs[slot];
         const resolveTextureOutputID = pass.resolveTextureOutputIDs[slot];
         const externalTexture = pass.resolveTextureOutputExternalTextures[slot];
@@ -699,6 +705,14 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         const hasResolveTextureOutputID = resolveTextureOutputID !== undefined;
         const hasExternalTexture = externalTexture !== undefined;
         assert(!(hasResolveTextureOutputID && hasExternalTexture));
+
+        let resolveTo: GfxTexture | null = null;
+        let store = false;
+
+        if (this.renderTargetOutputCount[renderTargetID] > 1) {
+            // A future pass is going to render to this RT, we need to store the results.
+            store = true;
+        }
 
         if (hasResolveTextureOutputID) {
             assert(graph.resolveTextureRenderTargetIDs[resolveTextureOutputID] === renderTargetID);
@@ -712,21 +726,25 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             // pass B resolving RenderTargetA to ResolveTextureA, and pass C writing to RenderTargetA, then we don't
             // strictly need to copy, but in order to determine that at the time of pass A, we'd need a much fancier
             // schedule than just tracking refcounts...
-            if (renderTarget.texture !== null && this.renderTargetOutputCount[renderTargetID] === 1)
-                return null;
+            if (renderTarget.texture !== null && this.renderTargetOutputCount[renderTargetID] === 1) {
+                resolveTo = null;
+                store = true;
+            } else {
+                if (!this.singleSampledTextureForResolveTextureID[resolveTextureOutputID]) {
+                    const desc = assertExists(graph.renderTargetDescriptions[renderTargetID]);
+                    this.singleSampledTextureForResolveTextureID[resolveTextureOutputID] = this.acquireSingleSampledTextureForDescription(desc);
+                    this.device.setResourceName(this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture, renderTarget.debugName + ` (Resolve ${resolveTextureOutputID})`);
+                }
 
-            if (!this.singleSampledTextureForResolveTextureID[resolveTextureOutputID]) {
-                const desc = assertExists(graph.renderTargetDescriptions[renderTargetID]);
-                this.singleSampledTextureForResolveTextureID[resolveTextureOutputID] = this.acquireSingleSampledTextureForDescription(desc);
-                this.device.setResourceName(this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture, renderTarget.debugName + ` (Resolve ${resolveTextureOutputID})`);
+                resolveTo = this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture;
             }
-
-            return this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture;
         } else if (hasExternalTexture) {
-            return externalTexture;
+            resolveTo = externalTexture;
         } else {
-            return null;
+            resolveTo = null;
         }
+
+        return { resolveTo, store };
     }
 
     private schedulePass(graph: GraphImpl, pass: PassImpl) {
@@ -737,16 +755,18 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             const colorRenderTarget = this.acquireRenderTargetForID(graph, colorRenderTargetID);
             pass.renderTargets[slot] = colorRenderTarget;
             pass.descriptor.colorAttachment[slot] = colorRenderTarget !== null ? colorRenderTarget.attachment : null;
-            pass.descriptor.colorResolveTo[slot] = this.determineResolveToTexture(graph, pass, slot);
-            pass.descriptor.colorStore[slot] = this.renderTargetOutputCount[colorRenderTargetID] > 1;
+            const { resolveTo, store } = this.determineResolveParam(graph, pass, slot);
+            pass.descriptor.colorResolveTo[slot] = resolveTo;
+            pass.descriptor.colorStore[slot] = store;
             pass.descriptor.colorClearColor[slot] = (colorRenderTarget !== null && colorRenderTarget.needsClear) ? graph.renderTargetDescriptions[colorRenderTargetID].colorClearColor : 'load';
         }
 
         const depthStencilRenderTarget = this.acquireRenderTargetForID(graph, depthStencilRenderTargetID);
         pass.renderTargets[GfxrAttachmentSlot.DepthStencil] = depthStencilRenderTarget;
         pass.descriptor.depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
-        pass.descriptor.depthStencilResolveTo = this.determineResolveToTexture(graph, pass, GfxrAttachmentSlot.DepthStencil);
-        pass.descriptor.depthStencilStore = this.renderTargetOutputCount[depthStencilRenderTargetID] > 1;
+        const { resolveTo, store } = this.determineResolveParam(graph, pass, GfxrAttachmentSlot.DepthStencil);
+        pass.descriptor.depthStencilResolveTo = resolveTo;
+        pass.descriptor.depthStencilStore = store;
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
