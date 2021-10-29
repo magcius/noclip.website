@@ -34,6 +34,7 @@ export class EnvfxManager {
     public atmosphere = new Atmosphere();
     public skyscape = new Skyscape();
     private timeOfDay = 4;
+    public ambienceIdx: number = 0;
     private overrideOutdoorAmbient: Color | null = null;
     
     private skyLight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
@@ -57,7 +58,7 @@ export class EnvfxManager {
 
     public update() {
         // TODO: change skylight angle depending on time of day
-        this.getAmbientColor(this.skyLight.color, 0);
+        this.getAmbientColor(this.skyLight.color, this.ambienceIdx);
         colorScale(this.groundLight.color, this.skyLight.color, this.groundLightFactor);
         this.groundLight.color.a = 1.0;
 
@@ -69,6 +70,12 @@ export class EnvfxManager {
     public setTimeOfDay(time: number) {
         //console.log(`setting time of day ${time}`);
         this.timeOfDay = time;
+        this.update();
+    }
+
+    public setAmbience(idx: number) {
+        this.ambienceIdx = idx;
+        this.update();
     }
 
     public getAmbientColor(out: Color, ambienceNum: number) {

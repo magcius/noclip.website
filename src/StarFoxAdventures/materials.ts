@@ -110,7 +110,7 @@ export function makeTemporalTextureDownscale8x(): TexFunc<any> {
 export function makeHemisphericAmbientProbeTexture(): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = 'hemispheric-ambient-probe';
+        mapping.lateBinding = 'ambient-probe-5';
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -119,7 +119,7 @@ export function makeHemisphericAmbientProbeTexture(): TexFunc<any> {
 export function makeReflectiveAmbientProbeTexture(): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = 'reflective-ambient-probe';
+        mapping.lateBinding = 'ambient-probe-0';
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -678,14 +678,14 @@ class StandardMapMaterial extends StandardMaterial {
 
 class StandardObjectMaterial extends StandardMaterial {
     private ambProbeTexCoord?: TexCoord = undefined;
-    private enableProbe0 = true;
-    private enableProbe1 = false;
+    private enableHemisphericProbe = true;
+    private enableReflectiveProbe = true;
 
-    // Emits REG1 = ambience data
-    private setupAmbientProbe0() {
+    // Emits REG1 = hemispheric probe
+    private setupHemisphericProbe() {
         this.ambProbeTexCoord = undefined;
 
-        if (!this.enableProbe0)
+        if (!this.enableHemisphericProbe)
             return;
 
         this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
@@ -710,9 +710,9 @@ class StandardObjectMaterial extends StandardMaterial {
         this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
     }
 
-    // Emits REG2 = ambience data
-    private setupAmbientProbe1(selector: number) {
-        if (!this.enableProbe1) {
+    // Emits REG2 = reflective probe
+    private setupReflectiveProbe(selector: number) {
+        if (!this.enableReflectiveProbe) {
             this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, OpaqueBlack));
             return;
         }
@@ -737,7 +737,7 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap);
         }
 
-        if (this.enableProbe0)
+        if (this.enableHemisphericProbe)
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C1, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
         else
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
@@ -787,7 +787,7 @@ class StandardObjectMaterial extends StandardMaterial {
                 let colorInMode: number;
                 if (i > 0)
                     colorInMode = this.shader.layers[i - 1].tevMode & 0x7f;
-                else if (this.enableProbe0)
+                else if (this.enableHemisphericProbe)
                     colorInMode = 8;
                 else
                     colorInMode = 0;
@@ -805,8 +805,8 @@ class StandardObjectMaterial extends StandardMaterial {
 
         this.mb.setUsePnMtxIdx(true);
 
-        this.setupAmbientProbe0();
-        this.setupAmbientProbe1(0);
+        this.setupHemisphericProbe();
+        this.setupReflectiveProbe(0);
 
         this.setupShaderLayers();
 
@@ -826,8 +826,6 @@ class StandardObjectMaterial extends StandardMaterial {
             }
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
-            // TODO: probe lights here?
-            // NO. We don't want to rebuild the material every time lighting conditions change.
             if (this.shader.lightFlags & 0x9) {
                 // Override mat color (e.g. torch sconces)
                 if (this.shader.lightFlags & 0x1)
@@ -839,11 +837,6 @@ class StandardObjectMaterial extends StandardMaterial {
                 if (this.shader.lightFlags & 0xc) {
                     // Override amb color to black
                     this.mb.setAmbColor(0, (dst: Color) => { colorCopy(dst, OpaqueBlack); });
-                    // FIXME: remove below once lighting is working correctly
-                    // this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
-                    //     colorCopy(dst, ctx.outdoorAmbientColor);
-                    //     dst.a = 0.0;
-                    // });
                 } else {
                     this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
                         colorCopy(dst, ctx.outdoorAmbientColor);
@@ -880,7 +873,7 @@ class StandardObjectMaterial extends StandardMaterial {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
-        if (this.enableProbe0)
+        if (this.enableHemisphericProbe)
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.C2);
         else
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.C2);

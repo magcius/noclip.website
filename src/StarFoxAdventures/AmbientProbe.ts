@@ -71,7 +71,7 @@ function createHemisphericMaterial(materialFactory: MaterialFactory): SFAMateria
 
     mb.setMatColor(0, (dst: Color) => colorCopy(dst, White));
 
-    mb.setAmbColor(0, (dst: Color, ctx: World) => ctx.envfxMan.getAmbientColor(dst, 0)); // TODO: ambience selectable by object
+    mb.setAmbColor(0, (dst: Color, ctx: World) => ctx.envfxMan.getAmbientColor(dst, ctx.envfxMan.ambienceIdx));
 
     return mb;
 }
@@ -88,7 +88,7 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
     const texCoord = mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
     const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.device, 0x5dc, false)));
     mb.setTevOrder(stage0, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
-    mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, /*GX.CC.RASA*/GX.CC.ONE, GX.CC.TEXC);
+    mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, /*GX.CC.RASA FIXME: why isn't this working*/GX.CC.ONE, GX.CC.TEXC);
     mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
     const stage1 = mb.genTevStage();
@@ -151,181 +151,134 @@ export class AmbientProbe {
         this.reflectiveMaterial = createReflectiveProbeMaterial(this.materialFactory, this.world.resColl.texFetcher);
     }
 
-    public renderHemispheric(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
-        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
-        // to obtain a local SceneParams buffer
-        const template = renderHelper.pushTemplateRenderInst();
+    private setupToRenderHemispheric(probeIdx: number, materialParams: MaterialParams, sceneCtx: SceneRenderContext): SFAMaterialBuilder<World> {
+        const ambParams = this.params[probeIdx];
+        this.world.envfxMan.setAmbience(5 - probeIdx);
 
-        // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, PROBE_PROJECTION_MTX, PROBE_TARGET_DIM, PROBE_TARGET_DIM);
-        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-        fillSceneParamsData(d, offs, scratchSceneParams);
+        this.hemisphericMaterial.setOnMaterialParams(materialParams, this.world);
 
-        // TODO: generate geometry once and reuse it for future renders
-        this.ddraw.beginDraw();
-        for (let x = 0; x < 16; x++) {
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
-            const fx0 = 2.0 * x / 15.0 - 1.0;
-            const fx1 = 2.0 * (x + 1) / 15.0 - 1.0;
-
-            for (let y = 0; y < 17; y++) {
-                const fy = 2.0 * y / 15.0 - 1.0;
-
-                this.ddraw.position3f32(fx0, fy, -2.0);
-                let z0 = fx0 * fx0 + fy * fy;
-                if (z0 >= 1.0)
-                    z0 = 0.0;
-                else
-                    z0 = Math.sqrt(1.0 - z0);
-                this.ddraw.normal3f32(fx0, fy, z0);
-
-                this.ddraw.position3f32(fx1, fy, -2.0);
-                let z1 = fx1 * fx1 + fy * fy;
-                if (z1 >= 1.0)
-                    z1 = 0.0;
-                else
-                    z1 = Math.sqrt(1.0 - z1);
-                this.ddraw.normal3f32(fx1, fy, z1);
-            }
-            this.ddraw.end();
-        }
-
-        const renderInst = this.ddraw.makeRenderInst(renderInstManager);
-
-        scratchPacketParams.clear();
         // FIXME: should lights be adjusted by camera view?
+        this.world.worldLights.setupLights(materialParams.u_Lights, sceneCtx, LightType.DIRECTIONAL);
 
-        scratchMaterialParams.clear();
-        this.hemisphericMaterial.setOnMaterialParams(scratchMaterialParams, this.world);
-
-        const ambParams = this.params[3]; // TODO: selectable per object
-
-        this.world.worldLights.setupLights(scratchMaterialParams.u_Lights, sceneCtx, LightType.DIRECTIONAL);
-        
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.hemisphericMaterial.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
-
-        this.ddraw.endAndUpload(renderInstManager);
-
-        renderInstManager.popTemplateRenderInst();
-
-        const targetID = builder.createRenderTargetID(this.targetDesc, 'Ambient Probe Target');
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('Ambient Probe');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, targetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
-
-            pass.exec((passRenderer, scope) => {
-                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
-            });
-        });
-
-        return targetID;
+        return this.hemisphericMaterial;
     }
 
-    public renderReflective(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
-        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
-        // to obtain a local SceneParams buffer
-        const template = renderHelper.pushTemplateRenderInst();
+    private setupToRenderReflective(probeIdx: number, materialParams: MaterialParams, sceneCtx: SceneRenderContext): SFAMaterialBuilder {
+        const ambParams = this.params[probeIdx];
+        this.world.envfxMan.setAmbience(probeIdx);
 
-        // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, PROBE_PROJECTION_MTX, PROBE_TARGET_DIM, PROBE_TARGET_DIM);
-        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-        fillSceneParamsData(d, offs, scratchSceneParams);
+        this.reflectiveMaterial.setOnMaterialParams(materialParams, undefined);
 
-        // TODO: generate geometry once and reuse it for future renders
-        this.ddraw.beginDraw();
-        for (let x = 0; x < 16; x++) {
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
-            const fx0 = 2.0 * x / 15.0 - 1.0;
-            const fx1 = 2.0 * (x + 1) / 15.0 - 1.0;
-
-            for (let y = 0; y < 17; y++) {
-                const fy = 2.0 * y / 15.0 - 1.0;
-
-                this.ddraw.position3f32(fx0, fy, -2.0);
-                let z0 = fx0 * fx0 + fy * fy;
-                if (z0 >= 1.0)
-                    z0 = 0.0;
-                else
-                    z0 = Math.sqrt(1.0 - z0);
-                this.ddraw.normal3f32(fx0, fy, z0);
-
-                this.ddraw.position3f32(fx1, fy, -2.0);
-                let z1 = fx1 * fx1 + fy * fy;
-                if (z1 >= 1.0)
-                    z1 = 0.0;
-                else
-                    z1 = Math.sqrt(1.0 - z1);
-                this.ddraw.normal3f32(fx1, fy, z1);
-            }
-            this.ddraw.end();
-        }
-
-        const renderInst = this.ddraw.makeRenderInst(renderInstManager);
-
-        scratchPacketParams.clear();
         // FIXME: should lights be adjusted by camera view?
-
-        scratchMaterialParams.clear();
-        this.reflectiveMaterial.setOnMaterialParams(scratchMaterialParams, undefined);
-
-        const ambParams = this.params[0]; // TODO: selectable per object
         const matColor = colorNewFromRGBA(
             1.0 * ambParams.matColorFactors[0] / 255.0,
             0.0,
             1.0 * ambParams.matColorFactors[1] / 255.0,
             1.0
         );
-        colorCopy(scratchMaterialParams.u_Color[ColorKind.MAT0], matColor);
-        colorCopy(scratchMaterialParams.u_Color[ColorKind.MAT1], matColor);
+        colorCopy(materialParams.u_Color[ColorKind.MAT0], matColor);
+        colorCopy(materialParams.u_Color[ColorKind.MAT1], matColor);
 
         const n111 = vec3.fromValues(1, 1, 1);
         vec3.normalize(n111, n111);
         const nn111 = vec3.clone(n111);
         vec3.negate(nn111, nn111);
+        // TODO: use sky/ground light from World
         const skyLight: Light = createDirectionalLight(n111, Red);
         const groundLight: Light = createDirectionalLight(nn111, Blue);
 
         // Light 0: COLOR0
-        scratchMaterialParams.u_Lights[0].reset();
-        vec3.copy(scratchMaterialParams.u_Lights[0].Direction, skyLight.direction);
-        setSpecularLightAtten(scratchMaterialParams.u_Lights[0], ambParams.attenFactors[0]);
-        colorCopy(scratchMaterialParams.u_Lights[0].Color, Red);
+        materialParams.u_Lights[0].reset();
+        vec3.copy(materialParams.u_Lights[0].Direction, skyLight.direction);
+        setSpecularLightAtten(materialParams.u_Lights[0], ambParams.attenFactors[0]);
+        colorCopy(materialParams.u_Lights[0].Color, Red);
 
         // Light 1: COLOR0
-        scratchMaterialParams.u_Lights[1].reset();
-        vec3.copy(scratchMaterialParams.u_Lights[1].Direction, skyLight.direction);
-        setSpecularLightAtten(scratchMaterialParams.u_Lights[1], ambParams.attenFactors[1]);
-        colorCopy(scratchMaterialParams.u_Lights[1].Color, Blue);
+        materialParams.u_Lights[1].reset();
+        vec3.copy(materialParams.u_Lights[1].Direction, skyLight.direction);
+        setSpecularLightAtten(materialParams.u_Lights[1], ambParams.attenFactors[1]);
+        colorCopy(materialParams.u_Lights[1].Color, Blue);
 
         // Light 2: ALPHA0
-        scratchMaterialParams.u_Lights[2].reset();
-        vec3.scale(scratchMaterialParams.u_Lights[2].Position, skyLight.direction, -100000.0);
-        colorCopy(scratchMaterialParams.u_Lights[2].Color, Blue);
-        vec3.set(scratchMaterialParams.u_Lights[2].CosAtten, 1.5, 0.0, 0.0);
+        materialParams.u_Lights[2].reset();
+        vec3.scale(materialParams.u_Lights[2].Position, skyLight.direction, -100000.0);
+        colorCopy(materialParams.u_Lights[2].Color, Blue);
+        vec3.set(materialParams.u_Lights[2].CosAtten, 1.5, 0.0, 0.0);
 
         // Light 3: COLOR1
-        scratchMaterialParams.u_Lights[3].reset();
-        vec3.copy(scratchMaterialParams.u_Lights[3].Direction, groundLight.direction);
-        setSpecularLightAtten(scratchMaterialParams.u_Lights[3], ambParams.attenFactors[0]);
-        colorCopy(scratchMaterialParams.u_Lights[3].Color, Red);
+        materialParams.u_Lights[3].reset();
+        vec3.copy(materialParams.u_Lights[3].Direction, groundLight.direction);
+        setSpecularLightAtten(materialParams.u_Lights[3], ambParams.attenFactors[0]);
+        colorCopy(materialParams.u_Lights[3].Color, Red);
 
         // Light 4: COLOR1
-        scratchMaterialParams.u_Lights[4].reset();
-        vec3.copy(scratchMaterialParams.u_Lights[4].Direction, groundLight.direction);
-        setSpecularLightAtten(scratchMaterialParams.u_Lights[4], ambParams.attenFactors[1]);
-        colorCopy(scratchMaterialParams.u_Lights[4].Color, Blue);
+        materialParams.u_Lights[4].reset();
+        vec3.copy(materialParams.u_Lights[4].Direction, groundLight.direction);
+        setSpecularLightAtten(materialParams.u_Lights[4], ambParams.attenFactors[1]);
+        colorCopy(materialParams.u_Lights[4].Color, Blue);
         
         // Light 5: ALPHA1
-        scratchMaterialParams.u_Lights[5].reset();
-        vec3.scale(scratchMaterialParams.u_Lights[5].Position, groundLight.direction, -100000.0);
-        colorCopy(scratchMaterialParams.u_Lights[5].Color, Blue);
-        vec3.set(scratchMaterialParams.u_Lights[5].CosAtten, 0.5, 0.0, 0.0);
+        materialParams.u_Lights[5].reset();
+        vec3.scale(materialParams.u_Lights[5].Position, groundLight.direction, -100000.0);
+        colorCopy(materialParams.u_Lights[5].Color, Blue);
+        vec3.set(materialParams.u_Lights[5].CosAtten, 0.5, 0.0, 0.0);
+
+        return this.reflectiveMaterial;
+    }
+
+    public render(probeIdx: number, device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
+        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
+        // to obtain a local SceneParams buffer
+        const template = renderHelper.pushTemplateRenderInst();
+
+        // Setup to draw in clip space
+        fillSceneParams(scratchSceneParams, PROBE_PROJECTION_MTX, PROBE_TARGET_DIM, PROBE_TARGET_DIM);
+        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
+        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
+        fillSceneParamsData(d, offs, scratchSceneParams);
+
+        // TODO: generate geometry once and reuse it for future renders
+        this.ddraw.beginDraw();
+        for (let x = 0; x < 16; x++) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
+            const fx0 = 2.0 * x / 15.0 - 1.0;
+            const fx1 = 2.0 * (x + 1) / 15.0 - 1.0;
+
+            for (let y = 0; y < 17; y++) {
+                const fy = 2.0 * y / 15.0 - 1.0;
+
+                this.ddraw.position3f32(fx0, fy, -2.0);
+                let z0 = fx0 * fx0 + fy * fy;
+                if (z0 >= 1.0)
+                    z0 = 0.0;
+                else
+                    z0 = Math.sqrt(1.0 - z0);
+                this.ddraw.normal3f32(fx0, fy, z0);
+
+                this.ddraw.position3f32(fx1, fy, -2.0);
+                let z1 = fx1 * fx1 + fy * fy;
+                if (z1 >= 1.0)
+                    z1 = 0.0;
+                else
+                    z1 = Math.sqrt(1.0 - z1);
+                this.ddraw.normal3f32(fx1, fy, z1);
+            }
+            this.ddraw.end();
+        }
+
+        const renderInst = this.ddraw.makeRenderInst(renderInstManager);
+
+        scratchPacketParams.clear();
+        scratchMaterialParams.clear();
+
+        const ambParams = this.params[probeIdx]; // TODO: selectable per object
+        let material: SFAMaterialBuilder<any>;
+        if (ambParams.type === ProbeType.Hemispheric)
+            material = this.setupToRenderHemispheric(probeIdx, scratchMaterialParams, sceneCtx);
+        else // ProbeType.Reflective
+            material = this.setupToRenderReflective(probeIdx, scratchMaterialParams, sceneCtx);
         
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.reflectiveMaterial.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
 
         this.ddraw.endAndUpload(renderInstManager);
 
