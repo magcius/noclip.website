@@ -694,21 +694,12 @@ class StandardObjectMaterial extends StandardMaterial {
         // const texMap = this.mb.genTexMap(makeAmbientProbeTexture());
         const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
 
-        // XXX: for testing, generate REG1 = opaque white
         const stage = this.mb.genTevStage();
-        console.log(`generating ambient probe texture in texMap ${texMap}, assigning to stage ${stage}`);
         this.mb.setTevDirect(stage);
-        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ONE, GX.CC.ONE, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG1);
+        this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+        this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
         this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-
-
-        // const stage = this.mb.genTevStage();
-        // this.mb.setTevDirect(stage);
-        // this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
-        // this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
-        // this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
-        // this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
     }
 
     // Emits REG2 = ambience data
