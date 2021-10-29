@@ -360,6 +360,8 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
     public minVel: number = 3.0;
     public indScaleY: number = 1.0;
     public indTransY: number = 0.0;
+    public baseY: number = 0.0;
+    public minY: number = -Infinity;
 
     private trackPrevPos = nArray(3, () => vec3.create());
 
@@ -432,7 +434,18 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
     }
 
     private getMaxWaterY(dst: vec3): void {
-        // TODO
+        const globals = this.globals, sea = globals.sea!;
+
+        if (sea.ChkArea(globals, dst[0], dst[2])) {
+            dst[1] = Math.max(sea.calcWave(globals, dst[0], dst[2]), this.minY);
+        } else {
+            if (Number.isFinite(this.minY))
+                dst[1] = this.minY;
+            else
+                dst[1] = this.baseY;
+        }
+
+        dst[1] += 2.0;
     }
 
     public execute(emitter: JPABaseEmitter): void {
