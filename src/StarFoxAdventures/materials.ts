@@ -13,7 +13,7 @@ import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red } from '../Color';
 import { SceneRenderContext } from './render';
-import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { ColorFunc, getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -26,7 +26,7 @@ export interface Shader {
     layers: ShaderLayer[],
     flags: number;
     attrFlags: number;
-    hasAuxTex0: boolean;
+    hasHemisphericProbe: boolean;
     hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
                          // It is possibly related to projected lighting.
     hasAuxTex2: boolean;
@@ -679,8 +679,8 @@ class StandardMapMaterial extends StandardMaterial {
 
 class StandardObjectMaterial extends StandardMaterial {
     private ambProbeTexCoord?: TexCoord = undefined;
-    private enableHemisphericProbe = true;
-    private enableReflectiveProbe = true;
+    private enableHemisphericProbe = false;
+    private enableReflectiveProbe = false;
 
     // Emits REG1 = hemispheric probe
     private setupHemisphericProbe() {
@@ -750,14 +750,59 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.G]);
     }
 
-    private addTextureLayerStage(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number) {
+    private addColoredTextureLayerStageWithoutAmbience(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         // TODO: support scrollable textures (e.g. eyeballs)
         const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         this.mb.setTevOrder(stage, texCoord, texMap);
-        this.mb.setTevKColorSel(stage, GX.KonstColorSel.KCSEL_1);
-        this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
+
+        if (colorFunc !== undefined) {
+            const kcolor = this.mb.genKonstColor(colorFunc);
+            this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+            this.mb.setTevKAlphaSel(stage, getGXKonstAlphaSel(kcolor));
+        } else {
+            this.mb.setTevKColorSel(stage, GX.KonstColorSel.KCSEL_1);
+            this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
+        }
+
+        switch (colorInMode) {
+        case 0:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.ZERO);
+            break;
+        case 8:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.C2);
+            break;
+        default: // Usually 1
+            this.mb.setTevColorFormula(stage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            break;
+        }
+
+        if (this.aprevIsValid)
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        else
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.KONST, GX.CA.ZERO);
+
+        this.cprevIsValid = true;
+        this.aprevIsValid = true;
+    }
+
+    private addColoredTextureLayerStageWithAmbienceAndSwapping(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        // TODO: support swapping
+        // TODO: support scrollable textures (e.g. eyeballs)
+        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
+        this.mb.setTevOrder(stage, texCoord, texMap);
+
+        if (colorFunc !== undefined) {
+            const kcolor = this.mb.genKonstColor(colorFunc);
+            this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+            this.mb.setTevKAlphaSel(stage, getGXKonstAlphaSel(kcolor));
+        } else {
+            this.mb.setTevKColorSel(stage, GX.KonstColorSel.KCSEL_1);
+            this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
+        }
 
         switch (colorInMode) {
         case 0:
@@ -780,21 +825,103 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = true;
     }
 
-    private setupShaderLayers() {
+    private addPlainTextureLayerStage(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number) {
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        // TODO: support scrollable textures (e.g. eyeballs)
+        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
+        this.mb.setTevOrder(stage, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+
+        switch (colorInMode) {
+        case 0:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+            break;
+        default:
+            console.warn(`Unhandled colorInMode ${colorInMode} in addPlainTextureLayerStage`);
+            this.mb.setTevColorFormula(stage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            break;
+        }
+
+        if (this.aprevIsValid)
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        else
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+
+        this.cprevIsValid = true;
+        this.aprevIsValid = true;
+    }
+    
+    private addAlphaedTextureLayerStage(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        // TODO: support scrollable textures (e.g. eyeballs)
+        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
+        this.mb.setTevOrder(stage, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+
+        if (colorFunc !== undefined) {
+            const kcolor = this.mb.genKonstColor(colorFunc);
+            this.mb.setTevKAlphaSel(stage, getGXKonstAlphaSel(kcolor));
+        } else {
+            this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
+        }
+
+        switch (colorInMode) {
+        case 0:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+            break;
+        case 8:
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.C2);
+            break;
+        default: // Usually 1
+            this.mb.setTevColorFormula(stage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            break;
+        }
+
+        if (this.aprevIsValid)
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        else
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.KONST, GX.CA.ZERO);
+
+        this.cprevIsValid = true;
+        this.aprevIsValid = true;
+    }
+
+    private setupShaderLayers(preProbe: boolean, fooFlag: boolean /* TODO: better name */) {
         for (let i = 0; i < this.shader.layers.length; i++) {
             const layer = this.shader.layers[i];
-            if (layer.texId !== null) {
-                const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-                let colorInMode: number;
-                if (i > 0)
-                    colorInMode = this.shader.layers[i - 1].tevMode & 0x7f;
-                else if (this.enableHemisphericProbe)
-                    colorInMode = 8;
-                else
-                    colorInMode = 0;
-                this.addTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
-            } else {
-                // TODO
+            if (!!(layer.tevMode & 0x80) == preProbe) {
+                if (layer.texId !== null) {
+                    const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+
+                    let colorInMode: number;
+                    if (i > 0)
+                        colorInMode = this.shader.layers[i - 1].tevMode & 0x7f;
+                    else if (this.enableHemisphericProbe)
+                        colorInMode = 8;
+                    else
+                        colorInMode = 0;
+
+                    if (!this.enableHemisphericProbe) {
+                        if (fooFlag) {
+                            if (this.shader.attrFlags & 0x10)
+                                this.addColoredTextureLayerStageWithoutAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
+                                    (dst: Color, ctx: MaterialRenderContext) => colorCopy(dst, ctx.outdoorAmbientColor));
+                            else
+                                this.addColoredTextureLayerStageWithAmbienceAndSwapping(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
+                                    (dst: Color, ctx: MaterialRenderContext) => colorCopy(dst, ctx.outdoorAmbientColor));
+                        } else {
+                            // TODO: special logic here if opacity is not 100%.
+                            if (this.shader.attrFlags & 0x10)
+                                this.addPlainTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                            else
+                                this.addAlphaedTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                        }
+                    } else {
+                        this.addColoredTextureLayerStageWithAmbienceAndSwapping(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                    }
+                } else {
+                    console.warn(`TODO: textureless shader layer`);
+                }
             }
         }
     }
@@ -803,13 +930,31 @@ class StandardObjectMaterial extends StandardMaterial {
         this.cprevIsValid = false;
         this.aprevIsValid = false;
         this.ambProbeTexCoord = undefined;
+        this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
+        this.enableReflectiveProbe = false; // TODO
 
         this.mb.setUsePnMtxIdx(true);
 
         this.setupHemisphericProbe();
-        this.setupReflectiveProbe(0);
+        this.setupReflectiveProbe(0); // TODO: selector comes from shader
 
-        this.setupShaderLayers();
+        const fooFlag = !!((this.shader.lightFlags & 0x2) && !(this.shader.normalFlags & 0x2));
+
+        // Pre-probe layers
+        this.setupShaderLayers(true, fooFlag);
+
+        // Blend ambient probes
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+        if (this.enableHemisphericProbe)
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.C2);
+        else
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.C2);
+        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+
+        // Post-probe layers
+        this.setupShaderLayers(false, fooFlag);
 
         if (this.shader.lightFlags & 0x2) {
             // Override world lighting (e.g. tornadoes)
@@ -869,16 +1014,6 @@ class StandardObjectMaterial extends StandardMaterial {
             // TODO: utilize channel 1
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
-
-        // Blend layers and ambient probes
-        const stage = this.mb.genTevStage();
-        this.mb.setTevDirect(stage);
-        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
-        if (this.enableHemisphericProbe)
-            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.C2);
-        else
-            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.C2);
-        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
     }
 }
 

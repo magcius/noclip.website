@@ -29,15 +29,15 @@ export type IndTexMtx = number & { [isIndTexMtx]: true }
 declare const isKonstColor: unique symbol;
 export type KonstColor = number & { [isKonstColor]: true }
 
-function getGXIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
+export function getGXIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
     return GX.IndTexStageID.STAGE0 + indTexStage;
 }
 
-function getGXTexMapID(texMap: TexMap | null): GX.TexMapID {
+export function getGXTexMapID(texMap: TexMap | null): GX.TexMapID {
     return texMap !== null ? GX.TexMapID.TEXMAP0 + texMap : GX.TexMapID.TEXMAP_NULL;
 }
 
-function getGXTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
+export function getGXTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
     return texCoord !== null ? GX.TexCoordID.TEXCOORD0 + texCoord : GX.TexCoordID.TEXCOORD_NULL;
 }
 
@@ -58,8 +58,8 @@ export function getGXKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
 }
 
 export type TexFunc<RenderContext> = ((dst: TextureMapping, ctx: RenderContext) => void) | undefined;
-type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
-type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
+export type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
+export type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
 
 export class SFAMaterialBuilder<RenderContext = undefined> {
     private mb: GXMaterialBuilder;

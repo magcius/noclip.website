@@ -34,7 +34,7 @@ const AMBIENT_PROBE_FACTORS = [
 ]
 
 const enum ProbeType {
-    // Sky light and ground light emitted against a spherical pattern
+    // Sky light and ground light emitted against a sphere
     Hemispheric,
     // Encoded texture containing Red: sky light, Green: surroundings, Blue: ground light
     Reflective,

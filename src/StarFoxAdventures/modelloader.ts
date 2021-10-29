@@ -631,7 +631,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
             let texmtxNum = 0;
 
-            if (shader.hasAuxTex0 || shader.hasAuxTex1) {
+            if (shader.hasHemisphericProbe || shader.hasAuxTex1) {
                 if (shader.hasAuxTex2) {
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;

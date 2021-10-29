@@ -61,7 +61,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         layers: [],
         flags: 0,
         attrFlags: 0,
-        hasAuxTex0: false,
+        hasHemisphericProbe: false,
         hasAuxTex1: false,
         hasAuxTex2: false,
         auxTex2Num: 0xffffffff,
@@ -89,13 +89,13 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.isBeta = true;
         shader.attrFlags = data.getUint8(0x34);
         shader.flags = 0; // TODO: where is this field?
-        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
+        shader.hasHemisphericProbe = data.getUint32(0x8) === 1;
         shader.hasAuxTex1 = data.getUint32(0x14) === 1;
         shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
     } else {
         shader.flags = data.getUint32(0x3c);
         shader.attrFlags = data.getUint8(0x40);
-        shader.hasAuxTex0 = data.getUint32(0x8) !== 0;
+        shader.hasHemisphericProbe = data.getUint32(0x8) !== 0;
         shader.hasAuxTex1 = data.getUint32(0x14) !== 0;
         shader.auxTex2Num = data.getUint32(0x34);
         shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
