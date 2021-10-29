@@ -13,7 +13,7 @@ import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red } from '../Color';
 import { SceneRenderContext } from './render';
-import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, getGXTexGenSrc, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
 
 export interface ShaderLayer {
@@ -221,16 +221,16 @@ export abstract class StandardMaterial extends MaterialBase {
         this.blendOverride = blendOverride;
     }
 
-    protected genScrollableTexCoord(texMap: TexMap, scrollingTexMtx?: number): TexCoord {
+    protected genScrollableTexCoord(texMap: TexMap, texGenSrc: GX.TexGenSrc, scrollingTexMtx?: number): TexCoord {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             const postTexMtx = this.mb.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
             });
 
-            return this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap), undefined, undefined, getGXPostTexGenMatrix(postTexMtx));
+            return this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc, undefined, undefined, getGXPostTexGenMatrix(postTexMtx));
         } else {
-            return this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap));
+            return this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         }
     }
     
@@ -395,7 +395,7 @@ export abstract class StandardMaterial extends MaterialBase {
         const texMap1 = this.mb.genTexMap(this.factory.getWavyTexture());
         const texMap2 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
 
-        const texCoord3 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0));
+        const texCoord3 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0);
 
         const pttexmtx0 = mat4.create();
         mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
@@ -422,9 +422,9 @@ export abstract class StandardMaterial extends MaterialBase {
             // It is unknown whether scrollable textures are ever used on lava.
         });
 
-        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, getGXTexGenSrc(texMap0), undefined, undefined, getGXPostTexGenMatrix(postTexMtx2));
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, undefined, undefined, getGXPostTexGenMatrix(postTexMtx2));
 
-        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, getGXTexGenSrc(texMap0), undefined, undefined, getGXPostTexGenMatrix(postTexMtx0));
+        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, undefined, undefined, getGXPostTexGenMatrix(postTexMtx0));
         
         const indStage0 = this.mb.genIndTexStage();
         this.mb.setIndTexOrder(indStage0, texCoord1, texMap1);
@@ -435,7 +435,7 @@ export abstract class StandardMaterial extends MaterialBase {
         const stage2 = this.mb.genTevStage();
         this.mb.setTevIndirect(stage1, indStage0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getGXIndTexMtxID(indTexMtx0), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
 
-        const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, getGXTexGenSrc(texMap0), undefined, undefined, getGXPostTexGenMatrix(postTexMtx1));
+        const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, undefined, undefined, getGXPostTexGenMatrix(postTexMtx1));
 
         const indStage1 = this.mb.genIndTexStage();
         this.mb.setIndTexOrder(indStage1, texCoord2, texMap1);
@@ -587,9 +587,9 @@ export abstract class StandardMaterial extends MaterialBase {
     protected addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
             const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-            const texCoord0 = this.genScrollableTexCoord(texMap0, this.shader.layers[0].scrollingTexMtx);
+            const texCoord0 = this.genScrollableTexCoord(texMap0, GX.TexGenSrc.TEX0, this.shader.layers[0].scrollingTexMtx);
             const texMap1 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[1].texId!, true)));
-            const texCoord1 = this.genScrollableTexCoord(texMap1, this.shader.layers[1].scrollingTexMtx);
+            const texCoord1 = this.genScrollableTexCoord(texMap1, GX.TexGenSrc.TEX1, this.shader.layers[1].scrollingTexMtx);
 
             this.addTevStageForTexture(0, texMap0, texCoord0);
             if (this.shader.flags & ShaderFlags.Reflective)
@@ -601,7 +601,7 @@ export abstract class StandardMaterial extends MaterialBase {
                 const layer = this.shader.layers[i];
 
                 const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
-                const texCoord = this.genScrollableTexCoord(texMap, layer.scrollingTexMtx);
+                const texCoord = this.genScrollableTexCoord(texMap, GX.TexGenSrc.TEX0 + i, layer.scrollingTexMtx);
 
                 if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
                     this.addTevStagesForIndoorOutdoorBlend(texMap, texCoord);
@@ -689,16 +689,26 @@ class StandardObjectMaterial extends StandardMaterial {
         const kcolor = this.mb.genKonstColor((dst: Color) => {
             colorCopy(dst, White); // TODO: intensity can be adjusted per object
             dst.a = 0.0; // FIXME: is this accurate?
-        })
+        });
         // TODO: there are 6 possible ambient probe textures that can be selected per object
         // const texMap = this.mb.genTexMap(makeAmbientProbeTexture());
         const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
+
+        // XXX: for testing, generate REG1 = opaque white
         const stage = this.mb.genTevStage();
+        console.log(`generating ambient probe texture in texMap ${texMap}, assigning to stage ${stage}`);
         this.mb.setTevDirect(stage);
-        this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
-        this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
+        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ONE, GX.CC.ONE, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG1);
         this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+
+
+        // const stage = this.mb.genTevStage();
+        // this.mb.setTevDirect(stage);
+        // this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+        // this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+        // this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
+        // this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
     }
 
     // Emits REG2 = ambience data
@@ -740,11 +750,12 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.G]);
     }
 
-    private addTextureLayerStage(texMap: TexMap, colorInMode: number) {
+    private addTextureLayerStage(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         // TODO: support scrollable textures (e.g. eyeballs)
-        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap));
+        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
+        console.log(`assigning texMap ${texMap} to stage ${stage}`);
         this.mb.setTevOrder(stage, texCoord, texMap);
         this.mb.setTevKColorSel(stage, GX.KonstColorSel.KCSEL_1);
         this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
@@ -775,6 +786,7 @@ class StandardObjectMaterial extends StandardMaterial {
             const layer = this.shader.layers[i];
             if (layer.texId !== null) {
                 const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+                console.log(`loading shader layer ${i} to texMap ${texMap}`);
                 let colorInMode: number;
                 if (i > 0)
                     colorInMode = this.shader.layers[i - 1].tevMode & 0x7f;
@@ -782,7 +794,7 @@ class StandardObjectMaterial extends StandardMaterial {
                     colorInMode = 8;
                 else
                     colorInMode = 0;
-                this.addTextureLayerStage(texMap, colorInMode);
+                this.addTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
             } else {
                 // TODO
             }
@@ -901,7 +913,7 @@ class WaterMaterial extends MaterialBase {
         const texMap0 = this.mb.genTexMap(makeOpaqueColorTextureDownscale2x());
         const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         const texMap1 = this.mb.genTexMap(this.factory.getWavyTexture());
-        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX3);
+        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX3);
 
         const indStage0 = this.mb.genIndTexStage();
         const indTexMtx0 = this.mb.genIndTexMtx((dst: mat4) => {
@@ -923,7 +935,7 @@ class WaterMaterial extends MaterialBase {
             mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue1);
         });
 
-        const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX4);
+        const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
 
         const itm1 = mat4FromRowMajor(
             0.3,  0.3, 0.0, 0.0,
@@ -1005,7 +1017,7 @@ class FurMaterial extends MaterialBase {
         // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
         // but then it replaces texmap 0 with shader layer 0 before drawing...
         const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0));
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0);
 
         const stage0 = this.mb.genTevStage();
         this.mb.setTevDirect(stage0);
@@ -1110,14 +1122,14 @@ export class HeatShimmerMaterial extends MaterialBase {
         const texMap1 = this.mb.genTexMap(makeOpaqueDepthTextureDownscale2x());
         const texMap2 = this.mb.genTexMap(this.factory.getWavyTexture());
 
-        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0));
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0);
 
         const pttexmtx0 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [7.0, 7.0, 1.0]);
             mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
             mat4SetValue(dst, 1, 3, -matCtx.sceneCtx.animController.envAnimValue1 * 10.0);
         });
-        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, getGXTexGenSrc(texMap0), undefined, undefined, getGXPostTexGenMatrix(pttexmtx0));
+        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, undefined, undefined, getGXPostTexGenMatrix(pttexmtx0));
 
         const k0 = this.mb.genKonstColor((dst: Color) => {
             colorFromRGBA(dst, 1.0, 1.0, 1.0, 0xfc/0xff);
@@ -1195,13 +1207,13 @@ export class FaultyTVMaterial extends MaterialBase {
         this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
-        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0));
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0);
 
         this.mb.setTexMtx(0, (dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.2, 0.2, 1.0]);
             mat4SetValue(dst, 1, 3, -matCtx.sceneCtx.animController.envAnimValue0);
         });
-        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX0);
+        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
 
         const rot45 = mat4.create();
         mat4.fromZRotation(rot45, Math.PI / 4);
@@ -1211,7 +1223,7 @@ export class FaultyTVMaterial extends MaterialBase {
             mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue1);
             mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue1);
         });
-        const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, getGXTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX1);
+        const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
 
         const indStage0 = this.mb.genIndTexStage();
         this.mb.setIndTexOrder(indStage0, texCoord1, texMap1);

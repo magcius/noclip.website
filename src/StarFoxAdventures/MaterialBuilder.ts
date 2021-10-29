@@ -37,10 +37,6 @@ function getGXTexMapID(texMap: TexMap | null): GX.TexMapID {
     return texMap !== null ? GX.TexMapID.TEXMAP0 + texMap : GX.TexMapID.TEXMAP_NULL;
 }
 
-export function getGXTexGenSrc(texMap: TexMap): GX.TexGenSrc {
-    return GX.TexGenSrc.TEX0 + texMap;
-}
-
 function getGXTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
     return texCoord !== null ? GX.TexCoordID.TEXCOORD0 + texCoord : GX.TexCoordID.TEXCOORD_NULL;
 }
@@ -263,18 +259,24 @@ export class SFAMaterialBuilder<RenderContext> {
             const func = this.texMtxs[i];
             if (func !== undefined)
                 func(params.u_TexMtx[i], ctx);
+            else
+                mat4.identity(params.u_TexMtx[i]);
         }
 
         for (let i = 0; i < this.indTexMtxs.length; i++) {
             const func = this.indTexMtxs[i];
             if (func !== undefined)
                 func(params.u_IndTexMtx[i], ctx);
+            else
+                mat4.identity(params.u_IndTexMtx[i]);
         }
 
         for (let i = 0; i < this.postTexMtxs.length; i++) {
             const func = this.postTexMtxs[i];
             if (func !== undefined)
                 func(params.u_PostTexMtx[i], ctx);
+            else
+                mat4.identity(params.u_PostTexMtx[i]);
         }
 
         for (let i = 0; i < 2; i++) {
