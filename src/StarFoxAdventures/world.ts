@@ -261,9 +261,9 @@ class WorldRenderer extends SFARenderer {
         this.sky.addSkyRenderPasses(device, this.renderHelper, builder, renderInstManager, renderLists, mainColorTargetID, this.mainDepthDesc, sceneCtx);
     }
 
-    private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) {
+    private setupLights(lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) {
         if (this.enableLights) {
-            this.world.worldLights.setupLights(lights, modelCtx, typeMask);
+            this.world.worldLights.setupLights(lights, sceneCtx, typeMask);
         } else {
             for (let i = 0; i < 8; i++)
                 lights[i].reset();
@@ -307,22 +307,21 @@ class WorldRenderer extends SFARenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
-    private ambientProbeTextureMapping = new TextureMapping();
     private ambientProbeSampler?: GfxSampler;
-    private ambientProbeTargetID: GfxrRenderTargetID;
-    private ambientProbeResolveID: GfxrResolveTextureID;
+    private hemisphericAmbientProbeTextureMapping = new TextureMapping();
+    private hemisphericAmbientProbeTargetID: GfxrRenderTargetID;
+    private hemisphericAmbientProbeResolveID: GfxrResolveTextureID;
 
     protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
-        this.ambientProbeTargetID = this.ambientProbe.render(device, builder, this.renderHelper, renderInstManager, sceneCtx);
+        this.hemisphericAmbientProbeTargetID = this.ambientProbe.renderHemispheric(device, builder, this.renderHelper, renderInstManager, sceneCtx);
     }
 
     protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {
-        this.ambientProbeResolveID = builder.resolveRenderTarget(this.ambientProbeTargetID);
-        pass.attachResolveTexture(this.ambientProbeResolveID);
+        this.hemisphericAmbientProbeResolveID = builder.resolveRenderTarget(this.hemisphericAmbientProbeTargetID);
+        pass.attachResolveTexture(this.hemisphericAmbientProbeResolveID);
     }
 
     protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
-        this.ambientProbeTextureMapping.gfxTexture = scope.getResolveTextureForID(this.ambientProbeResolveID);
         if (this.ambientProbeSampler === undefined) {
             this.ambientProbeSampler = this.renderHelper.getCache().createSampler({
                 wrapS: GfxWrapMode.Clamp,
@@ -332,10 +331,14 @@ class WorldRenderer extends SFARenderer {
                 mipFilter: GfxMipFilterMode.NoMip,
                 minLOD: 0,
                 maxLOD: 100,
-            })
+            });
         }
-        this.ambientProbeTextureMapping.gfxSampler = this.ambientProbeSampler;
-        renderList.resolveLateSamplerBinding('ambient-probe', this.ambientProbeTextureMapping);
+
+        this.hemisphericAmbientProbeTextureMapping.gfxTexture = scope.getResolveTextureForID(this.hemisphericAmbientProbeResolveID);
+        this.hemisphericAmbientProbeTextureMapping.gfxSampler = this.ambientProbeSampler;
+        this.hemisphericAmbientProbeTextureMapping.width = 32;
+        this.hemisphericAmbientProbeTextureMapping.height = 32;
+        renderList.resolveLateSamplerBinding('hemispheric-ambient-probe', this.hemisphericAmbientProbeTextureMapping);
     }
 
     public destroy(device: GfxDevice) {

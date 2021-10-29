@@ -104,7 +104,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) => void;
+    setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
 }
 
 export interface Light {

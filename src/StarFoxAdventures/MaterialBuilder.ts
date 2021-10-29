@@ -61,7 +61,7 @@ export type TexFunc<RenderContext> = ((dst: TextureMapping, ctx: RenderContext) 
 type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
 type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
 
-export class SFAMaterialBuilder<RenderContext> {
+export class SFAMaterialBuilder<RenderContext = undefined> {
     private mb: GXMaterialBuilder;
     private tevStageNum: number;
     private indTexStageNum: number;

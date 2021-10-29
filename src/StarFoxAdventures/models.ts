@@ -50,7 +50,7 @@ export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
     outdoorAmbientColor: Color;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) => void;
+    setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
 }
 
 const BLOCK_FUR_RENDER_LAYER = 23;

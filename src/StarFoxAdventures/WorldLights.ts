@@ -4,6 +4,7 @@ import { colorNewFromRGBA, Color, colorCopy, White, colorNewCopy } from '../Colo
 import { ModelRenderContext } from "./models";
 import { computeViewMatrix } from "../Camera";
 import { mat4SetTranslation } from "./util";
+import { SceneRenderContext } from "./render";
 
 export const enum LightType {
     POINT = 0x2,
@@ -53,11 +54,12 @@ export class WorldLights {
         this.lights.delete(light);
     }
     
-    public setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) {
+    public setupLights(lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) {
         let i = 0;
 
         const worldView = scratchMtx0;
-        computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+        // FIXME: are there some situations where camera-view should not be used, such as ambient probes?
+        computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
         const worldViewSR = scratchMtx1;
         mat4.copy(worldViewSR, worldView);
         mat4SetTranslation(worldViewSR, 0, 0, 0);
@@ -74,9 +76,9 @@ export class WorldLights {
                     colorCopy(lights[i].Color, light.color);
                     vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0);
                     vec3.set(lights[i].DistAtten, 1.0, 0.0, 0.0);
-                } else {
+                } else { // LightType.POINT
                     vec3.transformMat4(lights[i].Position, light.position, worldView);
-                    // drawWorldSpacePoint(getDebugOverlayCanvas2D(), modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                    // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
                     // TODO: use correct parameters
                     colorCopy(lights[i].Color, light.color);
                     vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO

@@ -250,7 +250,7 @@ export class ShapeMaterial {
         computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
 
-        modelCtx.setupLights(params.u_Lights, modelCtx, LightType.POINT);
+        modelCtx.setupLights(params.u_Lights, modelCtx.sceneCtx, LightType.POINT);
 
         this.material.setOnMaterialParams(params, this.matCtx);
     }

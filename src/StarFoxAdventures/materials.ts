@@ -14,7 +14,6 @@ import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red } from '../Color';
 import { SceneRenderContext } from './render';
 import { getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
-import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -108,10 +107,19 @@ export function makeTemporalTextureDownscale8x(): TexFunc<any> {
     };
 }
 
-export function makeAmbientProbeTexture(): TexFunc<any> {
+export function makeHemisphericAmbientProbeTexture(): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = 'ambient-probe';
+        mapping.lateBinding = 'hemispheric-ambient-probe';
+        mapping.width = 32;
+        mapping.height = 32;
+    };
+}
+
+export function makeReflectiveAmbientProbeTexture(): TexFunc<any> {
+    return  (mapping: TextureMapping) => {
+        mapping.reset();
+        mapping.lateBinding = 'reflective-ambient-probe';
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -669,9 +677,9 @@ class StandardMapMaterial extends StandardMaterial {
 }
 
 class StandardObjectMaterial extends StandardMaterial {
+    private ambProbeTexCoord?: TexCoord = undefined;
     private enableProbe0 = true;
     private enableProbe1 = false;
-    private ambProbeTexCoord?: TexCoord = undefined;
 
     // Emits REG1 = ambience data
     private setupAmbientProbe0() {
@@ -691,8 +699,8 @@ class StandardObjectMaterial extends StandardMaterial {
             dst.a = 0.0; // FIXME: is this accurate?
         });
         // TODO: there are 6 possible ambient probe textures that can be selected per object
-        // const texMap = this.mb.genTexMap(makeAmbientProbeTexture());
-        const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
+        const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
+        // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
@@ -709,7 +717,7 @@ class StandardObjectMaterial extends StandardMaterial {
             return;
         }
 
-        const texMap = this.mb.genTexMap(makeAmbientProbeTexture());
+        const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture());
 
         this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, White)); // TODO: set by shader
 
