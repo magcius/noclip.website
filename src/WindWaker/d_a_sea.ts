@@ -17,7 +17,7 @@ import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
 import { dKy_usonami_set } from './d_kankyo_wether';
 import { Plane } from '../Geometry';
-import { cLib_addCalcAngleS2, cM_atan2s, cM__Short2Rad } from './SComponent';
+import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM__Short2Rad } from './SComponent';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
 
 const scratchVec2a = vec2.create();
@@ -323,8 +323,8 @@ export class d_a_sea extends fopAc_ac_c {
             }
 
             const y = -(p.d + (p.n[0] * x + p.n[2] * z)) / p.n[1];
-            const v = vec3.fromValues(x, y, z);
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, v);
+            // const v = vec3.fromValues(x, y, z);
+            // drawWorldSpacePoint(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, v);
             return y;
         } else {
             return this.baseHeight;
@@ -707,20 +707,37 @@ export class dLib_wave_c {
     public animZ = 0.0;
 }
 
-export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, swayAmount: number, deltaTimeInFrames: number): void {
+function waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, deltaTimeInFrames: number | null): void {
     if (globals.sea === null)
         return;
 
     const r = 300.0;
     const y00 = globals.sea.calcWave(globals, pos[0], pos[2] - r);
     const y01 = globals.sea.calcWave(globals, pos[0], pos[2] + r);
-    const angleX = cM_atan2s(y01 - y00, r * 2.0);
+    const angleX = -cM_atan2s(y01 - y00, r * 2.0);
     const y10 = globals.sea.calcWave(globals, pos[0] - r, pos[2]);
     const y11 = globals.sea.calcWave(globals, pos[0] + r, pos[2]);
     const angleZ = cM_atan2s(y11 - y10, r * 2.0);
 
-    wave.angleX = cLib_addCalcAngleS2(wave.angleX, -angleX, 0x0A, 0x200 * deltaTimeInFrames);
-    wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 0x0A, 0x200 * deltaTimeInFrames);
+    if (deltaTimeInFrames !== null) {
+        wave.angleX = cLib_addCalcAngleS2(wave.angleX, angleX, 10, 0x200 * deltaTimeInFrames);
+        wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 10, 0x200 * deltaTimeInFrames);
+    } else {
+        wave.angleX = angleX;
+        wave.angleZ = angleZ;
+    }
+}
+
+export function dLib_waveInit(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3): void {
+    wave.animX = cM_rndF(32768.0);
+    wave.animZ = cM_rndF(32768.0);
+    // this is possibly a noclip improvement: I can't find where the angles are initialized in the original code,
+    // but I don't believe I've ever seen a boat somersault on spawn (maybe it's just too far away to draw?)
+    waveRot(globals, wave, pos, null);
+}
+
+export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, swayAmount: number, deltaTimeInFrames: number): void {
+    waveRot(globals, wave, pos, deltaTimeInFrames);
     wave.animX += 400 * deltaTimeInFrames;
     wave.animZ += 430 * deltaTimeInFrames;
     const swayAmountFull = 130.0 + swayAmount;

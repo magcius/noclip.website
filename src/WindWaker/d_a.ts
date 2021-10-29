@@ -15,7 +15,7 @@ import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, White, Green } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
-import { dLib_getWaterY, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea";
+import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -3345,7 +3345,6 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.setMtx(globals, 0.0);
 
         // initialize BgW
-        // initialize rope / ropeEnd
 
         // createInit
         vec3.copy(this.pathMovePos, this.pos);
@@ -3370,6 +3369,15 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const scaleX = this.scale[0];
         this.setCullSizeBox(scaleX * -1000.0, scaleX * -50.0, scaleX * -1000.0, scaleX * 1000.0, scaleX * 1000.0, scaleX * 1000.0);
         this.cullFarDistanceRatio = 10.0;
+
+        if (this.type === 0 || this.type === 4) {
+            // Flag
+        }
+
+        dLib_waveInit(globals, this.wave, this.pos);
+
+        // initialize rope / ropeEnd
+
         return cPhs__Status.Next;
     }
 
@@ -3730,17 +3738,18 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         for (let i = 0; i < this.model.materialInstances.length; i++)
             this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
 
-        this.cullMtx = this.model.modelMatrix;
-        this.setCullSizeBox(-300.0, -100.0, -650.0, 300.0, 700.0, 800.0);
-        this.cullFarDistanceRatio = 10.0;
-
         if (modelType === 0xFF)
             this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, 0x04, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
 
         if (pathId !== 0xFF)
             this.path = assertExists(dPath_GetRoomPath(globals, pathId, this.roomNo));
 
+        this.changeModeByRange(globals);
+        dLib_waveInit(globals, this.wave, this.pos);
         this.setMtx(globals, 0.0);
+        this.cullMtx = this.model.modelMatrix;
+        this.setCullSizeBox(-300.0, -100.0, -650.0, 300.0, 700.0, 800.0);
+        this.cullFarDistanceRatio = 10.0;
 
         this.splash = new dPa_splashEcallBack(globals);
         this.waveL = new dPa_waveEcallBack(globals);
