@@ -18,6 +18,7 @@ import { colorLerp, OpaqueBlack } from '../Color';
 import { dKy_usonami_set } from './d_kankyo_wether';
 import { Plane } from '../Geometry';
 import { cLib_addCalcAngleS2, cM_atan2s, cM__Short2Rad } from './SComponent';
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -291,6 +292,14 @@ export class d_a_sea extends fopAc_ac_c {
     public calcWave(globals: dGlobals, x: number, z: number): number {
         const gridSize = 800.0;
 
+        /*
+        const drawTriangle = (a: ReadonlyVec3, b: ReadonlyVec3, c: ReadonlyVec3) => {
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, a, b);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, b, c);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, c, a);
+        };
+        */
+
         if (this.ChkArea(globals, x, z)) {
             const xi = ((x - this.drawMinX) / gridSize) | 0;
             const zi = ((z - this.drawMinZ) / gridSize) | 0;
@@ -305,11 +314,18 @@ export class d_a_sea extends fopAc_ac_c {
             vec3.set(v11, x1, this.heightTable[(zi + 1) * 65 + xi + 1], z1);
 
             const p = new Plane();
-            if (((x - v01[0] / gridSize) + (z - v10[2]) / gridSize) < 1.0)
+            if ((((x - v01[0]) / gridSize) + ((z - v10[2]) / gridSize)) < 1.0) {
                 p.setTri(v00, v01, v10);
-            else
+                // drawTriangle(v00, v01, v10);
+            } else {
                 p.setTri(v01, v10, v11);
-            return -(p.d + (p.n[0] * x + p.n[2] * z) / p.n[1]);
+                // drawTriangle(v01, v10, v11);
+            }
+
+            const y = -(p.d + (p.n[0] * x + p.n[2] * z)) / p.n[1];
+            const v = vec3.fromValues(x, y, z);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, v);
+            return y;
         } else {
             return this.baseHeight;
         }
@@ -701,12 +717,12 @@ export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: Readonly
     const angleX = cM_atan2s(y01 - y00, r * 2.0);
     const y10 = globals.sea.calcWave(globals, pos[0] - r, pos[2]);
     const y11 = globals.sea.calcWave(globals, pos[0] + r, pos[2]);
-    const angleZ = cM_atan2s(y10 - y11, r * 2.0);
+    const angleZ = cM_atan2s(y11 - y10, r * 2.0);
 
-    wave.angleX = cLib_addCalcAngleS2(wave.angleX, angleX, 0x0A, 0x200 * deltaTimeInFrames);
+    wave.angleX = cLib_addCalcAngleS2(wave.angleX, -angleX, 0x0A, 0x200 * deltaTimeInFrames);
     wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 0x0A, 0x200 * deltaTimeInFrames);
-    wave.animX += 400;
-    wave.animZ += 430;
+    wave.animX += 400 * deltaTimeInFrames;
+    wave.animZ += 430 * deltaTimeInFrames;
     const swayAmountFull = 130.0 + swayAmount;
     wave.rotX = wave.angleX + swayAmountFull * Math.sin(cM__Short2Rad(wave.animX));
     wave.rotZ = wave.angleZ + swayAmountFull * Math.cos(cM__Short2Rad(wave.animZ));

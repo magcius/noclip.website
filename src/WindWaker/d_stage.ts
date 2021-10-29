@@ -267,8 +267,8 @@ export function dStage_actorCreate(globals: dGlobals, processNameStr: string, ac
 
     // This is supposed to be executing in the context of the room or stage, I believe.
     assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
-    const res = fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor);
-    assert(res);
+    const pcId = fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor);
+    assert(pcId !== null);
 }
 
 function dStage_actorInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number = -1): void {

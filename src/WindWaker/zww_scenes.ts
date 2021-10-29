@@ -1052,8 +1052,8 @@ class SceneDesc {
             fpcCt_Handler(globals.frameworkGlobals, globals);
         };
 
-        const ret = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
-        assert(ret);
+        const pcId = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
+        assert(pcId !== null);
 
         fpcCt_Handler(globals.frameworkGlobals, globals);
         assert(globals.scnPlay !== undefined);

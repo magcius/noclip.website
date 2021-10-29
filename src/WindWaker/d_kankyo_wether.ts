@@ -1349,7 +1349,7 @@ export class dKankyo_star_Packet {
     }
 }
 
-export function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
+export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);
     vec3.normalize(dst, dst);
 }
