@@ -235,6 +235,7 @@ class MapSceneRenderer extends SFARenderer {
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: false,
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
             setupLights: () => {},
         };

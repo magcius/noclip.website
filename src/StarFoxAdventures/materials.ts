@@ -107,10 +107,10 @@ export function makeTemporalTextureDownscale8x(): TexFunc<any> {
     };
 }
 
-export function makeHemisphericAmbientProbeTexture(): TexFunc<any> {
-    return  (mapping: TextureMapping) => {
+export function makeHemisphericAmbientProbeTexture(): TexFunc<MaterialRenderContext> {
+    return  (mapping: TextureMapping, ctx: MaterialRenderContext) => {
         mapping.reset();
-        mapping.lateBinding = 'ambient-probe-5';
+        mapping.lateBinding = `ambient-probe-${5 - ctx.ambienceIdx}`;
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -119,7 +119,7 @@ export function makeHemisphericAmbientProbeTexture(): TexFunc<any> {
 export function makeReflectiveAmbientProbeTexture(): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = 'ambient-probe-0';
+        mapping.lateBinding = 'ambient-probe-0'; // TODO: selectable by shader
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -141,6 +141,7 @@ export interface MaterialRenderContext {
     sceneCtx: SceneRenderContext;
     modelViewMtx: mat4;
     invModelViewMtx: mat4;
+    ambienceIdx: number;
     outdoorAmbientColor: Color;
     furLayer: number;
 }

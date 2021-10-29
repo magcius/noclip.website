@@ -185,6 +185,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             sceneCtx,
             modelViewMtx: mat4.create(),
             invModelViewMtx: mat4.create(),
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
             furLayer: 0,
         };

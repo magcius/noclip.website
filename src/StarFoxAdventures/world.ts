@@ -283,10 +283,11 @@ class WorldRenderer extends SFARenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
-        this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map
+        this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map (FIXME: really?)
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: this.showDevGeometry,
+            ambienceIdx: 0,
             outdoorAmbientColor: scratchColor0,
             setupLights: this.setupLights.bind(this),
         };

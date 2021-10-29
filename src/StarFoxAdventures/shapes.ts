@@ -238,12 +238,14 @@ export class ShapeMaterial {
                 sceneCtx: modelCtx.sceneCtx,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
+                ambienceIdx: modelCtx.ambienceIdx,
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
                 furLayer: matOptions.furLayer ?? 0,
             };
         }
 
         this.matCtx.sceneCtx = modelCtx.sceneCtx;
+        this.matCtx.ambienceIdx = modelCtx.ambienceIdx;
         colorCopy(this.matCtx.outdoorAmbientColor, modelCtx.outdoorAmbientColor);
         this.matCtx.furLayer = matOptions.furLayer ?? 0;
 

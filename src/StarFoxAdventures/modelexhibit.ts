@@ -245,6 +245,7 @@ class ModelExhibitRenderer extends SFARenderer {
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: true,
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
             setupLights: () => {},
         };

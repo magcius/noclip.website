@@ -49,6 +49,7 @@ interface Water {
 export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
+    ambienceIdx: number;
     outdoorAmbientColor: Color;
     setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
 }

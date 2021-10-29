@@ -329,6 +329,7 @@ export class ObjectInstance {
             // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ")");
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
+                ambienceIdx: this.ambienceIdx,
                 outdoorAmbientColor: scratchColor0,
             }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
