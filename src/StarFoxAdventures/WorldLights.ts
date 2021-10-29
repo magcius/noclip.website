@@ -7,7 +7,7 @@ import { mat4SetTranslation } from "./util";
 
 export const enum LightType {
     POINT = 0x2,
-    GLOBAL = 0x4,
+    DIRECTIONAL = 0x4,
 }
 
 export interface Light {
@@ -29,9 +29,9 @@ export function createPointLight(position: ReadonlyVec3, color: Color, distAtten
     };
 }
 
-export function createGlobalLight(direction: ReadonlyVec3, color: Color): Light {
+export function createDirectionalLight(direction: ReadonlyVec3, color: Color): Light {
     return {
-        type: LightType.GLOBAL,
+        type: LightType.DIRECTIONAL,
         position: vec3.create(), // unused
         direction: vec3.clone(direction),
         color: colorNewCopy(color),
@@ -53,7 +53,7 @@ export class WorldLights {
         this.lights.delete(light);
     }
     
-    public setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
+    public setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) {
         let i = 0;
 
         const worldView = scratchMtx0;
@@ -63,28 +63,30 @@ export class WorldLights {
         mat4SetTranslation(worldViewSR, 0, 0, 0);
 
         for (let light of this.lights) {
-            // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
-            // TODO: some types of light are specified in view-space, not world-space.
+            if (light.type & typeMask) {
+                // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
+                // TODO: some types of light are specified in view-space, not world-space.
 
-            lights[i].reset();
-            if (light.type === LightType.GLOBAL) {
-                vec3.scale(lights[i].Position, light.direction, -100000.0);
-                vec3.transformMat4(lights[i].Position, lights[i].Position, worldViewSR);
-                colorCopy(lights[i].Color, light.color);
-                vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0);
-                vec3.set(lights[i].DistAtten, 1.0, 0.0, 0.0);
-            } else {
-                vec3.transformMat4(lights[i].Position, light.position, worldView);
-                // drawWorldSpacePoint(getDebugOverlayCanvas2D(), modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
-                // TODO: use correct parameters
-                colorCopy(lights[i].Color, light.color);
-                vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-                vec3.copy(lights[i].DistAtten, light.distAtten);
+                lights[i].reset();
+                if (light.type === LightType.DIRECTIONAL) {
+                    vec3.scale(lights[i].Position, light.direction, -100000.0);
+                    vec3.transformMat4(lights[i].Position, lights[i].Position, worldViewSR);
+                    colorCopy(lights[i].Color, light.color);
+                    vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0);
+                    vec3.set(lights[i].DistAtten, 1.0, 0.0, 0.0);
+                } else {
+                    vec3.transformMat4(lights[i].Position, light.position, worldView);
+                    // drawWorldSpacePoint(getDebugOverlayCanvas2D(), modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                    // TODO: use correct parameters
+                    colorCopy(lights[i].Color, light.color);
+                    vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+                    vec3.copy(lights[i].DistAtten, light.distAtten);
+                }
+
+                i++;
+                if (i >= 8)
+                    break;
             }
-
-            i++;
-            if (i >= 8)
-                break;
         }
 
         for (; i < 8; i++)

@@ -23,7 +23,7 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { Sky } from './Sky';
-import { WorldLights } from './WorldLights';
+import { LightType, WorldLights } from './WorldLights';
 import { SFATextureFetcher } from './textures';
 import { AmbientProbe } from './AmbientProbe';
 import { TextureMapping } from '../TextureHolder';
@@ -261,9 +261,9 @@ class WorldRenderer extends SFARenderer {
         this.sky.addSkyRenderPasses(device, this.renderHelper, builder, renderInstManager, renderLists, mainColorTargetID, this.mainDepthDesc, sceneCtx);
     }
 
-    private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
+    private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) {
         if (this.enableLights) {
-            this.world.worldLights.setupLights(lights, modelCtx);
+            this.world.worldLights.setupLights(lights, modelCtx, typeMask);
         } else {
             for (let i = 0; i < 8; i++)
                 lights[i].reset();

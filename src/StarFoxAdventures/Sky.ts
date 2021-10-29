@@ -14,7 +14,7 @@ import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from '.
 import { vecPitch } from './util';
 import { getCamPos } from './util';
 import { World } from './world';
-import { createGlobalLight, Light, LightType } from './WorldLights';
+import { createDirectionalLight, Light, LightType } from './WorldLights';
 import { colorCopy, colorNewCopy, colorScale, White } from '../Color';
 
 const materialParams = new MaterialParams();
@@ -27,8 +27,8 @@ export class Sky {
     private materialHelperSky: GXMaterialHelperGfx;
 
     // TODO: move to envfx as AmbientLight?
-    private mainSkylight: Light = createGlobalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
-    private otherSkylight: Light = createGlobalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
+    private mainSkylight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
+    private otherSkylight: Light = createDirectionalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
     private otherSkylightFactor: number = 1.0;
 
     constructor(private world: World) {

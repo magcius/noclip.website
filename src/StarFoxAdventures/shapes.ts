@@ -17,6 +17,7 @@ import { MaterialRenderContext, SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { setGXMaterialOnRenderInst } from './render';
 import { computeModelView } from './util';
+import { LightType } from './WorldLights';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -249,8 +250,7 @@ export class ShapeMaterial {
         computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
 
-        colorCopy(params.u_Color[ColorKind.MAT0], White); // TODO
-        modelCtx.setupLights(params.u_Lights, modelCtx);
+        modelCtx.setupLights(params.u_Lights, modelCtx, LightType.POINT);
 
         this.material.setOnMaterialParams(params, this.matCtx);
     }

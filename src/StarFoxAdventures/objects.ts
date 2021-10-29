@@ -20,6 +20,7 @@ import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './an
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { getMatrixTranslation } from '../MathHelpers';
+import { LightType } from './WorldLights';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchVec0 = vec3.create();
@@ -103,7 +104,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext, typeMask: LightType) => void;
 }
 
 export interface Light {

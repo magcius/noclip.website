@@ -14,7 +14,7 @@ import { makeMaterialTexture, MaterialFactory } from './materials';
 import { SceneRenderContext, setGXMaterialOnRenderInst } from './render';
 import { mat4SetTranslation } from './util';
 import { World } from './world';
-import { createGlobalLight, Light } from './WorldLights';
+import { createDirectionalLight, Light } from './WorldLights';
 
 const scratchMaterialParams = new MaterialParams();
 const scratchPacketParams = new PacketParams();
@@ -164,8 +164,8 @@ export class AmbientProbe {
         vec3.normalize(n111, n111);
         const nn111 = vec3.clone(n111);
         vec3.negate(nn111, nn111);
-        const skyLight: Light = createGlobalLight(n111, Red);
-        const groundLight: Light = createGlobalLight(nn111, Blue);
+        const skyLight: Light = createDirectionalLight(n111, Red);
+        const groundLight: Light = createDirectionalLight(nn111, Blue);
 
         // Light 0: COLOR0
         scratchMaterialParams.u_Lights[0].reset();
