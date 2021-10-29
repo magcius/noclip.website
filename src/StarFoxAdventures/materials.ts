@@ -746,7 +746,6 @@ class StandardObjectMaterial extends StandardMaterial {
         this.mb.setTevDirect(stage);
         // TODO: support scrollable textures (e.g. eyeballs)
         const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
-        console.log(`assigning texMap ${texMap} to stage ${stage}`);
         this.mb.setTevOrder(stage, texCoord, texMap);
         this.mb.setTevKColorSel(stage, GX.KonstColorSel.KCSEL_1);
         this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
@@ -777,7 +776,6 @@ class StandardObjectMaterial extends StandardMaterial {
             const layer = this.shader.layers[i];
             if (layer.texId !== null) {
                 const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-                console.log(`loading shader layer ${i} to texMap ${texMap}`);
                 let colorInMode: number;
                 if (i > 0)
                     colorInMode = this.shader.layers[i - 1].tevMode & 0x7f;

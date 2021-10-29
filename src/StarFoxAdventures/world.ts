@@ -238,7 +238,7 @@ class WorldRenderer extends SFARenderer {
         else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
 
-        this.sky.update();
+        this.world.envfxMan.update();
         
         const updateCtx: ObjectUpdateContext = {
             viewerInput,

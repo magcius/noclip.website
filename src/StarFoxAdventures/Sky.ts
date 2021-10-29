@@ -26,11 +26,6 @@ export class Sky {
     private skyddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    // TODO: move to envfx as AmbientLight?
-    private mainSkylight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
-    private otherSkylight: Light = createDirectionalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
-    private otherSkylightFactor: number = 1.0;
-
     constructor(private world: World) {
         this.skyddraw.setVtxDesc(GX.Attr.POS, true);
         this.skyddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -50,15 +45,6 @@ export class Sky {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('atmosphere'));
-
-        this.world.worldLights.addLight(this.mainSkylight);
-        this.world.worldLights.addLight(this.otherSkylight);
-    }
-
-    public update() {
-        this.world.envfxMan.getAmbientColor(this.mainSkylight.color, 0);
-        colorScale(this.otherSkylight.color, this.mainSkylight.color, this.otherSkylightFactor);
-        this.otherSkylight.color.a = 1.0;
     }
 
     private renderAtmosphere(device: GfxDevice, renderHelper: GXRenderHelperGfx, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {

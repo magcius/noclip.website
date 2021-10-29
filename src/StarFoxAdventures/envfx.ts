@@ -1,6 +1,6 @@
 import { vec3 } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA } from '../Color';
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA, White, colorScale } from '../Color';
 import { nArray } from '../util';
 
 import { SFATexture } from './textures';
@@ -8,6 +8,7 @@ import { dataSubarray, readUint16 } from './util';
 import { ObjectInstance } from './objects';
 import { World } from './world';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { createDirectionalLight, Light } from './WorldLights';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -34,6 +35,10 @@ export class EnvfxManager {
     public skyscape = new Skyscape();
     private timeOfDay = 4;
     private overrideOutdoorAmbient: Color | null = null;
+    
+    private skyLight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
+    private groundLight: Light = createDirectionalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
+    private groundLightFactor: number = 1.0;
 
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
@@ -48,6 +53,17 @@ export class EnvfxManager {
         self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
         
         return self;
+    }
+
+    public update() {
+        // TODO: change skylight angle depending on time of day
+        this.getAmbientColor(this.skyLight.color, 0);
+        colorScale(this.groundLight.color, this.skyLight.color, this.groundLightFactor);
+        this.groundLight.color.a = 1.0;
+
+        // If lights were already added, this has no effect
+        this.world.worldLights.addLight(this.skyLight);
+        this.world.worldLights.addLight(this.groundLight);
     }
 
     public setTimeOfDay(time: number) {
