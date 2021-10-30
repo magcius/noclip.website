@@ -1,3 +1,4 @@
+import { colorFromRGBA, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from '../Color';
 import { Shader, ShaderLayer, ShaderFlags, ShaderAttrFlags } from './materials';
 import { dataSubarray } from './util';
 
@@ -66,6 +67,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         hasAuxTex2: false,
         auxTex2Num: 0xffffffff,
         furRegionsTexId: null,
+        color: colorNewCopy(White),
         normalFlags,
         lightFlags,
         texMtxCount,
@@ -100,6 +102,11 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.auxTex2Num = data.getUint32(0x34);
         shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
         shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
+        colorFromRGBA(shader.color,
+            data.getUint8(0x4) / 0xff,
+            data.getUint8(0x5) / 0xff,
+            data.getUint8(0x6) / 0xff,
+            1.0);
     }
 
     // console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);

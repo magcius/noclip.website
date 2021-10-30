@@ -269,7 +269,7 @@ export class FakeTextureFetcher extends TextureFetcher {
 
     public destroy(device: GfxDevice) {
         for (let texture of this.textures) {
-            texture.destroy(device);
+            texture?.destroy(device);
         }
         this.textures = [];
     }

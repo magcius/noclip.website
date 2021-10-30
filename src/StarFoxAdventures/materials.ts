@@ -32,6 +32,7 @@ export interface Shader {
     hasAuxTex2: boolean;
     auxTex2Num: number;
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
+    color: Color;
 
     // Model properties
     isAncient?: boolean;
@@ -886,6 +887,29 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = true;
     }
 
+    private addMultByKonstAlphaStage(colorFunc?: ColorFunc<MaterialRenderContext>) {
+        const stage = this.mb.genTevStage();
+        this.mb.setTevDirect(stage);
+        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+
+        if (colorFunc !== undefined) {
+            const kcolor = this.mb.genKonstColor(colorFunc);
+            this.mb.setTevKAlphaSel(stage, getGXKonstAlphaSel(kcolor));
+        } else {
+            this.mb.setTevKAlphaSel(stage, GX.KonstAlphaSel.KASEL_1);
+        }
+
+        if (this.cprevIsValid) {
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.APREV, GX.CA.KONST, GX.CA.ZERO);
+        } else {
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+        }
+
+        this.cprevIsValid = true;
+    }
+
     private setupShaderLayers(preProbe: boolean, fooFlag: boolean /* TODO: better name */) {
         for (let i = 0; i < this.shader.layers.length; i++) {
             const layer = this.shader.layers[i];
@@ -920,7 +944,17 @@ class StandardObjectMaterial extends StandardMaterial {
                         this.addColoredTextureLayerStageWithAmbienceAndSwapping(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
                     }
                 } else {
-                    console.warn(`TODO: textureless shader layer`);
+                    if (fooFlag) {
+                        if (this.shader.attrFlags & 0x10)
+                            console.log(`textureless fooFlag attr0x10`);
+                        else
+                            console.log(`textureless fooFlag !attr0x10`);
+                    } else {
+                        if (this.shader.attrFlags & 0x10)
+                            console.log(`textureless !fooFlag attr0x10`);
+                        else
+                            this.addMultByKonstAlphaStage();
+                    }
                 }
             }
         }
