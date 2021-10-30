@@ -683,31 +683,37 @@ class StandardObjectMaterial extends StandardMaterial {
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
 
+    private getAmbientProbeTexCoord(): TexCoord {
+        if (this.ambProbeTexCoord === undefined) {
+            this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
+            const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
+                mat4.fromTranslation(dst, [0.5, 0.5, 1.0]);
+                mat4.scale(dst, dst, [-0.5, -0.5, 0.0]);
+            });
+            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
+        }
+
+        return this.ambProbeTexCoord;
+    }
+
     // Emits REG1 = hemispheric probe
     private setupHemisphericProbe() {
-        this.ambProbeTexCoord = undefined;
-
         if (!this.enableHemisphericProbe)
             return;
 
-        this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
-        const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
-            mat4.fromScaling(dst, [-0.5, -0.5, 0.0]);
-            mat4.translate(dst, dst, [0.5, 0.5, 1.0]);
-        });
-        this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
         const kcolor = this.mb.genKonstColor((dst: Color) => {
             colorCopy(dst, White); // TODO: intensity can be adjusted per object
             dst.a = 0.0; // FIXME: is this accurate?
         });
-        // TODO: there are 6 possible ambient probe textures that can be selected per object
+
         const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
         // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
+        // const texMap = this.mb.genTexMap(this.factory.getProbeTestTexture());
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
-        this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap, GX.RasColorChannelID.COLOR0A0);
         this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
         this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
     }
@@ -726,17 +732,13 @@ class StandardObjectMaterial extends StandardMaterial {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         if (this.ambProbeTexCoord === undefined) {
-            this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
-            const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
-                mat4.fromScaling(dst, [-0.5, -0.5, 0.0]);
-                mat4.translate(dst, dst, [0.5, 0.5, 1.0]);
-            });
-            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
-            this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap, GX.RasColorChannelID.COLOR0A0);
+            this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap, GX.RasColorChannelID.COLOR0A0);
         } else {
             const indStage = this.mb.genIndTexStage();
+            // Enable "addPrev" option
+            // FIXME: this seems to break reflective probes entirely.
             this.mb.setTevIndirect(stage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
-            this.mb.setTevOrder(stage, this.ambProbeTexCoord, texMap);
+            this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap);
         }
 
         if (this.enableHemisphericProbe)
@@ -1571,6 +1573,46 @@ export class MaterialFactory {
         if (this.opaqueWhiteTexture === undefined)
             this.opaqueWhiteTexture = this.genColorTexture(255, 255, 255, 255);
         return this.opaqueWhiteTexture;
+    }
+
+    private probeTestTexture?: TexFunc<MaterialRenderContext>;
+
+    public getProbeTestTexture(): TexFunc<MaterialRenderContext> {
+        if (this.probeTestTexture === undefined) {
+            const width = 2;
+            const height = 2;
+            const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            const gfxSampler = this.device.createSampler({
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+
+            const pixels = new Uint8Array(4 * width * height);
+
+            function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+                const idx = 4 * (y * width + x);
+                pixels[idx] = r;
+                pixels[idx + 1] = g;
+                pixels[idx + 2] = b;
+                pixels[idx + 3] = a;
+            }
+
+            plot(0, 0, 255, 0, 0, 255);
+            plot(1, 0, 0, 255, 0, 255);
+            plot(0, 1, 0, 0, 255, 255);
+            plot(1, 1, 255, 255, 0, 255);
+
+            this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+            this.probeTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+        }
+
+        return this.probeTestTexture;
     }
     
     public getRampTexture(): TexFunc<MaterialRenderContext> {
