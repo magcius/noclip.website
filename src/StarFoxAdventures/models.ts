@@ -19,6 +19,7 @@ import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
 import { transformVec3Mat4w0 } from '../MathHelpers';
+import { LightType } from './WorldLights';
 
 interface Joint {
     parent: number;
@@ -48,8 +49,9 @@ interface Water {
 export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
+    ambienceIdx: number;
     outdoorAmbientColor: Color;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+    setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
 }
 
 const BLOCK_FUR_RENDER_LAYER = 23;

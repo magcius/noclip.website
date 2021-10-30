@@ -6,7 +6,7 @@ import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams, ColorKind, PacketParams, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
 
-import { Color, colorCopy, White } from '../Color';
+import { Color, colorCopy, TransparentBlack, White } from '../Color';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 
 // Declare opaque types, as described in <https://evertpot.com/opaque-ts-types/>.
@@ -29,19 +29,15 @@ export type IndTexMtx = number & { [isIndTexMtx]: true }
 declare const isKonstColor: unique symbol;
 export type KonstColor = number & { [isKonstColor]: true }
 
-function getGXIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
+export function getGXIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
     return GX.IndTexStageID.STAGE0 + indTexStage;
 }
 
-function getGXTexMapID(texMap: TexMap | null): GX.TexMapID {
+export function getGXTexMapID(texMap: TexMap | null): GX.TexMapID {
     return texMap !== null ? GX.TexMapID.TEXMAP0 + texMap : GX.TexMapID.TEXMAP_NULL;
 }
 
-export function getGXTexGenSrc(texMap: TexMap): GX.TexGenSrc {
-    return GX.TexGenSrc.TEX0 + texMap;
-}
-
-function getGXTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
+export function getGXTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
     return texCoord !== null ? GX.TexCoordID.TEXCOORD0 + texCoord : GX.TexCoordID.TEXCOORD_NULL;
 }
 
@@ -62,10 +58,10 @@ export function getGXKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
 }
 
 export type TexFunc<RenderContext> = ((dst: TextureMapping, ctx: RenderContext) => void) | undefined;
-type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
-type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
+export type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
+export type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
 
-export class SFAMaterialBuilder<RenderContext> {
+export class SFAMaterialBuilder<RenderContext = undefined> {
     private mb: GXMaterialBuilder;
     private tevStageNum: number;
     private indTexStageNum: number;
@@ -77,6 +73,7 @@ export class SFAMaterialBuilder<RenderContext> {
     private postTexMtxs: MtxFunc<RenderContext>[];
     private indTexMtxs: MtxFunc<RenderContext>[];
     private konstColors: ColorFunc<RenderContext>[];
+    private tevRegColors: ColorFunc<RenderContext>[];
     
     private gxMaterial: GXMaterial | undefined = undefined;
     private gxMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
@@ -97,6 +94,7 @@ export class SFAMaterialBuilder<RenderContext> {
         this.postTexMtxs = [];
         this.indTexMtxs = [];
         this.konstColors = [];
+        this.tevRegColors = [];
         this.gxMaterial = undefined;
         this.gxMaterialHelper = undefined;
     }
@@ -236,6 +234,10 @@ export class SFAMaterialBuilder<RenderContext> {
         this.matColors[idx] = func;
     }
 
+    public setTevRegColor(idx: number, func: ColorFunc<RenderContext>) {
+        this.tevRegColors[idx] = func;
+    }
+
     private rebuildGXMaterial() {
         this.gxMaterial = this.mb.finish(this.name);
         this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
@@ -257,18 +259,24 @@ export class SFAMaterialBuilder<RenderContext> {
             const func = this.texMtxs[i];
             if (func !== undefined)
                 func(params.u_TexMtx[i], ctx);
+            else
+                mat4.identity(params.u_TexMtx[i]);
         }
 
         for (let i = 0; i < this.indTexMtxs.length; i++) {
             const func = this.indTexMtxs[i];
             if (func !== undefined)
                 func(params.u_IndTexMtx[i], ctx);
+            else
+                mat4.identity(params.u_IndTexMtx[i]);
         }
 
         for (let i = 0; i < this.postTexMtxs.length; i++) {
             const func = this.postTexMtxs[i];
             if (func !== undefined)
                 func(params.u_PostTexMtx[i], ctx);
+            else
+                mat4.identity(params.u_PostTexMtx[i]);
         }
 
         for (let i = 0; i < 2; i++) {
@@ -293,6 +301,14 @@ export class SFAMaterialBuilder<RenderContext> {
                 func(params.u_Color[ColorKind.K0 + i], ctx);
             else
                 colorCopy(params.u_Color[ColorKind.K0 + i], White);
+        }
+
+        for (let i = 0; i < 3; i++) {
+            const func = this.tevRegColors[i];
+            if (func !== undefined)
+                func(params.u_Color[ColorKind.C0 + i], ctx);
+            else
+                colorCopy(params.u_Color[ColorKind.C0 + i], TransparentBlack);
         }
     }
 

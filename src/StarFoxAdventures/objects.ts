@@ -20,6 +20,7 @@ import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './an
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { getMatrixTranslation } from '../MathHelpers';
+import { LightType } from './WorldLights';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchVec0 = vec3.create();
@@ -103,7 +104,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+    setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
 }
 
 export interface Light {
@@ -131,7 +132,7 @@ export class ObjectInstance {
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    private ambienceNum: number = 0;
+    private ambienceIdx: number = 0;
 
     public animSpeed: number = 0.1; // Default to a sensible value.
     // In the game, each object class is responsible for driving its own animations
@@ -145,9 +146,9 @@ export class ObjectInstance {
         this.commonObjectParams = parseCommonObjectParams(objParams);
 
         if (this.commonObjectParams.ambienceValue !== 0)
-            this.ambienceNum = this.commonObjectParams.ambienceValue - 1;
+            this.ambienceIdx = this.commonObjectParams.ambienceValue - 1;
         else
-            this.ambienceNum = objType.ambienceNum;
+            this.ambienceIdx = objType.ambienceNum;
 
         vec3.copy(this.position, this.commonObjectParams.position);
         
@@ -322,12 +323,13 @@ export class ObjectInstance {
             getMatrixTranslation(worldPos, worldMtx);
             const viewPos = scratchVec1;
             vec3.transformMat4(viewPos, worldPos, viewMtx);
-            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
+            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceIdx);
             // const debugCtx = getDebugOverlayCanvas2D();
             // drawWorldSpacePoint(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos);
             // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ")");
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
+                ambienceIdx: this.ambienceIdx,
                 outdoorAmbientColor: scratchColor0,
             }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }

@@ -17,6 +17,7 @@ import { MaterialRenderContext, SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { setGXMaterialOnRenderInst } from './render';
 import { computeModelView } from './util';
+import { LightType } from './WorldLights';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -237,20 +238,21 @@ export class ShapeMaterial {
                 sceneCtx: modelCtx.sceneCtx,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
+                ambienceIdx: modelCtx.ambienceIdx,
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
                 furLayer: matOptions.furLayer ?? 0,
             };
         }
 
         this.matCtx.sceneCtx = modelCtx.sceneCtx;
+        this.matCtx.ambienceIdx = modelCtx.ambienceIdx;
         colorCopy(this.matCtx.outdoorAmbientColor, modelCtx.outdoorAmbientColor);
         this.matCtx.furLayer = matOptions.furLayer ?? 0;
 
         computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
 
-        colorCopy(params.u_Color[ColorKind.MAT0], White); // TODO
-        modelCtx.setupLights(params.u_Lights, modelCtx);
+        modelCtx.setupLights(params.u_Lights, modelCtx.sceneCtx, LightType.POINT);
 
         this.material.setOnMaterialParams(params, this.matCtx);
     }

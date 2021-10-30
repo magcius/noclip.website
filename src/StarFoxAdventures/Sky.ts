@@ -14,7 +14,7 @@ import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from '.
 import { vecPitch } from './util';
 import { getCamPos } from './util';
 import { World } from './world';
-import { createGlobalLight, Light, LightType } from './WorldLights';
+import { createDirectionalLight, Light, LightType } from './WorldLights';
 import { colorCopy, colorNewCopy, colorScale, White } from '../Color';
 
 const materialParams = new MaterialParams();
@@ -25,11 +25,6 @@ const scratchSceneParams = new SceneParams();
 export class Sky {
     private skyddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
-
-    // TODO: move to envfx as AmbientLight?
-    private mainSkylight: Light = createGlobalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
-    private otherSkylight: Light = createGlobalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
-    private otherSkylightFactor: number = 1.0;
 
     constructor(private world: World) {
         this.skyddraw.setVtxDesc(GX.Attr.POS, true);
@@ -50,15 +45,6 @@ export class Sky {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('atmosphere'));
-
-        this.world.worldLights.addLight(this.mainSkylight);
-        this.world.worldLights.addLight(this.otherSkylight);
-    }
-
-    public update() {
-        this.world.envfxMan.getAmbientColor(this.mainSkylight.color, 0);
-        colorScale(this.otherSkylight.color, this.mainSkylight.color, this.otherSkylightFactor);
-        this.otherSkylight.color.a = 1.0;
     }
 
     private renderAtmosphere(device: GfxDevice, renderHelper: GXRenderHelperGfx, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
