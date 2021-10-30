@@ -7,11 +7,11 @@ import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
 
 import { SFATexture, TextureFetcher } from './textures';
-import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor } from './util';
+import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, HighBitReader } from './util';
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 
@@ -694,12 +694,12 @@ class StandardObjectMaterial extends StandardMaterial {
 
     private getAmbientProbeTexCoord(): TexCoord {
         if (this.ambProbeTexCoord === undefined) {
-            this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
             const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [0.5, 0.5, 1.0]);
                 mat4.scale(dst, dst, [-0.5, -0.5, 0.0]);
             });
-            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
+            // TEXMTX0 is the normal matrix
+            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0 /*GX.TexGenMatrix.TEXMTX0*/, false, getGXPostTexGenMatrix(ptmtx));
         }
 
         return this.ambProbeTexCoord;
@@ -715,9 +715,9 @@ class StandardObjectMaterial extends StandardMaterial {
             dst.a = 0.0; // FIXME: is this accurate?
         });
 
-        const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
+        // const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
         // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
-        // const texMap = this.mb.genTexMap(this.factory.getProbeTestTexture());
+        const texMap = this.mb.genTexMap(this.factory.getProbeTestTexture());
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
@@ -976,7 +976,8 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = false;
         this.ambProbeTexCoord = undefined;
         this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
-        this.enableReflectiveProbe = this.shader.hasReflectiveProbe;
+        // this.enableReflectiveProbe = this.shader.hasReflectiveProbe;
+        this.enableReflectiveProbe = false;
 
         this.mb.setUsePnMtxIdx(true);
 
@@ -1000,6 +1001,15 @@ class StandardObjectMaterial extends StandardMaterial {
 
         // Post-probe layers
         this.setupShaderLayers(false, fooFlag);
+
+        // XXX: For debugging hemi probes, show only the C1 channel
+        if (this.enableHemisphericProbe) {
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C1);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        }
 
         if (this.shader.lightFlags & LightFlags.OverrideLighting) {
             // Override world lighting (e.g. tornadoes)
@@ -1587,8 +1597,10 @@ export class MaterialFactory {
 
     public getProbeTestTexture(): TexFunc<MaterialRenderContext> {
         if (this.probeTestTexture === undefined) {
-            const width = 2;
-            const height = 2;
+            const width = 1024;
+            const height = 1024;
+            const gridWidth = 32;
+            const gridHeight = 32;
             const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
             const gfxSampler = this.device.createSampler({
                 wrapS: GfxWrapMode.Clamp,
@@ -1602,18 +1614,36 @@ export class MaterialFactory {
 
             const pixels = new Uint8Array(4 * width * height);
 
-            function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+            function plot(x: number, y: number, color: Color) {
                 const idx = 4 * (y * width + x);
-                pixels[idx] = r;
-                pixels[idx + 1] = g;
-                pixels[idx + 2] = b;
-                pixels[idx + 3] = a;
+                pixels[idx] = color.r * 255;
+                pixels[idx + 1] = color.g * 255;
+                pixels[idx + 2] = color.b * 255;
+                pixels[idx + 3] = color.a * 255;
             }
 
-            plot(0, 0, 255, 0, 0, 255);
-            plot(1, 0, 0, 255, 0, 255);
-            plot(0, 1, 0, 0, 255, 255);
-            plot(1, 1, 255, 255, 0, 255);
+            const ctl = colorNewFromRGBA(1, 0, 0);
+            const ctr = colorNewFromRGBA(0, 1, 0);
+            const cbl = colorNewFromRGBA(0, 0, 1);
+            const cbr = colorNewFromRGBA(1, 1, 0);
+            const ct = colorNewCopy(TransparentBlack);
+            const cb = colorNewCopy(TransparentBlack);
+            const color = colorNewCopy(TransparentBlack);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    // const grid = ((x/gridWidth) & 1) ^ ((y/gridHeight) & 1);
+                    const grid= 0;
+                    colorLerp(ct, ctl, ctr, x/(width-1));
+                    colorLerp(cb, cbl, cbr, x/(width-1));
+                    colorLerp(color, ct, cb, y/(height-1));
+                    plot(x, y, color);
+                }
+            }
+
+            // plot(0, 0, 255, 0, 0, 255);
+            // plot(1, 0, 0, 255, 0, 255);
+            // plot(0, 1, 0, 0, 255, 255);
+            // plot(1, 1, 255, 255, 0, 255);
 
             this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 

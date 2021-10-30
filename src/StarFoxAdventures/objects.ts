@@ -331,6 +331,7 @@ export class ObjectInstance {
                 ...objectCtx,
                 ambienceIdx: this.ambienceIdx,
                 outdoorAmbientColor: scratchColor0,
+                object: this,
             }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
     }

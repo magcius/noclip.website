@@ -421,7 +421,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.posFineSkinningConfig));
         if (posFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
-            model.fineSkinQuantizeScale = posFineSkinningConfig.quantizeScale;
+            model.fineSkinPositionQuantizeScale = posFineSkinningConfig.quantizeScale;
 
             const weightsOffs = data.getUint32(fields.posFineSkinningWeights);
             const posFineSkinningWeights = dataSubarray(data, weightsOffs);
@@ -441,6 +441,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
         if (nrmFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
+            model.fineSkinNormalQuantizeScale = nrmFineSkinningConfig.quantizeScale;
             model.fineSkinNBTNormals = !!(normalFlags & NormalFlags.NBT);
 
             const weightsOffs = data.getUint32(fields.nrmFineSkinningWeights);
@@ -488,11 +489,15 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordOffset.toString(16)}`);
     const texcoordBuffer = dataSubarray(data, texcoordOffset);
 
+    let hasSkinning = false;
+
     let jointCount = 0;
     if (fields.hasBones) {
         const jointOffset = data.getUint32(fields.jointOffset);
         jointCount = data.getUint8(fields.jointCount);
         // console.log(`Loading ${jointCount} joints from offset 0x${jointOffset.toString(16)}`);
+
+        hasSkinning = true;
 
         model.joints = [];
         let offs = jointOffset;
@@ -707,7 +712,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
-        newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
+        newGeom.setPnMatrixMap(pnMatrixMap, hasSkinning, model.hasFineSkinning);
         if (dlInfo.aabb !== undefined)
             newGeom.setBoundingBox(dlInfo.aabb);
         if (dlInfo.sortLayer !== undefined)
@@ -771,7 +776,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
                         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
-                        newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
+                        newGeom.setPnMatrixMap(pnMatrixMap, hasSkinning, model.hasFineSkinning);
                         if (dlInfo.aabb !== undefined)
                             newGeom.setBoundingBox(dlInfo.aabb);
                         if (dlInfo.sortLayer !== undefined)

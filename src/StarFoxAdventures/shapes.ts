@@ -11,12 +11,13 @@ import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager,
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
 import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
+import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
 
 import { MaterialRenderContext, SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { setGXMaterialOnRenderInst } from './render';
-import { computeModelView } from './util';
+import { computeModelView, mat4SetTranslation } from './util';
 import { LightType } from './WorldLights';
 
 class MyShapeHelper {
@@ -117,6 +118,8 @@ export class ShapeGeometry {
     private sortLayer?: number;
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
+    public normalMatrixInTexMatrixCount = 0;
+    public hasSkinning = false;
     private hasFineSkinning = false;
 
     constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: DataView, private isDynamic: boolean) {
@@ -140,9 +143,11 @@ export class ShapeGeometry {
         this.sortLayer = sortLayer;
     }
 
-    public setPnMatrixMap(pnMatrixMap: number[], hasFineSkinning: boolean) {
+    public setPnMatrixMap(pnMatrixMap: number[], hasSkinning: boolean, hasFineSkinning: boolean) {
         for (let i = 0; i < pnMatrixMap.length; i++)
             this.pnMatrixMap[i] = pnMatrixMap[i];
+        this.normalMatrixInTexMatrixCount = pnMatrixMap.length;
+        this.hasSkinning = hasSkinning;
         this.hasFineSkinning = hasFineSkinning;
     }
 
@@ -197,7 +202,8 @@ export class ShapeGeometry {
         }
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            // If fine-skinning is enabled, matrix 9 is overridden with the identity matrix.
+            // If fine-skinning is enabled, matrix 9 is overridden with the model-view matrix,
+            // and vertices marked with matrix 9 are skinned by software.
             if (this.hasFineSkinning && i === 9)
                 mat4.copy(this.packetParams.u_PosMtx[i], modelViewMtx);
             else
@@ -276,8 +282,23 @@ export class Shape {
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
         this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
         this.material.setOnMaterialParams(scratchMaterialParams, modelMatrix, modelCtx, matOptions);
-        
+
         const packetParams = this.geom.getPacketParams();
+
+        // For environment mapping
+        if (this.geom.hasSkinning && modelCtx.object !== undefined) {
+            const descaleMtx = mat4.create();
+            const invScale = 1.0 / modelCtx.object.scale;
+            mat4.fromScaling(descaleMtx, [invScale, invScale, invScale])
+            for (let i = 0; i < this.geom.normalMatrixInTexMatrixCount; i++) {
+                // XXX: this is the game's peculiar way of creating normal matrices
+                mat4.copy(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
+                mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
+                mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
+                // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
+            }
+        }
+        
         const materialHelper = this.material.getGXMaterialHelper();
 
         setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, packetParams);
