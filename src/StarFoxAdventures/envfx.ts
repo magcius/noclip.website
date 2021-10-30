@@ -37,8 +37,10 @@ export class EnvfxManager {
     public ambienceIdx: number = 0;
     private overrideOutdoorAmbient: Color | null = null;
     
-    private skyLight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
-    private groundLight: Light = createDirectionalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
+    public skyLight: Light = createDirectionalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
+    public groundLight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
+    // TODO: groundLightFactor seems to be modified by the function for drawing lens flares,
+    // when looking at the sun. Otherwise, it is 1.0 by default.
     private groundLightFactor: number = 1.0;
 
     private envfxactBin: DataView;
@@ -68,7 +70,6 @@ export class EnvfxManager {
     }
 
     public setTimeOfDay(time: number) {
-        //console.log(`setting time of day ${time}`);
         this.timeOfDay = time;
         this.update();
     }

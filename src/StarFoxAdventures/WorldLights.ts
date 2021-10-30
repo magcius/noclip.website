@@ -58,7 +58,6 @@ export class WorldLights {
         let i = 0;
 
         const worldView = scratchMtx0;
-        // FIXME: are there some situations where camera-view should not be used, such as ambient probes?
         computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
         const worldViewSR = scratchMtx1;
         mat4.copy(worldViewSR, worldView);

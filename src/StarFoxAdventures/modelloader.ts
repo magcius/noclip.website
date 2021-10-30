@@ -6,7 +6,7 @@ import * as GX from '../gx/gx_enum';
 import { nArray } from '../util';
 
 import { parseShader, ANCIENT_MAP_SHADER_FIELDS, SFA_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS } from './materialloader';
-import { MaterialFactory, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
+import { MaterialFactory, NormalFlags, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
 import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';
@@ -394,10 +394,6 @@ const enum Opcode {
     End         = 5,
 }
 
-const enum NormalFlags {
-    NBT = 0x8,
-}
-
 export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFactory: MaterialFactory, version: ModelVersion): Model {
     const model = new Model(version);
     const fields = FIELDS[version];
@@ -631,7 +627,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
             let texmtxNum = 0;
 
-            if (shader.hasHemisphericProbe || shader.hasAuxTex1) {
+            if (shader.hasHemisphericProbe || shader.hasReflectiveProbe) {
                 if (shader.hasAuxTex2) {
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;
