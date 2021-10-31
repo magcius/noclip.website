@@ -134,6 +134,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         return id as TexMap;
     }
 
+    public getTexMapCount(): number {
+        return this.texMaps.length;
+    }
+
     public genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
         const texCoord = this.texCoordNum as TexCoord;
         if (texCoord >= 8)
@@ -141,6 +145,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         this.texCoordNum++;
         this.mb.setTexCoordGen(getGXTexCoordID(texCoord), texGenType, texGenSrc, texMtx, normalize, postTexMtx);
         return texCoord;
+    }
+
+    public getTexCoordCount(): number {
+        return this.texCoordNum;
     }
 
     public genPostTexMtx(func: MtxFunc<RenderContext>): PostTexMtx {
