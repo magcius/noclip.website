@@ -14,6 +14,7 @@ import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { clamp } from '../MathHelpers';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -717,7 +718,7 @@ class StandardObjectMaterial extends StandardMaterial {
 
         // const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
         // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
-        const texMap = this.mb.genTexMap(this.factory.getProbeTestTexture());
+        const texMap = this.mb.genTexMap(this.factory.getSphereMapTestTexture());
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
@@ -1593,10 +1594,13 @@ export class MaterialFactory {
         return this.opaqueWhiteTexture;
     }
 
-    private probeTestTexture?: TexFunc<MaterialRenderContext>;
+    private sphereMapTestTexture?: TexFunc<MaterialRenderContext>;
 
-    public getProbeTestTexture(): TexFunc<MaterialRenderContext> {
-        if (this.probeTestTexture === undefined) {
+    // Generate a sphere map with black in the center (where N points toward camera)
+    // and white around the edges (where N points perpendicular to camera).
+    // Useful for testing.
+    public getSphereMapTestTexture(): TexFunc<MaterialRenderContext> {
+        if (this.sphereMapTestTexture === undefined) {
             const width = 1024;
             const height = 1024;
             const gridWidth = 32;
@@ -1621,36 +1625,25 @@ export class MaterialFactory {
                 pixels[idx + 2] = color.b * 255;
                 pixels[idx + 3] = color.a * 255;
             }
-
-            const ctl = colorNewFromRGBA(1, 0, 0);
-            const ctr = colorNewFromRGBA(0, 1, 0);
-            const cbl = colorNewFromRGBA(0, 0, 1);
-            const cbr = colorNewFromRGBA(1, 1, 0);
-            const ct = colorNewCopy(TransparentBlack);
-            const cb = colorNewCopy(TransparentBlack);
+            
             const color = colorNewCopy(TransparentBlack);
             for (let y = 0; y < height; y++) {
+                const fy = 2*y/(height-1) - 1;
                 for (let x = 0; x < width; x++) {
-                    // const grid = ((x/gridWidth) & 1) ^ ((y/gridHeight) & 1);
-                    const grid= 0;
-                    colorLerp(ct, ctl, ctr, x/(width-1));
-                    colorLerp(cb, cbl, cbr, x/(width-1));
-                    colorLerp(color, ct, cb, y/(height-1));
+                    const fx = 2*x/(width-1) - 1;
+                    const d2 = clamp(fx*fx + fy*fy, 0.0, 1.0);
+                    const fz = 1.0 - Math.sqrt(1.0 - d2);
+                    colorFromRGBA(color, fz, fz, fz, 1.0);
                     plot(x, y, color);
                 }
             }
 
-            // plot(0, 0, 255, 0, 0, 255);
-            // plot(1, 0, 0, 255, 0, 255);
-            // plot(0, 1, 0, 0, 255, 255);
-            // plot(1, 1, 255, 255, 0, 255);
-
             this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-            this.probeTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+            this.sphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
         }
 
-        return this.probeTestTexture;
+        return this.sphereMapTestTexture;
     }
     
     public getRampTexture(): TexFunc<MaterialRenderContext> {
