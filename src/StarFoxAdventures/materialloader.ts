@@ -65,9 +65,10 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         hasHemisphericProbe: false,
         hasReflectiveProbe: false,
         reflectiveProbeIdx: 0,
-        reflectiveEnvFactor: 0.0,
-        hasAuxTex2: false,
-        auxTex2Num: 0xffffffff,
+        reflectiveAmbFactor: 0.0,
+        hasNBTTexture: false,
+        nbtTexId: 0xffffffff,
+        nbtParams: 0,
         furRegionsTexId: null,
         color: colorNewCopy(White),
         normalFlags,
@@ -95,17 +96,17 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.flags = 0; // TODO: where is this field?
         shader.hasHemisphericProbe = data.getUint32(0x8) === 1;
         shader.hasReflectiveProbe = data.getUint32(0x14) === 1;
-        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
+        shader.hasNBTTexture = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
     } else {
         shader.flags = data.getUint32(0x3c);
         shader.attrFlags = data.getUint8(0x40);
         shader.hasHemisphericProbe = data.getUint32(0x8) !== 0;
         shader.hasReflectiveProbe = data.getUint32(0x14) !== 0;
         shader.reflectiveProbeIdx = data.getUint8(0x20);
-        console.log(`reflective probe idx ${shader.reflectiveProbeIdx}`);
-        shader.reflectiveEnvFactor = data.getUint8(0x22) / 0xff;
-        shader.auxTex2Num = data.getUint32(0x34);
-        shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
+        shader.reflectiveAmbFactor = data.getUint8(0x22) / 0xff;
+        shader.nbtTexId = data.getUint32(0x34);
+        shader.hasNBTTexture = shader.nbtTexId != 0xffffffff;
+        shader.nbtParams = data.getUint8(0x42);
         shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
         colorFromRGBA(shader.color,
             data.getUint8(0x4) / 0xff,
