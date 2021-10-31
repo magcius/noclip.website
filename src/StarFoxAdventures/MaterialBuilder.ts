@@ -50,6 +50,14 @@ export function getGXIndTexMtxID(indTexMtx: IndTexMtx): GX.IndTexMtxID {
     return GX.IndTexMtxID._0 + indTexMtx;
 }
 
+export function getGXIndTexMtxID_S(indTexMtx: IndTexMtx): GX.IndTexMtxID {
+    return GX.IndTexMtxID.S0 + indTexMtx;
+}
+
+export function getGXIndTexMtxID_T(indTexMtx: IndTexMtx): GX.IndTexMtxID {
+    return GX.IndTexMtxID.T0 + indTexMtx;
+}
+
 export function getGXKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
     return GX.KonstColorSel.KCSEL_K0 + kcolor;
 }

@@ -13,7 +13,7 @@ import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
 import { SceneRenderContext } from './render';
-import { ColorFunc, getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { clamp } from '../MathHelpers';
 
 export interface ShaderLayer {
@@ -698,7 +698,7 @@ class StandardObjectMaterial extends StandardMaterial {
 
     private addNBTTextureStage() {
         const indStage = this.mb.genIndTexStage();
-        const indTexMtx0 = this.mb.genIndTexMtx((dst: mat4) => {
+        const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
         });
         const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId, false)!;
@@ -713,7 +713,7 @@ class StandardObjectMaterial extends StandardMaterial {
                 }
             }
         }
-        let nbtTexCoord = 1 as TexCoord; // FIXME: verify correctness
+        let nbtTexCoord = 1 as TexCoord; // FIXME: verify correctness. This (probably) finds the TexCoord for the first shader layer.
         if (this.enableHemisphericProbe)
             nbtTexCoord = 2 as TexCoord;
         if (this.enableReflectiveProbe)
@@ -726,23 +726,25 @@ class StandardObjectMaterial extends StandardMaterial {
             mat4SetTranslation(dst, 0.0, 0.0, 1.0);
         });
         this.mb.setUseTexMtxIdx(0);
-        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
-        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
+        const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
+        const tanTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
 
         const stage0 = this.mb.genTevStage();
-        // FIXME: S0 is not implemented
-        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, GX.IndTexMtxID.S0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
-        this.mb.setTevOrder(stage0, texCoord0, (nbtTexMap + 1) as TexMap, GX.RasColorChannelID.COLOR_ZERO);
+        // FIXME: matrixSel = S0 is not implemented
+        // FIXME: GX_TEX_DISABLE is not implemented. Said flag is used to perform texture coordinate scaling without a lookup.
+        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_S(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevOrder(stage0, binrmTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage0 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage0 !== 0 ? GX.CA.APREV : GX.CA.RASA);
 
         const stage1 = this.mb.genTevStage();
-        // FIXME: T0 is not implemented
-        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, GX.IndTexMtxID.T0, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
-        this.mb.setTevOrder(stage1, texCoord1, (nbtTexMap + 1) as TexMap, GX.RasColorChannelID.COLOR_ZERO);
+        // FIXME: matrixSel = T0 is not implemented
+        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_T(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevOrder(stage1, tanTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage1 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage1 !== 0 ? GX.CA.APREV : GX.CA.RASA);
 
+        // Set tev indirect on the following stage
         this.mb.setTevIndirect((stage1 + 1) as TevStage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
     }
 
