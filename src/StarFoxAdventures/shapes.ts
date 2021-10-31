@@ -295,7 +295,7 @@ export class Shape {
                 mat4.copy(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
                 mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
                 mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
-                // The following line causes glitches due to an issue related to the function's method of detecting uniform scaling.
+                // The following line causes glitches due to an issue related to computeNormalMatrix's method of detecting uniform scaling.
                 // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
             }
         }

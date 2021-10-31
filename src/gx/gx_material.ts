@@ -562,6 +562,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
+        console.log(`GENERATING TEX MTX INDEX ACCESS!!!`);
         if (index === GX.TexCoordID.TEXCOORD0) return `(a_TexMtx0123Idx.x * 256.0)`;
         if (index === GX.TexCoordID.TEXCOORD1) return `(a_TexMtx0123Idx.y * 256.0)`;
         if (index === GX.TexCoordID.TEXCOORD2) return `(a_TexMtx0123Idx.z * 256.0)`;
@@ -1398,6 +1399,8 @@ ${this.generateTexGens()}
 }
 `;
 
+        console.log(`vertex shader: ${this.vert}`);
+
         this.frag = `
 ${both}
 ${this.generateTexCoordGetters()}
@@ -1452,6 +1455,7 @@ ${this.generateFog()}
 ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
+console.log(`fragment shader: ${this.frag}`);
     }
 }
 // #endregion

@@ -8,6 +8,7 @@ import { TextureMapping } from '../TextureHolder';
 
 import { Color, colorCopy, TransparentBlack, White } from '../Color';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
+import { nArray } from '../util';
 
 // Declare opaque types, as described in <https://evertpot.com/opaque-ts-types/>.
 // These types compile as plain numbers, with no additional runtime overhead.
@@ -74,6 +75,7 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
     private indTexMtxs: MtxFunc<RenderContext>[];
     private konstColors: ColorFunc<RenderContext>[];
     private tevRegColors: ColorFunc<RenderContext>[];
+    private usedTexMtxIndexes?: boolean[];
     
     private gxMaterial: GXMaterial | undefined = undefined;
     private gxMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
@@ -95,6 +97,7 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         this.indTexMtxs = [];
         this.konstColors = [];
         this.tevRegColors = [];
+        this.usedTexMtxIndexes = undefined;
         this.gxMaterial = undefined;
         this.gxMaterialHelper = undefined;
     }
@@ -240,7 +243,15 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
 
     private rebuildGXMaterial() {
         this.gxMaterial = this.mb.finish(this.name);
+        if (this.usedTexMtxIndexes !== undefined)
+            this.gxMaterial.useTexMtxIdx = nArray(8, (i) => this.usedTexMtxIndexes![i]);
         this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
+    }
+
+    public setUseTexMtxIdx(idx: number) {
+        if (this.usedTexMtxIndexes === undefined)
+            this.usedTexMtxIndexes = nArray(8, () => false);
+        this.usedTexMtxIndexes[idx] = true;
     }
 
     public setOnMaterialParams(params: MaterialParams, ctx: RenderContext) {
