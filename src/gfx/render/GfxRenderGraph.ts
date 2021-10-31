@@ -112,6 +112,8 @@ export interface GfxrPass {
      * seldomly used.
      */
     post(func: PassPostFunc): void;
+
+    addExtraRef(renderTargetID: GfxrAttachmentSlot): void;
 }
 
 class PassImpl implements GfxrPass {
@@ -119,14 +121,16 @@ class PassImpl implements GfxrPass {
 
     // Input state used for scheduling.
 
-    // RenderTargetAttachmentSlot => renderTargetID
+    // GfxrAttachmentSlot => renderTargetID
     public renderTargetIDs: GfxrRenderTargetID[] = [];
-    // RenderTargetAttachmentSlot => resolveTextureID
+    // GfxrAttachmentSlot => resolveTextureID
     public resolveTextureOutputIDs: GfxrResolveTextureID[] = [];
-    // RenderTargetAttachmentSlot => GfxTexture
+    // GfxrAttachmentSlot => GfxTexture
     public resolveTextureOutputExternalTextures: GfxTexture[] = [];
     // List of resolveTextureIDs that we have a reference to.
     public resolveTextureInputIDs: GfxrResolveTextureID[] = [];
+    // GfxrAttachmentSlot => refcount.
+    public renderTargetExtraRefs: boolean[] = [];
 
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
@@ -197,6 +201,10 @@ class PassImpl implements GfxrPass {
     public post(func: PassPostFunc): void {
         assert(this.postFunc === null);
         this.postFunc = func;
+    }
+
+    public addExtraRef(slot: GfxrAttachmentSlot): void {
+        this.renderTargetExtraRefs[slot] = true;
     }
 }
 
@@ -610,12 +618,15 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     private singleSampledTextureForResolveTextureID: SingleSampledTexture[] = [];
 
     private scheduleAddUseCount(graph: GraphImpl, pass: PassImpl): void {
-        for (let i = 0; i < pass.renderTargetIDs.length; i++) {
-            const renderTargetID = pass.renderTargetIDs[i];
+        for (let slot = 0; slot < pass.renderTargetIDs.length; slot++) {
+            const renderTargetID = pass.renderTargetIDs[slot];
             if (renderTargetID === undefined)
                 continue;
 
             this.renderTargetOutputCount[renderTargetID]++;
+
+            if (pass.renderTargetExtraRefs[slot])
+                this.renderTargetOutputCount[renderTargetID]++;
         }
 
         for (let i = 0; i < pass.resolveTextureInputIDs.length; i++) {
@@ -806,6 +817,10 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
         for (let i = 0; i < pass.renderTargetIDs.length; i++)
             this.releaseRenderTargetForID(pass.renderTargetIDs[i], true);
+
+        for (let slot = 0; slot < pass.renderTargetExtraRefs.length; slot++)
+            if (pass.renderTargetExtraRefs[slot])
+                this.releaseRenderTargetForID(pass.renderTargetIDs[slot], true);
     }
 
     private scheduleGraph(graph: GraphImpl): void {
