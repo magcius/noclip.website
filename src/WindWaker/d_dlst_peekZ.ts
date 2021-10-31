@@ -178,6 +178,7 @@ void main() {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, colorTargetID);
             const resolvedDepthTextureID = builder.resolveRenderTarget(depthTargetID);
             pass.attachResolveTexture(resolvedDepthTextureID);
+            pass.addExtraRef(GfxrAttachmentSlot.Color0);
             pass.exec((passRenderer, scope) => {
                 const resolvedDepthTexture = scope.getResolveTextureForID(resolvedDepthTextureID);
 

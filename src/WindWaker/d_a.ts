@@ -3287,6 +3287,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     private type: number;
     private path_id: number;
     private model: J3DModelInstance;
+    private flagPcId: number | null = null;
     private bckAnm = new mDoExt_bckAnm();
     private path: dPath | null = null;
     private waveAnim1Timer = 0;
@@ -3371,7 +3372,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.cullFarDistanceRatio = 10.0;
 
         if (this.type === 0 || this.type === 4) {
-            // Flag
+            const flagParam = this.type === 0 ? 0x00000004 : 0x02000000;
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, flagParam, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
         }
 
         dLib_waveInit(globals, this.wave, this.pos);
@@ -3573,6 +3575,17 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
                 this.waveR!.remove();
                 this.splash!.remove();
                 this.track!.state = 1;
+            }
+        }
+
+        if (this.flagPcId !== null) {
+            const flag = fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId);
+            if (flag !== null && flag.parentMtx === null) {
+                flag.parentMtx = this.model.modelMatrix;
+                if (this.type === 0)
+                    flag.parentPos = vec3.fromValues(0.0, 700.0, 0.0);
+                else if (this.type === 4)
+                    flag.parentPos = vec3.fromValues(100.0, 530.0, 0.0);
             }
         }
     }
@@ -4135,8 +4148,8 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         }
 
         if (this.flagPcId !== null) {
-            const flag = assertExists(fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId));
-            if (flag.parentMtx === null) {
+            const flag = fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId);
+            if (flag !== null && flag.parentMtx === null) {
                 flag.parentMtx = this.model.modelMatrix;
                 flag.parentPos = vec3.fromValues(0.0, 800.0, 0.0);
             }

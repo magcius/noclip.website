@@ -5,7 +5,7 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp, randomRange } from "../MathHelpers";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
-import { vec2, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { fopAc_ac_c, fpc__ProcessName, cPhs__Status } from "./framework";
 import { ResType } from "./d_resorce";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -19,6 +19,7 @@ import { dKy_usonami_set } from './d_kankyo_wether';
 import { Plane } from '../Geometry';
 import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM__Short2Rad } from './SComponent';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { dfRange, dfShow } from '../DebugFloaters';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -28,8 +29,9 @@ class daSea_WaveInfo__Param {
     public height: number;
     public km: number;
     public phase: number;
-    public thetaScaleX: number;
-    public thetaScaleZ: number;
+    public direction = vec2.create();
+    public angle: number = 0;
+
     public counterMax: number;
 
     public parse(buffer: ArrayBufferSlice): number {
@@ -37,11 +39,12 @@ class daSea_WaveInfo__Param {
         this.height = view.getFloat32(0x00);
         this.km = view.getFloat32(0x04);
         this.phase = view.getInt16(0x08);
-        this.thetaScaleX = view.getFloat32(0x0C);
-        this.thetaScaleZ = view.getFloat32(0x10);
+        this.direction[0] = view.getFloat32(0x0C);
+        this.direction[1] = view.getFloat32(0x10);
         this.counterMax = view.getUint32(0x14);
         return 0x18;
     }
+
 }
 
 class daSea_WaveInfo {
@@ -142,7 +145,7 @@ class daSea_WaterHeightInfo_Mng {
 /**
  * Get length from point {@param pos} to a box with extents {@param min},{@param max}.
  */
-function GetLenBox2D(min: vec2, max: vec2, pos: vec2): number {
+function GetLenBox2D(min: ReadonlyVec2, max: ReadonlyVec2, pos: vec2): number {
     const xP = pos[0], yP = pos[1];
     const x0 = min[0], y0 = min[1];
     const x1 = max[0], y1 = max[1];
@@ -622,8 +625,8 @@ export class d_a_sea extends fopAc_ac_c {
         for (let i = 0; i < 4; i++) {
             const wavePrm = this.waveInfo.waveParam[i];
             const km = this.waveInfo.GetKm(i);
-            this.scratchThetaX[i] = wavePrm.thetaScaleX * km;
-            this.scratchThetaZ[i] = wavePrm.thetaScaleZ * km;
+            this.scratchThetaX[i] = wavePrm.direction[0] * km;
+            this.scratchThetaZ[i] = wavePrm.direction[1] * km;
             this.scratchOffsAnim[i] = MathConstants.TAU * (this.waveInfo.GetRatio(i) - 0.5);
             this.scratchHeight[i] = wavePrm.height * waveHeight;
         }
