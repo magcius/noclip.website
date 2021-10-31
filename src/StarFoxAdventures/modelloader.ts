@@ -408,12 +408,10 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
     model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
 
-    let nrmBuffer = data;
     if (fields.hasNormals) {
         const nrmOffset = data.getUint32(fields.nrmOffset);
         const nrmCount = data.getUint16(fields.nrmCount);
         // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
-        nrmBuffer = dataSubarray(data, nrmOffset);
         model.originalNrmBuffer = dataSubarray(data, nrmOffset, nrmCount * ((normalFlags & NormalFlags.NBT) ? 9 : 3));
     }
 

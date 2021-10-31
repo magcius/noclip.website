@@ -120,7 +120,7 @@ export class ShapeGeometry {
     public pnMatrixMap: number[] = nArray(10, () => 0);
     public normalMatrixInTexMatrixCount = 0;
     public hasSkinning = false;
-    private hasFineSkinning = false;
+    public hasFineSkinning = false;
 
     constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: DataView, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -290,11 +290,12 @@ export class Shape {
             const descaleMtx = mat4.create();
             const invScale = 1.0 / modelCtx.object.scale;
             mat4.fromScaling(descaleMtx, [invScale, invScale, invScale])
-            for (let i = 0; i < this.geom.normalMatrixInTexMatrixCount; i++) {
+            for (let i = 0; i < packetParams.u_PosMtx.length; i++) {
                 // XXX: this is the game's peculiar way of creating normal matrices
                 mat4.copy(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
                 mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
                 mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
+                // The following line causes glitches due to an issue related to the function's method of detecting uniform scaling.
                 // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
             }
         }

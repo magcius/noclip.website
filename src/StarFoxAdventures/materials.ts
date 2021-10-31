@@ -700,7 +700,7 @@ class StandardObjectMaterial extends StandardMaterial {
                 mat4.scale(dst, dst, [-0.5, -0.5, 0.0]);
             });
             // TEXMTX0 is the normal matrix
-            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0 /*GX.TexGenMatrix.TEXMTX0*/, false, getGXPostTexGenMatrix(ptmtx));
+            this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
         }
 
         return this.ambProbeTexCoord;
