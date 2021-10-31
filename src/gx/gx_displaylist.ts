@@ -833,8 +833,6 @@ return function() {
 }();
 `;
 
-    console.log(`full source: ${fullSource}`);
-
     const generator = new Function(fullSource);
     const func = generator() as T;
     return func; 

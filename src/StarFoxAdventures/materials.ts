@@ -717,9 +717,9 @@ class StandardObjectMaterial extends StandardMaterial {
             dst.a = 0.0; // FIXME: is this accurate?
         });
 
-        // const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
+        const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
         // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
-        const texMap = this.mb.genTexMap(this.factory.getSphereMapTestTexture());
+        // const texMap = this.mb.genTexMap(this.factory.getSphereMapTestTexture());
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
@@ -979,7 +979,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.ambProbeTexCoord = undefined;
         this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
         // this.enableReflectiveProbe = this.shader.hasReflectiveProbe;
-        this.enableReflectiveProbe = false;
+        this.enableReflectiveProbe = false; // TODO: fix and enable
 
         this.mb.setUsePnMtxIdx(true);
 
@@ -1003,15 +1003,6 @@ class StandardObjectMaterial extends StandardMaterial {
 
         // Post-probe layers
         this.setupShaderLayers(false, fooFlag);
-
-        // XXX: For debugging hemi probes, show only the C1 channel
-        if (this.enableHemisphericProbe) {
-            const stage = this.mb.genTevStage();
-            this.mb.setTevDirect(stage);
-            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
-            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C1);
-            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-        }
 
         if (this.shader.lightFlags & LightFlags.OverrideLighting) {
             // Override world lighting (e.g. tornadoes)

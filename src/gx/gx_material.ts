@@ -562,7 +562,6 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
-        console.log(`GENERATING TEX MTX INDEX ACCESS!!!`);
         if (index === GX.TexCoordID.TEXCOORD0) return `(a_TexMtx0123Idx.x * 256.0)`;
         if (index === GX.TexCoordID.TEXCOORD1) return `(a_TexMtx0123Idx.y * 256.0)`;
         if (index === GX.TexCoordID.TEXCOORD2) return `(a_TexMtx0123Idx.z * 256.0)`;
@@ -1355,7 +1354,6 @@ ${GfxShaderLibrary.saturate}
 ${GXShaderLibrary.TevOverflow}
 
 varying vec3 v_Position;
-varying vec3 v_Normal; // XXX: testing
 varying vec4 v_Color0;
 varying vec4 v_Color1;
 ${this.generateTexCoordVaryings()}
@@ -1387,7 +1385,6 @@ void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
     vec3 t_Normal = normalize(${this.generateMulNrm()});
-    v_Normal = t_Normal; // XXX: testing
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
@@ -1398,8 +1395,6 @@ ${this.generateTexGens()}
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
 `;
-
-        console.log(`vertex shader: ${this.vert}`);
 
         this.frag = `
 ${both}
@@ -1438,10 +1433,6 @@ void main() {
     vec4 t_Color1    = u_Color[2];
     vec4 t_Color2    = u_Color[3];
 
-    // XXX: testing
-    // gl_FragColor = vec4(v_Normal.rgb + vec3(1.0) / 2.0, 1.0);
-    // return;
-
 ${this.generateIndTexStages()}
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
@@ -1455,7 +1446,6 @@ ${this.generateFog()}
 ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
-console.log(`fragment shader: ${this.frag}`);
     }
 }
 // #endregion
