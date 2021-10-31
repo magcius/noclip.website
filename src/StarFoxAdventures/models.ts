@@ -18,8 +18,9 @@ import { Shape } from './shapes';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
-import { transformVec3Mat4w0 } from '../MathHelpers';
+import { computeNormalMatrix, transformVec3Mat4w0 } from '../MathHelpers';
 import { LightType } from './WorldLights';
+import { ObjectInstance } from './objects';
 
 interface Joint {
     parent: number;
@@ -51,6 +52,7 @@ export interface ModelRenderContext {
     showDevGeometry: boolean;
     ambienceIdx: number;
     outdoorAmbientColor: Color;
+    object?: ObjectInstance;
     setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
 }
 
@@ -162,7 +164,8 @@ export class Model {
 
     public hasFineSkinning: boolean = false;
     public hasBetaFineSkinning: boolean = false;
-    public fineSkinQuantizeScale: number = 0; // factor = 2 ^^ fineSkinQuantizeScale
+    public fineSkinPositionQuantizeScale: number = 0; // factor = 2 ^^ fineSkinQuantizeScale
+    public fineSkinNormalQuantizeScale: number = 0;
     public fineSkinNBTNormals: boolean = false;
     public posFineSkins: FineSkin[] = [];
     public nrmFineSkins: FineSkin[] = [];
@@ -201,6 +204,8 @@ const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
+const scratchVec1 = vec3.create();
+const scratchVec2 = vec3.create();
 
 export class ModelInstance {
     private modelShapes: ModelShapes;
@@ -301,8 +306,8 @@ export class ModelInstance {
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
-        const quant = 1 << this.model.fineSkinQuantizeScale;
-        const dequant = 1 / quant;
+        let quant = 1 << this.model.fineSkinPositionQuantizeScale;
+        let dequant = 1 / quant;
         for (let i = 0; i < this.model.posFineSkins.length; i++) {
             const skin = this.model.posFineSkins[i];
 
@@ -328,7 +333,7 @@ export class ModelInstance {
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
                 vec3.transformMat4(pos, pos, scratchMtx0);
 
-                setInt16Clamped(dst, bufferOffs, pos[0] * quant);
+                setInt16Clamped(dst, bufferOffs + 0, pos[0] * quant);
                 setInt16Clamped(dst, bufferOffs + 2, pos[1] * quant);
                 setInt16Clamped(dst, bufferOffs + 4, pos[2] * quant);
 
@@ -337,6 +342,8 @@ export class ModelInstance {
             }
         }
 
+        quant = 1 << this.model.fineSkinNormalQuantizeScale;
+        dequant = 1 / quant;
         for (let i = 0; i < this.model.nrmFineSkins.length; i++) {
             const skin = this.model.nrmFineSkins[i];
 
@@ -354,29 +361,27 @@ export class ModelInstance {
             let bufferOffs = skin.bufferOffset;
             let weightOffs = 0;
             for (let j = 0; j < skin.vertexCount; j++) {
-                pos[0] = src.getInt8(bufferOffs);
-                pos[1] = src.getInt8(bufferOffs + 1);
-                pos[2] = src.getInt8(bufferOffs + 2);
+                pos[0] = src.getInt8(bufferOffs + 0) * dequant;
+                pos[1] = src.getInt8(bufferOffs + 1) * dequant;
+                pos[2] = src.getInt8(bufferOffs + 2) * dequant;
 
                 const weight0 = skin.weights.getUint8(weightOffs) / 128;
                 const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
+                // The output normal is not scaled to magnitude 1. This doesn't matter, since the GX
+                // allegedly rescales normals automatically.
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
-                // Clear the translation column to produce a normal matrix from
-                // the position matrix.
-                // This method only works if the position matrix has no scaling
-                // in the X, Y or Z direction; only rotation and translation are
-                // allowed. Although this method appears to be used by the original
-                // game, it is not generally correct.
-                // Additionally, the original game does not rescale normals to
-                // magnitude 1, which is required for full accuracy.
-                // For the correct and general formula to produce a normal matrix from a
-                // position matrix, see: <https://github.com/graphitemaster/normals_revisited>
                 transformVec3Mat4w0(pos, scratchMtx0, pos);
 
-                setInt8Clamped(dst, bufferOffs + 0, pos[0]);
-                setInt8Clamped(dst, bufferOffs + 1, pos[1]);
-                setInt8Clamped(dst, bufferOffs + 2, pos[2]);
+                // XXX: the following might be more accurate to the game?
+                // transformVec3Mat4w0(nrm0, boneMtx0, pos);
+                // transformVec3Mat4w0(nrm1, boneMtx1, pos);
+                // vec3.scale(pos, nrm0, weight0);
+                // vec3.scaleAndAdd(pos, pos, nrm1, weight1);
+
+                setInt8Clamped(dst, bufferOffs + 0, pos[0] * quant);
+                setInt8Clamped(dst, bufferOffs + 1, pos[1] * quant);
+                setInt8Clamped(dst, bufferOffs + 2, pos[2] * quant);
 
                 bufferOffs += 3;
                 weightOffs += 2;

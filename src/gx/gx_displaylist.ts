@@ -800,7 +800,9 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
 
         switch (vtxAttrDesc.type) {
         case GX.AttrType.DIRECT:
-            return compileOneAttrib(`dlView`, `drawCallIdx`, srcAttrByteSize);
+            return `
+    // ${getAttrName(vtxAttrib)}
+    ${compileOneAttrib(`dlView`, `drawCallIdx`, srcAttrByteSize)}`;
         case GX.AttrType.INDEX8:
             return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), `dlView.getUint8(drawCallIdx)`, 1);
         case GX.AttrType.INDEX16:

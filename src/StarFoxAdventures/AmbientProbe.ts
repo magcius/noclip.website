@@ -1,12 +1,13 @@
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera';
-import { Blue, Color, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color';
+import { Blue, Color, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA, Magenta, Red, TransparentBlack, White } from '../Color';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { ColorKind, fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
+import { projectionMatrixForCuboid } from '../MathHelpers';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { nArray } from '../util';
 import { SFAMaterialBuilder } from './MaterialBuilder';
@@ -23,6 +24,8 @@ const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
+const scratchVec0 = vec3.create();
+const scratchVec1 = vec3.create();
 
 const AMBIENT_PROBE_FACTORS = [
     [0.5, 1.0],
@@ -54,7 +57,7 @@ function setSpecularLightAtten(light: GX_Material.Light, atten: number) {
 
 const PROBE_TARGET_DIM = 32;
 const PROBE_PROJECTION_MTX = mat4.create();
-mat4.ortho(PROBE_PROJECTION_MTX, -1.0, 1.0, -1.0, 1.0, 1.0, 15.0);
+projectionMatrixForCuboid(PROBE_PROJECTION_MTX, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
 
 function createHemisphericMaterial(materialFactory: MaterialFactory): SFAMaterialBuilder<World> {
     const mb = new SFAMaterialBuilder<World>('Ambient Hemispheric Probe Material');
@@ -88,13 +91,17 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
     const texCoord = mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
     const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.device, 0x5dc, false)));
     mb.setTevOrder(stage0, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
-    mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, /*GX.CC.RASA FIXME: why isn't this working*/GX.CC.ONE, GX.CC.TEXC);
+    mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, GX.CC.RASA, GX.CC.TEXC);
+    // mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASA);
+    // mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, GX.CC.ONE, GX.CC.TEXC);
     mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
     const stage1 = mb.genTevStage();
     mb.setTevDirect(stage1);
     mb.setTevOrder(stage1, null, null, GX.RasColorChannelID.COLOR1A1);
     mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASC, GX.CC.RASA, GX.CC.CPREV);
+    // mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+    // mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASC, GX.CC.ONE, GX.CC.CPREV);
     mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
     mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, (1<<0)|(1<<1), GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPEC);
@@ -169,7 +176,6 @@ export class AmbientProbe {
 
         this.reflectiveMaterial.setOnMaterialParams(materialParams, undefined);
 
-        // FIXME: should lights be adjusted by camera view?
         const matColor = colorNewFromRGBA(
             1.0 * ambParams.matColorFactors[0] / 255.0,
             0.0,
@@ -179,47 +185,55 @@ export class AmbientProbe {
         colorCopy(materialParams.u_Color[ColorKind.MAT0], matColor);
         colorCopy(materialParams.u_Color[ColorKind.MAT1], matColor);
 
-        const n111 = vec3.fromValues(1, 1, 1);
-        vec3.normalize(n111, n111);
-        const nn111 = vec3.clone(n111);
-        vec3.negate(nn111, nn111);
-        // TODO: use sky/ground light from World
-        const skyLight: Light = createDirectionalLight(n111, Red);
-        const groundLight: Light = createDirectionalLight(nn111, Blue);
+        const skyLight = this.world.envfxMan.skyLight;
+        const groundLight = this.world.envfxMan.groundLight;
+
+        const worldView = scratchMtx0;
+        computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
+        const worldViewSR = scratchMtx1;
+        mat4.copy(worldViewSR, worldView);
+        mat4SetTranslation(worldViewSR, 0, 0, 0);
+
+        const skyLightVec = scratchVec0;
+        vec3.transformMat4(skyLightVec, skyLight.direction, worldViewSR);
+        const groundLightVec = scratchVec1;
+        vec3.transformMat4(groundLightVec, groundLight.direction, worldViewSR);
 
         // Light 0: COLOR0
         materialParams.u_Lights[0].reset();
-        vec3.copy(materialParams.u_Lights[0].Direction, skyLight.direction);
+        vec3.copy(materialParams.u_Lights[0].Direction, skyLightVec);
         setSpecularLightAtten(materialParams.u_Lights[0], ambParams.attenFactors[0]);
         colorCopy(materialParams.u_Lights[0].Color, Red);
 
         // Light 1: COLOR0
         materialParams.u_Lights[1].reset();
-        vec3.copy(materialParams.u_Lights[1].Direction, skyLight.direction);
+        vec3.copy(materialParams.u_Lights[1].Direction, skyLightVec);
         setSpecularLightAtten(materialParams.u_Lights[1], ambParams.attenFactors[1]);
         colorCopy(materialParams.u_Lights[1].Color, Blue);
 
         // Light 2: ALPHA0
         materialParams.u_Lights[2].reset();
-        vec3.scale(materialParams.u_Lights[2].Position, skyLight.direction, -100000.0);
+        // FIXME: original game scales by -100000.0 here, but that puts the light position on the opposite side of where it should go ... hmmm.
+        vec3.scale(materialParams.u_Lights[2].Position, skyLightVec, 100000.0);
         colorCopy(materialParams.u_Lights[2].Color, Blue);
         vec3.set(materialParams.u_Lights[2].CosAtten, 1.5, 0.0, 0.0);
 
         // Light 3: COLOR1
         materialParams.u_Lights[3].reset();
-        vec3.copy(materialParams.u_Lights[3].Direction, groundLight.direction);
+        vec3.copy(materialParams.u_Lights[3].Direction, groundLightVec);
         setSpecularLightAtten(materialParams.u_Lights[3], ambParams.attenFactors[0]);
         colorCopy(materialParams.u_Lights[3].Color, Red);
 
         // Light 4: COLOR1
         materialParams.u_Lights[4].reset();
-        vec3.copy(materialParams.u_Lights[4].Direction, groundLight.direction);
+        vec3.copy(materialParams.u_Lights[4].Direction, groundLightVec);
         setSpecularLightAtten(materialParams.u_Lights[4], ambParams.attenFactors[1]);
         colorCopy(materialParams.u_Lights[4].Color, Blue);
         
         // Light 5: ALPHA1
         materialParams.u_Lights[5].reset();
-        vec3.scale(materialParams.u_Lights[5].Position, groundLight.direction, -100000.0);
+        // FIXME: see above
+        vec3.scale(materialParams.u_Lights[5].Position, groundLightVec, 100000.0);
         colorCopy(materialParams.u_Lights[5].Color, Blue);
         vec3.set(materialParams.u_Lights[5].CosAtten, 0.5, 0.0, 0.0);
 

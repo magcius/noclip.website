@@ -7,13 +7,14 @@ import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
 
 import { SFATexture, TextureFetcher } from './textures';
-import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor } from './util';
+import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, HighBitReader } from './util';
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { clamp } from '../MathHelpers';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -27,8 +28,7 @@ export interface Shader {
     flags: number;
     attrFlags: number;
     hasHemisphericProbe: boolean;
-    hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
-                         // It is possibly related to projected lighting.
+    hasReflectiveProbe: boolean;
     hasAuxTex2: boolean;
     auxTex2Num: number;
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
@@ -45,6 +45,16 @@ export interface Shader {
 export enum ShaderAttrFlags {
     NRM = 0x1,
     CLR = 0x2,
+}
+
+export const enum NormalFlags {
+    HasVertexColor = 0x2,
+    NBT = 0x8,
+    HasVertexAlpha = 0x10,
+}
+
+export const enum LightFlags {
+    OverrideLighting = 0x2,
 }
 
 export enum ShaderFlags {
@@ -685,11 +695,13 @@ class StandardObjectMaterial extends StandardMaterial {
 
     private getAmbientProbeTexCoord(): TexCoord {
         if (this.ambProbeTexCoord === undefined) {
-            this.mb.setTexMtx(0, (dst: mat4) => mat4.identity(dst)); // TODO
             const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [0.5, 0.5, 1.0]);
-                mat4.scale(dst, dst, [-0.5, -0.5, 0.0]);
+                const flipY = -1; // XXX: the flipY situation is confusing. Is this the solution or can it be handled elsewhere?
+                mat4.scale(dst, dst, [-0.5, -0.5 * flipY, 0.0]);
             });
+            // TEXMTX0 is the normal matrix
+            this.mb.setUseTexMtxIdx(0); // TEXMTX0 comes from vertex attribute TEX0MTXIDX, so enable it here.
             this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
         }
 
@@ -708,7 +720,7 @@ class StandardObjectMaterial extends StandardMaterial {
 
         const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
         // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
-        // const texMap = this.mb.genTexMap(this.factory.getProbeTestTexture());
+        // const texMap = this.mb.genTexMap(this.factory.getSphereMapTestTexture());
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
@@ -737,7 +749,7 @@ class StandardObjectMaterial extends StandardMaterial {
             const indStage = this.mb.genIndTexStage();
             // Enable "addPrev" option
             // FIXME: this seems to break reflective probes entirely.
-            this.mb.setTevIndirect(stage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+            // this.mb.setTevIndirect(stage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
             this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap);
         }
 
@@ -790,7 +802,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = true;
     }
 
-    private addColoredTextureLayerStageWithAmbienceAndSwapping(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
+    private addColoredTextureLayerStageWithAmbience(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         // TODO: support swapping
@@ -933,7 +945,7 @@ class StandardObjectMaterial extends StandardMaterial {
                                 this.addColoredTextureLayerStageWithoutAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
                                     (dst: Color, ctx: MaterialRenderContext) => colorCopy(dst, ctx.outdoorAmbientColor));
                             else
-                                this.addColoredTextureLayerStageWithAmbienceAndSwapping(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
+                                this.addColoredTextureLayerStageWithAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
                                     (dst: Color, ctx: MaterialRenderContext) => colorCopy(dst, ctx.outdoorAmbientColor));
                         } else {
                             // TODO: special logic here if opacity is not 100%.
@@ -943,7 +955,7 @@ class StandardObjectMaterial extends StandardMaterial {
                                 this.addAlphaedTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
                         }
                     } else {
-                        this.addColoredTextureLayerStageWithAmbienceAndSwapping(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                        this.addColoredTextureLayerStageWithAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
                     }
                 } else {
                     if (fooFlag) {
@@ -967,14 +979,14 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = false;
         this.ambProbeTexCoord = undefined;
         this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
-        this.enableReflectiveProbe = false; // TODO
+        this.enableReflectiveProbe = this.shader.hasReflectiveProbe; // TODO: fix excessive glossiness
 
         this.mb.setUsePnMtxIdx(true);
 
         this.setupHemisphericProbe();
         this.setupReflectiveProbe(0); // TODO: selector comes from shader
 
-        const fooFlag = !!((this.shader.lightFlags & 0x2) && !(this.shader.normalFlags & 0x2));
+        const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
 
         // Pre-probe layers
         this.setupShaderLayers(true, fooFlag);
@@ -992,10 +1004,9 @@ class StandardObjectMaterial extends StandardMaterial {
         // Post-probe layers
         this.setupShaderLayers(false, fooFlag);
 
-        if (this.shader.lightFlags & 0x2) {
+        if (this.shader.lightFlags & LightFlags.OverrideLighting) {
             // Override world lighting (e.g. tornadoes)
-            if (this.shader.normalFlags & 0x2 || this.shader.normalFlags & 0x10) {
-                // Light with outdoor ambient only
+            if ((this.shader.normalFlags & NormalFlags.HasVertexColor) || (this.shader.normalFlags & NormalFlags.HasVertexAlpha)) {
                 this.mb.setAmbColor(0, (dst: Color, ctx: MaterialRenderContext) => {
                     colorCopy(dst, ctx.outdoorAmbientColor);
                     dst.a = 0.0;
@@ -1040,10 +1051,10 @@ class StandardObjectMaterial extends StandardMaterial {
             }
 
             this.mb.setChanCtrl(
-                (this.shader.normalFlags & 0x10) ? GX.ColorChannelID.COLOR0A0 : GX.ColorChannelID.COLOR0,
+                (this.shader.normalFlags & NormalFlags.HasVertexAlpha) ? GX.ColorChannelID.COLOR0A0 : GX.ColorChannelID.COLOR0,
                 true,
                 GX.ColorSrc.REG,
-                (this.shader.normalFlags & 0x2) ? GX.ColorSrc.VTX : GX.ColorSrc.REG,
+                (this.shader.normalFlags & NormalFlags.HasVertexColor) ? GX.ColorSrc.VTX : GX.ColorSrc.REG,
                 0xff,
                 GX.DiffuseFunction.CLAMP,
                 GX.AttenuationFunction.SPOT);
@@ -1575,12 +1586,17 @@ export class MaterialFactory {
         return this.opaqueWhiteTexture;
     }
 
-    private probeTestTexture?: TexFunc<MaterialRenderContext>;
+    private sphereMapTestTexture?: TexFunc<MaterialRenderContext>;
 
-    public getProbeTestTexture(): TexFunc<MaterialRenderContext> {
-        if (this.probeTestTexture === undefined) {
-            const width = 2;
-            const height = 2;
+    // Generate a sphere map with black in the center (where N points toward camera)
+    // and white around the edges (where N points perpendicular to camera).
+    // Useful for testing.
+    public getSphereMapTestTexture(): TexFunc<MaterialRenderContext> {
+        if (this.sphereMapTestTexture === undefined) {
+            const width = 1024;
+            const height = 1024;
+            const gridWidth = 32;
+            const gridHeight = 32;
             const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
             const gfxSampler = this.device.createSampler({
                 wrapS: GfxWrapMode.Clamp,
@@ -1594,25 +1610,32 @@ export class MaterialFactory {
 
             const pixels = new Uint8Array(4 * width * height);
 
-            function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+            function plot(x: number, y: number, color: Color) {
                 const idx = 4 * (y * width + x);
-                pixels[idx] = r;
-                pixels[idx + 1] = g;
-                pixels[idx + 2] = b;
-                pixels[idx + 3] = a;
+                pixels[idx] = color.r * 255;
+                pixels[idx + 1] = color.g * 255;
+                pixels[idx + 2] = color.b * 255;
+                pixels[idx + 3] = color.a * 255;
             }
-
-            plot(0, 0, 255, 0, 0, 255);
-            plot(1, 0, 0, 255, 0, 255);
-            plot(0, 1, 0, 0, 255, 255);
-            plot(1, 1, 255, 255, 0, 255);
+            
+            const color = colorNewCopy(TransparentBlack);
+            for (let y = 0; y < height; y++) {
+                const fy = 2*y/(height-1) - 1;
+                for (let x = 0; x < width; x++) {
+                    const fx = 2*x/(width-1) - 1;
+                    const d2 = clamp(fx*fx + fy*fy, 0.0, 1.0);
+                    const fz = 1.0 - Math.sqrt(1.0 - d2);
+                    colorFromRGBA(color, fz, fz, fz, 1.0);
+                    plot(x, y, color);
+                }
+            }
 
             this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-            this.probeTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+            this.sphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
         }
 
-        return this.probeTestTexture;
+        return this.sphereMapTestTexture;
     }
     
     public getRampTexture(): TexFunc<MaterialRenderContext> {

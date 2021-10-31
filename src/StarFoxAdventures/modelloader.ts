@@ -6,7 +6,7 @@ import * as GX from '../gx/gx_enum';
 import { nArray } from '../util';
 
 import { parseShader, ANCIENT_MAP_SHADER_FIELDS, SFA_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS } from './materialloader';
-import { MaterialFactory, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
+import { MaterialFactory, NormalFlags, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
 import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';
@@ -394,10 +394,6 @@ const enum Opcode {
     End         = 5,
 }
 
-const enum NormalFlags {
-    NBT = 0x8,
-}
-
 export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFactory: MaterialFactory, version: ModelVersion): Model {
     const model = new Model(version);
     const fields = FIELDS[version];
@@ -412,12 +408,10 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
     model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
 
-    let nrmBuffer = data;
     if (fields.hasNormals) {
         const nrmOffset = data.getUint32(fields.nrmOffset);
         const nrmCount = data.getUint16(fields.nrmCount);
         // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
-        nrmBuffer = dataSubarray(data, nrmOffset);
         model.originalNrmBuffer = dataSubarray(data, nrmOffset, nrmCount * ((normalFlags & NormalFlags.NBT) ? 9 : 3));
     }
 
@@ -425,7 +419,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.posFineSkinningConfig));
         if (posFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
-            model.fineSkinQuantizeScale = posFineSkinningConfig.quantizeScale;
+            model.fineSkinPositionQuantizeScale = posFineSkinningConfig.quantizeScale;
 
             const weightsOffs = data.getUint32(fields.posFineSkinningWeights);
             const posFineSkinningWeights = dataSubarray(data, weightsOffs);
@@ -445,6 +439,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
         if (nrmFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
+            model.fineSkinNormalQuantizeScale = nrmFineSkinningConfig.quantizeScale;
             model.fineSkinNBTNormals = !!(normalFlags & NormalFlags.NBT);
 
             const weightsOffs = data.getUint32(fields.nrmFineSkinningWeights);
@@ -492,11 +487,15 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordOffset.toString(16)}`);
     const texcoordBuffer = dataSubarray(data, texcoordOffset);
 
+    let hasSkinning = false;
+
     let jointCount = 0;
     if (fields.hasBones) {
         const jointOffset = data.getUint32(fields.jointOffset);
         jointCount = data.getUint8(fields.jointCount);
         // console.log(`Loading ${jointCount} joints from offset 0x${jointOffset.toString(16)}`);
+
+        hasSkinning = true;
 
         model.joints = [];
         let offs = jointOffset;
@@ -631,7 +630,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
             let texmtxNum = 0;
 
-            if (shader.hasHemisphericProbe || shader.hasAuxTex1) {
+            if (shader.hasHemisphericProbe || shader.hasReflectiveProbe) {
                 if (shader.hasAuxTex2) {
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;
@@ -711,7 +710,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
-        newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
+        newGeom.setPnMatrixMap(pnMatrixMap, hasSkinning, model.hasFineSkinning);
         if (dlInfo.aabb !== undefined)
             newGeom.setBoundingBox(dlInfo.aabb);
         if (dlInfo.sortLayer !== undefined)
@@ -775,7 +774,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
                         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
-                        newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
+                        newGeom.setPnMatrixMap(pnMatrixMap, hasSkinning, model.hasFineSkinning);
                         if (dlInfo.aabb !== undefined)
                             newGeom.setBoundingBox(dlInfo.aabb);
                         if (dlInfo.sortLayer !== undefined)
