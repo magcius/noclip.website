@@ -697,10 +697,11 @@ class StandardObjectMaterial extends StandardMaterial {
         if (this.ambProbeTexCoord === undefined) {
             const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [0.5, 0.5, 1.0]);
-                mat4.scale(dst, dst, [-0.5, -0.5, 0.0]);
+                const flipY = -1; // XXX: the flipY situation is confusing. Is this the solution or can it be handled elsewhere?
+                mat4.scale(dst, dst, [-0.5, -0.5 * flipY, 0.0]);
             });
             // TEXMTX0 is the normal matrix
-            this.mb.setUseTexMtxIdx(0);
+            this.mb.setUseTexMtxIdx(0); // TEXMTX0 comes from vertex attribute TEX0MTXIDX, so enable it here.
             this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
         }
 
@@ -978,8 +979,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = false;
         this.ambProbeTexCoord = undefined;
         this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
-        // this.enableReflectiveProbe = this.shader.hasReflectiveProbe;
-        this.enableReflectiveProbe = false; // TODO: fix and enable
+        this.enableReflectiveProbe = this.shader.hasReflectiveProbe; // TODO: fix excessive glossiness
 
         this.mb.setUsePnMtxIdx(true);
 
