@@ -335,7 +335,7 @@ export class ModelInstance {
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
                 vec3.transformMat4(pos, pos, scratchMtx0);
 
-                vec3.zero(pos); // XXX: test
+                // vec3.zero(pos); // XXX: test
                 setInt16Clamped(dst, bufferOffs + 0, pos[0] * quant);
                 setInt16Clamped(dst, bufferOffs + 2, pos[1] * quant);
                 setInt16Clamped(dst, bufferOffs + 4, pos[2] * quant);
@@ -377,7 +377,7 @@ export class ModelInstance {
                 vec3.scale(pos, nrm0, weight0);
                 vec3.scaleAndAdd(pos, pos, nrm1, weight1);
 
-                vec3.zero(pos); // XXX: test
+                // vec3.zero(pos); // XXX: test
                 setInt8Clamped(dst, bufferOffs + 0, pos[0] * quant);
                 setInt8Clamped(dst, bufferOffs + 1, pos[1] * quant);
                 setInt8Clamped(dst, bufferOffs + 2, pos[2] * quant);
