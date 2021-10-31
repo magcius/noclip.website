@@ -42,30 +42,34 @@ export const ANCIENT_MAP_SHADER_FIELDS: ShaderFields = {
     layers: 0x24,
 };
 
-function parseTexId(data: DataView, offs: number, texIds: number[]): number | null {
-    const texNum = data.getUint32(offs);
-    return texNum !== 0xffffffff ? texIds[texNum] : null;
+function parseModelTexId(data: DataView, offs: number, modelTexIds: number[]): number | null {
+    const idx = data.getUint32(offs);
+    return idx !== 0xffffffff ? modelTexIds[idx] : null;
 }
 
-function parseShaderLayer(data: DataView, texIds: number[]): ShaderLayer {
+function parseShaderLayer(data: DataView, modelTexIds: number[]): ShaderLayer {
     const scrollingTexMtx = data.getUint8(0x6);
     return {
-        texId: parseTexId(data, 0x0, texIds),
+        texId: parseModelTexId(data, 0x0, modelTexIds),
         tevMode: data.getUint8(0x4),
         enableTexChainStuff: data.getUint8(0x5),
         scrollingTexMtx: scrollingTexMtx || undefined,
     };
 }
 
-export function parseShader(data: DataView, fields: ShaderFields, texIds: number[], normalFlags: number, lightFlags: number, texMtxCount: number): Shader {
+export function parseShader(data: DataView, fields: ShaderFields, modelTexIds: number[], normalFlags: number, lightFlags: number, texMtxCount: number): Shader {
     const shader: Shader = {
         layers: [],
         flags: 0,
         attrFlags: 0,
         hasHemisphericProbe: false,
         hasReflectiveProbe: false,
-        hasAuxTex2: false,
-        auxTex2Num: 0xffffffff,
+        reflectiveProbeMaskTexId: null,
+        reflectiveProbeIdx: 0,
+        reflectiveAmbFactor: 0.0,
+        hasNBTTexture: false,
+        nbtTexId: null,
+        nbtParams: 0,
         furRegionsTexId: null,
         color: colorNewCopy(White),
         normalFlags,
@@ -78,8 +82,9 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         console.warn(`Number of shader layers greater than maximum (${numLayers} / 2)`);
         numLayers = 2;
     }
+
     for (let i = 0; i < numLayers; i++) {
-        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds);
+        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), modelTexIds);
         shader.layers.push(layer);
     }
 
@@ -93,15 +98,19 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.flags = 0; // TODO: where is this field?
         shader.hasHemisphericProbe = data.getUint32(0x8) === 1;
         shader.hasReflectiveProbe = data.getUint32(0x14) === 1;
-        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
+        shader.hasNBTTexture = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
     } else {
         shader.flags = data.getUint32(0x3c);
         shader.attrFlags = data.getUint8(0x40);
         shader.hasHemisphericProbe = data.getUint32(0x8) !== 0;
         shader.hasReflectiveProbe = data.getUint32(0x14) !== 0;
-        shader.auxTex2Num = data.getUint32(0x34);
-        shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
-        shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
+        shader.reflectiveProbeMaskTexId = parseModelTexId(data, 0x18, modelTexIds);
+        shader.reflectiveProbeIdx = data.getUint8(0x20);
+        shader.reflectiveAmbFactor = data.getUint8(0x22) / 0xff;
+        shader.nbtTexId = parseModelTexId(data, 0x34, modelTexIds);
+        shader.hasNBTTexture = shader.nbtTexId !== null;
+        shader.nbtParams = data.getUint8(0x42);
+        shader.furRegionsTexId = parseModelTexId(data, 0x38, modelTexIds);
         colorFromRGBA(shader.color,
             data.getUint8(0x4) / 0xff,
             data.getUint8(0x5) / 0xff,

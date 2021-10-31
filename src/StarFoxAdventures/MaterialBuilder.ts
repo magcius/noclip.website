@@ -50,6 +50,14 @@ export function getGXIndTexMtxID(indTexMtx: IndTexMtx): GX.IndTexMtxID {
     return GX.IndTexMtxID._0 + indTexMtx;
 }
 
+export function getGXIndTexMtxID_S(indTexMtx: IndTexMtx): GX.IndTexMtxID {
+    return GX.IndTexMtxID.S0 + indTexMtx;
+}
+
+export function getGXIndTexMtxID_T(indTexMtx: IndTexMtx): GX.IndTexMtxID {
+    return GX.IndTexMtxID.T0 + indTexMtx;
+}
+
 export function getGXKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
     return GX.KonstColorSel.KCSEL_K0 + kcolor;
 }
@@ -126,6 +134,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         return id as TexMap;
     }
 
+    public getTexMapCount(): number {
+        return this.texMaps.length;
+    }
+
     public genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
         const texCoord = this.texCoordNum as TexCoord;
         if (texCoord >= 8)
@@ -133,6 +145,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         this.texCoordNum++;
         this.mb.setTexCoordGen(getGXTexCoordID(texCoord), texGenType, texGenSrc, texMtx, normalize, postTexMtx);
         return texCoord;
+    }
+
+    public getTexCoordCount(): number {
+        return this.texCoordNum;
     }
 
     public genPostTexMtx(func: MtxFunc<RenderContext>): PostTexMtx {

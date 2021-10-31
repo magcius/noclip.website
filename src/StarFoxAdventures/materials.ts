@@ -7,13 +7,13 @@ import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
 
 import { SFATexture, TextureFetcher } from './textures';
-import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, HighBitReader } from './util';
+import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, HighBitReader, mat4SetTranslation } from './util';
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
 import { SceneRenderContext } from './render';
-import { ColorFunc, getGXIndTexMtxID, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, SFAMaterialBuilder, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
+import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { clamp } from '../MathHelpers';
 
 export interface ShaderLayer {
@@ -27,10 +27,18 @@ export interface Shader {
     layers: ShaderLayer[],
     flags: number;
     attrFlags: number;
+
     hasHemisphericProbe: boolean;
+
     hasReflectiveProbe: boolean;
-    hasAuxTex2: boolean;
-    auxTex2Num: number;
+    reflectiveProbeMaskTexId: number | null;
+    reflectiveProbeIdx: number;
+    reflectiveAmbFactor: number;
+
+    hasNBTTexture: boolean;
+    nbtTexId: number | null;
+    nbtParams: number;
+
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
     color: Color;
 
@@ -127,10 +135,10 @@ export function makeHemisphericAmbientProbeTexture(): TexFunc<MaterialRenderCont
     };
 }
 
-export function makeReflectiveAmbientProbeTexture(): TexFunc<any> {
+export function makeReflectiveAmbientProbeTexture(idx: number): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = 'ambient-probe-0'; // TODO: selectable by shader
+        mapping.lateBinding = `ambient-probe-${idx}`;
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -693,6 +701,59 @@ class StandardObjectMaterial extends StandardMaterial {
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
 
+    private addNBTTextureStage() {
+        const indStage = this.mb.genIndTexStage();
+        const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
+            mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
+        });
+        const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, false)!;
+        console.log(`nbt tex name is ${nbtTex.viewerTexture!.name}`);
+        const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
+        if (this.shader.layers[0].texId !== null) {
+            const layer0Tex = this.texFetcher.getTexture(this.device, this.shader.layers[0].texId, true);
+            if (layer0Tex !== null) {
+                const scaleIdx = (layer0Tex.width / (nbtTex.width * ((this.shader.nbtParams & 0xf) * 4 + 1)))|0;
+                if (scaleIdx !== 0) {
+                    // TODO: GXSetIndTexCoordScale (I can't find an example of this code being triggered)
+                    console.warn(`TODO: GXSetIndTexCoordScale in addNBTTextureStage`);
+                }
+            }
+        }
+        let nbtTexCoord = 1 as TexCoord; // FIXME: verify correctness. This (probably) finds the TexCoord for the first shader layer.
+        if (this.enableHemisphericProbe)
+            nbtTexCoord = 2 as TexCoord;
+        if (this.enableReflectiveProbe)
+            nbtTexCoord = (nbtTexCoord+1) as TexCoord;
+        this.mb.setIndTexOrder(indStage, nbtTexCoord, nbtTexMap);
+
+        const pttexmtx = this.mb.genPostTexMtx((dst: mat4) => {
+            const s = 0.5 * 3.0 * ((this.shader.nbtParams >> 4) / 7.0 - 1.0);
+            mat4.fromScaling(dst, [s, s, 0.0]);
+            mat4SetTranslation(dst, 0.0, 0.0, 1.0);
+        });
+        this.mb.setUseTexMtxIdx(0);
+        const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
+        const tanTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
+
+        const stage0 = this.mb.genTevStage();
+        // FIXME: matrixSel = S0 is not implemented
+        // FIXME: GX_TEX_DISABLE is not implemented. Said flag is used to perform texture coordinate scaling without a lookup.
+        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_S(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevOrder(stage0, binrmTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage0 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
+        this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage0 !== 0 ? GX.CA.APREV : GX.CA.RASA);
+
+        const stage1 = this.mb.genTevStage();
+        // FIXME: matrixSel = T0 is not implemented
+        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_T(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevOrder(stage1, tanTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage1 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
+        this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage1 !== 0 ? GX.CA.APREV : GX.CA.RASA);
+
+        // Set tev indirect on the following stage
+        this.mb.setTevIndirect((stage1 + 1) as TevStage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+    }
+
     private getAmbientProbeTexCoord(): TexCoord {
         if (this.ambProbeTexCoord === undefined) {
             const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
@@ -731,25 +792,24 @@ class StandardObjectMaterial extends StandardMaterial {
     }
 
     // Emits REG2 = reflective probe
-    private setupReflectiveProbe(selector: number) {
+    private setupReflectiveProbe() {
         if (!this.enableReflectiveProbe) {
             this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, OpaqueBlack));
             return;
         }
 
-        const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture());
+        const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture(this.shader.reflectiveProbeIdx >> 1));
 
-        this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, White)); // TODO: set by shader
+        this.mb.setTevRegColor(2, (dst: Color) => colorFromRGBA(dst, 1.0, 1.0, 1.0, this.shader.reflectiveAmbFactor));
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         if (this.ambProbeTexCoord === undefined) {
             this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap, GX.RasColorChannelID.COLOR0A0);
         } else {
-            const indStage = this.mb.genIndTexStage();
             // Enable "addPrev" option
             // FIXME: this seems to break reflective probes entirely.
-            // this.mb.setTevIndirect(stage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+            // this.mb.setTevIndirect(stage, 0 as IndTexStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
             this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap);
         }
 
@@ -759,10 +819,21 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
         this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.A2, GX.CA.ZERO);
 
-        if (selector & 0x1) // If ground light
+        if (this.shader.reflectiveProbeIdx & 0x1) // Use blue channel for specular
             this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.G]);
-        else // otherwise sky light
+        else // Use red channel for specular
             this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.G]);
+
+        if (this.shader.reflectiveAmbFactor !== 0) {
+            // Blend ambient channel into reflective channel (e.g. Arwing)
+            const stage = this.mb.genTevStage();
+            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+            if (this.enableHemisphericProbe)
+                this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.APREV, GX.CC.C1, GX.CC.C2, undefined, undefined, undefined, undefined, GX.Register.REG2);
+            else
+                this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.APREV, GX.CC.RASC, GX.CC.C2, undefined, undefined, undefined, undefined, GX.Register.REG2);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        }
     }
 
     private addColoredTextureLayerStageWithoutAmbience(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
@@ -979,12 +1050,31 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = false;
         this.ambProbeTexCoord = undefined;
         this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
-        this.enableReflectiveProbe = this.shader.hasReflectiveProbe; // TODO: fix excessive glossiness
+        this.enableReflectiveProbe = this.shader.hasReflectiveProbe;
 
         this.mb.setUsePnMtxIdx(true);
 
+        if ((this.enableHemisphericProbe || this.enableReflectiveProbe) && this.shader.hasNBTTexture)
+            this.addNBTTextureStage();
+
         this.setupHemisphericProbe();
-        this.setupReflectiveProbe(0); // TODO: selector comes from shader
+        this.setupReflectiveProbe();
+
+        // FIXME: Figure out reflective probe mask textures
+        if (false && this.shader.reflectiveProbeMaskTexId !== null) {
+            console.log(`reflective probe mask texture id: ${this.shader.reflectiveProbeMaskTexId}`);
+            const reflectiveProbeMask = this.texFetcher.getTexture(this.device, this.shader.reflectiveProbeMaskTexId!, true)!;
+            if (reflectiveProbeMask !== null && reflectiveProbeMask.viewerTexture !== undefined)
+                console.log(`reflective probe mask texture loaded as ${reflectiveProbeMask.viewerTexture!.name}`);
+            // XXX: actually the reflective probe mask texture itself seems to be ignored?
+            // all it does is activate this stage when it is present...
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            // Use the texCoord and texMap generated by the next future call to genTexCoord/genTexMap (i.e., by shader layer 0)
+            this.mb.setTevOrder(stage, this.mb.getTexCoordCount() as TexCoord, this.mb.getTexMapCount() as TexMap, GX.RasColorChannelID.COLOR_ZERO);
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.C2, GX.CC.TEXC, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        }
 
         const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
 
@@ -1092,7 +1182,7 @@ class WaterMaterial extends MaterialBase {
         const indTexMtx0 = this.mb.genIndTexMtx((dst: mat4) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
             mat4.multiplyScalar(dst, dst, 1 / 4); // scale_exp -2
-            mat4SetRow(itm2, 3, 0.0, 0.0, 0.0, 1.0);
+            mat4SetRow(dst, 3, 0.0, 0.0, 0.0, 1.0);
         });
         this.mb.setIndTexOrder(indStage0, texCoord1, texMap1);
         this.mb.setIndTexScale(indStage0, GX.IndTexScale._1, GX.IndTexScale._1);
