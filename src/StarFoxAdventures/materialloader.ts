@@ -64,6 +64,8 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         attrFlags: 0,
         hasHemisphericProbe: false,
         hasReflectiveProbe: false,
+        reflectiveProbeIdx: 0,
+        reflectiveEnvFactor: 0.0,
         hasAuxTex2: false,
         auxTex2Num: 0xffffffff,
         furRegionsTexId: null,
@@ -99,6 +101,9 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.attrFlags = data.getUint8(0x40);
         shader.hasHemisphericProbe = data.getUint32(0x8) !== 0;
         shader.hasReflectiveProbe = data.getUint32(0x14) !== 0;
+        shader.reflectiveProbeIdx = data.getUint8(0x20);
+        console.log(`reflective probe idx ${shader.reflectiveProbeIdx}`);
+        shader.reflectiveEnvFactor = data.getUint8(0x22) / 0xff;
         shader.auxTex2Num = data.getUint32(0x34);
         shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
         shader.furRegionsTexId = parseTexId(data, 0x38, texIds);

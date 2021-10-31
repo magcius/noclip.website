@@ -29,6 +29,8 @@ export interface Shader {
     attrFlags: number;
     hasHemisphericProbe: boolean;
     hasReflectiveProbe: boolean;
+    reflectiveProbeIdx: number;
+    reflectiveEnvFactor: number;
     hasAuxTex2: boolean;
     auxTex2Num: number;
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
@@ -127,10 +129,10 @@ export function makeHemisphericAmbientProbeTexture(): TexFunc<MaterialRenderCont
     };
 }
 
-export function makeReflectiveAmbientProbeTexture(): TexFunc<any> {
+export function makeReflectiveAmbientProbeTexture(idx: number): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = 'ambient-probe-0'; // TODO: selectable by shader
+        mapping.lateBinding = `ambient-probe-${idx}`;
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -731,22 +733,21 @@ class StandardObjectMaterial extends StandardMaterial {
     }
 
     // Emits REG2 = reflective probe
-    private setupReflectiveProbe(selector: number) {
+    private setupReflectiveProbe() {
         if (!this.enableReflectiveProbe) {
             this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, OpaqueBlack));
             return;
         }
 
-        const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture());
+        const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture(this.shader.reflectiveProbeIdx >> 1));
 
-        this.mb.setTevRegColor(2, (dst: Color) => colorCopy(dst, White)); // TODO: set by shader
+        this.mb.setTevRegColor(2, (dst: Color) => colorFromRGBA(dst, 1.0, 1.0, 1.0, this.shader.reflectiveEnvFactor));
 
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         if (this.ambProbeTexCoord === undefined) {
             this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap, GX.RasColorChannelID.COLOR0A0);
         } else {
-            const indStage = this.mb.genIndTexStage();
             // Enable "addPrev" option
             // FIXME: this seems to break reflective probes entirely.
             // this.mb.setTevIndirect(stage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
@@ -759,7 +760,7 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
         this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.A2, GX.CA.ZERO);
 
-        if (selector & 0x1) // If ground light
+        if (this.shader.reflectiveProbeIdx & 0x1) // If ground light
             this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.G]);
         else // otherwise sky light
             this.mb.setTevSwapMode(stage, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.G]);
@@ -984,7 +985,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.mb.setUsePnMtxIdx(true);
 
         this.setupHemisphericProbe();
-        this.setupReflectiveProbe(0); // TODO: selector comes from shader
+        this.setupReflectiveProbe();
 
         const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
 
