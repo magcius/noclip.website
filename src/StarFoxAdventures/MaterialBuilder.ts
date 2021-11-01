@@ -126,6 +126,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         return id as IndTexStage;
     }
 
+    public getIndTexStageCount(): number {
+        return this.indTexStageNum;
+    }
+
     public genTexMap(texture: TexFunc<RenderContext>): TexMap {
         const id = this.texMaps.length;
         if (id >= 8)

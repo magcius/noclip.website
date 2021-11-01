@@ -726,7 +726,8 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateIndTexStageScale(stage: IndTexStage): string {
-        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
+        // XXX: ind tex map scaling is weird like this...
+        const baseCoord = `(ReadTexCoord${stage.texCoordId}() * TextureScale(${stage.texCoordId}) * TextureInvScale(${stage.texture}))`;
         if (stage.scaleS === GX.IndTexScale._1 && stage.scaleT === GX.IndTexScale._1)
             return baseCoord;
         else
@@ -1446,6 +1447,8 @@ ${this.generateFog()}
 ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
+
+    console.log(`vertex shader:\n${this.vert}\nfragment shader:\n${this.frag}`);
     }
 }
 // #endregion

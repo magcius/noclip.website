@@ -703,15 +703,18 @@ class StandardObjectMaterial extends StandardMaterial {
 
     private addNBTTextureStage() {
         const indStage = this.mb.genIndTexStage();
-        const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
+        const indTexMtx = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
+            // const s = 0.5 * Math.sin(Math.PI * ctx.sceneCtx.animController.envAnimValue1);
+            // mat4.fromScaling(dst, [s, s, 0.0]);
         });
+        console.log(`nbt params: 0x${this.shader.nbtParams.toString(16)}`);
         const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, true)!;
-        console.log(`nbt tex loaded as is ${nbtTex.viewerTexture!.name}`);
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
         if (this.shader.layers[0].texId !== null) {
             const layer0Tex = this.texFetcher.getTexture(this.device, this.shader.layers[0].texId, true);
             if (layer0Tex !== null) {
+                console.log(`layer 0 tex width: ${layer0Tex.width}\nnbt tex width: ${nbtTex.width}`);
                 const scaleIdx = (layer0Tex.width / (nbtTex.width * ((this.shader.nbtParams & 0xf) * 4 + 1)))|0;
                 if (scaleIdx !== 0) {
                     // TODO: GXSetIndTexCoordScale (I can't find an example of this code being triggered)
@@ -726,14 +729,16 @@ class StandardObjectMaterial extends StandardMaterial {
             nbtTexCoord = (nbtTexCoord+1) as TexCoord;
         this.mb.setIndTexOrder(indStage, nbtTexCoord, nbtTexMap);
 
-        const pttexmtx = this.mb.genPostTexMtx((dst: mat4) => {
-            const s = 0.5 * 3.0 * ((this.shader.nbtParams >> 4) / 7.0 - 1.0);
+        const pttexmtx = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            // const s = 0.5 * 3.0 * ((this.shader.nbtParams >> 4) / 7.0 - 1.0);
+            const s = 5 * Math.sin(Math.PI * ctx.sceneCtx.animController.envAnimValue1);
             mat4.fromScaling(dst, [s, s, 0.0]);
             mat4SetTranslation(dst, 0.0, 0.0, 1.0);
         });
-        // TEXMTX0 is the normal matrix
+        // Matrix comes from TEX0MTXIDX
         const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
         this.mb.setTexCoordUsesMtxIdx(binrmTexCoord);
+        // Matrix comes from TEX1MTXIDX
         const tanTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
         this.mb.setTexCoordUsesMtxIdx(tanTexCoord);
 
@@ -763,7 +768,7 @@ class StandardObjectMaterial extends StandardMaterial {
                 const flipY = -1; // XXX: the flipY situation is confusing. Is this the solution or can it be handled elsewhere?
                 mat4.scale(dst, dst, [-0.5, -0.5 * flipY, 0.0]);
             });
-            // TEXMTX0 is the normal matrix
+            // Matrix comes from TEX0MTXIDX (or TEX2MTXIDX if NBT textures are used)
             this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
             this.mb.setTexCoordUsesMtxIdx(this.ambProbeTexCoord);
         }
@@ -786,7 +791,9 @@ class StandardObjectMaterial extends StandardMaterial {
         // const texMap = this.mb.genTexMap(this.factory.getSphereMapTestTexture());
 
         const stage = this.mb.genTevStage();
-        this.mb.setTevDirect(stage);
+        // Only call setTevDirect if addNBTTextureStage has not set the ind tex configuration for this stage
+        if (this.mb.getIndTexStageCount() === 0)
+            this.mb.setTevDirect(stage);
         this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
         this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap, GX.RasColorChannelID.COLOR0A0);
         this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.RASC, undefined, undefined, undefined, undefined, GX.Register.REG1);
@@ -805,14 +812,14 @@ class StandardObjectMaterial extends StandardMaterial {
         this.mb.setTevRegColor(2, (dst: Color) => colorFromRGBA(dst, 1.0, 1.0, 1.0, this.shader.reflectiveAmbFactor));
 
         const stage = this.mb.genTevStage();
-        this.mb.setTevDirect(stage);
+        if (this.mb.getIndTexStageCount() === 0)
+            this.mb.setTevDirect(stage);
         if (this.ambProbeTexCoord === undefined) {
             this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap, GX.RasColorChannelID.COLOR0A0);
         } else {
             // Enable "addPrev" option
-            // FIXME: this seems to break reflective probes entirely.
-            // this.mb.setTevIndirect(stage, 0 as IndTexStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
-            this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap);
+            this.mb.setTevIndirect(stage, 0 as IndTexStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+            this.mb.setTevOrder(stage, this.mb.getTexCoordCount() - 1 as TexCoord, texMap);
         }
 
         if (this.enableHemisphericProbe)
