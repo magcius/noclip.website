@@ -83,7 +83,7 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
     private indTexMtxs: MtxFunc<RenderContext>[];
     private konstColors: ColorFunc<RenderContext>[];
     private tevRegColors: ColorFunc<RenderContext>[];
-    private usedTexMtxIndexes?: boolean[];
+    private texCoordUsesMtxIndex?: boolean[];
     
     private gxMaterial: GXMaterial | undefined = undefined;
     private gxMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
@@ -105,7 +105,7 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         this.indTexMtxs = [];
         this.konstColors = [];
         this.tevRegColors = [];
-        this.usedTexMtxIndexes = undefined;
+        this.texCoordUsesMtxIndex = undefined;
         this.gxMaterial = undefined;
         this.gxMaterialHelper = undefined;
     }
@@ -259,15 +259,16 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
 
     private rebuildGXMaterial() {
         this.gxMaterial = this.mb.finish(this.name);
-        if (this.usedTexMtxIndexes !== undefined)
-            this.gxMaterial.useTexMtxIdx = nArray(8, (i) => this.usedTexMtxIndexes![i]);
+        if (this.texCoordUsesMtxIndex !== undefined)
+            this.gxMaterial.useTexMtxIdx = nArray(8, (i) => this.texCoordUsesMtxIndex![i]);
         this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
     }
 
-    public setUseTexMtxIdx(idx: number) {
-        if (this.usedTexMtxIndexes === undefined)
-            this.usedTexMtxIndexes = nArray(8, () => false);
-        this.usedTexMtxIndexes[idx] = true;
+    // Enable if TexCoord uses a TEX*MTXIDX vertex attribute.
+    public setTexCoordUsesMtxIdx(texCoord: TexCoord) {
+        if (this.texCoordUsesMtxIndex === undefined)
+            this.texCoordUsesMtxIndex = nArray(8, () => false);
+        this.texCoordUsesMtxIndex[texCoord] = true;
     }
 
     public setOnMaterialParams(params: MaterialParams, ctx: RenderContext) {

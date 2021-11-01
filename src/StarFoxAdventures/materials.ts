@@ -731,21 +731,23 @@ class StandardObjectMaterial extends StandardMaterial {
             mat4.fromScaling(dst, [s, s, 0.0]);
             mat4SetTranslation(dst, 0.0, 0.0, 1.0);
         });
-        this.mb.setUseTexMtxIdx(0); // TEXMTX0 is the normal matrix
+        // TEXMTX0 is the normal matrix
         const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
+        this.mb.setTexCoordUsesMtxIdx(binrmTexCoord);
         const tanTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
+        this.mb.setTexCoordUsesMtxIdx(tanTexCoord);
 
         const stage0 = this.mb.genTevStage();
         // FIXME: matrixSel = S0 is not implemented
         // FIXME: GX_TEX_DISABLE is not implemented. Said flag is used to perform texture coordinate scaling without a lookup.
-        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_S(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID/*_S*/(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         this.mb.setTevOrder(stage0, binrmTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage0 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage0 !== 0 ? GX.CA.APREV : GX.CA.RASA);
 
         const stage1 = this.mb.genTevStage();
         // FIXME: matrixSel = T0 is not implemented
-        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_T(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID/*_T*/(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
         this.mb.setTevOrder(stage1, tanTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage1 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage1 !== 0 ? GX.CA.APREV : GX.CA.RASA);
@@ -762,8 +764,8 @@ class StandardObjectMaterial extends StandardMaterial {
                 mat4.scale(dst, dst, [-0.5, -0.5 * flipY, 0.0]);
             });
             // TEXMTX0 is the normal matrix
-            this.mb.setUseTexMtxIdx(0); // TEXMTX0 comes from vertex attribute TEX0MTXIDX, so enable it here.
             this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
+            this.mb.setTexCoordUsesMtxIdx(this.ambProbeTexCoord);
         }
 
         return this.ambProbeTexCoord;
