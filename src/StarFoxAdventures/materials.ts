@@ -706,8 +706,8 @@ class StandardObjectMaterial extends StandardMaterial {
         const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
         });
-        const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, false)!;
-        console.log(`nbt tex name is ${nbtTex.viewerTexture!.name}`);
+        const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, true)!;
+        console.log(`nbt tex loaded as is ${nbtTex.viewerTexture!.name}`);
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
         if (this.shader.layers[0].texId !== null) {
             const layer0Tex = this.texFetcher.getTexture(this.device, this.shader.layers[0].texId, true);
@@ -731,7 +731,7 @@ class StandardObjectMaterial extends StandardMaterial {
             mat4.fromScaling(dst, [s, s, 0.0]);
             mat4SetTranslation(dst, 0.0, 0.0, 1.0);
         });
-        this.mb.setUseTexMtxIdx(0);
+        this.mb.setUseTexMtxIdx(0); // TEXMTX0 is the normal matrix
         const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
         const tanTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
 
