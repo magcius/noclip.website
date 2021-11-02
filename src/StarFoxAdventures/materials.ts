@@ -730,8 +730,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.mb.setIndTexOrder(indStage, nbtTexCoord, nbtTexMap);
 
         const pttexmtx = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
-            // const s = 0.5 * 3.0 * ((this.shader.nbtParams >> 4) / 7.0 - 1.0);
-            const s = 5 * Math.sin(Math.PI * ctx.sceneCtx.animController.envAnimValue1);
+            const s = 0.5 * 3.0 * ((this.shader.nbtParams >> 4) / 7.0 - 1.0);
             mat4.fromScaling(dst, [s, s, 0.0]);
             mat4SetTranslation(dst, 0.0, 0.0, 1.0);
         });
@@ -745,14 +744,14 @@ class StandardObjectMaterial extends StandardMaterial {
         const stage0 = this.mb.genTevStage();
         // FIXME: matrixSel = S0 is not implemented
         // FIXME: GX_TEX_DISABLE is not implemented. Said flag is used to perform texture coordinate scaling without a lookup.
-        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID/*_S*/(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_S(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         this.mb.setTevOrder(stage0, binrmTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage0 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage0 !== 0 ? GX.CA.APREV : GX.CA.RASA);
 
         const stage1 = this.mb.genTevStage();
         // FIXME: matrixSel = T0 is not implemented
-        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID/*_T*/(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_T(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
         this.mb.setTevOrder(stage1, tanTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage1 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage1 !== 0 ? GX.CA.APREV : GX.CA.RASA);
@@ -808,6 +807,7 @@ class StandardObjectMaterial extends StandardMaterial {
         }
 
         const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture(this.shader.reflectiveProbeIdx >> 1));
+        // const texMap = this.mb.genTexMap(this.factory.getGreenSphereMapTestTexture());
 
         this.mb.setTevRegColor(2, (dst: Color) => colorFromRGBA(dst, 1.0, 1.0, 1.0, this.shader.reflectiveAmbFactor));
 
@@ -819,7 +819,7 @@ class StandardObjectMaterial extends StandardMaterial {
         } else {
             // Enable "addPrev" option
             this.mb.setTevIndirect(stage, 0 as IndTexStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
-            this.mb.setTevOrder(stage, this.mb.getTexCoordCount() - 1 as TexCoord, texMap);
+            this.mb.setTevOrder(stage, this.getAmbientProbeTexCoord(), texMap);
         }
 
         if (this.enableHemisphericProbe)
@@ -1070,7 +1070,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.setupReflectiveProbe();
 
         // FIXME: Figure out reflective probe mask textures
-        if (false && this.shader.reflectiveProbeMaskTexId !== null) {
+        if (this.shader.reflectiveProbeMaskTexId !== null) {
             console.log(`reflective probe mask texture id: ${this.shader.reflectiveProbeMaskTexId}`);
             const reflectiveProbeMask = this.texFetcher.getTexture(this.device, this.shader.reflectiveProbeMaskTexId!, true)!;
             if (reflectiveProbeMask !== null && reflectiveProbeMask.viewerTexture !== undefined)
@@ -1085,23 +1085,35 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
         }
 
-        const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
+        if (false) {
+            // XXX: for testing: show only hemispheric ambient lighting
+            const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
+            // Pre-probe layers
+            this.setupShaderLayers(true, fooFlag); // Just put this here to get layer 0 setup
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C1);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        } else {
+            const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
 
-        // Pre-probe layers
-        this.setupShaderLayers(true, fooFlag);
-
-        // Blend ambient probes
-        const stage = this.mb.genTevStage();
-        this.mb.setTevDirect(stage);
-        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
-        if (this.enableHemisphericProbe)
-            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.C2);
-        else
-            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.C2);
-        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-
-        // Post-probe layers
-        this.setupShaderLayers(false, fooFlag);
+            // Pre-probe layers
+            this.setupShaderLayers(true, fooFlag);
+    
+            // Blend ambient probes
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+            if (this.enableHemisphericProbe)
+                this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.C2);
+            else
+                this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.C2);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+    
+            // Post-probe layers
+            this.setupShaderLayers(false, fooFlag);
+        }
 
         if (this.shader.lightFlags & LightFlags.OverrideLighting) {
             // Override world lighting (e.g. tornadoes)
@@ -1686,6 +1698,55 @@ export class MaterialFactory {
     }
 
     private sphereMapTestTexture?: TexFunc<MaterialRenderContext>;
+    private greenSphereMapTestTexture?: TexFunc<MaterialRenderContext>;
+
+    // Generate a sphere map with black in the center (where N points toward camera)
+    // and white around the edges (where N points perpendicular to camera).
+    // Useful for testing.
+    public getGreenSphereMapTestTexture(): TexFunc<MaterialRenderContext> {
+        if (this.greenSphereMapTestTexture === undefined) {
+            const width = 1024;
+            const height = 1024;
+            const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            const gfxSampler = this.device.createSampler({
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+
+            const pixels = new Uint8Array(4 * width * height);
+
+            function plot(x: number, y: number, color: Color) {
+                const idx = 4 * (y * width + x);
+                pixels[idx] = color.r * 255;
+                pixels[idx + 1] = color.g * 255;
+                pixels[idx + 2] = color.b * 255;
+                pixels[idx + 3] = color.a * 255;
+            }
+            
+            const color = colorNewCopy(TransparentBlack);
+            for (let y = 0; y < height; y++) {
+                const fy = 2*y/(height-1) - 1;
+                for (let x = 0; x < width; x++) {
+                    const fx = 2*x/(width-1) - 1;
+                    const d2 = clamp(fx*fx + fy*fy, 0.0, 1.0);
+                    const fz = 1.0 - Math.sqrt(1.0 - d2);
+                    colorFromRGBA(color, 0.0, fz, 0.0, 1.0);
+                    plot(x, y, color);
+                }
+            }
+
+            this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+            this.greenSphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+        }
+
+        return this.greenSphereMapTestTexture;
+    }
 
     // Generate a sphere map with black in the center (where N points toward camera)
     // and white around the edges (where N points perpendicular to camera).

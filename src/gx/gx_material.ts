@@ -726,8 +726,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateIndTexStageScale(stage: IndTexStage): string {
-        // XXX: ind tex map scaling is weird like this...
-        const baseCoord = `(ReadTexCoord${stage.texCoordId}() * TextureScale(${stage.texCoordId}) * TextureInvScale(${stage.texture}))`;
+        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
         if (stage.scaleS === GX.IndTexScale._1 && stage.scaleT === GX.IndTexScale._1)
             return baseCoord;
         else
@@ -1078,6 +1077,18 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTexCoord}, 0.0))`;
         case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTexCoord}, 0.0))`;
         case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID.S0:
+        case GX.IndTexMtxID.S1:
+        case GX.IndTexMtxID.S2:
+            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
+            // This assumes scale_exp is 0.
+            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+        case GX.IndTexMtxID.T0:
+        case GX.IndTexMtxID.T1:
+        case GX.IndTexMtxID.T2:
+            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
+            // This assumes scale_exp is 0.
+            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
         default:
             console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
@@ -1448,7 +1459,7 @@ ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
 
-    console.log(`vertex shader:\n${this.vert}\nfragment shader:\n${this.frag}`);
+        // console.log(`vertex shader:\n${this.vert}\nfragment shader:\n${this.frag}`);
     }
 }
 // #endregion

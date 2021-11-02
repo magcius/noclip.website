@@ -92,7 +92,7 @@ type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: nu
 // everything.
 // The final version of the game has a minor difference in VAT 5 compared to beta
 // and older versions.
-function generateVat(old: boolean): GX_VtxAttrFmt[][] {
+function generateVat(old: boolean, nbt: boolean): GX_VtxAttrFmt[][] {
     const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
     for (let i = 0; i <= GX.Attr.MAX; i++) {
         for (let j = 0; j < 8; j++)
@@ -114,7 +114,7 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
     vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
 
     vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-    vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: nbt ? GX.CompCnt.NRM_NBT : GX.CompCnt.NRM_XYZ };
     vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
     vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
     vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -154,8 +154,9 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
     return vat;
 }
 
-const VAT = generateVat(false);
-const OLD_VAT = generateVat(true);
+const VAT = generateVat(false, false);
+const VAT_NBT = generateVat(false, true);
+const OLD_VAT = generateVat(true, false);
 
 const FIELDS: any = {
     [ModelVersion.AncientMap]: {
@@ -460,8 +461,13 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         model.hasBetaFineSkinning = model.hasFineSkinning && version === ModelVersion.Beta;
     }
 
-
-    const vat = fields.oldVat ? OLD_VAT : VAT;
+    let vat: GX_VtxAttrFmt[][];
+    if (fields.oldVat)
+        vat = OLD_VAT;
+    else if (normalFlags & NormalFlags.NBT)
+        vat = VAT_NBT;
+    else
+        vat = VAT;
 
     // @0x8: data size
     // @0xc: 4x3 matrix (placeholder; always zeroed in files)

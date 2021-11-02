@@ -781,6 +781,42 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             }
         }
 
+        function compileNBTAttrib(viewName: string, attrOffsetBase: string, drawCallIdxIncr: number): string {
+            let S = ``;
+
+            if (enableOutput) {
+                const srcAttrCompSize = getAttributeComponentByteSize(vtxAttrib, vtxAttrFmt);
+                const dstComponentSize = getFormatCompByteSize(dstFormat);
+    
+                for (let i = 0; i < 9; i++) {
+                    const dstOffs = dstBaseOffs + (i * dstComponentSize);
+                    const srcOffs: string = `${attrOffsetBase} + ${i * srcAttrCompSize}`;
+                    const value = compileReadOneComponent(viewName, srcOffs);
+    
+                    S += `
+        ${compileWriteOneComponent(dstOffs, value)};`;
+                }
+            }
+
+            S += `
+    drawCallIdx += ${drawCallIdxIncr};
+`;
+
+            return S;
+        }
+
+        function compileNBTIndex(viewName: string, readIndex: string, drawCallIdxIncr: number, uniqueSuffix: string = ''): string {
+            const stride = `vtxArrayStrides[${vtxAttrib}]`;
+            const attrOffsetBase = `(${readIndex}) * ${stride}`;
+            const arrayOffsetVarName = `arrayOffset${vtxAttrib}${uniqueSuffix}`;
+
+            if (enableOutput) {
+                return `const ${arrayOffsetVarName} = ${attrOffsetBase};${compileNBTAttrib(viewName, arrayOffsetVarName, drawCallIdxIncr)}`;
+            } else {
+                return compileNBTAttrib('', '', drawCallIdxIncr);
+            }
+        }
+
         function compileAttribIndex(viewName: string, readIndex: string, drawCallIdxIncr: number): string {
             if (vtxAttrib === GX.Attr.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
                 // Special case: NBT3.
@@ -791,6 +827,10 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
     ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_B`)}
     // TANGENT
     ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_T`)}`;
+            } else if (vtxAttrib === GX.Attr.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT) {
+                return `
+    // NBT
+    ${compileNBTIndex(viewName, readIndex, drawCallIdxIncr)}`;
             } else {
                 return `
     // ${getAttrName(vtxAttrib)}
@@ -846,6 +886,9 @@ function runVertices(dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, 
     return drawCallIdx;
 }
 `;
+    if (vatLayout.vatFormat[GX.Attr.NRM]?.compCnt === GX.CompCnt.NRM_NBT || vatLayout.vatFormat[GX.Attr.NRM]?.compCnt === GX.CompCnt.NRM_NBT3) {
+        console.log(`compiling NBT loader:\n${source}`);
+    }
     return compileFunction(source, `runVertices`);
 }
 
