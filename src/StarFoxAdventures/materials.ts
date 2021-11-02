@@ -15,6 +15,7 @@ import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy,
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { clamp } from '../MathHelpers';
+import { CtrTextureHolder } from '../oot3d/render';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -117,19 +118,19 @@ export function makeTemporalTextureDownscale8x(): TexFunc<any> {
     };
 }
 
-export function makeHemisphericAmbientProbeTexture(): TexFunc<MaterialRenderContext> {
+export function makeHemisphericProbeTexture(): TexFunc<MaterialRenderContext> {
     return  (mapping: TextureMapping, ctx: MaterialRenderContext) => {
         mapping.reset();
-        mapping.lateBinding = `ambient-probe-${5 - ctx.ambienceIdx}`;
+        mapping.lateBinding = `sphere-map-${5 - ctx.ambienceIdx}`;
         mapping.width = 32;
         mapping.height = 32;
     };
 }
 
-export function makeReflectiveAmbientProbeTexture(idx: number): TexFunc<any> {
+export function makeReflectiveProbeTexture(idx: number): TexFunc<any> {
     return  (mapping: TextureMapping) => {
         mapping.reset();
-        mapping.lateBinding = `ambient-probe-${idx}`;
+        mapping.lateBinding = `sphere-map-${idx}`;
         mapping.width = 32;
         mapping.height = 32;
     };
@@ -239,7 +240,9 @@ export abstract class StandardMaterial extends MaterialBase {
     public setBlendOverride(blendOverride?: BlendOverride) {
         this.blendOverride = blendOverride;
     }
+}
 
+class StandardMapMaterial extends StandardMaterial {
     protected genScrollableTexCoord(texMap: TexMap, texGenSrc: GX.TexGenSrc, scrollSlot?: number): TexCoord {
         if (scrollSlot !== undefined) {
             const scroll = this.factory.scrollSlots[scrollSlot];
@@ -252,7 +255,7 @@ export abstract class StandardMaterial extends MaterialBase {
             return this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         }
     }
-    
+
     protected addTevStagesForIndoorOutdoorBlend(texMap: TexMap, texCoord: TexCoord) {
         // Stage 0: Multiply vertex color by outdoor ambient color
         const stage0 = this.mb.genTevStage();
@@ -487,32 +490,26 @@ export abstract class StandardMaterial extends MaterialBase {
         this.mb.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
         this.mb.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
     }
-    
+
     protected addTevStagesForCaustic() {
         const mapOriginX = 1.0; // TODO: these values are set to ensure caustics don't exhibit seams at block boundaries.
         const mapOriginZ = 1.0; // TODO
 
-        const pttexmtx0 = mat4FromRowMajor(
-            0.008, 0.0,   0.0,   0.8 * 0.01 * mapOriginX,
-            0.0,   0.008, 0.0,   0.0,
-            0.0,   0.0,   0.008, 0.8 * 0.01 * mapOriginZ,
-            0.0,   0.0,   0.0,   1.0
-        );
+        const pttexmtx0 = mat4.create();
+        mat4.fromScaling(pttexmtx0, [0.008, 0.008, 0.008]);
+        mat4SetTranslation(pttexmtx0, 0.8 * 0.01 * mapOriginX, 0.0, 0.8 * 0.01 * mapOriginZ);
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
-        const postTexMtx0 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
-            mat4.mul(dst, pttexmtx0, matCtx.invModelViewMtx);
+        const postTexMtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            mat4.mul(dst, pttexmtx0, ctx.invModelViewMtx);
             mat4.mul(dst, postRotate0, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
         const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getGXPostTexGenMatrix(postTexMtx0));
         
-        const pttexmtx1 = mat4FromRowMajor(
-            0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
-            0.0,   0.005, 0.0,   0.0,
-            0.0,   0.0,   0.005, 0.5 * 0.01 * mapOriginZ,
-            0.0,   0.0,   0.0,   1.0
-        );
+        const pttexmtx1 = mat4.create();
+        mat4.fromScaling(pttexmtx1, [0.005, 0.005, 0.005]);
+        mat4SetTranslation(pttexmtx1, 0.5 * 0.01 * mapOriginX, 0.0, 0.5 * 0.01 * mapOriginZ);
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
         const postTexMtx1 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
@@ -530,15 +527,11 @@ export abstract class StandardMaterial extends MaterialBase {
         const postRotate2 = mat4.create();
         mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
         const pttexmtx2 = mat4.create();
-        const postTexMtx2 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
-            mat4SetRowMajor(pttexmtx2,
-                0.01, 0.0,  0.0,  0.01 * mapOriginX + matCtx.sceneCtx.animController.envAnimValue0,
-                0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ,
-                0.0,  0.0,  0.0,  1.0
-            );
+        const postTexMtx2 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            mat4.fromScaling(pttexmtx2, [0.01, 0.01, 0.01]);
+            mat4SetTranslation(pttexmtx2, 0.01 * mapOriginX + ctx.sceneCtx.animController.envAnimValue0, 0.0, 0.01 * mapOriginZ);
             mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
-            mat4.mul(dst, pttexmtx2, matCtx.invModelViewMtx);
+            mat4.mul(dst, pttexmtx2, ctx.invModelViewMtx);
             mat4.mul(dst, postRotate2, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -556,14 +549,10 @@ export abstract class StandardMaterial extends MaterialBase {
         const postRotate3 = mat4.create();
         mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
         const pttexmtx3 = mat4.create();
-        const postTexMtx3 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
-            mat4SetRowMajor(pttexmtx3,
-                0.01, 0.0,  0.0,  0.01 * mapOriginX,
-                0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ + matCtx.sceneCtx.animController.envAnimValue1,
-                0.0,  0.0,  0.0,  1.0
-            );
-            mat4.mul(dst, pttexmtx3, matCtx.invModelViewMtx);
+        const postTexMtx3 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            mat4.fromScaling(pttexmtx3, [0.01, 0.01, 0.01]);
+            mat4SetTranslation(pttexmtx3, 0.01 * mapOriginX, 0.0, 0.01 * mapOriginZ + ctx.sceneCtx.animController.envAnimValue1);
+            mat4.mul(dst, pttexmtx3, ctx.invModelViewMtx);
             mat4.mul(dst, postRotate3, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -632,9 +621,7 @@ export abstract class StandardMaterial extends MaterialBase {
                 this.addTevStagesForReflectiveFloor();
         }
     }
-}
 
-class StandardMapMaterial extends StandardMaterial {
     protected rebuildSpecialized() {
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
             // Flipped
@@ -694,12 +681,9 @@ class StandardObjectMaterial extends StandardMaterial {
 
     private addNBTTextureStage(): number { // Returns scale to use for nbtTexCoord
         const indStage = this.mb.genIndTexStage();
-        const indTexMtx = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+        const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
-            // const s = 0.5 * Math.sin(Math.PI * ctx.sceneCtx.animController.envAnimValue1);
-            // mat4.fromScaling(dst, [s, s, 0.0]);
         });
-        console.log(`nbt params: 0x${this.shader.nbtParams.toString(16)}`);
         const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, true)!;
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
         let nbtScale = 1;
@@ -707,7 +691,6 @@ class StandardObjectMaterial extends StandardMaterial {
             const layer0Tex = this.texFetcher.getTexture(this.device, this.shader.layers[0].texId, true);
             if (layer0Tex !== null) {
                 nbtScale = (this.shader.nbtParams & 0xf) * 4 + 1;
-                console.log(`layer 0 tex width: ${layer0Tex.width}\nnbt tex width: ${nbtTex.width}`);
                 const scaleIdx = (layer0Tex.width / (nbtTex.width * nbtScale))|0;
                 if (scaleIdx !== 0) {
                     // TODO: GXSetIndTexCoordScale (I can't find an example of this code being triggered)
@@ -736,17 +719,14 @@ class StandardObjectMaterial extends StandardMaterial {
         this.mb.setTexCoordUsesMtxIdx(tanTexCoord);
 
         const stage0 = this.mb.genTevStage();
-        // FIXME: matrixSel = S0 is not implemented
-        // FIXME: GX_TEX_DISABLE is not implemented. Said flag is used to perform texture coordinate scaling without a lookup.
         this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_S(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
-        this.mb.setTevOrder(stage0, binrmTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevOrder(stage0, binrmTexCoord, (nbtTexMap + 1) as TexMap, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage0 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage0 !== 0 ? GX.CA.APREV : GX.CA.RASA);
 
         const stage1 = this.mb.genTevStage();
-        // FIXME: matrixSel = T0 is not implemented
         this.mb.setTevIndirect(stage1, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_T(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, true, false, GX.IndTexAlphaSel.OFF);
-        this.mb.setTevOrder(stage1, tanTexCoord, (nbtTexMap + 1) as TexMap /* | GX_TEX_DISABLE */, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevOrder(stage1, tanTexCoord, (nbtTexMap + 1) as TexMap, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, stage1 !== 0 ? GX.CC.CPREV : GX.CC.RASC);
         this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, stage1 !== 0 ? GX.CA.APREV : GX.CA.RASA);
 
@@ -781,7 +761,7 @@ class StandardObjectMaterial extends StandardMaterial {
             dst.a = 0.0; // FIXME: is this accurate?
         });
 
-        const texMap = this.mb.genTexMap(makeHemisphericAmbientProbeTexture());
+        const texMap = this.mb.genTexMap(makeHemisphericProbeTexture());
         // const texMap = this.mb.genTexMap(this.factory.getOpaqueWhiteTexture());
         // const texMap = this.mb.genTexMap(this.factory.getSphereMapTestTexture());
 
@@ -802,7 +782,7 @@ class StandardObjectMaterial extends StandardMaterial {
             return;
         }
 
-        const texMap = this.mb.genTexMap(makeReflectiveAmbientProbeTexture(this.shader.reflectiveProbeIdx >> 1));
+        const texMap = this.mb.genTexMap(makeReflectiveProbeTexture(this.shader.reflectiveProbeIdx >> 1));
         // const texMap = this.mb.genTexMap(this.factory.getGreenSphereMapTestTexture());
 
         this.mb.setTevRegColor(2, (dst: Color) => colorFromRGBA(dst, 1.0, 1.0, 1.0, this.shader.reflectiveAmbFactor));
@@ -1071,10 +1051,7 @@ class StandardObjectMaterial extends StandardMaterial {
 
         // FIXME: Figure out reflective probe mask textures
         if (this.shader.reflectiveProbeMaskTexId !== null) {
-            console.log(`reflective probe mask texture id: ${this.shader.reflectiveProbeMaskTexId}`);
             const reflectiveProbeMask = this.texFetcher.getTexture(this.device, this.shader.reflectiveProbeMaskTexId!, true)!;
-            if (reflectiveProbeMask !== null && reflectiveProbeMask.viewerTexture !== undefined)
-                console.log(`reflective probe mask texture loaded as ${reflectiveProbeMask.viewerTexture!.name}`);
             // XXX: actually the reflective probe mask texture itself seems to be ignored?
             // all it does is activate this stage when it is present...
             const stage = this.mb.genTevStage();

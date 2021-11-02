@@ -19,8 +19,6 @@ import { radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
 import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
-import { drawScreenSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { AmbientProbe } from './AmbientProbe';
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;

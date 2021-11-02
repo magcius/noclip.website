@@ -1,33 +1,34 @@
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera';
-import { Blue, Color, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA, Magenta, Red, TransparentBlack, White } from '../Color';
-import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
+import { Blue, Color, colorCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color';
+import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { ColorKind, fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
+import { ColorKind, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
 import { projectionMatrixForCuboid } from '../MathHelpers';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
+import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { SFAMaterialBuilder } from './MaterialBuilder';
 import { makeMaterialTexture, MaterialFactory } from './materials';
 import { SceneRenderContext, setGXMaterialOnRenderInst } from './render';
-import { SFATextureFetcher, TextureFetcher } from './textures';
+import { TextureFetcher } from './textures';
 import { mat4SetTranslation } from './util';
 import { World } from './world';
-import { createDirectionalLight, Light, LightType } from './WorldLights';
+import { LightType } from './WorldLights';
 
 const scratchMaterialParams = new MaterialParams();
 const scratchPacketParams = new PacketParams();
 const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
-const scratchMtx2 = mat4.create();
 const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();
 
-const AMBIENT_PROBE_FACTORS = [
+const REFLECTIVE_PROBE_FACTORS = [
     [0.5, 1.0],
     [0.5, 0.5],
     [0.4, 1.0],
@@ -36,15 +37,15 @@ const AMBIENT_PROBE_FACTORS = [
     [0.4, 0.5],
 ]
 
-const enum ProbeType {
+const enum SphereMapType {
     // Sky light and ground light emitted against a sphere
-    Hemispheric,
+    HemisphericProbe,
     // Encoded texture containing Red: sky light, Green: surroundings, Blue: ground light
-    Reflective,
+    ReflectiveProbe,
 }
 
-interface AmbientProbeParams {
-    type: ProbeType,
+interface SphereMapParams {
+    type: SphereMapType,
     attenFactors: number[/* 2 */];
     matColorFactors: number[/* 2 */];
 }
@@ -55,11 +56,11 @@ function setSpecularLightAtten(light: GX_Material.Light, atten: number) {
     vec3.set(light.CosAtten, 0.0, 0.0, 1.0);
 }
 
-const PROBE_TARGET_DIM = 32;
-const PROBE_PROJECTION_MTX = mat4.create();
-projectionMatrixForCuboid(PROBE_PROJECTION_MTX, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
+const SPHERE_MAP_DIM = 32;
+const SPHERE_MAP_PROJECTION_MTX = mat4.create();
+projectionMatrixForCuboid(SPHERE_MAP_PROJECTION_MTX, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
 
-function createHemisphericMaterial(materialFactory: MaterialFactory): SFAMaterialBuilder<World> {
+function createHemisphericProbeMaterial(materialFactory: MaterialFactory): SFAMaterialBuilder<World> {
     const mb = new SFAMaterialBuilder<World>('Ambient Hemispheric Probe Material');
 
     const stage = mb.genTevStage();
@@ -92,16 +93,12 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
     const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.device, 0x5dc, false)));
     mb.setTevOrder(stage0, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
     mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, GX.CC.RASA, GX.CC.TEXC);
-    // mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASA);
-    // mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, GX.CC.ONE, GX.CC.TEXC);
     mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
     const stage1 = mb.genTevStage();
     mb.setTevDirect(stage1);
     mb.setTevOrder(stage1, null, null, GX.RasColorChannelID.COLOR1A1);
     mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASC, GX.CC.RASA, GX.CC.CPREV);
-    // mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
-    // mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASC, GX.CC.ONE, GX.CC.CPREV);
     mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
     mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, (1<<0)|(1<<1), GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPEC);
@@ -120,33 +117,48 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
     return mb;
 }
 
-export class AmbientProbe {
+interface RenderedSphereMap {
+    textureMapping: TextureMapping;
+    targetID: GfxrRenderTargetID;
+    resolveID: GfxrResolveTextureID;
+}
+
+export class SphereMapManager {
     private targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    private params: AmbientProbeParams[] = nArray(6, () => { return { type: ProbeType.Hemispheric, attenFactors: [0, 0], matColorFactors: [0, 0] }; });
+    private params: SphereMapParams[] = nArray(6, () => { return { type: SphereMapType.HemisphericProbe, attenFactors: [0, 0], matColorFactors: [0, 0] }; });
     private ddraw = new TDDraw();
     private hemisphericMaterial: SFAMaterialBuilder<World>;
     private reflectiveMaterial: SFAMaterialBuilder;
+    
+    private sphereMapSampler?: GfxSampler;
+    private sphereMaps: RenderedSphereMap[] = nArray<RenderedSphereMap>(6, () => {
+        return {
+            textureMapping: new TextureMapping(),
+            targetID: 0 as GfxrRenderTargetID,
+            resolveID: 0 as GfxrResolveTextureID,
+        };
+    });
 
     constructor(private world: World, private materialFactory: MaterialFactory) {
-        this.targetDesc.setDimensions(PROBE_TARGET_DIM, PROBE_TARGET_DIM, 1);
+        this.targetDesc.setDimensions(SPHERE_MAP_DIM, SPHERE_MAP_DIM, 1);
 
         let k = 0;
         // 0, 1, 2
         for (let i = 0; i < 6; i++) {
-            const factors = AMBIENT_PROBE_FACTORS[i];
+            const factors = REFLECTIVE_PROBE_FACTORS[i];
             this.params[k].attenFactors[i & 1] = 2.146452 / Math.pow(factors[0], 2.520326);
             this.params[k].matColorFactors[i & 1] = 255.0 * factors[1];
-            this.params[k].type = ProbeType.Reflective;
+            this.params[k].type = SphereMapType.ReflectiveProbe;
             if ((i & 1) !== 0)
                 k++;
         }
 
         // 3, 4, 5
-        this.params[k].type = ProbeType.Hemispheric;
+        this.params[k].type = SphereMapType.HemisphericProbe;
         k++;
-        this.params[k].type = ProbeType.Hemispheric;
+        this.params[k].type = SphereMapType.HemisphericProbe;
         k++;
-        this.params[k].type = ProbeType.Hemispheric;
+        this.params[k].type = SphereMapType.HemisphericProbe;
         k++;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -154,11 +166,11 @@ export class AmbientProbe {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
 
-        this.hemisphericMaterial = createHemisphericMaterial(this.materialFactory);
+        this.hemisphericMaterial = createHemisphericProbeMaterial(this.materialFactory);
         this.reflectiveMaterial = createReflectiveProbeMaterial(this.materialFactory, this.world.resColl.texFetcher);
     }
 
-    private setupToRenderHemispheric(probeIdx: number, materialParams: MaterialParams, sceneCtx: SceneRenderContext): SFAMaterialBuilder<World> {
+    private setupToRenderHemisphericProbe(probeIdx: number, materialParams: MaterialParams, sceneCtx: SceneRenderContext): SFAMaterialBuilder<World> {
         const ambParams = this.params[probeIdx];
         this.world.envfxMan.setAmbience(5 - probeIdx);
 
@@ -170,7 +182,7 @@ export class AmbientProbe {
         return this.hemisphericMaterial;
     }
 
-    private setupToRenderReflective(probeIdx: number, materialParams: MaterialParams, sceneCtx: SceneRenderContext): SFAMaterialBuilder {
+    private setupToRenderReflectiveProbe(probeIdx: number, materialParams: MaterialParams, sceneCtx: SceneRenderContext): SFAMaterialBuilder {
         const ambParams = this.params[probeIdx];
         this.world.envfxMan.setAmbience(probeIdx);
 
@@ -240,13 +252,13 @@ export class AmbientProbe {
         return this.reflectiveMaterial;
     }
 
-    public render(probeIdx: number, device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
+    private renderMap(mapIdx: number, device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
         // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
         // to obtain a local SceneParams buffer
         const template = renderHelper.pushTemplateRenderInst();
 
         // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, PROBE_PROJECTION_MTX, PROBE_TARGET_DIM, PROBE_TARGET_DIM);
+        fillSceneParams(scratchSceneParams, SPHERE_MAP_PROJECTION_MTX, SPHERE_MAP_DIM, SPHERE_MAP_DIM);
         let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
         const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
         fillSceneParamsData(d, offs, scratchSceneParams);
@@ -285,12 +297,12 @@ export class AmbientProbe {
         scratchPacketParams.clear();
         scratchMaterialParams.clear();
 
-        const ambParams = this.params[probeIdx]; // TODO: selectable per object
+        const ambParams = this.params[mapIdx]; // TODO: selectable per object
         let material: SFAMaterialBuilder<any>;
-        if (ambParams.type === ProbeType.Hemispheric)
-            material = this.setupToRenderHemispheric(probeIdx, scratchMaterialParams, sceneCtx);
-        else // ProbeType.Reflective
-            material = this.setupToRenderReflective(probeIdx, scratchMaterialParams, sceneCtx);
+        if (ambParams.type === SphereMapType.HemisphericProbe)
+            material = this.setupToRenderHemisphericProbe(mapIdx, scratchMaterialParams, sceneCtx);
+        else // SphereMapType.ReflectiveProbe
+            material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
         
         setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
 
@@ -298,10 +310,10 @@ export class AmbientProbe {
 
         renderInstManager.popTemplateRenderInst();
 
-        const targetID = builder.createRenderTargetID(this.targetDesc, 'Ambient Probe Target');
+        const targetID = builder.createRenderTargetID(this.targetDesc, 'Sphere Map Target');
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Ambient Probe');
+            pass.setDebugName('Sphere Map');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, targetID);
             pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
@@ -311,5 +323,39 @@ export class AmbientProbe {
         });
 
         return targetID;
+    }
+
+    public renderMaps(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        for (let i = 0; i < 6; i++)
+            this.sphereMaps[i].targetID = this.renderMap(i, device, builder, renderHelper, renderInstManager, sceneCtx);
+    }
+
+    public attachResolveTextures(builder: GfxrGraphBuilder, pass: GfxrPass) {
+        for (let i = 0; i < 6; i++) {
+            this.sphereMaps[i].resolveID = builder.resolveRenderTarget(this.sphereMaps[i].targetID);
+            pass.attachResolveTexture(this.sphereMaps[i].resolveID);
+        }
+    }
+
+    public resolveLateSamplerBindings(renderList: GfxRenderInstList, scope: GfxrPassScope, renderCache: GfxRenderCache) {
+        if (this.sphereMapSampler === undefined) {
+            this.sphereMapSampler = renderCache.createSampler({
+                wrapS: GfxWrapMode.Clamp,
+                wrapT: GfxWrapMode.Clamp,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+        }
+
+        for (let i = 0; i < 6; i++) {
+            this.sphereMaps[i].textureMapping.gfxTexture = scope.getResolveTextureForID(this.sphereMaps[i].resolveID);
+            this.sphereMaps[i].textureMapping.gfxSampler = this.sphereMapSampler;
+            this.sphereMaps[i].textureMapping.width = SPHERE_MAP_DIM;
+            this.sphereMaps[i].textureMapping.height = SPHERE_MAP_DIM;
+            renderList.resolveLateSamplerBinding(`sphere-map-${i}`, this.sphereMaps[i].textureMapping);
+        }
     }
 }

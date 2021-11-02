@@ -347,6 +347,7 @@ const FIELDS: any = {
         shaderOffset: 0x38,
         shaderCount: 0xf8,
         shaderFields: SFA_SHADER_FIELDS,
+        texMtxCount: 0xfa,
         dlInfoOffset: 0xd0,
         dlInfoCount: 0xf5,
         dlInfoSize: 0x1c,
@@ -442,6 +443,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
             model.hasFineSkinning = true;
             model.fineSkinNormalQuantizeScale = nrmFineSkinningConfig.quantizeScale;
             model.fineSkinNBTNormals = !!(normalFlags & NormalFlags.NBT);
+            if (model.fineSkinNBTNormals)
+                console.warn(`Fine-skinned NBT normals detected; not implemented yet`);
 
             const weightsOffs = data.getUint32(fields.nrmFineSkinningWeights);
             const nrmFineSkinningWeights = dataSubarray(data, weightsOffs);
@@ -486,12 +489,12 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     const clrOffset = data.getUint32(fields.clrOffset);
     const clrCount = data.getUint16(fields.clrCount);
     // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
-    const clrBuffer = dataSubarray(data, clrOffset);
+    const clrBuffer = dataSubarray(data, clrOffset, clrCount * 2);
 
     const texcoordOffset = data.getUint32(fields.texcoordOffset);
     const texcoordCount = data.getUint16(fields.texcoordCount);
     // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordOffset.toString(16)}`);
-    const texcoordBuffer = dataSubarray(data, texcoordOffset);
+    const texcoordBuffer = dataSubarray(data, texcoordOffset, texcoordCount * 4);
 
     let hasSkinning = false;
 
@@ -557,12 +560,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     }
 
     let texMtxCount = 0;
-    if (fields.hasBones) {
-        if (fields.isBeta)
-            texMtxCount = data.getUint8(fields.texMtxCount);
-        else
-            texMtxCount = data.getUint8(0xfa);
-    }
+    if (fields.hasBones)
+        texMtxCount = data.getUint8(fields.texMtxCount);
     
     const shaderOffset = data.getUint32(fields.shaderOffset);
     const shaderCount = data.getUint8(fields.shaderCount);
@@ -638,12 +637,15 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
             if (shader.hasHemisphericProbe || shader.hasReflectiveProbe) {
                 if (shader.hasNBTTexture) {
+                    // Binormal matrix index
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;
+                    // Tangent matrix index
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;
                 }
 
+                // Normal matrix index
                 vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                 texmtxNum++;
             }
@@ -655,25 +657,17 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
             }
         }
 
-        const posDesc = bits.get(1);
-        vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+        vcd[GX.Attr.POS].type = bits.get(1) ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
 
-        if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM)) {
-            const nrmDesc = bits.get(1);
-            vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-
-            // const isNBT = !!(nrmTypeFlags & 8);
-            // No need to do anything, NRM and NBT are the same under the hood.
-        } else {
+        if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM))
+            vcd[GX.Attr.NRM].type = bits.get(1) ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+        else
             vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-        }
 
-        if (shader.attrFlags & ShaderAttrFlags.CLR) {
-            const clr0Desc = bits.get(1);
-            vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-        } else {
+        if (shader.attrFlags & ShaderAttrFlags.CLR)
+            vcd[GX.Attr.CLR0].type = bits.get(1) ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+        else
             vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
-        }
 
         const texCoordDesc = bits.get(1);
         if (shader.layers.length > 0) {
@@ -812,7 +806,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                 vcd = readVertexDesc(bits, curShader);
                 break;
             }
-            case Opcode.SetMatrices: // When drawing map blocks, this command is ignored by the original game.
+            case Opcode.SetMatrices:
+                // This command is only relevant when drawing objects. The game ignores this command when drawing maps.
                 const numBones = bits.get(4);
                 if (numBones > 10)
                     throw Error(`Too many PN matrices`);
