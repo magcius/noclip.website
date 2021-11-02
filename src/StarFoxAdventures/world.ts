@@ -2,14 +2,14 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderGraph, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph';
+import { GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { colorNewFromRGBA, Color, colorCopy, White } from '../Color';
+import { colorNewFromRGBA, White } from '../Color';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -25,9 +25,7 @@ import { SFABlockFetcher } from './blocks';
 import { Sky } from './Sky';
 import { LightType, WorldLights } from './WorldLights';
 import { SFATextureFetcher } from './textures';
-import { AmbientProbe } from './AmbientProbe';
-import { TextureMapping } from '../TextureHolder';
-import { nArray } from '../util';
+import { SphereMapManager } from './SphereMaps';
 
 export class World {
     public animController: SFAAnimationController;
@@ -124,14 +122,7 @@ export class World {
     }
 }
 
-const scratchMtx0 = mat4.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
-
-interface RenderedAmbientProbe {
-    textureMapping: TextureMapping;
-    targetID: GfxrRenderTargetID;
-    resolveID: GfxrResolveTextureID;
-}
 
 class WorldRenderer extends SFARenderer {
     public textureHolder: UI.TextureListHolder;
@@ -143,14 +134,14 @@ class WorldRenderer extends SFARenderer {
     private showDevObjects: boolean = false;
     private enableLights: boolean = true;
     private sky: Sky; // TODO: move to World?
-    private ambientProbe: AmbientProbe;
+    private sphereMapMan: SphereMapManager;
 
     constructor(private world: World, materialFactory: MaterialFactory) {
         super(world.device, world.animController, materialFactory);
         if (this.world.resColl.texFetcher instanceof SFATextureFetcher)
             this.textureHolder = this.world.resColl.texFetcher.textureHolder;
         this.sky = new Sky(this.world);
-        this.ambientProbe = new AmbientProbe(this.world, materialFactory);
+        this.sphereMapMan = new SphereMapManager(this.world, materialFactory);
     }
 
     public createPanels(): UI.Panel[] {
@@ -315,47 +306,16 @@ class WorldRenderer extends SFARenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
-    private ambientProbeSampler?: GfxSampler;
-    private ambientProbes: RenderedAmbientProbe[] = nArray<RenderedAmbientProbe>(6, () => {
-        return {
-            textureMapping: new TextureMapping(),
-            targetID: 0 as GfxrRenderTargetID,
-            resolveID: 0 as GfxrResolveTextureID,
-        };
-    });
-
     protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
-        for (let i = 0; i < 6; i++)
-            this.ambientProbes[i].targetID = this.ambientProbe.render(i, device, builder, this.renderHelper, renderInstManager, sceneCtx);
+        this.sphereMapMan.renderMaps(device, builder, this.renderHelper, renderInstManager, sceneCtx);
     }
 
     protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {
-        for (let i = 0; i < 6; i++) {
-            this.ambientProbes[i].resolveID = builder.resolveRenderTarget(this.ambientProbes[i].targetID);
-            pass.attachResolveTexture(this.ambientProbes[i].resolveID);
-        }
+        this.sphereMapMan.attachResolveTextures(builder, pass);
     }
 
     protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
-        if (this.ambientProbeSampler === undefined) {
-            this.ambientProbeSampler = this.renderHelper.getCache().createSampler({
-                wrapS: GfxWrapMode.Clamp,
-                wrapT: GfxWrapMode.Clamp,
-                minFilter: GfxTexFilterMode.Bilinear,
-                magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
-                minLOD: 0,
-                maxLOD: 100,
-            });
-        }
-
-        for (let i = 0; i < 6; i++) {
-            this.ambientProbes[i].textureMapping.gfxTexture = scope.getResolveTextureForID(this.ambientProbes[i].resolveID);
-            this.ambientProbes[i].textureMapping.gfxSampler = this.ambientProbeSampler;
-            this.ambientProbes[i].textureMapping.width = 32;
-            this.ambientProbes[i].textureMapping.height = 32;
-            renderList.resolveLateSamplerBinding(`ambient-probe-${i}`, this.ambientProbes[i].textureMapping);
-        }
+        this.sphereMapMan.resolveLateSamplerBindings(renderList, scope, this.renderHelper.getCache());
     }
 
     public destroy(device: GfxDevice) {

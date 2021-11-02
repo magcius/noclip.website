@@ -1,7 +1,6 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import * as GX_Material from '../gx/gx_material';
-import { colorNewFromRGBA, Color, colorCopy, White, colorNewCopy } from '../Color';
-import { ModelRenderContext } from "./models";
+import { Color, colorCopy, colorNewCopy } from '../Color';
 import { computeViewMatrix } from "../Camera";
 import { mat4SetTranslation } from "./util";
 import { SceneRenderContext } from "./render";

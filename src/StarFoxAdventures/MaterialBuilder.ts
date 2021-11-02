@@ -1,13 +1,11 @@
 import { mat4 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
-import { MaterialParams, ColorKind, PacketParams, GXMaterialHelperGfx } from '../gx/gx_render';
+import { MaterialParams, ColorKind, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
 
 import { Color, colorCopy, TransparentBlack, White } from '../Color';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { nArray } from '../util';
 
 // Declare opaque types, as described in <https://evertpot.com/opaque-ts-types/>.

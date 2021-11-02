@@ -18,7 +18,7 @@ import { Shape } from './shapes';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
-import { computeNormalMatrix, transformVec3Mat4w0 } from '../MathHelpers';
+import { computeNormalMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
 import { LightType } from './WorldLights';
 import { ObjectInstance } from './objects';
 
@@ -331,7 +331,7 @@ export class ModelInstance {
                 const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
-                vec3.transformMat4(pos, pos, scratchMtx0);
+                transformVec3Mat4w1(pos, scratchMtx0, pos);
 
                 setInt16Clamped(dst, bufferOffs + 0, pos[0] * quant);
                 setInt16Clamped(dst, bufferOffs + 2, pos[1] * quant);
