@@ -1,4 +1,4 @@
-import { colorFromRGBA, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from '../Color';
+import { colorFromRGBA, colorNewCopy, White } from '../Color';
 import { Shader, ShaderLayer, ShaderFlags, ShaderAttrFlags } from './materials';
 import { dataSubarray } from './util';
 

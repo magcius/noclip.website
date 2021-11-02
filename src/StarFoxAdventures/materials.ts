@@ -1,21 +1,20 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import * as GX from '../gx/gx_enum';
 import { SwapTable } from '../gx/gx_material';
-import { GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
 
 import { SFATexture, TextureFetcher } from './textures';
-import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, HighBitReader, mat4SetTranslation } from './util';
+import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTranslation } from './util';
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, Red, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { clamp } from '../MathHelpers';
-import { CtrTextureHolder } from '../oot3d/render';
 
 export interface ShaderLayer {
     texId: number | null;

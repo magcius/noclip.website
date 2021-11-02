@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
