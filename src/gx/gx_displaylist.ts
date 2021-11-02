@@ -886,9 +886,6 @@ function runVertices(dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, 
     return drawCallIdx;
 }
 `;
-    if (vatLayout.vatFormat[GX.Attr.NRM]?.compCnt === GX.CompCnt.NRM_NBT || vatLayout.vatFormat[GX.Attr.NRM]?.compCnt === GX.CompCnt.NRM_NBT3) {
-        console.log(`compiling NBT loader:\n${source}`);
-    }
     return compileFunction(source, `runVertices`);
 }
 
