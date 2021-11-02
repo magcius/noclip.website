@@ -19,8 +19,8 @@ import { clamp } from '../MathHelpers';
 export interface ShaderLayer {
     texId: number | null;
     tevMode: number;
-    enableTexChainStuff: number;
-    scrollingTexMtx: number | undefined;
+    enableScroll: number;
+    scrollSlot?: number | undefined;
 }
 
 export interface Shader {
@@ -83,19 +83,10 @@ export enum ShaderFlags {
 }
 
 export function makeMaterialTexture(texture: SFATexture | null): TexFunc<any> {
-    if (texture) {
-        return (mapping: TextureMapping) => {
-            mapping.reset();
-            mapping.gfxTexture = texture.gfxTexture;
-            mapping.gfxSampler = texture.gfxSampler;
-            mapping.width = texture.width;
-            mapping.height = texture.height;
-            mapping.lodBias = 0.0;
-        };
+    if (texture !== null) {
+        return (mapping: TextureMapping) => texture.setOnTextureMapping(mapping);
     } else {
-        return (mapping: TextureMapping) => {
-            mapping.reset();
-        };
+        return (mapping: TextureMapping) => mapping.reset();
     }
 }
 
@@ -171,7 +162,7 @@ export interface SFAMaterial {
     rebuild: () => void;
 }
 
-interface ScrollingTexMtx {
+interface ScrollSlot {
     x: number;
     y: number;
     dxPerFrame: number;
@@ -249,9 +240,9 @@ export abstract class StandardMaterial extends MaterialBase {
         this.blendOverride = blendOverride;
     }
 
-    protected genScrollableTexCoord(texMap: TexMap, texGenSrc: GX.TexGenSrc, scrollingTexMtx?: number): TexCoord {
-        if (scrollingTexMtx !== undefined) {
-            const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
+    protected genScrollableTexCoord(texMap: TexMap, texGenSrc: GX.TexGenSrc, scrollSlot?: number): TexCoord {
+        if (scrollSlot !== undefined) {
+            const scroll = this.factory.scrollSlots[scrollSlot];
             const postTexMtx = this.mb.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
             });
@@ -615,9 +606,9 @@ export abstract class StandardMaterial extends MaterialBase {
     protected addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
             const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-            const texCoord0 = this.genScrollableTexCoord(texMap0, GX.TexGenSrc.TEX0, this.shader.layers[0].scrollingTexMtx);
+            const texCoord0 = this.genScrollableTexCoord(texMap0, GX.TexGenSrc.TEX0, this.shader.layers[0].scrollSlot);
             const texMap1 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[1].texId!, true)));
-            const texCoord1 = this.genScrollableTexCoord(texMap1, GX.TexGenSrc.TEX1, this.shader.layers[1].scrollingTexMtx);
+            const texCoord1 = this.genScrollableTexCoord(texMap1, GX.TexGenSrc.TEX1, this.shader.layers[1].scrollSlot);
 
             this.addTevStageForTexture(0, texMap0, texCoord0);
             if (this.shader.flags & ShaderFlags.Reflective)
@@ -629,7 +620,7 @@ export abstract class StandardMaterial extends MaterialBase {
                 const layer = this.shader.layers[i];
 
                 const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
-                const texCoord = this.genScrollableTexCoord(texMap, GX.TexGenSrc.TEX0 + i, layer.scrollingTexMtx);
+                const texCoord = this.genScrollableTexCoord(texMap, GX.TexGenSrc.TEX0 + i, layer.scrollSlot);
 
                 if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
                     this.addTevStagesForIndoorOutdoorBlend(texMap, texCoord);
@@ -850,11 +841,9 @@ class StandardObjectMaterial extends StandardMaterial {
         }
     }
 
-    private addColoredTextureLayerStageWithoutAmbience(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
+    private addColoredTextureLayerStageWithoutAmbience(texCoord: TexCoord, texMap: TexMap, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
-        // TODO: support scrollable textures (e.g. eyeballs)
-        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         this.mb.setTevOrder(stage, texCoord, texMap);
 
         if (colorFunc !== undefined) {
@@ -887,12 +876,10 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = true;
     }
 
-    private addColoredTextureLayerStageWithAmbience(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
+    private addColoredTextureLayerStageWithAmbience(texCoord: TexCoord, texMap: TexMap, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
         // TODO: support swapping
-        // TODO: support scrollable textures (e.g. eyeballs)
-        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         this.mb.setTevOrder(stage, texCoord, texMap);
 
         if (colorFunc !== undefined) {
@@ -925,11 +912,9 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = true;
     }
 
-    private addPlainTextureLayerStage(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number) {
+    private addPlainTextureLayerStage(texCoord: TexCoord, texMap: TexMap, colorInMode: number) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
-        // TODO: support scrollable textures (e.g. eyeballs)
-        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         this.mb.setTevOrder(stage, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
 
         switch (colorInMode) {
@@ -951,11 +936,9 @@ class StandardObjectMaterial extends StandardMaterial {
         this.aprevIsValid = true;
     }
     
-    private addAlphaedTextureLayerStage(texMap: TexMap, texGenSrc: GX.TexGenSrc, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
+    private addAlphaedTextureLayerStage(texCoord: TexCoord, texMap: TexMap, colorInMode: number, colorFunc?: ColorFunc<MaterialRenderContext>) {
         const stage = this.mb.genTevStage();
         this.mb.setTevDirect(stage);
-        // TODO: support scrollable textures (e.g. eyeballs)
-        const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, texGenSrc);
         this.mb.setTevOrder(stage, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
 
         if (colorFunc !== undefined) {
@@ -1014,7 +997,9 @@ class StandardObjectMaterial extends StandardMaterial {
             const layer = this.shader.layers[i];
             if (!!(layer.tevMode & 0x80) == preProbe) {
                 if (layer.texId !== null) {
-                    const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+                    const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, layer.texId, true)));
+                    // TODO: support scrollable textures (e.g. eyeballs)
+                    const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0 + i);
 
                     let colorInMode: number;
                     if (i > 0)
@@ -1027,20 +1012,20 @@ class StandardObjectMaterial extends StandardMaterial {
                     if (!this.enableHemisphericProbe) {
                         if (fooFlag) {
                             if (this.shader.attrFlags & 0x10)
-                                this.addColoredTextureLayerStageWithoutAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
+                                this.addColoredTextureLayerStageWithoutAmbience(texCoord, texMap, colorInMode,
                                     (dst: Color, ctx: MaterialRenderContext) => colorCopy(dst, ctx.outdoorAmbientColor));
                             else
-                                this.addColoredTextureLayerStageWithAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode,
+                                this.addColoredTextureLayerStageWithAmbience(texCoord, texMap, colorInMode,
                                     (dst: Color, ctx: MaterialRenderContext) => colorCopy(dst, ctx.outdoorAmbientColor));
                         } else {
                             // TODO: special logic here if opacity is not 100%.
                             if (this.shader.attrFlags & 0x10)
-                                this.addPlainTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                                this.addPlainTextureLayerStage(texCoord, texMap, colorInMode);
                             else
-                                this.addAlphaedTextureLayerStage(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                                this.addAlphaedTextureLayerStage(texCoord, texMap, colorInMode);
                         }
                     } else {
-                        this.addColoredTextureLayerStageWithAmbience(texMap, GX.TexGenSrc.TEX0 + i, colorInMode);
+                        this.addColoredTextureLayerStageWithAmbience(texCoord, texMap, colorInMode);
                     }
                 } else {
                     if (fooFlag) {
@@ -1621,24 +1606,24 @@ export class MaterialFactory {
     private halfGrayGfxTexture: SFATexture | null = null;
     private halfGrayTexture: TexFunc<MaterialRenderContext>;
     private furFactory: FurFactory | null = null;
-    public scrollingTexMtxs: ScrollingTexMtx[] = [];
+    public scrollSlots: ScrollSlot[] = [];
 
     constructor(public device: GfxDevice) {
     }
 
     public update(animController: SFAAnimationController) {
-        for (let i = 0; i < this.scrollingTexMtxs.length; i++) {
-            const scrollingTexMtx = this.scrollingTexMtxs[i];
-            scrollingTexMtx.x = (animController.animController.getTimeInFrames() * scrollingTexMtx.dxPerFrame) % MAX_SCROLL;
-            scrollingTexMtx.y = (animController.animController.getTimeInFrames() * scrollingTexMtx.dyPerFrame) % MAX_SCROLL;
+        for (let i = 0; i < this.scrollSlots.length; i++) {
+            const scroll = this.scrollSlots[i];
+            scroll.x = (animController.animController.getTimeInFrames() * scroll.dxPerFrame) % MAX_SCROLL;
+            scroll.y = (animController.animController.getTimeInFrames() * scroll.dyPerFrame) % MAX_SCROLL;
         }
     }
 
-    public setupScrollingTexMtx(dxPerFrame: number, dyPerFrame: number): number {
-        this.scrollingTexMtxs.push({
+    public addScrollSlot(dxPerFrame: number, dyPerFrame: number): number {
+        this.scrollSlots.push({
             x: 0, y: 0, dxPerFrame, dyPerFrame
         });
-        return this.scrollingTexMtxs.length - 1;
+        return this.scrollSlots.length - 1;
     }
 
     public buildObjectMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {

@@ -222,7 +222,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
                                 const theTexture = obj.world.resColl.texFetcher.getTexture(obj.world.device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
-                                layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
+                                layer.scrollSlot = mat.factory.addScrollSlot(dxPerFrame, dyPerFrame);
                                 mat.rebuild();
                             }
                         }
@@ -233,6 +233,8 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
                     console.warn(`Couldn't find material texture for scrolling`);
             }
         }
+
+        // TODO: implement unmount
     },
     [309]: commonClass(),
     [312]: commonClass(),

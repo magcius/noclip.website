@@ -52,8 +52,8 @@ function parseShaderLayer(data: DataView, modelTexIds: number[]): ShaderLayer {
     return {
         texId: parseModelTexId(data, 0x0, modelTexIds),
         tevMode: data.getUint8(0x4),
-        enableTexChainStuff: data.getUint8(0x5),
-        scrollingTexMtx: scrollingTexMtx || undefined,
+        enableScroll: data.getUint8(0x5),
+        scrollSlot: scrollingTexMtx || undefined,
     };
 }
 

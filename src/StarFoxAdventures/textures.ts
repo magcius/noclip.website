@@ -10,6 +10,7 @@ import { GameInfo } from './scenes';
 import { loadRes } from './resource';
 import { readUint32 } from './util';
 import * as Viewer from '../viewer';
+import { TextureMapping } from '../TextureHolder';
 
 export class SFATexture {
     public viewerTexture?: Viewer.Texture;
@@ -20,6 +21,15 @@ export class SFATexture {
     public destroy(device: GfxDevice) {
         device.destroySampler(this.gfxSampler);
         device.destroyTexture(this.gfxTexture);
+    }
+
+    public setOnTextureMapping(mapping: TextureMapping) {
+        mapping.reset();
+        mapping.gfxTexture = this.gfxTexture;
+        mapping.gfxSampler = this.gfxSampler;
+        mapping.width = this.width;
+        mapping.height = this.height;
+        mapping.lodBias = 0.0;
     }
 }
 
@@ -219,8 +229,14 @@ class TextureFile {
         if (this.textures[num] === undefined) {
             try {
                 const texture = loadTextureArrayFromTable(device, this.tab, this.bin, num, this.isBeta);
-                if (texture !== null && texture.textures[0].viewerTexture !== undefined) {
-                    texture.textures[0].viewerTexture.name = `${this.name} #${num}`;
+                if (texture !== null) {
+                    for (let arrayIdx = 0; arrayIdx < texture.textures.length; arrayIdx++) {
+                        const viewerTexture = texture.textures[arrayIdx].viewerTexture;
+                        if (viewerTexture !== undefined)
+                            viewerTexture.name = `${this.name} #${num}`;
+                            if (texture.textures.length > 1)
+                                viewerTexture!.name += `.${arrayIdx}`;
+                    }
                 }
                 this.textures[num] = texture;
             } catch (e) {
@@ -370,10 +386,13 @@ export class SFATextureFetcher extends TextureFetcher {
         const isNewlyLoaded = !file.file.isTextureLoaded(file.texNum);
         const textureArray = file.file.getTextureArray(device, file.texNum);
         if (isNewlyLoaded && textureArray !== null) {
-            if (textureArray.textures[0].viewerTexture !== undefined) {
-                this.textureHolder.viewerTextures.push(textureArray.textures[0].viewerTexture);
-                if (this.textureHolder.onnewtextures !== null)
-                    this.textureHolder.onnewtextures();
+            for (let arrayIdx = 0; arrayIdx < textureArray.textures.length; arrayIdx++) {
+                const viewerTexture = textureArray.textures[arrayIdx].viewerTexture;
+                if (viewerTexture !== undefined) {
+                    this.textureHolder.viewerTextures.push(viewerTexture);
+                    if (this.textureHolder.onnewtextures !== null)
+                        this.textureHolder.onnewtextures();
+                }
             }
         }
 
