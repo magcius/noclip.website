@@ -1097,11 +1097,10 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
-        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length) {
+        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length)
             return `${this.generateTevTexCoordIndirectMtx(stage)}`;
-        } else {
+        else
             return ``;
-    }
     }
 
     private generateTevTexCoordIndirect(stage: TevStage): string {

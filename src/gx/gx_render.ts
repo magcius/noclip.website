@@ -273,21 +273,6 @@ export function fillIndTexMtx(dst: mat4, src: Float32Array): void {
     );
 }
 
-export function fillIndTexMtxData(d_: Float32Array, offs: number, src: Float32Array): number {
-    const a = src[0], c = src[1], tx = src[2], scale = src[3];
-    const b = src[4], d = src[5], ty = src[6];
-    d_[offs + 0] = a;
-    d_[offs + 1] = c;
-    d_[offs + 2] = tx;
-    d_[offs + 3] = scale;
-    d_[offs + 4] = b;
-    d_[offs + 5] = d;
-    d_[offs + 6] = ty;
-    d_[offs + 7] = 0;
-    return 4*2;
-}
-
-
 function autoOptimizeMaterialHasPostTexMtxBlock(material: GX_Material.GXMaterial): boolean {
     for (let i = 0; i < material.texGens.length; i++)
         if (material.texGens[i].postMatrix !== GX.PostTexGenMatrix.PTIDENTITY)
