@@ -701,7 +701,7 @@ class StandardObjectMaterial extends StandardMaterial {
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
 
-    private addNBTTextureStage() {
+    private addNBTTextureStage(): number { // Returns scale to use for nbtTexCoord
         const indStage = this.mb.genIndTexStage();
         const indTexMtx = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
@@ -711,14 +711,17 @@ class StandardObjectMaterial extends StandardMaterial {
         console.log(`nbt params: 0x${this.shader.nbtParams.toString(16)}`);
         const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, true)!;
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
+        let nbtScale = 1;
         if (this.shader.layers[0].texId !== null) {
             const layer0Tex = this.texFetcher.getTexture(this.device, this.shader.layers[0].texId, true);
             if (layer0Tex !== null) {
+                nbtScale = (this.shader.nbtParams & 0xf) * 4 + 1;
                 console.log(`layer 0 tex width: ${layer0Tex.width}\nnbt tex width: ${nbtTex.width}`);
-                const scaleIdx = (layer0Tex.width / (nbtTex.width * ((this.shader.nbtParams & 0xf) * 4 + 1)))|0;
+                const scaleIdx = (layer0Tex.width / (nbtTex.width * nbtScale))|0;
                 if (scaleIdx !== 0) {
                     // TODO: GXSetIndTexCoordScale (I can't find an example of this code being triggered)
                     console.warn(`TODO: GXSetIndTexCoordScale in addNBTTextureStage`);
+                    nbtScale = 0;
                 }
             }
         }
@@ -758,6 +761,8 @@ class StandardObjectMaterial extends StandardMaterial {
 
         // Set tev indirect on the following stage
         this.mb.setTevIndirect((stage1 + 1) as TevStage, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+
+        return nbtScale;
     }
 
     private getAmbientProbeTexCoord(): TexCoord {
@@ -1063,11 +1068,21 @@ class StandardObjectMaterial extends StandardMaterial {
 
         this.mb.setUsePnMtxIdx(true);
 
+        let nbtScale = 0;
         if ((this.enableHemisphericProbe || this.enableReflectiveProbe) && this.shader.hasNBTTexture)
-            this.addNBTTextureStage();
+            nbtScale = this.addNBTTextureStage();
 
         this.setupHemisphericProbe();
         this.setupReflectiveProbe();
+
+        // TODO: Add projected texture lighting stages if necessary
+
+        if (nbtScale !== 0) {
+            const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
+                mat4.fromScaling(dst, [nbtScale, nbtScale, 0.0]);
+            });
+            this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getGXPostTexGenMatrix(ptmtx));
+        }
 
         // FIXME: Figure out reflective probe mask textures
         if (this.shader.reflectiveProbeMaskTexId !== null) {
