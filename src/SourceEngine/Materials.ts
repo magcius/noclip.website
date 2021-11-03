@@ -1401,7 +1401,7 @@ void mainVS() {
     vec3 t_TangentSWorld = Mul(t_WorldFromLocalMatrix, vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
-    v_TangentSpaceBasis0 = t_TangentSWorld * sign(a_TangentS.w);
+    v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
     v_TangentSpaceBasis1 = t_TangentTWorld;
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
@@ -3234,9 +3234,9 @@ void mainVS() {
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
+    vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
-    vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
+    vec3 t_TangentSWorld = Mul(t_WorldFromLocalMatrix, vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
     v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
