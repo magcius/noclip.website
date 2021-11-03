@@ -304,6 +304,11 @@ export default class InputManager {
     }
 
     public onMotion(dx: number, dy: number) {
+        // Toss junk deltas.
+        // https://bugs.chromium.org/p/chromium/issues/detail?id=1031906
+        if (Math.abs(dx) > 100 || Math.abs(dy) > 100)
+            return;
+
         this.dx += dx;
         this.dy += dy;
     }
