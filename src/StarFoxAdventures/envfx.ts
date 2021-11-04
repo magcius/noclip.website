@@ -30,6 +30,8 @@ class Skyscape { // Clouds, mountains, etc.
     }
 }
 
+const MIST_TEXTURE_DIM = 64;
+
 export class EnvfxManager {
     public atmosphere = new Atmosphere();
     public skyscape = new Skyscape();
@@ -46,11 +48,14 @@ export class EnvfxManager {
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
 
-    private constructor(private world: World) {
+    private mistTexture: SFATexture;
+
+    private constructor(device: GfxDevice, private world: World) {
+        this.mistTexture = SFATexture.create(device, MIST_TEXTURE_DIM, MIST_TEXTURE_DIM);
     }
 
-    public static async create(world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
-        const self = new EnvfxManager(world);
+    public static async create(device: GfxDevice, world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
+        const self = new EnvfxManager(device, world);
 
         const pathBase = world.gameInfo.pathBase;
         self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
@@ -58,7 +63,17 @@ export class EnvfxManager {
         return self;
     }
 
-    public update() {
+    public update(device: GfxDevice) {
+        this.updateAmbience();
+        this.updateMistTexture(device, 32); // TODO: param depends on camera
+        // this.updateMistTexture(device, 32 * Math.sin(this.world.animController.envAnimValue1*Math.PI) + 32 /*TODO*/);
+    }
+
+    public getMistTexture(): SFATexture {
+        return this.mistTexture;
+    }
+
+    private updateAmbience() {
         // TODO: change skylight angle depending on time of day
         this.getAmbientColor(this.skyLight.color, this.ambienceIdx);
         colorScale(this.groundLight.color, this.skyLight.color, this.groundLightFactor);
@@ -71,12 +86,34 @@ export class EnvfxManager {
 
     public setTimeOfDay(time: number) {
         this.timeOfDay = time;
-        this.update();
+        this.updateAmbience();
     }
 
     public setAmbience(idx: number) {
         this.ambienceIdx = idx;
-        this.update();
+        this.updateAmbience();
+    }
+
+    private updateMistTexture(device: GfxDevice, param: number) {
+        const pixels = new Uint8Array(4 * MIST_TEXTURE_DIM * MIST_TEXTURE_DIM);
+
+        function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+            const idx = 4 * (y * MIST_TEXTURE_DIM + x)
+            pixels[idx] = r;
+            pixels[idx + 1] = g;
+            pixels[idx + 2] = b;
+            pixels[idx + 3] = a;
+        }
+
+        for (let y = 0; y < MIST_TEXTURE_DIM; y++) {
+            const lineFactor = Math.min((y + param) * 255, 0x3fc0);
+            for (let x = 0; x < MIST_TEXTURE_DIM; x++) {
+                let I = (lineFactor * x) >> 12;
+                plot(x, y, I, I, I, I);
+            }
+        }
+
+        device.uploadTextureData(this.mistTexture.gfxTexture, 0, [pixels]);
     }
 
     public getAmbientColor(out: Color, ambienceNum: number) {

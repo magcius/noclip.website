@@ -14,15 +14,17 @@ import { nArray } from '../util';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
-import { MaterialFactory, HeatShimmerMaterial } from './materials';
+import { MaterialFactory, HeatShimmerMaterial, MaterialRenderContext } from './materials';
 import { radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
 import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
+import { World } from './world';
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
     animController: SFAAnimationController;
+    world?: World;
 }
 
 const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
@@ -55,6 +57,8 @@ export function submitScratchRenderInst(device: GfxDevice, renderInstManager: Gf
 }
 
 export class SFARenderer implements Viewer.SceneGfx {
+    protected world?: World;
+
     protected renderHelper: GXRenderHelperGfx;
     protected renderLists: SFARenderLists;
     
@@ -179,10 +183,12 @@ export class SFARenderer implements Viewer.SceneGfx {
         if (this.heatShimmerMaterial === undefined)
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
 
-        const matCtx = {
+        const matCtx: MaterialRenderContext = {
             sceneCtx,
-            modelViewMtx: mat4.create(),
-            invModelViewMtx: mat4.create(),
+            worldToViewMtx: mat4.create(),
+            viewToWorldMtx: mat4.create(),
+            modelToViewMtx: mat4.create(),
+            viewToModelMtx: mat4.create(),
             ambienceIdx: 0,
             outdoorAmbientColor: White,
             furLayer: 0,
@@ -306,6 +312,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         const sceneCtx: SceneRenderContext = {
             viewerInput,
             animController: this.animController,
+            world: this.world,
         };
 
         this.addSkyRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);

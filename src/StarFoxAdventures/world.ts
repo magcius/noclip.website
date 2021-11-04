@@ -42,7 +42,7 @@ export class World {
 
     private async init(dataFetcher: DataFetcher) {
         this.animController = new SFAAnimationController();
-        this.envfxMan = await EnvfxManager.create(this, dataFetcher);
+        this.envfxMan = await EnvfxManager.create(this.device, this, dataFetcher);
         
         const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
         const texFetcherPromise = async () => {
@@ -136,7 +136,7 @@ class WorldRenderer extends SFARenderer {
     private sky: Sky; // TODO: move to World?
     private sphereMapMan: SphereMapManager;
 
-    constructor(private world: World, materialFactory: MaterialFactory) {
+    constructor(protected world: World, materialFactory: MaterialFactory) {
         super(world.device, world.animController, materialFactory);
         if (this.world.resColl.texFetcher instanceof SFATextureFetcher)
             this.textureHolder = this.world.resColl.texFetcher.textureHolder;
@@ -236,7 +236,7 @@ class WorldRenderer extends SFARenderer {
         else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
 
-        this.world.envfxMan.update();
+        this.world.envfxMan.update(this.world.device);
         
         const updateCtx: ObjectUpdateContext = {
             viewerInput,

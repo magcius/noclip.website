@@ -18,6 +18,21 @@ export class SFATexture {
     constructor(public gfxTexture: GfxTexture, public gfxSampler: GfxSampler, public width: number, public height: number) {
     }
 
+    public static create(device: GfxDevice, width: number, height: number) {
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = device.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        return new SFATexture(gfxTexture, gfxSampler, width, height);
+    }
+
     public destroy(device: GfxDevice) {
         device.destroySampler(this.gfxSampler);
         device.destroyTexture(this.gfxTexture);
