@@ -1520,7 +1520,7 @@ class math_counter extends BaseEntity {
     private updateValue(entitySystem: EntitySystem, v: number): void {
         this.value = v;
 
-        if (this.max !== 0) {
+        if (this.min !== 0 || this.max !== 0) {
             if (this.value >= this.max) {
                 this.value = this.max;
                 if (!this.maxEdgeState) {
@@ -1530,9 +1530,7 @@ class math_counter extends BaseEntity {
             } else {
                 this.maxEdgeState = false;
             }
-        }
 
-        if (this.min !== 0) {
             if (this.value <= this.min) {
                 this.value = this.min;
                 if (!this.minEdgeState) {
