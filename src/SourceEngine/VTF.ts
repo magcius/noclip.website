@@ -199,12 +199,12 @@ export class VTF {
     public gfxSampler: GfxSampler | null = null;
 
     public format: ImageFormat;
-    public flags: VTFFlags;
-    public width: number;
-    public height: number;
-    public depth: number;
-    public numFrames: number;
-    public numLevels: number;
+    public flags: VTFFlags = 0;
+    public width: number = 0;
+    public height: number = 0;
+    public depth: number = 1;
+    public numFrames: number = 1;
+    public numLevels: number = 1;
 
     private versionMajor: number;
     private versionMinor: number;

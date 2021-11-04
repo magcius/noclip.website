@@ -14,7 +14,7 @@ import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderIn
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType } from './Main';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
@@ -178,6 +178,17 @@ export class BaseEntity {
 
     public shouldDraw(): boolean {
         return this.visible && this.enabled && this.alive && this.spawnState === SpawnState.Spawned;
+    }
+
+    public checkFrustum(renderContext: SourceRenderContext): boolean {
+        if (this.modelStudio !== null) {
+            return this.modelStudio.checkFrustum(renderContext);
+        } else if (this.modelBSP !== null) {
+            return this.modelBSP.checkFrustum(renderContext);
+        } else {
+            // TODO(jstpierre): Do what here?
+            return false;
+        }
     }
 
     private findSequenceLabel(label: string): number {
@@ -2662,6 +2673,32 @@ class env_tonemap_controller extends BaseEntity {
     }
 }
 
+function calcViewFromWorldMatrixForEntity(dst: mat4, entity: BaseEntity): void {
+    entity.getAbsOriginAndAngles(scratchVec3a, scratchVec3b);
+
+    mat4.identity(dst);
+    mat4.rotateX(dst, dst, -MathConstants.TAU / 4);
+    mat4.rotateZ(dst, dst, MathConstants.TAU / 4);
+
+    mat4.rotateX(dst, dst, -scratchVec3b[2] * MathConstants.DEG_TO_RAD);
+    mat4.rotateY(dst, dst, -scratchVec3b[0] * MathConstants.DEG_TO_RAD);
+    mat4.rotateZ(dst, dst, -scratchVec3b[1] * MathConstants.DEG_TO_RAD);
+
+    vec3.negate(scratchVec3a, scratchVec3a);
+    mat4.translate(dst, dst, scratchVec3a);
+}
+
+function calcFrustumViewProjection(dst: SourceEngineView, renderContext: SourceRenderContext, fovY: number, aspect: number, nearZ: number, farZ: number): void {
+    const nearY = Math.tan(MathConstants.DEG_TO_RAD * 0.5 * fovY) * nearZ;
+    const nearX = nearY * aspect;
+    projectionMatrixForFrustum(dst.clipFromViewMatrix, -nearX, nearX, -nearY, nearY, nearZ, farZ);
+    projectionMatrixReverseDepth(dst.clipFromViewMatrix);
+    const clipSpaceNearZ = renderContext.device.queryVendorInfo().clipSpaceNearZ;
+    projectionMatrixConvertClipSpaceNearZ(dst.clipFromViewMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+    dst.clipSpaceNearZ = clipSpaceNearZ;
+    dst.finishSetup();
+}
+
 export class env_projectedtexture extends BaseEntity {
     public static classname = `env_projectedtexture`;
 
@@ -2701,30 +2738,10 @@ export class env_projectedtexture extends BaseEntity {
         this.registerInput('turnoff', this.input_turnoff.bind(this));
     }
 
-    private calcViewMatrix(dst: mat4): void {
-        this.getAbsOriginAndAngles(scratchVec3a, scratchVec3b);
-
-        mat4.identity(dst);
-        mat4.rotateX(dst, dst, -MathConstants.TAU / 4);
-        mat4.rotateZ(dst, dst, MathConstants.TAU / 4);
-
-        mat4.rotateX(dst, dst, -scratchVec3b[2]);
-        mat4.rotateY(dst, dst, -scratchVec3b[0]);
-        mat4.rotateZ(dst, dst, -scratchVec3b[1]);
-
-        vec3.negate(scratchVec3a, scratchVec3a);
-        mat4.translate(dst, dst, scratchVec3a);
-    }
-
     private updateFrustumView(renderContext: SourceRenderContext): void {
-        this.calcViewMatrix(this.frustumView.viewFromWorldMatrix);
-        const nearXY = Math.tan(MathConstants.DEG_TO_RAD * 0.5 * this.fovY) * this.nearZ;
-        projectionMatrixForFrustum(this.frustumView.clipFromViewMatrix, -nearXY, nearXY, -nearXY, nearXY, this.nearZ, this.farZ);
-        projectionMatrixReverseDepth(this.frustumView.clipFromViewMatrix);
-        const clipSpaceNearZ = renderContext.device.queryVendorInfo().clipSpaceNearZ;
-        projectionMatrixConvertClipSpaceNearZ(this.frustumView.clipFromViewMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-        this.frustumView.clipSpaceNearZ = clipSpaceNearZ;
-        this.frustumView.finishSetup();
+        calcViewFromWorldMatrixForEntity(this.frustumView.viewFromWorldMatrix, this);
+        const aspect = 1.0;
+        calcFrustumViewProjection(this.frustumView, renderContext, this.fovY, aspect, this.nearZ, this.farZ);
     }
 
     private async fetchTexture(renderContext: SourceRenderContext, textureName: string) {
@@ -2733,15 +2750,18 @@ export class env_projectedtexture extends BaseEntity {
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
         if (!this.shouldDraw())
             return;
 
         this.updateFrustumView(renderContext);
     }
 
-    public preparePasses(renderer: SourceRenderer, renderInstManager: GfxRenderInstManager): void {
+    public preparePasses(renderer: SourceRenderer): void {
         const renderContext = renderer.renderContext;
         renderContext.currentView = this.frustumView;
+        const renderInstManager = renderer.renderHelper.renderInstManager;
 
         for (let i = 0; i < renderer.bspRenderers.length; i++) {
             const bspRenderer = renderer.bspRenderers[i];
@@ -2802,6 +2822,88 @@ export class env_projectedtexture extends BaseEntity {
     }
 }
 
+export class point_camera extends BaseEntity {
+    public static classname = `point_camera`;
+
+    private fovY: number;
+    private nearZ: number = 0.1;
+    private farZ: number = 10000.0;
+    private useScreenAspectRatio: boolean;
+
+    public viewRenderer = new SourceWorldViewRenderer(`Camera`, SourceEngineViewType.MainView);
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.fovY = Number(this.entity.fov);
+        this.useScreenAspectRatio = fallbackUndefined(this.entity.usescreenaspectratio, '1') !== '0';
+
+        this.viewRenderer.pvsFallback = false;
+        this.viewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
+    }
+
+    private updateFrustumView(renderContext: SourceRenderContext): void {
+        const frustumView = this.viewRenderer.mainView;
+        calcViewFromWorldMatrixForEntity(frustumView.viewFromWorldMatrix, this);
+        const aspect = this.useScreenAspectRatio ? renderContext.currentView.aspect : 1.0;
+        calcFrustumViewProjection(frustumView, renderContext, this.fovY, aspect, this.nearZ, this.farZ);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.shouldDraw())
+            return;
+
+        this.updateFrustumView(renderContext);
+    }
+
+    public preparePasses(renderer: SourceRenderer): void {
+        this.viewRenderer.reset();
+        this.viewRenderer.prepareToRender(renderer, null);
+    }
+
+    public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, mainColorDesc: GfxrRenderTargetDescription): void {
+        const cameraColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        cameraColorDesc.copyDimensions(mainColorDesc);
+        cameraColorDesc.width /= 2;
+        cameraColorDesc.height /= 2;
+
+        this.viewRenderer.pushPasses(renderer, builder, cameraColorDesc);
+    }
+}
+
+class BaseMonitor extends BaseEntity {
+    public target: string;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.target = this.entity.target;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.shouldDraw() || !this.checkFrustum(renderContext))
+            return;
+
+        const camera = entitySystem.findEntityByTargetName(this.target);
+        if (camera === null || !(camera instanceof point_camera))
+            return;
+
+        renderContext.currentPointCamera = camera;
+    }
+}
+
+class func_monitor extends BaseMonitor {
+    public static classname = `func_monitor`;
+}
+
+class info_camera_link extends BaseMonitor {
+    public static classname = `info_camera_link`;
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2860,6 +2962,9 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_sprite_clientside);
         this.registerFactory(env_tonemap_controller);
         this.registerFactory(env_projectedtexture);
+        this.registerFactory(point_camera);
+        this.registerFactory(func_monitor);
+        this.registerFactory(info_camera_link);
     }
 
     public registerFactory(factory: EntityFactory): void {

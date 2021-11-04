@@ -22,6 +22,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
 import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -45,6 +46,7 @@ export const enum SkinningMode {
 };
 
 export const enum LateBindingTexture {
+    Camera              = `camera`,
     FramebufferColor    = `framebuffer-color`,
     FramebufferDepth    = `framebuffer-depth`,
     WaterReflection     = `water-reflection`,
@@ -319,7 +321,7 @@ class ParameterTexture {
 
             if (this.isEnvmap) {
                 // Dynamic cubemaps.
-                if (filename === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null && entityParams.lightCache.envCubemap !== null) {
+                if (filename.toLowerCase() === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null && entityParams.lightCache.envCubemap !== null) {
                     filename = entityParams.lightCache.envCubemap.filename;
                 } else if (materialCache.isUsingHDR()) {
                     const hdrFilename = `${filename}.hdr`;
@@ -678,6 +680,11 @@ export abstract class BaseMaterial {
                 return false;
         }
 
+        if (renderContext.currentView.viewType === SourceEngineViewType.WaterReflectView) {
+            if (this instanceof Material_Water)
+                return false;
+        }
+
         return true;
     }
 
@@ -760,6 +767,17 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterMatrix).matrix;
     }
 
+    protected paramGetFlipY(renderContext: SourceRenderContext, name: string): boolean {
+        if (!renderContext.materialCache.deviceNeedsFlipY)
+            return false;
+
+        const vtf = this.paramGetVTF(name);
+        if (vtf === null)
+            return false;
+
+        return vtf.lateBinding !== null;
+    }
+
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
@@ -775,14 +793,16 @@ export abstract class BaseMaterial {
         return fillVec4(d, offs, scaleS, scaleT, transS, transT);
     }
 
-    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
+    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true, flipY: boolean = false): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
-        if (useMappingTransform) {
+        mat4.copy(scratchMat4a, m);
+        if (useMappingTransform)
             scaleMatrix(scratchMat4a, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
-            return fillMatrix4x2(d, offs, scratchMat4a);
-        } else {
-            return fillMatrix4x2(d, offs, m);
+        if (flipY) {
+            scratchMat4a[5] *= -1;
+            scratchMat4a[13] += 2;
         }
+        return fillMatrix4x2(d, offs, scratchMat4a);
     }
 
     protected paramFillGammaColor(d: Float32Array, offs: number, name: string, alpha: number = 1.0): number {
@@ -2361,7 +2381,7 @@ class Material_Generic extends BaseMaterial {
             offs += lightCache.fillWorldLights(d, offs, renderContext.worldLightingState);
         }
 
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
@@ -2545,7 +2565,7 @@ class Material_Modulate extends BaseMaterial {
 
         let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 8);
         const d = renderInst.mapUniformBufferF32(ModulateProgram.ub_ObjectParams);
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -2652,7 +2672,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', this.paramGetNumber('$alpha'));
 
@@ -3375,7 +3395,7 @@ class Material_Refract extends BaseMaterial {
         p['$localrefract']                 = new ParameterBoolean(false, false);
         p['$localrefractdepth']            = new ParameterNumber(0.05);
 
-        this.paramGetTexture('$basetexture').ref = '_rt_Camera';
+        this.paramGetTexture('$basetexture').ref = '_rt_RefractTexture';
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
@@ -3467,6 +3487,9 @@ class StaticResources {
     public whiteTexture2D: GfxTexture;
     public opaqueBlackTexture2D: GfxTexture;
     public transparentBlackTexture2D: GfxTexture;
+    public linearClampSampler: GfxSampler;
+    public linearRepeatSampler: GfxSampler;
+    public pointClampSampler: GfxSampler;
     public shadowSampler: GfxSampler;
     public particleStaticResource: ParticleStaticResource;
     public zeroVertexBuffer: GfxBuffer;
@@ -3482,6 +3505,33 @@ class StaticResources {
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             compareMode: GfxCompareMode.Less,
+        });
+        this.linearClampSampler = cache.createSampler({
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+        });
+        this.linearRepeatSampler = cache.createSampler({
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+        });
+        this.pointClampSampler = cache.createSampler({
+            magFilter: GfxTexFilterMode.Point,
+            minFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
         });
         this.zeroVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new ArrayBuffer(16));
         this.particleStaticResource = new ParticleStaticResource(device, cache);
@@ -3503,14 +3553,21 @@ export class MaterialCache {
     private usingHDR: boolean = false;
     public staticResources: StaticResources;
     public materialDefines: string[] = [];
+    public deviceNeedsFlipY: boolean;
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
-        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.FramebufferColor));
+        const _rt_Camera = new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.Camera);
+        _rt_Camera.width = 256;
+        _rt_Camera.height = 256;
+        this.textureCache.set('_rt_Camera', _rt_Camera);
+        this.textureCache.set('_rt_RefractTexture', new VTF(device, cache, null, '_rt_RefractTexture', false, LateBindingTexture.FramebufferColor));
         this.textureCache.set('_rt_WaterRefraction', new VTF(device, cache, null, '_rt_WaterRefraction', false, LateBindingTexture.FramebufferColor));
         this.textureCache.set('_rt_WaterReflection', new VTF(device, cache, null, '_rt_WaterReflection', false, LateBindingTexture.WaterReflection));
         this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.staticResources = new StaticResources(device, cache);
+
+        this.deviceNeedsFlipY = gfxDeviceNeedsFlipY(device);
     }
 
     public setUsingHDR(hdr: boolean): void {

@@ -2047,12 +2047,19 @@ export class StudioModelInstance {
         mat4.mul(dst, this.worldFromPoseMatrix[boneidx], attachment.local);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
+    public checkFrustum(renderContext: SourceRenderContext): boolean {
         if (!this.visible)
-            return;
+            return false;
 
         scratchAABB.transform(this.viewBB, this.modelMatrix);
         if (!renderContext.currentView.frustum.contains(scratchAABB))
+            return false;
+
+        return true;
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
+        if (!this.checkFrustum(renderContext))
             return;
 
         scratchAABB.centerPoint(scratchVec3);

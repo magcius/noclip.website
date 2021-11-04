@@ -13,7 +13,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation, projectionMatrixForFrustum, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -21,7 +21,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem, env_projectedtexture, sky_camera, worldspawn } from "./EntitySystem";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem, env_projectedtexture, point_camera, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -498,7 +498,9 @@ export class BSPModelRenderer {
         }
     }
 
-    private prepareToRenderCommon(view: SourceEngineView): boolean {
+    public checkFrustum(renderContext: SourceRenderContext): boolean {
+        const view = renderContext.currentView;
+
         if (!this.visible)
             return false;
 
@@ -509,7 +511,7 @@ export class BSPModelRenderer {
     }
 
     public prepareToRenderModel(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
-        if (!this.prepareToRenderCommon(renderContext.currentView))
+        if (!this.checkFrustum(renderContext))
             return;
 
         // Submodels don't use the BSP tree, they simply render all surfaces back to back in a batch.
@@ -518,7 +520,7 @@ export class BSPModelRenderer {
     }
 
     public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
-        if (!this.prepareToRenderCommon(renderContext.currentView))
+        if (!this.checkFrustum(renderContext))
             return;
 
         // Gather all BSP surfaces, and cull based on that.
@@ -533,6 +535,7 @@ export class BSPModelRenderer {
 
 export const enum SourceEngineViewType {
     MainView,
+    WaterReflectView,
     ShadowMap,
 };
 
@@ -550,6 +553,7 @@ export class SourceEngineView {
 
     // The current camera position, in Source engine world space.
     public cameraPos = vec3.create();
+    public aspect = 1.0;
 
     // Frustum is stored in Source engine world space.
     public frustum = new Frustum();
@@ -573,6 +577,7 @@ export class SourceEngineView {
 
     public copy(other: SourceEngineView): void {
         this.clipSpaceNearZ = other.clipSpaceNearZ;
+        this.aspect = other.aspect;
         mat4.copy(this.viewFromWorldMatrix, other.viewFromWorldMatrix);
         mat4.copy(this.clipFromViewMatrix, other.clipFromViewMatrix);
         vec3.copy(this.cameraPos, other.cameraPos);
@@ -580,6 +585,7 @@ export class SourceEngineView {
 
     public setupFromCamera(camera: Camera): void {
         this.clipSpaceNearZ = camera.clipSpaceNearZ;
+        this.aspect = camera.aspect;
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();
@@ -627,7 +633,7 @@ export class SourceEngineView {
     }
 }
 
-const enum RenderObjectKind {
+export const enum RenderObjectKind {
     WorldSpawn  = 1 << 0,
     Entities    = 1 << 1,
     StaticProps = 1 << 2,
@@ -926,12 +932,14 @@ export class SourceRenderContext {
     public toneMapParams = new ToneMapParams();
     public renderCache: GfxRenderCache;
     public currentProjectedLight: env_projectedtexture | null = null;
+    public currentPointCamera: point_camera | null = null;
 
     // Public settings
     public enableFog = true;
     public enableBloom = true;
     public enableAutoExposure = true;
     public enableExpensiveWater = true;
+    public enableCamera = true;
     public showToolMaterials = false;
     public showTriggerDebug = false;
     public showDecalMaterials = true;
@@ -977,11 +985,11 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 // Renders the entire world (2D skybox, 3D skybox, etc.) given a specific camera location.
 // It's distinct from a view, which is camera settings, which there can be multiple of in a world renderer view.
-class SourceWorldViewRenderer {
+export class SourceWorldViewRenderer {
     public drawSkybox2D = true;
     public drawSkybox3D = true;
-    public drawWorld = true;
     public drawIndirect = true;
+    public drawWorld = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities;
     public pvsEnabled = true;
     public pvsFallback = true;
@@ -992,7 +1000,9 @@ class SourceWorldViewRenderer {
 
     public outputColorTargetID: GfxrRenderTargetID | null = null;
 
-    constructor(public name: string) {
+    constructor(public name: string, private viewType: SourceEngineViewType) {
+        this.mainView.viewType = viewType;
+        this.skyboxView.viewType = viewType;
     }
 
     public prepareToRender(renderer: SourceRenderer, parentViewRenderer: SourceWorldViewRenderer | null): void {
@@ -1002,7 +1012,6 @@ class SourceWorldViewRenderer {
         this.skyboxView.copy(this.mainView);
 
         // Position the 2D skybox around the main view.
-        vec3.negate(scratchVec3, this.mainView.cameraPos);
         mat4.fromTranslation(scratchMatrix, this.mainView.cameraPos);
         mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, scratchMatrix);
         this.skyboxView.finishSetup();
@@ -1059,6 +1068,8 @@ class SourceWorldViewRenderer {
     }
 
     public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
+        const staticResources = renderer.renderContext.materialCache.staticResources;
+
         assert(this.enabled);
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
@@ -1088,7 +1099,17 @@ class SourceWorldViewRenderer {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            pass.exec((passRenderer) => {
+            const pointCamera = renderer.renderContext.currentPointCamera;
+            let cameraResolveTextureID: GfxrResolveTextureID | null = null;
+            if (pointCamera !== null && pointCamera.viewRenderer.outputColorTargetID !== null) {
+                cameraResolveTextureID = builder.resolveRenderTarget(pointCamera.viewRenderer.outputColorTargetID);
+                pass.attachResolveTexture(cameraResolveTextureID);
+            }
+
+            pass.exec((passRenderer, scope) => {
+                if (cameraResolveTextureID !== null)
+                    renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(cameraResolveTextureID), staticResources.linearRepeatSampler);
+
                 renderer.executeOnPass(passRenderer, this.mainView.mainList);
             });
 
@@ -1114,11 +1135,11 @@ class SourceWorldViewRenderer {
                 }
 
                 pass.exec((passRenderer, scope) => {
-                    renderer.setLateBindingTexture(LateBindingTexture.FramebufferColor, scope.getResolveTextureForID(mainColorResolveTextureID), renderer.linearSampler);
-                    renderer.setLateBindingTexture(LateBindingTexture.FramebufferDepth, scope.getResolveTextureForID(mainDepthResolveTextureID), renderer.pointSampler);
+                    renderer.setLateBindingTexture(LateBindingTexture.FramebufferColor, scope.getResolveTextureForID(mainColorResolveTextureID), staticResources.linearClampSampler);
+                    renderer.setLateBindingTexture(LateBindingTexture.FramebufferDepth, scope.getResolveTextureForID(mainDepthResolveTextureID), staticResources.pointClampSampler);
 
                     const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : renderer.renderContext.materialCache.staticResources.opaqueBlackTexture2D;
-                    renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, renderer.linearSampler);
+                    renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, staticResources.linearClampSampler);
 
                     renderer.executeOnPass(passRenderer, this.mainView.indirectList);
                 });
@@ -1312,46 +1333,25 @@ void main() {
 
 export class SourceRenderer implements SceneGfx {
     private luminanceHistogram: LuminanceHistogram;
-    public linearSampler: GfxSampler;
-    public pointSampler: GfxSampler;
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
 
     private textureMapping = nArray(4, () => new TextureMapping());
-    private bindingMapping: string[] = [LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection];
+    private bindingMapping: string[] = [LateBindingTexture.Camera, LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection];
 
-    public mainViewRenderer = new SourceWorldViewRenderer(`Main View`);
-    public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`);
+    public mainViewRenderer = new SourceWorldViewRenderer(`Main View`, SourceEngineViewType.MainView);
+    public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`, SourceEngineViewType.WaterReflectView);
 
     constructor(context: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
-        this.reflectViewRenderer.drawIndirect = false;
+        // TODO(jstpierre): There seems to be a bug with indirect objects in the water reflection view. Must be some form of confusion...
+        // this.reflectViewRenderer.drawIndirect = false;
         this.reflectViewRenderer.pvsFallback = false;
-        this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.Entities | RenderObjectKind.DetailProps);
+        this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
-
-        this.linearSampler = this.renderContext.renderCache.createSampler({
-            magFilter: GfxTexFilterMode.Bilinear,
-            minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
-            minLOD: 0,
-            maxLOD: 100,
-            wrapS: GfxWrapMode.Clamp,
-            wrapT: GfxWrapMode.Clamp,
-        });
-
-        this.pointSampler = this.renderContext.renderCache.createSampler({
-            magFilter: GfxTexFilterMode.Point,
-            minFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
-            minLOD: 0,
-            maxLOD: 100,
-            wrapS: GfxWrapMode.Clamp,
-            wrapT: GfxWrapMode.Clamp,
-        });
 
         this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
     }
@@ -1505,6 +1505,8 @@ export class SourceRenderer implements SceneGfx {
             this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
         }
 
+        renderContext.currentPointCamera = null;
+
         this.calcProjectedLight();
         this.movement();
 
@@ -1515,7 +1517,10 @@ export class SourceRenderer implements SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         if (renderContext.currentProjectedLight !== null)
-            renderContext.currentProjectedLight.preparePasses(this, renderInstManager);
+            renderContext.currentProjectedLight.preparePasses(this);
+
+        if (renderContext.currentPointCamera !== null)
+            (renderContext.currentPointCamera as point_camera).preparePasses(this);
 
         this.mainViewRenderer.prepareToRender(this, null);
 
@@ -1580,6 +1585,7 @@ export class SourceRenderer implements SceneGfx {
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const cache = this.renderContext.renderCache;
+        const staticResources = this.renderContext.materialCache.staticResources;
 
         const bloomDownsampleProgram = cache.createProgram(new BloomDownsampleProgram());
         const bloomBlurXProgram = cache.createProgram(new BloomBlurProgram(false));
@@ -1613,7 +1619,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(bloomDownsampleProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                this.textureMapping[0].gfxSampler = this.linearSampler;
+                this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(cache, passRenderer);
             });
@@ -1630,7 +1636,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(bloomBlurXProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
-                this.textureMapping[0].gfxSampler = this.linearSampler;
+                this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(cache, passRenderer);
             });
@@ -1647,7 +1653,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(bloomBlurYProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
-                this.textureMapping[0].gfxSampler = this.linearSampler;
+                this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(cache, passRenderer);
             });
@@ -1659,6 +1665,7 @@ export class SourceRenderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const renderContext = this.renderContext, cache = renderContext.renderCache;
+        const staticResources = renderContext.materialCache.staticResources;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         for (let i = 0; i < this.textureMapping.length; i++)
@@ -1668,6 +1675,10 @@ export class SourceRenderer implements SceneGfx {
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         setBackbufferDescSimple(mainColorDesc, viewerInput);
+
+        // Render the camera
+        if (renderContext.currentPointCamera !== null)
+            renderContext.currentPointCamera.pushPasses(this, builder, mainColorDesc);
 
         // Render the depth map first if necessary
         if (renderContext.currentProjectedLight !== null)
@@ -1722,10 +1733,10 @@ export class SourceRenderer implements SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                this.textureMapping[0].gfxSampler = this.linearSampler;
-                this.textureMapping[2].gfxTexture = bloomResolveTextureID !== null ? scope.getResolveTextureForID(bloomResolveTextureID) : null;
-                this.textureMapping[2].gfxSampler = this.linearSampler;
+                this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 this.renderContext.colorCorrection.fillTextureMapping(this.textureMapping[1]);
+                this.textureMapping[2].gfxTexture = bloomResolveTextureID !== null ? scope.getResolveTextureForID(bloomResolveTextureID) : null;
+                this.textureMapping[2].gfxSampler = staticResources.linearClampSampler;
                 postRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 postRenderInst.drawOnPass(cache, passRenderer);
             });
