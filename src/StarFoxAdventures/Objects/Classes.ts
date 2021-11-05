@@ -400,6 +400,10 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             obj.world.envfxMan.loadEnvfx(0x1b3);
             obj.world.envfxMan.loadEnvfx(0x1b4);
         }
+
+        mount() {
+            
+        }
     },
     [437]: commonClass(),
     [438]: class extends SFAClass { // SC_LevelCon
@@ -408,6 +412,16 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             obj.world.envfxMan.loadEnvfx(0x4f);
             obj.world.envfxMan.loadEnvfx(0x50);
             obj.world.envfxMan.loadEnvfx(0x245);
+        }
+
+        public mount(obj: ObjectInstance, world: World) {
+            world.envfxMan.mistEnable = true;
+            world.envfxMan.mistBottom = -1000.0;
+            world.envfxMan.mistTop = world.envfxMan.mistBottom + 50.0;
+        }
+
+        public unmount(obj: ObjectInstance, world: World) {
+            world.envfxMan.mistEnable = false;
         }
     },
     [439]: class extends SFAClass { // SC_MusicTre

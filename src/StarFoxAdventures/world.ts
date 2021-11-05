@@ -128,6 +128,7 @@ class WorldRenderer extends SFARenderer {
     public textureHolder: UI.TextureListHolder;
     private timeSelect: UI.Slider;
     private enableAmbient: boolean = true;
+    private enableFog: boolean = true;
     private layerSelect: UI.Slider;
     private showObjects: boolean = true;
     private showDevGeometry: boolean = false;
@@ -159,6 +160,12 @@ class WorldRenderer extends SFARenderer {
             this.enableAmbient = !disableAmbient.checked;
         };
         timePanel.contents.append(disableAmbient.elem);
+
+        const disableFog = new UI.Checkbox("Disable fog", false);
+        disableFog.onchanged = () => {
+            this.enableFog = !disableFog.checked;
+        };
+        timePanel.contents.append(disableFog.elem);
 
         const layerPanel = new UI.Panel();
         layerPanel.setTitle(UI.LAYER_ICON, 'Layers');
@@ -231,12 +238,9 @@ class WorldRenderer extends SFARenderer {
         this.materialFactory.update(this.animController);
 
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
-        if (!this.enableAmbient)
-            this.world.envfxMan.setOverrideOutdoorAmbientColor(White);
-        else
-            this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
-
-        this.world.envfxMan.update(this.world.device);
+        this.world.envfxMan.enableAmbientLighting = this.enableAmbient;
+        this.world.envfxMan.enableFog = this.enableFog;
+        this.world.envfxMan.update(this.world.device, { viewerInput });
         
         const updateCtx: ObjectUpdateContext = {
             viewerInput,

@@ -21,6 +21,10 @@ import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
 import { World } from './world';
 
+export interface SceneUpdateContext {
+    viewerInput: Viewer.ViewerRenderInput;
+}
+
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
     animController: SFAAnimationController;

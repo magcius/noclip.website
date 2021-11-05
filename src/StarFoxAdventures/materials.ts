@@ -206,8 +206,6 @@ export abstract class MaterialBase implements SFAMaterial {
 export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => void) | undefined;
 
 export abstract class StandardMaterial extends MaterialBase {
-    protected cprevIsValid = false;
-    protected aprevIsValid = false;
     private blendOverride?: BlendOverride = undefined;
 
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
@@ -217,9 +215,6 @@ export abstract class StandardMaterial extends MaterialBase {
     protected abstract rebuildSpecialized(): void;
 
     protected rebuildInternal() {
-        this.cprevIsValid = false;
-        this.aprevIsValid = false;
-
         this.rebuildSpecialized();
 
         this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
@@ -243,9 +238,61 @@ export abstract class StandardMaterial extends MaterialBase {
     public setBlendOverride(blendOverride?: BlendOverride) {
         this.blendOverride = blendOverride;
     }
+    
+    protected addMistStages() {
+        const ptmtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            if (ctx.sceneCtx.world === undefined || !ctx.sceneCtx.world.envfxMan.mistEnable)
+                return; // Skip if mist is disabled
+
+            const mistParams = [
+                5.0e-4,
+                0.1,
+                1000.0,
+                ctx.sceneCtx.world.envfxMan.mistBottom,
+                ctx.sceneCtx.world.envfxMan.mistTop,
+            ];
+
+            const f = -1.0 / (mistParams[4] - mistParams[3]);
+            mat4SetRowMajor(dst,
+                0.0, 0.0, -1.0 / mistParams[2], mistParams[1],
+                f * ctx.viewToWorldMtx[4*0+1], f * ctx.viewToWorldMtx[4*1+1], f * ctx.viewToWorldMtx[4*2+1], f * ctx.viewToWorldMtx[4*3+1] - mistParams[4] * f,
+                0.0, 0.0, 0.0, 1.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+        });
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getGXPostTexGenMatrix(ptmtx0));
+
+        const kcolor = this.mb.genKonstColor((dst: Color, ctx: MaterialRenderContext) => {
+            if (ctx.sceneCtx.world?.envfxMan.mistEnable)
+                ctx.sceneCtx.world.envfxMan.getFogColor(dst, ctx.ambienceIdx);
+        });
+
+        const texMap0 = this.mb.genTexMap((dst: TextureMapping, ctx: MaterialRenderContext) => {
+            if (ctx.sceneCtx.world?.envfxMan.enableFog && ctx.sceneCtx.world?.envfxMan.mistEnable) {
+                ctx.sceneCtx.world.envfxMan.getMistTexture().setOnTextureMapping(dst);
+            } else {
+                this.factory.getTransparentBlackTexture().setOnTextureMapping(dst);
+            }
+        });
+
+        const enableWavyMist = false;
+        if (enableWavyMist) {
+            // TODO
+        } else {
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, texCoord0, texMap0, GX.RasColorChannelID.COLOR_ZERO);
+            this.mb.setTevColorFormula(stage, GX.CC.CPREV, GX.CC.KONST, GX.CC.TEXA, GX.CC.ZERO);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+            this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+        }
+    }
 }
 
 class StandardMapMaterial extends StandardMaterial {
+    private cprevIsValid = false;
+    private aprevIsValid = false;
+
     protected genScrollableTexCoord(texMap: TexMap, texGenSrc: GX.TexGenSrc, scrollSlot?: number): TexCoord {
         if (scrollSlot !== undefined) {
             const scroll = this.factory.scrollSlots[scrollSlot];
@@ -625,51 +672,10 @@ class StandardMapMaterial extends StandardMaterial {
         }
     }
 
-    protected addMistStages() {
-        const ptmtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
-            // const animParam = -1000.0;
-            const animParam = lerp(-1200.0, -1000.0, 0.5 * Math.sin(Math.PI * ctx.sceneCtx.animController.envAnimValue1) + 0.5);
-            // const animParam = 1200.0 * Math.sin(Math.PI * ctx.sceneCtx.animController.envAnimValue1);
-            const mistParams = [
-                5.0e-4,
-                0.1,
-                1000.0,
-                animParam,
-                animParam + 50.0,
-            ]; // TODO: Controlled by Level controller object such as SC_LevelCon (class 438), may be animated
-
-            const f = -1.0 / (mistParams[4] - mistParams[3]);
-            mat4SetRowMajor(dst,
-                0.0, 0.0, -1.0 / mistParams[2], mistParams[1],
-                f * ctx.viewToWorldMtx[4*0+1], f * ctx.viewToWorldMtx[4*1+1], f * ctx.viewToWorldMtx[4*2+1], f * ctx.viewToWorldMtx[4*3+1] - mistParams[4] * f,
-                0.0, 0.0, 0.0, 1.0,
-                0.0, 0.0, 0.0, 1.0
-            );
-        });
-        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getGXPostTexGenMatrix(ptmtx0));
-
-        const kcolor = this.mb.genKonstColor((dst: Color) => colorCopy(dst, Red)); // TODO: use environment fog color
-
-        const texMap0 = this.mb.genTexMap((dst: TextureMapping, ctx: MaterialRenderContext) => {
-            if (ctx.sceneCtx.world !== undefined) {
-                ctx.sceneCtx.world.envfxMan.getMistTexture().setOnTextureMapping(dst);
-            }
-        });
-
-        const enableWavyMist = false;
-        if (enableWavyMist) {
-            // TODO
-        } else {
-            const stage = this.mb.genTevStage();
-            this.mb.setTevDirect(stage);
-            this.mb.setTevOrder(stage, texCoord0, texMap0, GX.RasColorChannelID.COLOR_ZERO);
-            this.mb.setTevColorFormula(stage, GX.CC.CPREV, GX.CC.KONST, GX.CC.TEXA, GX.CC.ZERO);
-            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-            this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
-        }
-    }
-
     protected rebuildSpecialized() {
+        this.cprevIsValid = false;
+        this.aprevIsValid = false;
+
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
             // Flipped
             texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, 1);
@@ -723,6 +729,8 @@ class StandardMapMaterial extends StandardMaterial {
 }
 
 class StandardObjectMaterial extends StandardMaterial {
+    private cprevIsValid = false;
+    private aprevIsValid = false;
     private ambProbeTexCoord?: TexCoord = undefined;
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
@@ -1138,6 +1146,11 @@ class StandardObjectMaterial extends StandardMaterial {
     
             // Post-probe layers
             this.setupShaderLayers(false, fooFlag);
+
+            // TODO: Model flag can disable mist
+            if (this.mb.getTevStageCount() < 8)
+                // Some models use too many tev stages and thus cannot be rendered with mist.
+                this.addMistStages();
         }
 
         if (this.shader.lightFlags & LightFlags.OverrideLighting) {
@@ -1675,7 +1688,7 @@ export class MaterialFactory {
         return this.furFactory;
     }
 
-    private genColorTexture(r: number, g: number, b: number, a: number): TexFunc<any> {
+    private genColorTexture(r: number, g: number, b: number, a: number): SFATexture {
         const width = 1;
         const height = 1;
         const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
@@ -1703,13 +1716,13 @@ export class MaterialFactory {
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        return makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+        return new SFATexture(gfxTexture, gfxSampler, width, height);
     }
 
     public getHalfGrayTexture(): TexFunc<MaterialRenderContext> {
         // Used to test indirect texturing
         if (this.halfGrayTexture === undefined)
-            this.halfGrayTexture = this.genColorTexture(127, 127, 127, 255);
+            this.halfGrayTexture = makeMaterialTexture(this.genColorTexture(127, 127, 127, 255));
 
         return this.halfGrayTexture;
     }
@@ -1718,8 +1731,16 @@ export class MaterialFactory {
 
     public getOpaqueWhiteTexture(): TexFunc<any> {
         if (this.opaqueWhiteTexture === undefined)
-            this.opaqueWhiteTexture = this.genColorTexture(255, 255, 255, 255);
+            this.opaqueWhiteTexture = makeMaterialTexture(this.genColorTexture(255, 255, 255, 255));
         return this.opaqueWhiteTexture;
+    }
+
+    private transparentBlackTexture?: SFATexture;
+
+    public getTransparentBlackTexture(): SFATexture {
+        if (this.transparentBlackTexture === undefined)
+            this.transparentBlackTexture = this.genColorTexture(0, 0, 0, 0);
+        return this.transparentBlackTexture;
     }
 
     private sphereMapTestTexture?: TexFunc<MaterialRenderContext>;
