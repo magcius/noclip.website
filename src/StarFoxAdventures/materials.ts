@@ -11,10 +11,12 @@ import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTra
 import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp, Red } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
-import { clamp } from '../MathHelpers';
+import { clamp, lerp } from '../MathHelpers';
+import { ModelRenderContext } from './models';
+import { World } from './world';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -149,8 +151,10 @@ function makeFurMapMaterialTexture(factory: MaterialFactory): TexFunc<MaterialRe
 
 export interface MaterialRenderContext {
     sceneCtx: SceneRenderContext;
-    modelViewMtx: mat4;
-    invModelViewMtx: mat4;
+    worldToViewMtx: mat4;
+    viewToWorldMtx: mat4;
+    modelToViewMtx: mat4;
+    viewToModelMtx: mat4;
     ambienceIdx: number;
     outdoorAmbientColor: Color;
     furLayer: number;
@@ -202,8 +206,6 @@ export abstract class MaterialBase implements SFAMaterial {
 export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => void) | undefined;
 
 export abstract class StandardMaterial extends MaterialBase {
-    protected cprevIsValid = false;
-    protected aprevIsValid = false;
     private blendOverride?: BlendOverride = undefined;
 
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
@@ -213,9 +215,6 @@ export abstract class StandardMaterial extends MaterialBase {
     protected abstract rebuildSpecialized(): void;
 
     protected rebuildInternal() {
-        this.cprevIsValid = false;
-        this.aprevIsValid = false;
-
         this.rebuildSpecialized();
 
         this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
@@ -239,9 +238,61 @@ export abstract class StandardMaterial extends MaterialBase {
     public setBlendOverride(blendOverride?: BlendOverride) {
         this.blendOverride = blendOverride;
     }
+    
+    protected addMistStages() {
+        const ptmtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            if (ctx.sceneCtx.world === undefined || !ctx.sceneCtx.world.envfxMan.mistEnable)
+                return; // Skip if mist is disabled
+
+            const mistParams = [
+                5.0e-4,
+                0.1,
+                1000.0,
+                ctx.sceneCtx.world.envfxMan.mistBottom,
+                ctx.sceneCtx.world.envfxMan.mistTop,
+            ];
+
+            const f = -1.0 / (mistParams[4] - mistParams[3]);
+            mat4SetRowMajor(dst,
+                0.0, 0.0, -1.0 / mistParams[2], mistParams[1],
+                f * ctx.viewToWorldMtx[4*0+1], f * ctx.viewToWorldMtx[4*1+1], f * ctx.viewToWorldMtx[4*2+1], f * ctx.viewToWorldMtx[4*3+1] - mistParams[4] * f,
+                0.0, 0.0, 0.0, 1.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+        });
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getGXPostTexGenMatrix(ptmtx0));
+
+        const kcolor = this.mb.genKonstColor((dst: Color, ctx: MaterialRenderContext) => {
+            if (ctx.sceneCtx.world?.envfxMan.mistEnable)
+                ctx.sceneCtx.world.envfxMan.getFogColor(dst, ctx.ambienceIdx);
+        });
+
+        const texMap0 = this.mb.genTexMap((dst: TextureMapping, ctx: MaterialRenderContext) => {
+            if (ctx.sceneCtx.world?.envfxMan.enableFog && ctx.sceneCtx.world?.envfxMan.mistEnable) {
+                ctx.sceneCtx.world.envfxMan.getMistTexture().setOnTextureMapping(dst);
+            } else {
+                this.factory.getTransparentBlackTexture().setOnTextureMapping(dst);
+            }
+        });
+
+        const enableWavyMist = false;
+        if (enableWavyMist) {
+            // TODO
+        } else {
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, texCoord0, texMap0, GX.RasColorChannelID.COLOR_ZERO);
+            this.mb.setTevColorFormula(stage, GX.CC.CPREV, GX.CC.KONST, GX.CC.TEXA, GX.CC.ZERO);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+            this.mb.setTevKColorSel(stage, getGXKonstColorSel(kcolor));
+        }
+    }
 }
 
 class StandardMapMaterial extends StandardMaterial {
+    private cprevIsValid = false;
+    private aprevIsValid = false;
+
     protected genScrollableTexCoord(texMap: TexMap, texGenSrc: GX.TexGenSrc, scrollSlot?: number): TexCoord {
         if (scrollSlot !== undefined) {
             const scroll = this.factory.scrollSlots[scrollSlot];
@@ -500,7 +551,7 @@ class StandardMapMaterial extends StandardMaterial {
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
         const postTexMtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
-            mat4.mul(dst, pttexmtx0, ctx.invModelViewMtx);
+            mat4.mul(dst, pttexmtx0, ctx.viewToWorldMtx);
             mat4.mul(dst, postRotate0, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -512,7 +563,7 @@ class StandardMapMaterial extends StandardMaterial {
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
         const postTexMtx1 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
-            mat4.mul(dst, pttexmtx1, matCtx.invModelViewMtx);
+            mat4.mul(dst, pttexmtx1, matCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate1, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -530,7 +581,7 @@ class StandardMapMaterial extends StandardMaterial {
             mat4.fromScaling(pttexmtx2, [0.01, 0.01, 0.01]);
             mat4SetTranslation(pttexmtx2, 0.01 * mapOriginX + ctx.sceneCtx.animController.envAnimValue0, 0.0, 0.01 * mapOriginZ);
             mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
-            mat4.mul(dst, pttexmtx2, ctx.invModelViewMtx);
+            mat4.mul(dst, pttexmtx2, ctx.viewToWorldMtx);
             mat4.mul(dst, postRotate2, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -551,7 +602,7 @@ class StandardMapMaterial extends StandardMaterial {
         const postTexMtx3 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(pttexmtx3, [0.01, 0.01, 0.01]);
             mat4SetTranslation(pttexmtx3, 0.01 * mapOriginX, 0.0, 0.01 * mapOriginZ + ctx.sceneCtx.animController.envAnimValue1);
-            mat4.mul(dst, pttexmtx3, ctx.invModelViewMtx);
+            mat4.mul(dst, pttexmtx3, ctx.viewToWorldMtx);
             mat4.mul(dst, postRotate3, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -622,10 +673,13 @@ class StandardMapMaterial extends StandardMaterial {
     }
 
     protected rebuildSpecialized() {
+        this.cprevIsValid = false;
+        this.aprevIsValid = false;
+
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
             // Flipped
             texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, 1);
-            mat4.mul(dst, dst, matCtx.modelViewMtx);
+            mat4.mul(dst, dst, matCtx.modelToViewMtx);
             return dst;
         });
 
@@ -640,6 +694,7 @@ class StandardMapMaterial extends StandardMaterial {
             this.addTevStagesForCaustic();
         else {
             // TODO
+            this.addMistStages();
         }
 
         if (this.shader.isAncient) {
@@ -674,6 +729,8 @@ class StandardMapMaterial extends StandardMaterial {
 }
 
 class StandardObjectMaterial extends StandardMaterial {
+    private cprevIsValid = false;
+    private aprevIsValid = false;
     private ambProbeTexCoord?: TexCoord = undefined;
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
@@ -1089,6 +1146,11 @@ class StandardObjectMaterial extends StandardMaterial {
     
             // Post-probe layers
             this.setupShaderLayers(false, fooFlag);
+
+            // TODO: Model flag can disable mist
+            if (this.mb.getTevStageCount() < 8)
+                // Some models use too many tev stages and thus cannot be rendered with mist.
+                this.addMistStages();
         }
 
         if (this.shader.lightFlags & LightFlags.OverrideLighting) {
@@ -1153,21 +1215,21 @@ class StandardObjectMaterial extends StandardMaterial {
 
 class WaterMaterial extends MaterialBase {
     protected rebuildInternal() {
-        this.mb.setTexMtx(0, (dst: mat4, matCtx: MaterialRenderContext) => {
+        this.mb.setTexMtx(0, (dst: mat4, ctx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, 1);
-            mat4.mul(dst, dst, matCtx.modelViewMtx);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.viewerInput.viewport, 1);
+            mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
-        this.mb.setTexMtx(1, (dst: mat4, matCtx: MaterialRenderContext) => {
+        this.mb.setTexMtx(1, (dst: mat4, ctx: MaterialRenderContext) => {
             // Unflipped
-            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, -1);
-            mat4.mul(dst, dst, matCtx.modelViewMtx);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.viewerInput.viewport, -1);
+            mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
-        this.mb.setTexMtx(3, (dst: mat4, matCtx: MaterialRenderContext) => {
+        this.mb.setTexMtx(3, (dst: mat4, ctx: MaterialRenderContext) => {
             mat4.identity(dst);
-            mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue0);
+            mat4SetValue(dst, 1, 3, ctx.sceneCtx.animController.envAnimValue0);
         });
 
         const texMap0 = this.mb.genTexMap(makeOpaqueColorTextureDownscale2x());
@@ -1302,7 +1364,7 @@ class FurMaterial extends MaterialBase {
         const texMap1 = this.mb.genTexMap(makeFurMapMaterialTexture(this.factory));
 
         // This texture matrix, when combined with a POS tex-gen, creates
-        // texture coordinates that increase linearly on the model's XZ plane.
+        // texture coordinates that increase linearly on the world's XZ plane.
         const texmtx0 = mat4FromRowMajor(
             0.1, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.1, 0.0,
@@ -1332,14 +1394,14 @@ class FurMaterial extends MaterialBase {
         
         // Stage 2: Distance fade
         const texMap3 = this.mb.genTexMap(this.factory.getRampTexture());
-        this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
+        this.mb.setTexMtx(2, (dst: mat4, ctx: MaterialRenderContext) => {
             mat4SetRowMajor(dst,
                 0.0, 0.0, 1/30, 25/3, // TODO: This matrix can be tweaked to adjust the draw distance. This may be desirable on high-resolution displays.
                 0.0, 0.0,  0.0,  0.0,
                 0.0, 0.0,  0.0,  0.0,
                 0.0, 0.0,  0.0,  0.0
             );
-            mat4.mul(dst, dst, matCtx.modelViewMtx);
+            mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
         const stage2 = this.mb.genTevStage();
         const texCoord3 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
@@ -1626,7 +1688,7 @@ export class MaterialFactory {
         return this.furFactory;
     }
 
-    private genColorTexture(r: number, g: number, b: number, a: number): TexFunc<any> {
+    private genColorTexture(r: number, g: number, b: number, a: number): SFATexture {
         const width = 1;
         const height = 1;
         const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
@@ -1654,13 +1716,13 @@ export class MaterialFactory {
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
-        return makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
+        return new SFATexture(gfxTexture, gfxSampler, width, height);
     }
 
     public getHalfGrayTexture(): TexFunc<MaterialRenderContext> {
         // Used to test indirect texturing
         if (this.halfGrayTexture === undefined)
-            this.halfGrayTexture = this.genColorTexture(127, 127, 127, 255);
+            this.halfGrayTexture = makeMaterialTexture(this.genColorTexture(127, 127, 127, 255));
 
         return this.halfGrayTexture;
     }
@@ -1669,8 +1731,16 @@ export class MaterialFactory {
 
     public getOpaqueWhiteTexture(): TexFunc<any> {
         if (this.opaqueWhiteTexture === undefined)
-            this.opaqueWhiteTexture = this.genColorTexture(255, 255, 255, 255);
+            this.opaqueWhiteTexture = makeMaterialTexture(this.genColorTexture(255, 255, 255, 255));
         return this.opaqueWhiteTexture;
+    }
+
+    private transparentBlackTexture?: SFATexture;
+
+    public getTransparentBlackTexture(): SFATexture {
+        if (this.transparentBlackTexture === undefined)
+            this.transparentBlackTexture = this.genColorTexture(0, 0, 0, 0);
+        return this.transparentBlackTexture;
     }
 
     private sphereMapTestTexture?: TexFunc<MaterialRenderContext>;

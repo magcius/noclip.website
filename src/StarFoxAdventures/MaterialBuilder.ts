@@ -116,6 +116,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         return id as TevStage;
     }
 
+    public getTevStageCount(): number {
+        return this.tevStageNum;
+    }
+
     public genIndTexStage(): IndTexStage {
         const id = this.indTexStageNum;
         if (id >= 4)

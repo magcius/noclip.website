@@ -1,4 +1,4 @@
-import { vec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA, White, colorScale } from '../Color';
 import { nArray } from '../util';
@@ -9,6 +9,8 @@ import { ObjectInstance } from './objects';
 import { World } from './world';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { createDirectionalLight, Light } from './WorldLights';
+import { SceneUpdateContext } from './render';
+import { computeViewMatrix } from '../Camera';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -30,12 +32,17 @@ class Skyscape { // Clouds, mountains, etc.
     }
 }
 
+const scratchMtx0 = mat4.create();
+
+const MIST_TEXTURE_DIM = 64;
+
 export class EnvfxManager {
     public atmosphere = new Atmosphere();
     public skyscape = new Skyscape();
     private timeOfDay = 4;
     public ambienceIdx: number = 0;
-    private overrideOutdoorAmbient: Color | null = null;
+    public enableAmbientLighting = true;
+    public enableFog = true;
     
     public skyLight: Light = createDirectionalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
     public groundLight: Light = createDirectionalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
@@ -46,11 +53,18 @@ export class EnvfxManager {
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
 
-    private constructor(private world: World) {
+    public mistEnable = true;
+    public mistTop = 0.0;
+    public mistBottom = 0.0;
+    private mistTexture: SFATexture;
+    private mistParam?: number;
+
+    private constructor(device: GfxDevice, private world: World) {
+        this.mistTexture = SFATexture.create(device, MIST_TEXTURE_DIM, MIST_TEXTURE_DIM);
     }
 
-    public static async create(world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
-        const self = new EnvfxManager(world);
+    public static async create(device: GfxDevice, world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
+        const self = new EnvfxManager(device, world);
 
         const pathBase = world.gameInfo.pathBase;
         self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
@@ -58,11 +72,40 @@ export class EnvfxManager {
         return self;
     }
 
-    public update() {
+    public update(device: GfxDevice, sceneCtx: SceneUpdateContext) {
+        this.updateAmbience();
+
+        const viewToWorldMtx = scratchMtx0;
+        computeViewMatrix(viewToWorldMtx, sceneCtx.viewerInput.camera);
+        mat4.invert(viewToWorldMtx, viewToWorldMtx);
+
+        const viewToWorldTY = viewToWorldMtx[4*3+1];
+
+        // XXX: This code causes the mist to "overwhelm" the camera when the camera is immersed.
+        //      This doesn't work well with noclip, so I have disabled it.
+        // let mistParam;
+        // if (viewToWorldTY >= this.mistTop)
+        //     mistParam = 0;
+        // else if (viewToWorldTY <= this.mistBottom)
+        //     mistParam = 64;
+        // else
+        //     mistParam = 64 * (this.mistTop - viewToWorldTY) / (this.mistTop - this.mistBottom);
+        let mistParam = 0; // Behave as if the camera is always above the mist
+        this.updateMistTexture(device, mistParam);
+    }
+
+    public getMistTexture(): SFATexture {
+        return this.mistTexture;
+    }
+
+    private updateAmbience() {
         // TODO: change skylight angle depending on time of day
         this.getAmbientColor(this.skyLight.color, this.ambienceIdx);
-        colorScale(this.groundLight.color, this.skyLight.color, this.groundLightFactor);
-        this.groundLight.color.a = 1.0;
+        if (this.enableAmbientLighting) {
+            colorScale(this.groundLight.color, this.skyLight.color, this.groundLightFactor);
+            this.groundLight.color.a = 1.0;
+        } else
+            colorCopy(this.groundLight.color, this.skyLight.color);
 
         // If lights were already added, this has no effect
         this.world.worldLights.addLight(this.skyLight);
@@ -71,33 +114,55 @@ export class EnvfxManager {
 
     public setTimeOfDay(time: number) {
         this.timeOfDay = time;
-        this.update();
+        this.updateAmbience();
     }
 
     public setAmbience(idx: number) {
         this.ambienceIdx = idx;
-        this.update();
+        this.updateAmbience();
     }
 
-    public getAmbientColor(out: Color, ambienceNum: number) {
-        if (this.overrideOutdoorAmbient !== null) {
-            colorCopy(out, this.overrideOutdoorAmbient);
-        } else {
-            if (ambienceNum === 0) {
-                colorCopy(out, this.atmosphere.outdoorAmbientColors[this.timeOfDay]);
-            } else {
-                // TODO
-                colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
+    private updateMistTexture(device: GfxDevice, param: number) {
+        if (!this.enableFog || !this.mistEnable || this.mistParam === param)
+            return;
+
+        const pixels = new Uint8Array(4 * MIST_TEXTURE_DIM * MIST_TEXTURE_DIM);
+
+        function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+            const idx = 4 * (y * MIST_TEXTURE_DIM + x)
+            pixels[idx] = r;
+            pixels[idx + 1] = g;
+            pixels[idx + 2] = b;
+            pixels[idx + 3] = a;
+        }
+
+        for (let y = 0; y < MIST_TEXTURE_DIM; y++) {
+            const lineFactor = Math.min((y + param) * 255, 0x3fc0);
+            for (let x = 0; x < MIST_TEXTURE_DIM; x++) {
+                let I = (lineFactor * x) >> 12;
+                plot(x, y, I, I, I, I);
             }
         }
+
+        device.uploadTextureData(this.mistTexture.gfxTexture, 0, [pixels]);
     }
 
-    public setOverrideOutdoorAmbientColor(color: Color | null) {
-        if (color !== null) {
-            this.overrideOutdoorAmbient = colorNewCopy(color);
+    public getAmbientColor(out: Color, ambienceIdx: number) {
+        if (!this.enableAmbientLighting)
+            colorCopy(out, White);
+        else if (ambienceIdx === 0) {
+            colorCopy(out, this.atmosphere.outdoorAmbientColors[this.timeOfDay]);
         } else {
-            this.overrideOutdoorAmbient = null;
+            // TODO: 1 is alternate ambient environment; 2 is blend of ambiences 0 and 1.
+            // The game is able to smoothly transition between two environments via this method.
+            colorCopy(out, White);
         }
+    }
+
+    public getFogColor(dst: Color, ambienceIdx: number) {
+        // Just use the ambient color
+        // TODO: other logic might be involved depending on configuration
+        this.getAmbientColor(dst, ambienceIdx);
     }
 
     public getAtmosphereTexture(): SFATexture | null {
