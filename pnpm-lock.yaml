@@ -20,6 +20,7 @@ specifiers:
   html-webpack-plugin: ^5.2.0
   iconv-lite: ^0.6.2
   ignore-loader: ^0.1.2
+  kaitai-struct: ^0.9.0
   librw: ^0.4.0
   pako: ^1.0.7
   pngjs: ^3.4.0
@@ -39,6 +40,8 @@ dependencies:
   '@sentry/browser': 5.30.0
   crc-32: 1.2.0
   gl-matrix: 3.3.0
+  iconv-lite: 0.6.3
+  kaitai-struct: 0.9.0
   librw: 0.4.0
   pako: 1.0.11
   reflect-metadata: 0.1.13
@@ -58,7 +61,6 @@ devDependencies:
   fork-ts-checker-webpack-plugin: 6.3.2
   git-revision-webpack-plugin: 3.0.6
   html-webpack-plugin: 5.3.2_webpack@5.51.1
-  iconv-lite: 0.6.3
   ignore-loader: 0.1.2
   pngjs: 3.4.0
   puppeteer: 1.20.0
@@ -1772,7 +1774,7 @@ packages:
     engines: {node: '>=0.10.0'}
     dependencies:
       safer-buffer: 2.1.2
-    dev: true
+    dev: false
 
   /ieee754/1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -2029,6 +2031,10 @@ packages:
     optionalDependencies:
       graceful-fs: 4.2.8
     dev: true
+
+  /kaitai-struct/0.9.0:
+    resolution: {integrity: sha512-mfoBu9+IGqaY3ykG1TyAy9omOAZWtheqESQOvo/HKIQVTz+gRPVCNBnhjbO+8wAQ77RD33wYvLBWmITuXIviQg==}
+    dev: false
 
   /kind-of/6.0.3:
     resolution: {integrity: sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==}
@@ -2759,7 +2765,6 @@ packages:
 
   /safer-buffer/2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
-    dev: true
 
   /schema-utils/2.7.0:
     resolution: {integrity: sha512-0ilKFI6QQF5nxDZLFn2dMjvc4hjg/Wkg7rHd3jK6/A4a1Hl9VFdQWvgB1UMGoU94pad1P/8N7fMcEnLnSiju8A==}
