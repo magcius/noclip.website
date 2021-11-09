@@ -1,12 +1,11 @@
 import { commonClass, commonSetup, decorClass, templeClass } from './Common';
 import { TriggerObj } from './Triggers';
-import { LightObj } from './Lights';
-import { ObjectInstance, ObjectUpdateContext } from '../objects';
+import { LGTPointLgt, LGTProjecte, Torch, Torch2 } from './Lights';
+import { ObjectInstance } from '../objects';
 import { angle16ToRads, readUint32 } from '../util';
 import { World } from '../world';
 import { getRandomInt } from '../../SuperMarioGalaxy/ActorUtil';
 import { MaterialRenderContext, StandardMaterial } from '../materials';
-import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import * as GX from '../../gx/gx_enum';
 import { SFAClass } from './SFAClass';
 import { SFAMaterialBuilder } from '../MaterialBuilder';
@@ -508,17 +507,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
     [509]: commonClass(),
     [510]: commonClass(0x18),
     [513]: commonClass(0x18),
-    [518]: class extends SFAClass { // PoleFlame
-        constructor(obj: ObjectInstance, data: DataView) {
-            super(obj, data);
-            obj.yaw = angle16ToRads((data.getUint8(0x18) & 0x3f) << 10);
-            const objScale = data.getInt16(0x1a);
-            if (objScale < 1)
-                obj.scale = 0.1;
-            else
-                obj.scale = objScale / 8192;
-        }
-    },
+    [518]: Torch,
     [521]: class extends SFAClass { // WM_LevelCon
         constructor(obj: ObjectInstance, data: DataView) {
             super(obj, data);
@@ -712,21 +701,14 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             obj.roll = angle16ToRads(getRandomInt(0, 0xffff));
         }
     },
-    [681]: LightObj, // LGTPointLgt
+    [681]: LGTPointLgt, // LGTPointLgt
     [682]: commonClass(0x18, 0x19),
-    [683]: class extends commonClass(0x18, 0x19, 0x34) { // LGTProjecte
-        public mount(obj: ObjectInstance, world: World) {
-            // TODO: support this type of light. Used in Krazoa Palace glowing platforms.
-            // world.lights.add({
-            //     position: obj.getPosition(),
-            // })
-        }
-    },
+    [683]: LGTProjecte,
     [685]: decorClass(0.001),
     [686]: decorClass(),
     [687]: decorClass(0.0025),
     [688]: decorClass(),
-    [689]: commonClass(0x1a, 0x19, 0x18),
+    [689]: Torch2,
     [690]: commonClass(0x1a, 0x19, 0x18),
     [691]: class extends SFAClass { // SkyVortS
         constructor(obj: ObjectInstance, data: DataView) {

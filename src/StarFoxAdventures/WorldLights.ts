@@ -1,49 +1,108 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import * as GX_Material from '../gx/gx_material';
-import { Color, colorCopy, colorNewCopy } from '../Color';
+import { Color, colorCopy, colorNewCopy, White } from '../Color';
 import { computeViewMatrix } from "../Camera";
 import { mat4SetTranslation } from "./util";
 import { SceneRenderContext } from "./render";
+import { ObjectInstance } from "./objects";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+
+const scratchVec0 = vec3.create();
+const scratchVec1 = vec3.create();
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
 
 export const enum LightType {
     POINT = 0x2,
     DIRECTIONAL = 0x4,
+    PROJECTED = 0x8,
 }
 
-export interface Light {
-    type: LightType;
-    position: vec3;
-    direction: vec3;
-    color: Color;
-    distAtten: vec3;
-    // TODO: flags and other parameters...
+export class Light {
+    public type: LightType = 0;
+    private position: vec3 = vec3.create();
+    public direction: vec3 = vec3.create();
+    public refDistance: number = 0;
+    public radius: number = 0;
+    public color: Color = colorNewCopy(White);
+    public distAtten: vec3 = vec3.create();
+    public obj?: ObjectInstance;
+
+    // Used only when probing lights
+    public probedInfluence: number = 0;
+
+    public getPosition(dst: vec3) {
+        if (this.obj !== undefined) {
+            this.obj.getSRTForChildren(scratchMtx0);
+            vec3.transformMat4(dst, this.position, scratchMtx0);
+        } else
+            vec3.copy(dst, this.position);
+    }
+
+    public setPosition(v: ReadonlyVec3) {
+        vec3.copy(this.position, v);
+    }
+
+    public setDistanceAndRadius(refDistance: number, radius: number) {
+        this.refDistance = refDistance;
+        this.radius = radius;
+        
+        // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
+        // TODO: Some types of light use other formulae
+        const refBrightness = 0.75;
+        const kfactor = 0.5 * (1.0 - refBrightness);
+        vec3.set(this.distAtten,
+            1.0,
+            kfactor / (refBrightness * refDistance),
+            kfactor / (refBrightness * refDistance * refDistance)
+            );
+    }
 }
 
-export function createPointLight(position: ReadonlyVec3, color: Color, distAtten: ReadonlyVec3): Light {
-    return {
-        type: LightType.POINT,
-        position: vec3.clone(position),
-        direction: vec3.create(),
-        color: colorNewCopy(color),
-        distAtten: vec3.clone(distAtten),
-    };
+export function createPointLight(position: ReadonlyVec3, color: Color, refDistance: number, radius: number): Light {
+    const light = new Light();
+    light.type = LightType.POINT;
+    light.setPosition(position);
+    colorCopy(light.color, color);
+    light.setDistanceAndRadius(refDistance, radius);
+    return light;
 }
 
-export function createDirectionalLight(direction: ReadonlyVec3, color: Color): Light {
-    return {
-        type: LightType.DIRECTIONAL,
-        position: vec3.create(), // unused
-        direction: vec3.clone(direction),
-        color: colorNewCopy(color),
-        distAtten: vec3.create(), // unused
-    };
+export function createDirectionalLight(direction: ReadonlyVec3, color: Color): Light {    const light = new Light();
+    light.type = LightType.DIRECTIONAL;
+    vec3.copy(light.direction, direction);
+    light.refDistance = 1000000.0; // TODO
+    light.radius = 1000000.0; // TODO
+    colorCopy(light.color, color);
+    return light;
 }
 
-const scratchMtx0 = mat4.create();
-const scratchMtx1 = mat4.create();
+const lightPos: vec3 = vec3.create();
+
+export function calcLightInfluenceOnObject(light: Light, obj: ObjectInstance): number {
+    const objPos = scratchVec0;
+    const lightToObj = scratchVec1;
+
+    obj.getPosition(objPos);
+    light.getPosition(lightPos);
+    vec3.sub(lightToObj, objPos, lightPos);
+
+    let dist = vec3.length(lightToObj);
+    dist -= obj.cullRadius * obj.scale;
+    if (dist > 1000.0 || dist > light.radius)
+        return 0.0;
+
+    let result = 1.0;
+    if (dist >= light.refDistance)
+        result = 1.0 - (dist - light.refDistance) / (light.radius - light.refDistance);
+
+    // TODO: adjust result for directional lights
+
+    return result;
+}
 
 export class WorldLights {
-    private lights: Set<Light> = new Set();
+    public lights: Set<Light> = new Set();
 
     public addLight(light: Light) {
         this.lights.add(light);
@@ -52,44 +111,21 @@ export class WorldLights {
     public removeLight(light: Light) {
         this.lights.delete(light);
     }
-    
-    public setupLights(lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) {
-        let i = 0;
 
-        const worldView = scratchMtx0;
-        computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
-        const worldViewSR = scratchMtx1;
-        mat4.copy(worldViewSR, worldView);
-        mat4SetTranslation(worldViewSR, 0, 0, 0);
-
+    public probeLightsOnObject(obj: ObjectInstance, sceneCtx: SceneRenderContext, typeMask: LightType): Light[] {
+        const probedLights: Light[] = [];
         for (let light of this.lights) {
             if (light.type & typeMask) {
-                // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
-                // TODO: some types of light are specified in view-space, not world-space.
-
-                lights[i].reset();
-                if (light.type === LightType.DIRECTIONAL) {
-                    vec3.scale(lights[i].Position, light.direction, -100000.0);
-                    vec3.transformMat4(lights[i].Position, lights[i].Position, worldViewSR);
-                    colorCopy(lights[i].Color, light.color);
-                    vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0);
-                    vec3.set(lights[i].DistAtten, 1.0, 0.0, 0.0);
-                } else { // LightType.POINT
-                    vec3.transformMat4(lights[i].Position, light.position, worldView);
-                    // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
-                    // TODO: use correct parameters
-                    colorCopy(lights[i].Color, light.color);
-                    vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-                    vec3.copy(lights[i].DistAtten, light.distAtten);
-                }
-
-                i++;
-                if (i >= 8)
-                    break;
+                light.probedInfluence = calcLightInfluenceOnObject(light, obj);
+                // light.getPosition(lightPos);
+                // const ctx = getDebugOverlayCanvas2D();
+                // drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, lightPos);
+                probedLights.push(light);
             }
         }
 
-        for (; i < 8; i++)
-            lights[i].reset();
+        probedLights.sort((a, b) => b.probedInfluence - a.probedInfluence);
+
+        return probedLights;
     }
 }

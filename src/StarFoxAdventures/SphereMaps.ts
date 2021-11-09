@@ -177,7 +177,7 @@ export class SphereMapManager {
         this.hemisphericMaterial.setOnMaterialParams(materialParams, this.world);
 
         // FIXME: should lights be adjusted by camera view?
-        this.world.worldLights.setupLights(materialParams.u_Lights, sceneCtx, LightType.DIRECTIONAL);
+        this.world.setupLightsForObject(materialParams.u_Lights, undefined, sceneCtx, LightType.DIRECTIONAL);
 
         return this.hemisphericMaterial;
     }
