@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { colorNewFromRGBA, White } from "../../Color";
+import { Color, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../Color";
 import { ObjectInstance } from "../objects";
 import { SFATexture } from "../textures";
 import { angle16ToRads } from "../util";
@@ -86,7 +86,25 @@ export class LGTProjecte extends SFAClass {
     }
 }
 
-export class Torch extends SFAClass { // WM_Torch, PoleFlame
+const TORCH_COLORS = [
+    colorNewFromRGBA8(0xffc000ff),
+    colorNewFromRGBA8(0xff7f00ff),
+    colorNewFromRGBA8(0xffc000ff),
+    colorNewFromRGBA8(0xffc000ff),
+    colorNewFromRGBA8(0x00ffffff),
+    colorNewFromRGBA8(0xff0000ff),
+    colorNewFromRGBA8(0x00ff00ff),
+    colorNewFromRGBA8(0xffff00ff),
+    colorNewFromRGBA8(0xff4000ff),
+    colorNewFromRGBA8(0xffc000ff),
+    colorNewFromRGBA8(0x007fffff),
+    colorNewFromRGBA8(0xffff00ff),
+    colorNewFromRGBA8(0xffffffff),
+    colorNewFromRGBA8(0xffffffff),
+    colorNewFromRGBA8(0xffffffff),
+];
+
+export class Torch extends SFAClass { // Class 518: WM_Torch, PoleFlame
     private light: Light;
 
     constructor(obj: ObjectInstance, data: DataView) {
@@ -98,8 +116,23 @@ export class Torch extends SFAClass { // WM_Torch, PoleFlame
         else
             obj.scale = objScale / 8192;
 
-        vec3.zero(scratchVec0);
-        this.light = createPointLight(scratchVec0, White, 40.0, 65.0);
+        let colorSelector = 1; // TODO: may be animated
+        if (!data.getUint8(0x19)) {
+            const flags = data.getUint16(0x1c);
+            if (flags & 0x4)
+                colorSelector = 4;
+            else if (flags & 0x8)
+                colorSelector = 8;
+            else if (flags & 0x10)
+                colorSelector = 6;
+        }
+        const color = TORCH_COLORS[colorSelector];
+
+        if (obj.commonObjectParams.objType === 0x705 || obj.commonObjectParams.objType === 0x712)
+            vec3.zero(scratchVec0);
+        else
+            vec3.set(scratchVec0, 0.0, 7.0, 0.0);
+        this.light = createPointLight(scratchVec0, color, 40.0, 65.0);
         this.light.obj = obj;
     }
 
@@ -112,20 +145,63 @@ export class Torch extends SFAClass { // WM_Torch, PoleFlame
     }
 }
 
-export class Torch2 extends SFAClass { // CmbSrcTWall
+const TORCH2_COLORS: Color[][] = [
+    [
+        colorNewFromRGBA8(0xffc000ff),
+        colorNewFromRGBA8(0xff7f00ff),
+        colorNewFromRGBA8(0xffc000ff),
+        colorNewFromRGBA8(0xffc000ff),
+        colorNewFromRGBA8(0x00ffffff),
+        colorNewFromRGBA8(0xff0000ff),
+        colorNewFromRGBA8(0x00ff00ff),
+        colorNewFromRGBA8(0xffff00ff),
+        colorNewFromRGBA8(0xff4000ff),
+        colorNewFromRGBA8(0xffc000ff),
+        colorNewFromRGBA8(0x007fffff),
+        colorNewFromRGBA8(0xffff00ff),
+        colorNewFromRGBA8(0xffffffff),
+        colorNewFromRGBA8(0xffffffff),
+        colorNewFromRGBA8(0xffffffff),
+        colorNewFromRGBA8(0xff0000ff),
+    ],
+    [ // For objtype 0x758
+        colorNewFromRGBA8(0xffc000ff),
+        colorNewFromRGBA8(0xffc040ff),
+        colorNewFromRGBA8(0xc07fffff),
+        colorNewFromRGBA8(0xffc000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+        colorNewFromRGBA8(0x000000ff),
+    ],
+];
+
+export class Torch2 extends SFAClass { // Class 689: CmbSrcTWall
     private light: Light;
 
     constructor(obj: ObjectInstance, data: DataView) {
         super(obj, data);
         commonSetup(obj, data, 0x1a, 0x19, 0x18);
 
-        // TODO: load light color (selected by data 0x1b)
+        const colorSelector = data.getUint8(0x1b);
+        const color = TORCH2_COLORS[obj.commonObjectParams.objType === 0x758 ? 1 : 0][colorSelector];
 
         const refDistance = (data.getUint8(0x2a) & 0x8 ? 520.0 : 130.0) * obj.scale;
         const radius = refDistance + 40.0;
 
-        vec3.zero(scratchVec0);
-        this.light = createPointLight(scratchVec0, White, refDistance, radius);
+        if (obj.commonObjectParams.objType === 0x758)
+            vec3.zero(scratchVec0);
+        else
+            vec3.set(scratchVec0, 0.0, 7.0, 0.0);
+        this.light = createPointLight(scratchVec0, color, refDistance, radius);
         this.light.obj = obj;
     }
 
