@@ -404,7 +404,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
             const mapSceneInfo = await loadMap(this.gameInfo, dataFetcher, this.mapNum);
-            mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher);
+            mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher, world);
             await mapInstance.reloadBlocks(dataFetcher);
 
             // Translate map for SFA world coordinates

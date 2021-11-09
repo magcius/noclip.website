@@ -4,7 +4,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { nArray } from '../util';
 import { White } from '../Color';
 
@@ -15,6 +15,11 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext, ModelInstance } from './models';
+import { World } from './world';
+import { AABB } from '../Geometry';
+import { LightType } from './WorldLights';
+import { computeViewMatrix } from '../Camera';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
 
 export interface BlockInfo {
     mod: number;
@@ -86,6 +91,8 @@ interface BlockIter {
 }
 
 const scratchMtx0 = mat4.create();
+const scratchBox0 = new AABB();
+const scratchVec0 = vec3.create();
 
 export class MapInstance {
     private matrix: mat4 = mat4.create(); // map-to-world
@@ -95,7 +102,7 @@ export class MapInstance {
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
     private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
-    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
+    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher, public world?: World) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 
@@ -145,6 +152,26 @@ export class MapInstance {
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
+            modelCtx.mapLights = [];
+            if (this.world !== undefined) {
+                scratchBox0.set(640.0 * b.x, -10000.0, 640.0 * b.z, 640.0 * (b.x + 1), 10000.0, 640.0 * (b.z + 1));
+                scratchBox0.transform(scratchBox0, this.matrix);
+                const worldView = scratchMtx0;
+                computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+                const probedLights = this.world.worldLights.probeLightsOnBox(scratchBox0, LightType.POINT);
+                for (let i = 0; i < probedLights.length && i < 8; i++) {
+                    const viewPosition = scratchVec0;
+                    probedLights[i].getPosition(viewPosition);
+                    const ctx = getDebugOverlayCanvas2D();
+                    drawWorldSpacePoint(ctx, modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, viewPosition);
+                    vec3.transformMat4(viewPosition, viewPosition, worldView);
+                    modelCtx.mapLights.push({
+                        radius: probedLights[i].radius,
+                        color: probedLights[i].color,
+                        viewPosition
+                    });
+                }
+            }
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
             b.block.addRenderInsts(device, renderInstManager, modelCtx, renderLists, scratchMtx0);

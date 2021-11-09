@@ -1,7 +1,7 @@
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
-import { colorCopy, colorNewFromRGBA, White } from '../Color';
+import { colorCopy, colorNewFromRGBA, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -264,6 +264,8 @@ export class ShapeMaterial {
         mat4.invert(this.matCtx.viewToModelMtx, this.matCtx.modelToViewMtx);
 
         modelCtx.setupLights(params.u_Lights, modelCtx.sceneCtx, LightType.POINT);
+
+        this.matCtx.mapLights = modelCtx.mapLights;
 
         this.material.setOnMaterialParams(params, this.matCtx);
     }

@@ -181,6 +181,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
         return id as KonstColor;
     }
 
+    public getKonstColorCount(): number {
+        return this.konstColors.length;
+    }
+
     public setTevDirect(stage: TevStage) {
         this.mb.setTevDirect(stage);
     }

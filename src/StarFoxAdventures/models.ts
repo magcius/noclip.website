@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { Color } from '../Color';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial } from './materials';
+import { MapLight, SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
 import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped } from './util';
@@ -54,6 +54,7 @@ export interface ModelRenderContext {
     outdoorAmbientColor: Color;
     object?: ObjectInstance;
     setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
+    mapLights?: MapLight[];
 }
 
 const BLOCK_FUR_RENDER_LAYER = 23;

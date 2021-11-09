@@ -8,7 +8,7 @@ import { texProjCameraSceneTex } from '../Camera';
 
 import { SFATexture, TextureFetcher } from './textures';
 import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTranslation } from './util';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp, Red } from '../Color';
@@ -149,6 +149,12 @@ function makeFurMapMaterialTexture(factory: MaterialFactory): TexFunc<MaterialRe
     };
 }
 
+export interface MapLight {
+    radius: number;
+    color: Color;
+    viewPosition: vec3;
+}
+
 export interface MaterialRenderContext {
     sceneCtx: SceneRenderContext;
     worldToViewMtx: mat4;
@@ -158,6 +164,9 @@ export interface MaterialRenderContext {
     ambienceIdx: number;
     outdoorAmbientColor: Color;
     furLayer: number;
+
+    // For map blocks only
+    mapLights?: MapLight[];
 }
 
 export interface SFAMaterial {
@@ -672,6 +681,67 @@ class StandardMapMaterial extends StandardMaterial {
         }
     }
 
+    protected addLightStage(idx: number) {
+        const texMtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            if (ctx.mapLights !== undefined && idx < ctx.mapLights.length) {
+                const light = ctx.mapLights[idx];
+                const radius = Math.max(0.1, light.radius);
+                const s = 0.5 / radius;
+                mat4SetRowMajor(dst,
+                    s, 0, 0, -light.viewPosition[0] * s + 0.5,
+                    0, 0, s, -light.viewPosition[2] * s + 0.5,
+                    0, 0, 0, 1,
+                    0, 0, 0, 1
+                );
+            } else
+                mat4.identity(dst);
+        });
+        const texMtx1 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            if (ctx.mapLights !== undefined && idx < ctx.mapLights.length) {
+                const light = ctx.mapLights[idx];
+                const radius = Math.max(0.1, light.radius);
+                const s = 0.5 / radius;
+                mat4SetRowMajor(dst,
+                    0, 0, 0, -light.viewPosition[1] * s + 0.5,
+                    0, s, 0, 0.5,
+                    0, 0, 0, 1,
+                    0, 0, 0, 1
+                );
+            } else
+                mat4.identity(dst);
+        });
+        const texMap = this.mb.genTexMap(this.factory.getMapLightTexture());
+        const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getGXPostTexGenMatrix(texMtx0));
+        const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getGXPostTexGenMatrix(texMtx1));
+
+        const stage0 = this.mb.genTevStage();
+        this.mb.setTevDirect(stage0);
+        this.mb.setTevOrder(stage0, texCoord0, texMap, GX.RasColorChannelID.COLOR_ZERO);
+        const kcolor = this.mb.genKonstColor((dst: Color, ctx: MaterialRenderContext) => {
+            if (ctx.mapLights !== undefined && idx < ctx.mapLights.length)
+                colorCopy(dst, ctx.mapLights[idx].color);
+            else
+                colorCopy(dst, TransparentBlack);
+        });
+        this.mb.setTevKColorSel(stage0, getGXKonstColorSel(kcolor));
+        this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.KONST, GX.CC.TEXC, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG0);
+        this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+
+        const stage1 = this.mb.genTevStage();
+        this.mb.setTevDirect(stage1);
+        this.mb.setTevOrder(stage1, texCoord1, texMap, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.C0, GX.CC.TEXC, GX.CC.CPREV);
+        this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+    }
+
+    protected addLightStages() {
+        let i = 0;
+        while (this.mb.getTevStageCount() < 16 && this.mb.getTexCoordCount() < 7 && this.mb.getKonstColorCount() < 4) {
+            this.addLightStage(i);
+            i++;
+        }
+    }
+
     protected rebuildSpecialized() {
         this.cprevIsValid = false;
         this.aprevIsValid = false;
@@ -701,6 +771,9 @@ class StandardMapMaterial extends StandardMaterial {
             // XXX: show vertex colors in ancient maps
             this.addTevStageForMultColor0A0();
         }
+
+        // FIXME: only do this when certain flags are active
+        this.addLightStages();
 
         // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood
         if ((this.shader.flags & 0x1) || (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
@@ -1637,6 +1710,8 @@ export class FaultyTVMaterial extends MaterialBase {
 export class MaterialFactory {
     private rampGfxTexture: SFATexture | null = null;
     private rampTexture: TexFunc<MaterialRenderContext>;
+    private mapLightGfxTexture: SFATexture | null = null;
+    private mapLightTexture: TexFunc<MaterialRenderContext>;
     private causticGfxTexture: SFATexture | null = null;
     private causticTexture: TexFunc<MaterialRenderContext>;
     private wavyGfxTexture: SFATexture | null = null;
@@ -1943,6 +2018,55 @@ export class MaterialFactory {
         this.causticTexture = makeMaterialTexture(this.causticGfxTexture);
         return this.causticTexture;
     }
+
+    public getMapLightTexture(): TexFunc<MaterialRenderContext> {
+        if (this.mapLightTexture !== undefined)
+            return this.mapLightTexture;
+
+        const width = 128;
+        const height = 128;
+        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.device.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        const pixels = new Uint8Array(4 * width * height);
+
+        function plot(x: number, y: number, color: Color) {
+            const idx = 4 * (y * width + x);
+            pixels[idx] = color.r * 255;
+            pixels[idx + 1] = color.g * 255;
+            pixels[idx + 2] = color.b * 255;
+            pixels[idx + 3] = color.a * 255;
+        }
+        
+        const color = colorNewCopy(TransparentBlack);
+        for (let y = 0; y < height; y++) {
+            const fy = (y - 64) / 64.0;
+            for (let x = 0; x < width; x++) {
+                const fx = (x - 64) / 64.0;
+                const dist = Math.hypot(fx, fy);
+                let factor = 1.0 - dist;
+                if (factor < 0.0)
+                    factor = 0.0;
+                const I = factor;
+                colorFromRGBA(color, I, I, I, I);
+                plot(x, y, color);
+            }
+        }
+
+        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+
+        this.mapLightGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
+        this.mapLightTexture = makeMaterialTexture(this.mapLightGfxTexture);
+        return this.mapLightTexture;
+    }
     
     public getWavyTexture(): TexFunc<MaterialRenderContext> {
         // This function generates a texture with a wavy pattern used for water, lava and other materials.
@@ -2003,6 +2127,8 @@ export class MaterialFactory {
             this.rampGfxTexture.destroy(device);
         if (this.causticGfxTexture !== null)
             this.causticGfxTexture.destroy(device);
+        if (this.mapLightGfxTexture !== null)
+            this.mapLightGfxTexture.destroy(device);
         if (this.wavyGfxTexture !== null)
             this.wavyGfxTexture.destroy(device);
         this.furFactory?.destroy(device);
