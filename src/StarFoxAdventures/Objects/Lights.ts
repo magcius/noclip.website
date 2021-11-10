@@ -36,8 +36,7 @@ export class LGTPointLgt extends SFAClass { // Class 681: LGTPointLgt
         vec3.zero(scratchVec0);
         this.light = createPointLight(scratchVec0, color, refDistance, radius);
         this.light.obj = obj;
-        // this.light.affectsMap = !!data.getUint8(0x3f);
-        this.light.affectsMap = true;
+        this.light.affectsMap = !!data.getUint8(0x3f);
     }
 
     public mount(obj: ObjectInstance, world: World) {
