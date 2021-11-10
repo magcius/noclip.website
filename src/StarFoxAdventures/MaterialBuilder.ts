@@ -110,7 +110,7 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
     
     public genTevStage(): TevStage {
         const id = this.tevStageNum;
-        if (id >= 8)
+        if (id >= 16)
             throw Error(`Too many TEV stages`);
         this.tevStageNum++;
         return id as TevStage;

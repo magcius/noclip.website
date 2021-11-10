@@ -681,7 +681,7 @@ export class StandardMapMaterial extends StandardMaterial {
         }
     }
 
-    protected addLightStage(idx: number) {
+    protected addLightStage(idx: number, lightToC1: boolean) {
         const texMtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             if (ctx.mapLights !== undefined && idx < ctx.mapLights.length) {
                 const light = ctx.mapLights[idx];
@@ -730,15 +730,50 @@ export class StandardMapMaterial extends StandardMaterial {
         const stage1 = this.mb.genTevStage();
         this.mb.setTevDirect(stage1);
         this.mb.setTevOrder(stage1, texCoord1, texMap, GX.RasColorChannelID.COLOR_ZERO);
-        this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.C0, GX.CC.TEXC, GX.CC.CPREV);
+        this.mb.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.C0, GX.CC.TEXC, lightToC1 ? GX.CC.C1 : GX.CC.CPREV, undefined, undefined, undefined, undefined, lightToC1 ? GX.Register.REG1 : GX.Register.PREV);
         this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
     }
 
     protected addLightStages() {
+        let tevLimit = 16;
+        let lightToC1 = false;
+        if ((this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            tevLimit = 12;
+            lightToC1 = true;
+        }
+
         let i = 0;
-        while (this.mb.getTevStageCount() < 16 && this.mb.getTexCoordCount() < 7 && this.mb.getKonstColorCount() < 4) {
-            this.addLightStage(i);
+        while (this.mb.getTevStageCount() < tevLimit && this.mb.getTexCoordCount() < 7 && this.mb.getKonstColorCount() < 4) {
+            this.addLightStage(i, lightToC1);
             i++;
+        }
+
+        if (this.shader.flags & 0x800) {
+            // Multiply with C1
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR_ZERO);
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.ZERO);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        } else if (this.shader.flags & 0x1000) {
+            // Blend C1 via RASA
+            const stage0 = this.mb.genTevStage();
+            this.mb.setTevDirect(stage0);
+            this.mb.setTevOrder(stage0, null, null, GX.RasColorChannelID.COLOR_ZERO);
+            this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
+            this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+
+            const stage1 = this.mb.genTevStage();
+            this.mb.setTevDirect(stage1);
+            this.mb.setTevOrder(stage1, null, null, GX.RasColorChannelID.COLOR_ZERO);
+            this.mb.setTevColorFormula(stage1, GX.CC.C1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+            this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+
+            const stage2 = this.mb.genTevStage();
+            this.mb.setTevDirect(stage2);
+            this.mb.setTevOrder(stage2, null, null, GX.RasColorChannelID.COLOR0A0);
+            this.mb.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.C2, GX.CC.RASA, GX.CC.ZERO);
+            this.mb.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         }
     }
 
@@ -772,7 +807,6 @@ export class StandardMapMaterial extends StandardMaterial {
             this.addTevStageForMultColor0A0();
         }
 
-        // FIXME: only do this when certain flags are active
         this.addLightStages();
 
         // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood

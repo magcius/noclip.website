@@ -29,6 +29,7 @@ export class Light {
     public color: Color = colorNewCopy(White);
     public distAtten: vec3 = vec3.create();
     public obj?: ObjectInstance;
+    public affectsMap: boolean = false;
 
     // Used only when probing lights
     public probedInfluence: number = 0;
@@ -132,7 +133,7 @@ export class WorldLights {
         return probedLights;
     }
 
-    public probeLightsOnBox(aabb: AABB, typeMask: LightType): Light[] {
+    public probeLightsOnMapBox(aabb: AABB, typeMask: LightType): Light[] {
         const center = scratchVec0;
         const lightPos = scratchVec1;
         const lightBox = scratchBox0;
@@ -141,7 +142,7 @@ export class WorldLights {
 
         const probedLights: Light[] = [];
         for (let light of this.lights) {
-            if ((light.type & typeMask) && light.radius > 0) {
+            if ((light.type & typeMask) && light.radius > 0 && light.affectsMap) {
                 light.getPosition(lightPos);
                 lightBox.set(lightPos[0] - light.radius, lightPos[1] - light.radius, lightPos[2] - light.radius,
                     lightPos[0] + light.radius, lightPos[1] + light.radius, lightPos[2] + light.radius);

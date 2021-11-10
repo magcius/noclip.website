@@ -10,7 +10,7 @@ import { SFAClass } from "./SFAClass";
 
 const scratchVec0 = vec3.create();
 
-export class LGTPointLgt extends SFAClass {
+export class LGTPointLgt extends SFAClass { // Class 681: LGTPointLgt
     private light: Light;
 
     constructor(obj: ObjectInstance, data: DataView) {
@@ -36,6 +36,8 @@ export class LGTPointLgt extends SFAClass {
         vec3.zero(scratchVec0);
         this.light = createPointLight(scratchVec0, color, refDistance, radius);
         this.light.obj = obj;
+        // this.light.affectsMap = !!data.getUint8(0x3f);
+        this.light.affectsMap = true;
     }
 
     public mount(obj: ObjectInstance, world: World) {
@@ -203,6 +205,7 @@ export class Torch2 extends SFAClass { // Class 689: CmbSrcTWall
             vec3.set(scratchVec0, 0.0, 7.0, 0.0);
         this.light = createPointLight(scratchVec0, color, refDistance, radius);
         this.light.obj = obj;
+        this.light.affectsMap = !!(data.getUint8(0x29) & 0x20);
     }
 
     public mount(obj: ObjectInstance, world: World) {
