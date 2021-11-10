@@ -110,7 +110,7 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
     
     public genTevStage(): TevStage {
         const id = this.tevStageNum;
-        if (id >= 8)
+        if (id >= 16)
             throw Error(`Too many TEV stages`);
         this.tevStageNum++;
         return id as TevStage;
@@ -179,6 +179,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
             throw Error(`Too many konst colors`);
         this.konstColors.push(func);
         return id as KonstColor;
+    }
+
+    public getKonstColorCount(): number {
+        return this.konstColors.length;
     }
 
     public setTevDirect(stage: TevStage) {

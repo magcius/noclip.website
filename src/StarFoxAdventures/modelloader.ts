@@ -408,7 +408,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     const posOffset = data.getUint32(fields.posOffset);
     const posCount = data.getUint16(fields.posCount);
     // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-    model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
+    // model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
+    model.originalPosBuffer = dataSubarray(data, posOffset);
 
     if (fields.hasNormals) {
         const nrmOffset = data.getUint32(fields.nrmOffset);
@@ -489,12 +490,14 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     const clrOffset = data.getUint32(fields.clrOffset);
     const clrCount = data.getUint16(fields.clrCount);
     // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
-    const clrBuffer = dataSubarray(data, clrOffset, clrCount * 2);
+    // const clrBuffer = dataSubarray(data, clrOffset, clrCount * 2);
+    const clrBuffer = dataSubarray(data, clrOffset);
 
     const texcoordOffset = data.getUint32(fields.texcoordOffset);
     const texcoordCount = data.getUint16(fields.texcoordCount);
     // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordOffset.toString(16)}`);
-    const texcoordBuffer = dataSubarray(data, texcoordOffset, texcoordCount * 4);
+    // const texcoordBuffer = dataSubarray(data, texcoordOffset, texcoordCount * 4);
+    const texcoordBuffer = dataSubarray(data, texcoordOffset);
 
     let hasSkinning = false;
 

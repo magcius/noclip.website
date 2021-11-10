@@ -126,7 +126,7 @@ export class ObjectInstance {
     public scale: number = 1.0;
     private srtMatrix: mat4 = mat4.create();
     private srtDirty: boolean = true;
-    private cullRadius: number = 10;
+    public cullRadius: number = 10;
 
     private modelAnimNum: number | null = null;
     private anim: Anim | null = null;
@@ -196,23 +196,22 @@ export class ObjectInstance {
         return this.srtMatrix;
     }
 
-    public getSRTForChildren(): mat4 {
-        const result = mat4.create();
-        mat4.fromTranslation(result, this.position);
-        // mat4.scale(result, result, [this.scale, this.scale, this.scale]);
-        mat4.rotateY(result, result, this.yaw);
-        mat4.rotateX(result, result, this.pitch);
-        mat4.rotateZ(result, result, this.roll);
-        return result;
+    public getSRTForChildren(dst: mat4) {
+        mat4.fromTranslation(dst, this.position);
+        // mat4.scale(dst, dst, [this.scale, this.scale, this.scale]);
+        mat4.rotateY(dst, dst, this.yaw);
+        mat4.rotateX(dst, dst, this.pitch);
+        mat4.rotateZ(dst, dst, this.roll);
     }
 
     public getWorldSRT(out: mat4) {
         const localSrt = this.getLocalSRT();
         if (this.parent !== null) {
-            mat4.mul(out, this.parent.getSRTForChildren(), localSrt);
-        } else {
+            const mtx = mat4.create();
+            this.parent.getSRTForChildren(mtx);
+            mat4.mul(out, mtx, localSrt);
+        } else
             mat4.copy(out, localSrt);
-        }
     }
 
     public getType(): ObjectType {
@@ -227,8 +226,12 @@ export class ObjectInstance {
         return this.objType.name;
     }
 
-    public getPosition(): vec3 {
-        return this.position;
+    public getPosition(dst: vec3) {
+        if (this.parent !== null) {
+            this.getWorldSRT(scratchMtx0);
+            getMatrixTranslation(dst, scratchMtx0);
+        } else
+            vec3.copy(dst, this.position);
     }
 
     public setPosition(pos: vec3) {

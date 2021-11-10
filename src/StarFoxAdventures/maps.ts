@@ -4,7 +4,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { nArray } from '../util';
 import { White } from '../Color';
 
@@ -15,6 +15,11 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext, ModelInstance } from './models';
+import { World } from './world';
+import { AABB } from '../Geometry';
+import { LightType } from './WorldLights';
+import { computeViewMatrix } from '../Camera';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
 
 export interface BlockInfo {
     mod: number;
@@ -86,6 +91,8 @@ interface BlockIter {
 }
 
 const scratchMtx0 = mat4.create();
+const scratchBox0 = new AABB();
+const scratchVec0 = vec3.create();
 
 export class MapInstance {
     private matrix: mat4 = mat4.create(); // map-to-world
@@ -95,7 +102,7 @@ export class MapInstance {
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
     private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
-    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
+    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher, public world?: World) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 

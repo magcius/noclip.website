@@ -9,7 +9,7 @@ import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { colorNewFromRGBA, White } from '../Color';
+import { colorCopy, colorNewFromRGBA, White } from '../Color';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -17,7 +17,7 @@ import { ObjectManager, ObjectInstance, ObjectUpdateContext } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { MapInstance, loadMap } from './maps';
-import { dataSubarray, readVec3 } from './util';
+import { dataSubarray, mat4SetTranslation, readVec3 } from './util';
 import { ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
@@ -26,6 +26,12 @@ import { Sky } from './Sky';
 import { LightType, WorldLights } from './WorldLights';
 import { SFATextureFetcher } from './textures';
 import { SphereMapManager } from './SphereMaps';
+import { computeViewMatrix } from '../Camera';
+
+const scratchVec0 = vec3.create();
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
+const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 export class World {
     public animController: SFAAnimationController;
@@ -111,6 +117,45 @@ export class World {
             i++;
         }
     }
+    
+    public setupLightsForObject(lights: GX_Material.Light[], obj: ObjectInstance | undefined, sceneCtx: SceneRenderContext, typeMask: LightType) {
+        const probedLights = obj !== undefined ? this.worldLights.probeLightsOnObject(obj, sceneCtx, typeMask) : this.worldLights.lights;
+        let i = 0;
+
+        const worldView = scratchMtx0;
+        computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
+        const worldViewSR = scratchMtx1;
+        mat4.copy(worldViewSR, worldView);
+        mat4SetTranslation(worldViewSR, 0, 0, 0);
+
+        for (let light of probedLights) {
+            if (light.type & typeMask) {
+                lights[i].reset();
+                if (light.type === LightType.DIRECTIONAL) {
+                    vec3.scale(lights[i].Position, light.direction, -100000.0);
+                    vec3.transformMat4(lights[i].Position, lights[i].Position, worldViewSR);
+                    colorCopy(lights[i].Color, light.color);
+                    vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0);
+                    vec3.set(lights[i].DistAtten, 1.0, 0.0, 0.0);
+                } else { // LightType.POINT
+                    light.getPosition(scratchVec0);
+                    vec3.transformMat4(lights[i].Position, scratchVec0, worldView);
+                    // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                    // TODO: use correct parameters
+                    colorCopy(lights[i].Color, light.color);
+                    vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+                    vec3.copy(lights[i].DistAtten, light.distAtten);
+                }
+
+                i++;
+                if (i >= 8)
+                    break;
+            }
+        }
+
+        for (; i < 8; i++)
+            lights[i].reset();
+    }
 
     public destroy(device: GfxDevice) {
         for (let obj of this.objectInstances)
@@ -121,8 +166,6 @@ export class World {
         this.blockFetcher.destroy(device);
     }
 }
-
-const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 class WorldRenderer extends SFARenderer {
     public textureHolder: UI.TextureListHolder;
@@ -263,9 +306,9 @@ class WorldRenderer extends SFARenderer {
         this.sky.addSkyRenderPasses(device, this.renderHelper, builder, renderInstManager, renderLists, mainColorTargetID, this.mainDepthDesc, sceneCtx);
     }
 
-    private setupLights(lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) {
+    public setupLightsForObject(lights: GX_Material.Light[], obj: ObjectInstance, sceneCtx: SceneRenderContext, typeMask: LightType) {
         if (this.enableLights) {
-            this.world.worldLights.setupLights(lights, sceneCtx, typeMask);
+            this.world.setupLightsForObject(lights, obj, sceneCtx, typeMask);
         } else {
             for (let i = 0; i < 8; i++)
                 lights[i].reset();
@@ -284,7 +327,7 @@ class WorldRenderer extends SFARenderer {
             showDevGeometry: this.showDevGeometry,
             ambienceIdx: 0,
             outdoorAmbientColor: scratchColor0,
-            setupLights: this.setupLights.bind(this),
+            setupLights: undefined!,
         };
 
         if (this.showObjects) {
@@ -295,11 +338,16 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
+                    modelCtx.setupLights = (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => {
+                        this.setupLightsForObject(lights, obj, sceneCtx, typeMask);
+                    };
                     obj.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
         
                     const drawLabels = false;
-                    if (drawLabels)
-                        drawWorldSpaceText(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                    if (drawLabels) {
+                        obj.getPosition(scratchVec0);
+                        drawWorldSpaceText(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, scratchVec0, obj.getName(), undefined, undefined, {outline: 2});
+                    }
                 }
             }
         }
@@ -356,7 +404,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
             const mapSceneInfo = await loadMap(this.gameInfo, dataFetcher, this.mapNum);
-            mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher);
+            mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher, world);
             await mapInstance.reloadBlocks(dataFetcher);
 
             // Translate map for SFA world coordinates
