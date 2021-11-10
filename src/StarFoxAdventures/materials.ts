@@ -298,7 +298,7 @@ export abstract class StandardMaterial extends MaterialBase {
     }
 }
 
-class StandardMapMaterial extends StandardMaterial {
+export class StandardMapMaterial extends StandardMaterial {
     private cprevIsValid = false;
     private aprevIsValid = false;
 
@@ -702,8 +702,8 @@ class StandardMapMaterial extends StandardMaterial {
                 const radius = Math.max(0.1, light.radius);
                 const s = 0.5 / radius;
                 mat4SetRowMajor(dst,
-                    0, 0, 0, -light.viewPosition[1] * s + 0.5,
-                    0, s, 0, 0.5,
+                    0, s, 0, -light.viewPosition[1] * s + 0.5,
+                    0, 0, 0, 0.5,
                     0, 0, 0, 1,
                     0, 0, 0, 1
                 );

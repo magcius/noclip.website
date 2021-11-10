@@ -14,7 +14,7 @@ import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, Pack
 import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
 
-import { MaterialRenderContext, SFAMaterial } from './materials';
+import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { setGXMaterialOnRenderInst } from './render';
 import { mat4SetTranslation } from './util';
@@ -114,7 +114,7 @@ export class ShapeGeometry {
     private packetParams = new PacketParams();
     private verticesDirty = true;
 
-    private aabb?: AABB;
+    public aabb?: AABB;
     private sortLayer?: number;
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
@@ -227,6 +227,8 @@ export interface MaterialOptions {
     furLayer?: number;
 }
 
+const scratchBox0 = new AABB();
+
 export class ShapeMaterial {
     private matCtx: MaterialRenderContext | undefined;
 
@@ -238,7 +240,7 @@ export class ShapeMaterial {
         this.material = material;
     }
 
-    public setOnMaterialParams(params: MaterialParams, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
+    public setOnMaterialParams(params: MaterialParams, geom: ShapeGeometry, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
         if (this.matCtx === undefined) {
             this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
@@ -265,6 +267,27 @@ export class ShapeMaterial {
 
         modelCtx.setupLights(params.u_Lights, modelCtx.sceneCtx, LightType.POINT);
 
+        modelCtx.mapLights = [];
+        if (modelCtx.sceneCtx.world !== undefined && geom.aabb !== undefined && this.material instanceof StandardMapMaterial) {
+            scratchBox0.copy(geom.aabb);
+            scratchBox0.transform(scratchBox0, modelToWorldMtx);
+            const worldView = scratchMtx0;
+            computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+            const probedLights = modelCtx.sceneCtx.world.worldLights.probeLightsOnBox(scratchBox0, LightType.POINT);
+            for (let i = 0; i < probedLights.length && i < 8; i++) {
+                const viewPosition = scratchVec0;
+                probedLights[i].getPosition(viewPosition);
+                const ctx = getDebugOverlayCanvas2D();
+                drawWorldSpacePoint(ctx, modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, viewPosition);
+                vec3.transformMat4(viewPosition, viewPosition, worldView);
+                modelCtx.mapLights.push({
+                    radius: probedLights[i].radius,
+                    color: probedLights[i].color,
+                    viewPosition: vec3.clone(viewPosition),
+                });
+            }
+        }
+
         this.matCtx.mapLights = modelCtx.mapLights;
 
         this.material.setOnMaterialParams(params, this.matCtx);
@@ -288,7 +311,7 @@ export class Shape {
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
         this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
-        this.material.setOnMaterialParams(scratchMaterialParams, modelToWorldMtx, modelCtx, matOptions);
+        this.material.setOnMaterialParams(scratchMaterialParams, this.geom, modelToWorldMtx, modelCtx, matOptions);
 
         const packetParams = this.geom.getPacketParams();
 

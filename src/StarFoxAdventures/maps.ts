@@ -152,26 +152,6 @@ export class MapInstance {
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
-            modelCtx.mapLights = [];
-            if (this.world !== undefined) {
-                scratchBox0.set(640.0 * b.x, -10000.0, 640.0 * b.z, 640.0 * (b.x + 1), 10000.0, 640.0 * (b.z + 1));
-                scratchBox0.transform(scratchBox0, this.matrix);
-                const worldView = scratchMtx0;
-                computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
-                const probedLights = this.world.worldLights.probeLightsOnBox(scratchBox0, LightType.POINT);
-                for (let i = 0; i < probedLights.length && i < 8; i++) {
-                    const viewPosition = scratchVec0;
-                    probedLights[i].getPosition(viewPosition);
-                    const ctx = getDebugOverlayCanvas2D();
-                    drawWorldSpacePoint(ctx, modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, viewPosition);
-                    vec3.transformMat4(viewPosition, viewPosition, worldView);
-                    modelCtx.mapLights.push({
-                        radius: probedLights[i].radius,
-                        color: probedLights[i].color,
-                        viewPosition
-                    });
-                }
-            }
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
             b.block.addRenderInsts(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
