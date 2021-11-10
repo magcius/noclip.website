@@ -750,6 +750,9 @@ export class StandardMapMaterial extends StandardMaterial {
 
         if (this.shader.flags & 0x800) {
             // Multiply with C1
+
+            // CPREV = CPREV * C1
+            // APREV = APREV
             const stage = this.mb.genTevStage();
             this.mb.setTevDirect(stage);
             this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR_ZERO);
@@ -757,23 +760,34 @@ export class StandardMapMaterial extends StandardMaterial {
             this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         } else if (this.shader.flags & 0x1000) {
             // Blend C1 via RASA
+
+            // C2 = CPREV * C1
+            // APREV = APREV
             const stage0 = this.mb.genTevStage();
             this.mb.setTevDirect(stage0);
             this.mb.setTevOrder(stage0, null, null, GX.RasColorChannelID.COLOR_ZERO);
             this.mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG2);
             this.mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
+            // CPREV = C1
+            // APREV = APREV
             const stage1 = this.mb.genTevStage();
             this.mb.setTevDirect(stage1);
             this.mb.setTevOrder(stage1, null, null, GX.RasColorChannelID.COLOR_ZERO);
             this.mb.setTevColorFormula(stage1, GX.CC.C1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
             this.mb.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
+            // CPREV = mix(CPREV, C2, RASA)
+            // APREV = APREV
             const stage2 = this.mb.genTevStage();
             this.mb.setTevDirect(stage2);
             this.mb.setTevOrder(stage2, null, null, GX.RasColorChannelID.COLOR0A0);
             this.mb.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.C2, GX.CC.RASA, GX.CC.ZERO);
             this.mb.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+
+            // Overall:
+            // CPREV = mix(C1, CPREV * C1, RASA)
+            // APREV = APREV
         }
     }
 
