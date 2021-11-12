@@ -2062,6 +2062,7 @@ but I could not have done it alone. I've been assisted by so many others through
 <a href="https://github.com/vlad001">vlad001</a>,
 <a href="https://twitter.com/Jewelots_">Jewel</a>,
 <a href="https://twitter.com/instant_grat">Instant Grat</a>,
+<a href="https://github.com/naclomi/">naclomi</a>,
 along with countless others from the modding communities, game reverse
 engineering and research communities, and emulation communities.</p>
 

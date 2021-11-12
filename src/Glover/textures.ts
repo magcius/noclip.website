@@ -1,15 +1,17 @@
 import * as Viewer from '../viewer';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assertExists } from "../util";
-import { parseTLUT, ImageFormat, ImageSize, TextFilt, TexCM, getSizBitsPerPixel, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, decodeTex_I4, decodeTex_I8, TextureLUT, getTLUTSize } from "../Common/N64/Image";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { parseTLUT, ImageFormat, ImageSize, TextFilt, TexCM,
+         decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4,
+         decodeTex_CI8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16,
+         decodeTex_I4, decodeTex_I8,
+         TextureLUT, getTLUTSize } from "../Common/N64/Image";
+import { getImageFormatString } from "../BanjoKazooie/f3dex";
+import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { TextureHolder, LoadedTexture } from "../TextureHolder";
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
-import { getImageFormatString } from "./f3dex";
 
 import { GloverTexbank } from './parsers';
-
 
 export interface Image {
     name: string;
@@ -23,8 +25,9 @@ export interface Image {
     dataOffs: number;
 }
 
-
 function textureToCanvas(texture: Image): Viewer.Texture {
+    // TODO: use the BanjoKazooie implementation rather than
+    //       redefining here
     const surfaces: HTMLCanvasElement[] = [];
 
     for (let i = 0; i < texture.levels.length; i++) {
@@ -40,12 +43,15 @@ function textureToCanvas(texture: Image): Viewer.Texture {
     return { name: texture.name, extraInfo, surfaces };
 }
 
+
 export class GloverTextureHolder extends TextureHolder<Image> {
-    public addTextureBank(device: GfxDevice, bank: typeof GloverTexbank) : void {
+    public addTextureBank(device: GfxDevice, bank: GloverTexbank) : void {
         let images = [];
         for (let texture of bank.asset) {
 
-            var colorFormat = texture.colorFormat;
+            // TODO: properly apply blur to "restart.bmp"
+
+            var colorFormat = texture.colorFormat as number as ImageFormat;
             if (texture.compressionFormat == GloverTexbank.TextureCompressionFormat.CI4 || 
                 texture.compressionFormat == GloverTexbank.TextureCompressionFormat.CI8)
             {
@@ -56,7 +62,7 @@ export class GloverTextureHolder extends TextureHolder<Image> {
                 width: texture.width,
                 height: texture.height,
                 format: colorFormat,
-                siz: texture.compressionFormat,
+                siz: texture.compressionFormat as number as ImageSize,
                 cms: 0, // TODO: where is CMS specified?
                 cmt: 0, // TODO: where is CMT specified?
                 levels: [],
@@ -66,7 +72,6 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             let tlut : Uint8Array | null = null;
             if (image.format === ImageFormat.G_IM_FMT_CI) {
                 const tlutSize = getTLUTSize(image.siz);
-
                 const tlutView = ArrayBufferSlice.fromView(texture.data).createDataView(texture.paletteOffset - texture.dataPtr);
                 tlut =  new Uint8Array(tlutSize * 4);
                 // TODO: support RGBA32
@@ -94,13 +99,11 @@ export class GloverTextureHolder extends TextureHolder<Image> {
         this.addTextures(device, images);
     }
 
-
-
     public loadTexture(device: GfxDevice, texture: Image): LoadedTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(gfxTexture, texture.name);
-
         device.uploadTextureData(gfxTexture, 0, texture.levels);
+
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };

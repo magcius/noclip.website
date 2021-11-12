@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
 import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
-import { getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dex";
+import { getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -510,19 +510,6 @@ export class RenderData {
         for (let i = 0; i < this.dynamicStateCopies.length; i++)
             device.destroyInputState(this.dynamicStateCopies[i]);
     }
-}
-
-function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x1000);
-    const cullBack = !!(m & 0x2000);
-    if (cullFront && cullBack)
-        return GfxCullMode.FrontAndBack;
-    else if (cullFront)
-        return GfxCullMode.Front;
-    else if (cullBack)
-        return GfxCullMode.Back;
-    else
-        return GfxCullMode.None;
 }
 
 const viewMatrixScratch = mat4.create();

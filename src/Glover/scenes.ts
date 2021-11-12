@@ -3,7 +3,13 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as BYML from '../byml';
 
+import * as F3DEX from '../BanjoKazooie/f3dex';
+
+
 import { GloverTextureHolder } from './textures';
+
+
+import { GloverActorRenderer, GloverSharedOutput } from './render';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -30,11 +36,12 @@ import { KaitaiStream } from 'kaitai-struct';
 const pathBase = `glover`;
 
 class GloverRenderer implements Viewer.SceneGfx {
+    public actorRenderers: GloverActorRenderer[] = [];
+
     public renderHelper: GfxRenderHelper;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
+    constructor(device: GfxDevice, public textureHolder: GloverTextureHolder) {
         this.renderHelper = new GfxRenderHelper(device);
-
     }
 
     public adjustCameraController(c: CameraController) {
@@ -42,18 +49,21 @@ class GloverRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-
         return [];
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
+        for (let actorRenderer of this.actorRenderers) {
+            actorRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
+
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) : void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
@@ -61,7 +71,22 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-  
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+
+        // TODO: reenable once we're at Hello Triangle:
+        // pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
@@ -70,65 +95,59 @@ class GloverRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
 
+        for (let actorRenderer of this.actorRenderers) {
+            actorRenderer.destroy(device);
+        }
+
         this.textureHolder.destroy(device);
     }
 }
 
 
-class GloverSceneBankDescriptor {
-    constructor(
-        public landscape: string,
-        public object_banks: string[],
-        public texture_banks: string[]) {}
-}
+interface GloverSceneBankDescriptor {
+    landscape: string,
+    object_banks: string[],
+    texture_banks: string[]
+};
 
 // Level ID to bank information
-const sceneBanks = new Map();
-
 // TODO, do the rest of them
-sceneBanks.set("0a", new GloverSceneBankDescriptor(
-    "10.AT1lnd.n64.lev",
-    ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L1.obj.fla"],
-    ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]
-));
-sceneBanks.set("0b", new GloverSceneBankDescriptor(
-    "11.AT2lnd.n64.lev",
-    ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L2.obj.fla"],
-    ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]
-));
-sceneBanks.set("0c", new GloverSceneBankDescriptor(
-    "12.AT3Aln.n64.lev",
-    ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L3A.obj.fla"],
-    ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]
-));
-sceneBanks.set("0d", new GloverSceneBankDescriptor(
-    "13.ATBOSS.n64.lev",
-    ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_BOSS.obj.fla"],
-    ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]
-));
-sceneBanks.set("0e", new GloverSceneBankDescriptor(
-    "14.ATBONUS.n64.lev",
-    ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_BONUS.obj.fla"],
-    ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]
-));
+const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
+    ["0a", {
+        landscape: "10.AT1lnd.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L1.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
+    ["0b", {
+        landscape: "11.AT2lnd.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L2.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
+    ["0c", {
+        landscape: "12.AT3Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L3A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
+    ["0d", {
+        landscape: "13.ATBOSS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_BOSS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
+    ["0e", {
+        landscape: "14.ATBONUS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_BONUS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
+]);
 
 class SceneDesc implements Viewer.SceneDesc {
-    // TODO: better types
-    private textures : Map<number, any>;
-    private objects : Map<number, any>;
-    constructor(public id: string, public name: string) {
-        this.textures = new Map();
-        this.objects = new Map();
-    }
+    constructor(public id: string, public name: string) {}
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
         const bankDescriptor = sceneBanks.get(this.id);
+        assert(bankDescriptor !== undefined);
+
         const raw_landscape = await dataFetcher.fetchData(`${pathBase}/${bankDescriptor.landscape}?cache_bust=2`)!; 
-        const raw_object_banks = await Promise.all<ArrayBufferSlice, void>(bankDescriptor.object_banks.map(
+        const raw_object_banks = await Promise.all<ArrayBufferSlice>(bankDescriptor.object_banks.map(
             (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}?cache_bust=2`)!))
-        const raw_texture_banks = await Promise.all<ArrayBufferSlice, void>(bankDescriptor.texture_banks.map(
+        const raw_texture_banks = await Promise.all<ArrayBufferSlice>(bankDescriptor.texture_banks.map(
             (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}?cache_bust=2`)!))
 
 
@@ -138,16 +157,19 @@ class SceneDesc implements Viewer.SceneDesc {
         const texture_banks = raw_texture_banks.map(
             (raw) => { return raw == null ? null : new GloverTexbank(new KaitaiStream(decompress(raw).arrayBuffer))})
 
-
-        // TODO: load from tex
         const textureHolder = new GloverTextureHolder();
         const sceneRenderer = new GloverRenderer(device, textureHolder);
         const cache = sceneRenderer.renderHelper.getCache();
 
-        for (let bank of texture_banks) {
-            textureHolder.addTextureBank(device, bank);
-        }
+        // for (let bank of texture_banks) {
+        //     if (bank) {
+        //         textureHolder.addTextureBank(device, bank);
+        //     }
+        // }
 
+        const sharedOutput = new GloverSharedOutput();
+        const testActor = new GloverActorRenderer(device, cache, sharedOutput, object_banks[0]!.directory[0].objRoot);
+        sceneRenderer.actorRenderers.push(testActor)
 
         return sceneRenderer;
     }
