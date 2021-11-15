@@ -9,7 +9,7 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import { GloverTextureHolder } from './textures';
 
 
-import { GloverActorRenderer, GloverSharedOutput } from './render';
+import { GloverActorRenderer } from './render';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -167,8 +167,7 @@ class SceneDesc implements Viewer.SceneDesc {
         //     }
         // }
 
-        const sharedOutput = new GloverSharedOutput();
-        const testActor = new GloverActorRenderer(device, cache, sharedOutput, object_banks[0]!.directory[0].objRoot);
+        const testActor = new GloverActorRenderer(device, cache, object_banks[0]!.directory[0].objRoot);
         sceneRenderer.actorRenderers.push(testActor)
 
         return sceneRenderer;

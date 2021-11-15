@@ -21,6 +21,10 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { GloverObjbank } from './parsers';
 
+// TODO:
+//  - Separate render boilerplate classes and actor classes into separate files
+
+
 function makeVertexBufferData(v: F3DEX.Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
@@ -41,28 +45,28 @@ function makeVertexBufferData(v: F3DEX.Vertex[]): Float32Array {
     return buf;
 }
 
-export class GloverRenderData {
-    public vertexBuffer: GfxBuffer;
-    public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+export class DrawCallRenderData {
     public textures: GfxTexture[] = [];
     public samplers: GfxSampler[] = [];
-    public vertexBufferData: Float32Array;
 
     public dynamicBufferCopies: GfxBuffer[] = [];
     public dynamicStateCopies: GfxInputState[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: GloverSharedOutput) {
-        const textures = sharedOutput.textureCache.textures;
+    public vertexBuffer: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
+    public vertexBufferData: Float32Array;
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, textureCache: RDP.TextureCache, drawCall: DrawCall) {
+        const textures = textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
             this.textures.push(RDP.translateToGfxTexture(device, tex));
-            this.samplers.push(RDP.translateSampler(device, cache, tex));
+            this.samplers.push(RDP.translateSampler(device, renderCache, tex));
         }
 
-        this.vertexBufferData = makeVertexBufferData(sharedOutput.drawVertices);
+        this.vertexBufferData = makeVertexBufferData(drawCall.vertices);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
-        assert(sharedOutput.vertexCache.length <= 0xFFFFFFFF);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -98,47 +102,19 @@ export class GloverRenderData {
     }
 }
 
-export class GloverSharedOutput {
-    public textureCache: RDP.TextureCache = new RDP.TextureCache();
-    public vertexCache: F3DEX.Vertex[] = [];
-    public drawVertices: F3DEX.Vertex[] = [];
-
-    public setVertexBufferFromData(vertexData: DataView): void {
-        const scratchVertex = new F3DEX.StagingVertex();
-
-        for (let offs = 0; offs < vertexData.byteLength; offs += 0x10) {
-            scratchVertex.setFromView(vertexData, offs);
-            this.loadVertex(scratchVertex);
-        }
-    }
-
-    public loadVertex(v: F3DEX.StagingVertex): void {
-        if (v.outputIndex === -1) {
-            const n = new F3DEX.Vertex();
-            n.copy(v);
-            this.vertexCache.push(n);
-            v.outputIndex = this.vertexCache.length - 1;
-        }
-    }
-}
-
 export class GloverRSPOutput {
-    public drawCalls: DrawCall[] = [];
-
-    public currentDrawCall = new DrawCall();
-
-    public newDrawCall(): DrawCall {
-        this.currentDrawCall = new DrawCall();
-        this.drawCalls.push(this.currentDrawCall);
-        return this.currentDrawCall;
+    constructor(public drawCalls: DrawCall[], public textureCache: RDP.TextureCache) {
     }
 }
 
 export class GloverRSPState implements F3DEX.RSPStateInterface {
-    private output = new GloverRSPOutput();
+    private outputDrawCalls: DrawCall[] = [];
+    private currentDrawCall = new DrawCall();
 
     private stateChanged: boolean = false;
-    private vertexCache = nArray(64, () => 0);
+
+    private textureCache: RDP.TextureCache = new RDP.TextureCache();
+    private vertexCache: F3DEX.Vertex[] = [];
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new F3DEX.TextureState();
@@ -152,14 +128,17 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private DP_TileState = nArray(8, () => new RDP.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
-    constructor(public segmentBuffers: ArrayBufferSlice[], public sharedOutput: GloverSharedOutput) {
+    constructor(public segmentBuffers: ArrayBufferSlice[]) {
     }
 
     public finish(): GloverRSPOutput | null {
-        if (this.output.drawCalls.length === 0)
+        if (this.outputDrawCalls.length === 0)
             return null;
 
-        return this.output;
+        return new GloverRSPOutput(
+            this.outputDrawCalls,
+            this.textureCache
+        );
     }
 
     private _setGeometryMode(newGeometryMode: number) {
@@ -192,18 +171,19 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         const addrIdx = dramAddr & 0x00FFFFFF;
         const view = segment.createDataView(addrIdx, n * 0x10);
         
-        this.sharedOutput.setVertexBufferFromData(view);
+        const scratchVertex = new F3DEX.StagingVertex();
 
-        for (let vertexIndex = 0; vertexIndex < n; vertexIndex++) {
-            this.vertexCache[v0 + vertexIndex] = vertexIndex;
-
-            // Copy in our matrix indices at time of G_VTX.
-            this.sharedOutput.vertexCache[vertexIndex].matrixIndex = this.SP_MatrixStackDepth;
+        for (let offs = 0; offs < view.byteLength; offs += 0x10) {
+            const n = new F3DEX.Vertex();
+            scratchVertex.setFromView(view, offs);
+            n.copy(scratchVertex);
+            n.matrixIndex = this.SP_MatrixStackDepth;
+            this.vertexCache.push(n);
         }
     }
 
     public gSPModifyVertex(vtx: number, where: number, val: number): void {
-        const vertex = this.sharedOutput.vertexCache[vtx];
+        const vertex = this.vertexCache[vtx];
         if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_RGBA) {
             vertex.c0 = (val >>> 24) & 0xFF;
             vertex.c1 = (val >>> 16) & 0xFF;
@@ -238,7 +218,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             dramPalAddr = 0;
         }
 
-        return this.sharedOutput.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
+        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
     }
 
     private _flushTextures(dc: DrawCall): void {
@@ -269,7 +249,9 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         if (this.stateChanged) {
             this.stateChanged = false;
 
-            const dc = this.output.newDrawCall();
+            const dc = new DrawCall();
+            this.currentDrawCall = dc
+            this.outputDrawCalls.push(dc);
 
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
@@ -283,11 +265,11 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     public gSPTri(i0: number, i1: number, i2: number): void {
         this._flushDrawCall();
 
-        this.sharedOutput.drawVertices.push(
-            this.sharedOutput.vertexCache[this.vertexCache[i0]],
-            this.sharedOutput.vertexCache[this.vertexCache[i1]],
-            this.sharedOutput.vertexCache[this.vertexCache[i2]]);
-        this.output.currentDrawCall.vertexCount += 3;
+        this.currentDrawCall.vertices.push(
+            this.vertexCache[i0],
+            this.vertexCache[i1],
+            this.vertexCache[i2]);
+        this.currentDrawCall.vertexCount += 3;
     }
 
     public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
@@ -370,8 +352,12 @@ export class DrawCall {
     public DP_Combine: RDP.CombineParams;
 
     public textureIndices: number[] = [];
+    public textureCache: RDP.TextureCache;
 
     public vertexCount: number = 0;
+    public vertices: F3DEX.Vertex[] = [];
+
+    public renderData: DrawCallRenderData | null = null;
 }
 
 export class DrawCallInstance {
@@ -390,13 +376,15 @@ export class DrawCallInstance {
     public envAlpha = 1;
     public visible = true;
 
-    constructor(geometryData: GloverRenderData, private drawMatrix: mat4[], private drawCall: DrawCall) {
+    constructor(private drawCall: DrawCall, private drawMatrix: mat4[], textureCache: RDP.TextureCache) {
+        assert(drawCall.renderData !== null);
+
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
-                this.textureEntry[i] = geometryData.sharedOutput.textureCache.textures[idx];
-                this.textureMappings[i].gfxTexture = geometryData.textures[idx];
-                this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
+                this.textureEntry[i] = textureCache.textures[idx];
+                this.textureMappings[i].gfxTexture = this.drawCall.renderData!.textures[idx];
+                this.textureMappings[i].gfxSampler = this.drawCall.renderData!.samplers[idx];
             }
         }
 
@@ -480,6 +468,8 @@ export class DrawCallInstance {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
+        renderInst.setInputLayoutAndState(this.drawCall.renderData!.inputLayout, this.drawCall.renderData!.inputState);
+
         renderInst.setGfxProgram(this.gfxProgram);
         if (depthKey > 0)
             renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, depthKey)
@@ -528,12 +518,9 @@ export class GloverActorRenderer {
 
     private meshRenderers: GloverMeshRenderer[] = [];
 
-    private renderData: GloverRenderData;
-
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
-        private sharedOutput: GloverSharedOutput,
         private actorObject: GloverObjbank.ObjectRoot)
     {
         this.megaStateFlags = {};
@@ -544,16 +531,14 @@ export class GloverActorRenderer {
         });
 
         // TODO: tree traversal of mesh children
-        const meshRenderer = new GloverMeshRenderer(actorObject.mesh, this.renderData, sharedOutput);
+        const meshRenderer = new GloverMeshRenderer(device, cache, actorObject.mesh);
         this.meshRenderers.push(meshRenderer);
 
-        this.renderData = new GloverRenderData(device, cache, sharedOutput);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.renderData.inputLayout, this.renderData.inputState);
         template.setMegaStateFlags(this.megaStateFlags);
 
         const sceneParamsSize = 16;
@@ -575,16 +560,14 @@ export class GloverActorRenderer {
 }
 
 class GloverMeshRenderer {
-    private drawMatrix = mat4.create();
-    private drawCallInstances: DrawCallInstance[] = [];
+    private rspOutput: GloverRSPOutput | null;
     private visible = true;
 
     constructor(
-        private meshData: GloverObjbank.Mesh,
-        private renderData: GloverRenderData,
-        private sharedOutput: GloverSharedOutput)
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private meshData: GloverObjbank.Mesh)
     {
-
 
         /* Object bank in first segment, then one
            texture bank for each subsequent */
@@ -594,33 +577,31 @@ class GloverMeshRenderer {
         ];
         
         const buffer = meshData._io.buffer;
-        const rspState = new GloverRSPState(segments, sharedOutput);
+        const rspState = new GloverRSPState(segments);
 
         const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
 
         F3DEX.runDL_F3DEX(rspState, displayListOffs);
-        const rspOutput = rspState.finish();
-        if (rspOutput !== null) {
-            for (let drawCall of rspOutput.drawCalls) {
-                const drawCallInstance = new DrawCallInstance(
-                    this.renderData, [this.drawMatrix, this.drawMatrix], drawCall);
-                this.drawCallInstances.push(drawCallInstance);
+        this.rspOutput = rspState.finish();
+        if (this.rspOutput !== null) {
+            for (let drawCall of this.rspOutput.drawCalls) {
+                drawCall.renderData = new DrawCallRenderData(device, cache, this.rspOutput.textureCache, drawCall);
             }
         }
-        console.log(this.drawCallInstances)
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.renderData.inputLayout, this.renderData.inputState);
- 
-        for (let drawCallInstance of this.drawCallInstances) {
-            drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
+        const drawMatrix: mat4 = mat4.create();
+
+        if (this.rspOutput !== null) {
+            for (let drawCall of this.rspOutput.drawCalls) {
+                const drawCallInstance = new DrawCallInstance(drawCall, [drawMatrix, drawMatrix], this.rspOutput.textureCache);
+                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
+            }
         }
-        renderInstManager.popTemplateRenderInst();
     }
 
 
