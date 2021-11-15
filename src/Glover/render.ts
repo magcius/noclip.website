@@ -129,6 +129,9 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private DP_TMemTracker = new Map<number, number>();
 
     constructor(public segmentBuffers: ArrayBufferSlice[]) {
+        for (let i = 0; i < 64; i++) {
+            this.vertexCache.push(new F3DEX.Vertex());
+        }
     }
 
     public finish(): GloverRSPOutput | null {
@@ -167,31 +170,33 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     }
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
+        assert(v0 + n < this.vertexCache.length);
         const segment = this.segmentBuffers[(dramAddr >>> 24)];
         const addrIdx = dramAddr & 0x00FFFFFF;
         const view = segment.createDataView(addrIdx, n * 0x10);
-        
         const scratchVertex = new F3DEX.StagingVertex();
 
+        let writeIdx = v0;
         for (let offs = 0; offs < view.byteLength; offs += 0x10) {
-            const n = new F3DEX.Vertex();
+            const writeVtx = this.vertexCache[writeIdx]; 
             scratchVertex.setFromView(view, offs);
-            n.copy(scratchVertex);
-            n.matrixIndex = this.SP_MatrixStackDepth;
-            this.vertexCache.push(n);
+            writeVtx.copy(scratchVertex);
+            writeVtx.matrixIndex = this.SP_MatrixStackDepth;
+            writeIdx += 1;
         }
     }
 
     public gSPModifyVertex(vtx: number, where: number, val: number): void {
+        assert(vtx < this.vertexCache.length);
         const vertex = this.vertexCache[vtx];
         if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_RGBA) {
-            vertex.c0 = (val >>> 24) & 0xFF;
-            vertex.c1 = (val >>> 16) & 0xFF;
-            vertex.c2 = (val >>>  8) & 0xFF;
-            vertex.a =  (val >>>  0) & 0xFF;
+            vertex.c0 = ((val >>> 24) & 0xFF) / 0xFF;
+            vertex.c1 = ((val >>> 16) & 0xFF) / 0xFF;
+            vertex.c2 = ((val >>>  8) & 0xFF) / 0xFF;
+            vertex.a =  ((val >>>  0) & 0xFF) / 0xFF;
         } else if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_ST) {
-            vertex.tx = (val >>> 16) & 0xFF;
-            vertex.ty = (val >>>  0) & 0xFF;
+            vertex.tx = ((val >>> 16) & 0xFFFF) / 2**5;
+            vertex.ty = ((val >>>  0) & 0xFFFF) / 2**5;
         } else if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_XYSCREEN) {
             vertex.x = (val >>> 16) & 0xFFFF;
             vertex.y = (val >>>  0) & 0xFFFF;
@@ -264,11 +269,10 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
 
     public gSPTri(i0: number, i1: number, i2: number): void {
         this._flushDrawCall();
-
         this.currentDrawCall.vertices.push(
-            this.vertexCache[i0],
-            this.vertexCache[i1],
-            this.vertexCache[i2]);
+            new F3DEX.Vertex().copy(this.vertexCache[i0]),
+            new F3DEX.Vertex().copy(this.vertexCache[i1]),
+            new F3DEX.Vertex().copy(this.vertexCache[i2]));
         this.currentDrawCall.vertexCount += 3;
     }
 
@@ -389,7 +393,7 @@ export class DrawCallInstance {
         }
 
         this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
-        this.setBackfaceCullingEnabled(true);
+        this.setBackfaceCullingEnabled(false);
         this.createProgram();
     }
 

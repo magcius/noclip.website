@@ -297,7 +297,7 @@ void main() {
 
 ${this.generateAlphaTest()}
 
-    gl_FragColor = t_Color;
+    gl_FragColor = t_Color - t_Color + vec4(v_TexCoord.xy/2.0,1.0,1.0);
 }
 `;
     }

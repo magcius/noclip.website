@@ -51,11 +51,12 @@ export class Vertex {
     // Pretend.
     public matrixIndex: number = 0;
 
-    public copy(v: Vertex): void {
+    public copy(v: Vertex): Vertex {
         this.x = v.x; this.y = v.y; this.z = v.z;
         this.matrixIndex = v.matrixIndex;
         this.tx = v.tx; this.ty = v.ty;
         this.c0 = v.c0; this.c1 = v.c1; this.c2 = v.c2; this.a = v.a;
+        return this;
     }
 }
 
