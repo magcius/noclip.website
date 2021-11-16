@@ -41,15 +41,23 @@ var GloverTexbank = (function() {
     this._io = _io;
     this._parent = _parent;
     this._root = _root || this;
+    this._debug = {};
 
     this._read();
   }
   GloverTexbank.prototype._read = function() {
+    this._debug.nTextures = { start: this._io.pos, ioOffset: this._io.byteOffset };
     this.nTextures = this._io.readU4be();
+    this._debug.nTextures.end = this._io.pos;
+    this._debug.asset = { start: this._io.pos, ioOffset: this._io.byteOffset };
     this.asset = new Array(this.nTextures);
+    this._debug.asset.arr = new Array(this.nTextures);
     for (var i = 0; i < this.nTextures; i++) {
+      this._debug.asset.arr[i] = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.asset[i] = new Texture(this._io, this, this._root);
+      this._debug.asset.arr[i].end = this._io.pos;
     }
+    this._debug.asset.end = this._io.pos;
   }
 
   var Texture = GloverTexbank.Texture = (function() {
@@ -58,23 +66,50 @@ var GloverTexbank = (function() {
       this._io = _io;
       this._parent = _parent;
       this._root = _root || this;
+      this._debug = {};
 
       this._read();
     }
     Texture.prototype._read = function() {
+      this._debug.id = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.id = this._io.readU4be();
+      this._debug.id.end = this._io.pos;
+      this._debug.u2 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u2 = this._io.readU2be();
+      this._debug.u2.end = this._io.pos;
+      this._debug.flags = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.flags = this._io.readU2be();
+      this._debug.flags.end = this._io.pos;
+      this._debug.u3 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u3 = this._io.readU4be();
+      this._debug.u3.end = this._io.pos;
+      this._debug.width = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.width = this._io.readU2be();
+      this._debug.width.end = this._io.pos;
+      this._debug.height = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.height = this._io.readU2be();
+      this._debug.height.end = this._io.pos;
+      this._debug.u5 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u5 = this._io.readU4be();
+      this._debug.u5.end = this._io.pos;
+      this._debug.length = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.length = this._io.readU4be();
+      this._debug.length.end = this._io.pos;
+      this._debug.colorFormat = { start: this._io.pos, ioOffset: this._io.byteOffset, enumName: "GloverTexbank.TextureColorFormat" };
       this.colorFormat = this._io.readU2be();
+      this._debug.colorFormat.end = this._io.pos;
+      this._debug.compressionFormat = { start: this._io.pos, ioOffset: this._io.byteOffset, enumName: "GloverTexbank.TextureCompressionFormat" };
       this.compressionFormat = this._io.readU2be();
+      this._debug.compressionFormat.end = this._io.pos;
+      this._debug.dataPtr = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.dataPtr = this._io.readU4be();
+      this._debug.dataPtr.end = this._io.pos;
+      this._debug.paletteOffset = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.paletteOffset = this._io.readU4be();
+      this._debug.paletteOffset.end = this._io.pos;
+      this._debug.data = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.data = this._io.readBytes((this.length - 36));
+      this._debug.data.end = this._io.pos;
     }
 
     return Texture;

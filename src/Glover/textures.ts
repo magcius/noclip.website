@@ -45,9 +45,17 @@ function textureToCanvas(texture: Image): Viewer.Texture {
 
 
 export class GloverTextureHolder extends TextureHolder<Image> {
+    private banks: GloverTexbank[] = [];
+    private idToBank = new Map<number, number>();
+    private idToTexture = new Map<number, GloverTexbank.Texture>();
+
     public addTextureBank(device: GfxDevice, bank: GloverTexbank) : void {
+        this.banks.push(bank)
         let images = [];
         for (let texture of bank.asset) {
+
+            this.idToBank.set(texture.id, this.banks.length - 1);
+            this.idToTexture.set(texture.id, texture);
 
             // TODO: properly apply blur to "restart.bmp"
 
@@ -99,11 +107,46 @@ export class GloverTextureHolder extends TextureHolder<Image> {
         this.addTextures(device, images);
     }
 
+    public textureSegments() : ArrayBufferSlice[] {
+        const segments: ArrayBufferSlice[] = Array(16);
+        for (let bankIdx = 0; bankIdx < this.banks.length; bankIdx++) {
+            segments[bankIdx+1] = new ArrayBufferSlice(this.banks[bankIdx]._io.buffer);
+        }
+        return segments;
+    }
+
+    public getSegmentPaletteAddr(id: number) : number | undefined {
+        const bank = this.idToBank.get(id);
+        const texture = this.idToTexture.get(id);
+        console.log(bank, texture)
+        if (bank !== undefined && texture !== undefined) {
+            const segmentBaseAddr = (bank + 1) << 24;
+            const textureBaseAddr = texture._debug.id.start;
+            const offset = texture.paletteOffset;
+            return segmentBaseAddr + textureBaseAddr + offset;
+        } else {
+            return undefined;
+        }
+    }
+    public getSegmentDataAddr(id: number) : number | undefined {
+        const bank = this.idToBank.get(id);
+        const texture = this.idToTexture.get(id);
+        console.log(bank, texture)
+
+        if (bank !== undefined && texture !== undefined) {
+            const segmentBaseAddr = (bank + 1) << 24;
+            const textureBaseAddr = texture._debug.id.start;
+            const offset = texture.dataPtr;
+            return segmentBaseAddr + textureBaseAddr + offset;
+        } else {
+            return undefined;
+        }
+    }
+
     public loadTexture(device: GfxDevice, texture: Image): LoadedTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(gfxTexture, texture.name);
         device.uploadTextureData(gfxTexture, 0, texture.levels);
-
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };

@@ -19,7 +19,7 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { GloverObjbank } from './parsers';
+import { GloverObjbank, GloverTexbank } from './parsers';
 
 // TODO:
 //  - Separate render boilerplate classes and actor classes into separate files
@@ -128,7 +128,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private DP_TileState = nArray(8, () => new RDP.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
-    constructor(public segmentBuffers: ArrayBufferSlice[]) {
+    constructor(public segmentBuffers: ArrayBufferSlice[], private textures: Textures.GloverTextureHolder) {
         for (let i = 0; i < 64; i++) {
             this.vertexCache.push(new F3DEX.Vertex());
         }
@@ -288,7 +288,13 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     public gDPLoadTLUT(tile: number, count: number): void {
         // Track the TMEM destination back to the originating DRAM address.
         const tmemDst = this.DP_TileState[tile].tmem;
-        this.DP_TMemTracker.set(tmemDst, this.DP_TextureImageState.addr);
+
+        const actualAddr = this.textures.getSegmentPaletteAddr(this.DP_TextureImageState.addr);
+        if (actualAddr === undefined){
+            console.error(`Texture 0x${this.DP_TextureImageState.addr.toString(16)} not loaded`);
+        } else {
+            this.DP_TMemTracker.set(tmemDst, actualAddr);
+        }
     }
 
     public gDPLoadBlock(tileIndex: number, uls: number, ult: number, lrs: number, dxt: number): void {
@@ -307,7 +313,13 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         tile.lrt = (((numWordsTotal / numWordsInLine) / 4) - 1) << 2;
 
         // Track the TMEM destination back to the originating DRAM address.
-        this.DP_TMemTracker.set(tile.tmem, this.DP_TextureImageState.addr);
+
+        const actualAddr = this.textures.getSegmentDataAddr(this.DP_TextureImageState.addr);
+        if (actualAddr === undefined){
+            console.error(`Texture 0x${this.DP_TextureImageState.addr.toString(16)} not loaded`);
+        } else {
+            this.DP_TMemTracker.set(tile.tmem, actualAddr);
+        }
         this.stateChanged = true;
     }
 
@@ -525,8 +537,14 @@ export class GloverActorRenderer {
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder,
         private actorObject: GloverObjbank.ObjectRoot)
     {
+        /* Object bank in first segment, then one
+           texture bank for each subsequent */
+        const segments = textures.textureSegments();
+        segments[0] = new ArrayBufferSlice(actorObject._io.buffer);
+
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
@@ -535,7 +553,7 @@ export class GloverActorRenderer {
         });
 
         // TODO: tree traversal of mesh children
-        const meshRenderer = new GloverMeshRenderer(device, cache, actorObject.mesh);
+        const meshRenderer = new GloverMeshRenderer(device, cache, segments, textures, actorObject.mesh);
         this.meshRenderers.push(meshRenderer);
 
     }
@@ -570,18 +588,12 @@ class GloverMeshRenderer {
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
+        private segments: ArrayBufferSlice[],
+        private textures: Textures.GloverTextureHolder,
         private meshData: GloverObjbank.Mesh)
     {
-
-        /* Object bank in first segment, then one
-           texture bank for each subsequent */
-        const segments = [
-            new ArrayBufferSlice(meshData._io.buffer) // 0x00,
-            // TODO: load texture buffers and do address fixup
-        ];
-        
         const buffer = meshData._io.buffer;
-        const rspState = new GloverRSPState(segments);
+        const rspState = new GloverRSPState(segments, textures);
 
         const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
 

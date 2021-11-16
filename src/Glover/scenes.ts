@@ -161,13 +161,13 @@ class SceneDesc implements Viewer.SceneDesc {
         const sceneRenderer = new GloverRenderer(device, textureHolder);
         const cache = sceneRenderer.renderHelper.getCache();
 
-        // for (let bank of texture_banks) {
-        //     if (bank) {
-        //         textureHolder.addTextureBank(device, bank);
-        //     }
-        // }
+        for (let bank of texture_banks) {
+            if (bank) {
+                textureHolder.addTextureBank(device, bank);
+            }
+        }
 
-        const testActor = new GloverActorRenderer(device, cache, object_banks[0]!.directory[0].objRoot);
+        const testActor = new GloverActorRenderer(device, cache, textureHolder, object_banks[0]!.directory[0].objRoot);
         sceneRenderer.actorRenderers.push(testActor)
 
         return sceneRenderer;
