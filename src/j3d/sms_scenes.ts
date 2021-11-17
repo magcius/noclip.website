@@ -10,7 +10,7 @@ import { readString, assert, assertExists } from '../util';
 import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
-import { mat4, quat } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
@@ -23,6 +23,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 import { Camera } from '../Camera';
+import { transformVec3Mat4w1 } from '../MathHelpers';
 
 const sjisDecoder = new TextDecoder('sjis')!;
 
@@ -273,17 +274,42 @@ export const enum SMSPass {
     TRANSPARENT = 1 << 3,
 }
 
-function setGXLight(dst: Light, src: SceneBinObjLight, camera: Camera): void {
-    lightSetWorldPosition(dst, camera, src.x, src.y, src.z);
-    colorFromRGBA(dst.Color, src.r/0xFF, src.g/0xFF, src.b/0xFF, src.a/0xFF);
-}
-
 class LightConfig {
     public lightObj: SceneBinObjLight[] = [];
 
+    private LARGE_NUMBER = -1048576.0;
+    private initSpecularDir(lit: Light, nx: number, ny: number, nz: number) {
+        // Compute half-angle vector
+        const hx = -nx, hy = -ny, hz = -(nz - 1.0);
+        vec3.set(lit.Direction, hx, hy, hz);
+        vec3.normalize(lit.Direction, lit.Direction);
+
+        const px  = (nx * this.LARGE_NUMBER);
+        const py  = (ny * this.LARGE_NUMBER);
+        const pz  = (nz * this.LARGE_NUMBER);
+        
+        vec3.set(lit.Position, px, py, pz);
+    }
+    private scratchVec3 = vec3.create();
+
     public setOnModelInstance(modelInstance: J3DModelInstance, camera: Camera): void {
-        for (let i = 0; i < 3; i++)
-            setGXLight(modelInstance.getGXLightReference(i), this.lightObj[i], camera);
+        const diffSrc = this.lightObj[0];
+        const diffDst = modelInstance.getGXLightReference(0);
+        lightSetWorldPosition(diffDst, camera, diffSrc.x, diffSrc.y, diffSrc.z);
+        colorFromRGBA(diffDst.Color, diffSrc.r/0xFF, diffSrc.g/0xFF, diffSrc.b/0xFF, diffSrc.a/0xFF);
+        vec3.set(diffDst.CosAtten, 1.0, 0.0, 0.0);
+        vec3.set(diffDst.DistAtten, 1.0, 0.0, 0.0);
+        
+        const specSrc = this.lightObj[2];
+        const specDst = modelInstance.getGXLightReference(2);
+        const v = this.scratchVec3;
+        vec3.set(v, specSrc.x, specSrc.y, specSrc.z);
+        transformVec3Mat4w1(v, camera.viewMatrix, v);
+        vec3.normalize(v, v);
+        this.initSpecularDir(specDst, -v[0], -v[1], -v[2]);
+        colorFromRGBA(specDst.Color, specSrc.r/0xFF, specSrc.g/0xFF, specSrc.b/0xFF, specSrc.a/0xFF);
+        vec3.set(specDst.CosAtten, 0.0, 0.0, 1.0);
+        vec3.set(specDst.DistAtten, 0.5*specSrc.intensity, 0.0, 1.0 - 0.5*specSrc.intensity);
     }
 }
 
@@ -334,6 +360,20 @@ export class SunshineRenderer implements Viewer.SceneGfx {
                 }
             }
         }
+    }
+    
+    private LARGE_NUMBER = -1048576.0;
+    private initSpecularDir(lit: Light, nx: number, ny: number, nz: number) {
+        // Compute half-angle vector
+        const hx = -nx, hy = -ny, hz = -(nz - 1.0);
+        vec3.set(lit.Direction, hx, hy, hz);
+        vec3.normalize(lit.Direction, lit.Direction);
+
+        const px  = (nx * this.LARGE_NUMBER);
+        const py  = (ny * this.LARGE_NUMBER);
+        const pz  = (nz * this.LARGE_NUMBER);
+        
+        vec3.set(lit.Position, px, py, pz);
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -474,6 +514,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
                 renderer.modelInstances.push(seaIndirectScene);
 
             this.createSceneBinObjects(device, cache, renderer, rarc, sceneBinObj);
+            
+            for (let i = 0; i < renderer.modelInstances.length; i++) {
+                this.setUpAmbientLight(renderer.modelInstances[i]);
+            }
+            
             return renderer;
         });
     }
@@ -495,6 +540,13 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             this.createRendererForSceneBinModel(device, cache, renderer, rarc, obj);
         }
     }
+    
+    private setUpAmbientLight(modelInstance: J3DModelInstanceSimple) {
+        if (this.objectsAmbIndex !== -1 && modelInstance.modelMaterialData.materialData !== null) {
+            const ambColor = this.ambAry.children[this.objectsAmbIndex] as SceneBinObjAmbColor;
+            modelInstance.modelMaterialData.materialData.forEach(matData => colorFromRGBA(matData.material.colorAmbRegs[0], ambColor.r/255, ambColor.g/255, ambColor.b/255, ambColor.a/255));
+         }
+     }
 
     private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, renderer: SunshineRenderer, rarc: RARC.JKRArchive, obj: SceneBinObjModel): J3DModelInstanceSimple | null {
         interface ModelLookup {
@@ -652,11 +704,6 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         if (scene === null)
             return null;
-
-        if (this.objectsAmbIndex !== -1 && scene.modelMaterialData.materialData !== null) {
-            const ambColor = this.ambAry.children[this.objectsAmbIndex] as SceneBinObjAmbColor;
-            scene.modelMaterialData.materialData.forEach(matData => colorFromRGBA(matData.material.colorAmbRegs[0], ambColor.r/255, ambColor.g/255, ambColor.b/255, ambColor.a/255));
-        }
 
         const q = quat.create();
         quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
