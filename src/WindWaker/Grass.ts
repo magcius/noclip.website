@@ -800,7 +800,7 @@ export class TreePacket {
                 const topRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[1].setOnRenderInst(topRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.topModelMtx);
-                this.treeModel.main.materialHelper.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
+                this.treeModel.main.materialHelper.allocatePacketParamsDataOnInst(topRenderInst, packetParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
         }
