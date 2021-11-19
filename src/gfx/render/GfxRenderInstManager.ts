@@ -8,7 +8,6 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
-import { IS_DEVELOPMENT } from "../../BuildVersion";
 
 // The "Render" subsystem provides high-level scene graph utiltiies, built on top of gfx/platform and gfx/helpers. A
 // rough overview of the design:
@@ -252,6 +251,15 @@ export class GfxRenderInst {
         this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
             this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
+    }
+
+    public validate(): void {
+        // Validate uniform buffer bindings.
+        for (let i = 0; i < this._bindingDescriptors.length; i++) {
+            const bd = this._bindingDescriptors[i];
+            for (let j = 0; j < bd.bindingLayout.numUniformBuffers; j++)
+                assert(bd.uniformBufferBindings[j].wordCount > 0);
+        }
     }
 
     /**
@@ -582,6 +590,7 @@ export class GfxRenderInstList {
     }
 
     public submitRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.validate();
         renderInst._flags |= GfxRenderInstFlags.Draw;
         this.insertSorted(renderInst);
     }
