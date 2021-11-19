@@ -26,8 +26,6 @@ export interface Image {
 }
 
 function textureToCanvas(texture: Image): Viewer.Texture {
-    // TODO: use the BanjoKazooie implementation rather than
-    //       redefining here
     const surfaces: HTMLCanvasElement[] = [];
 
     for (let i = 0; i < texture.levels.length; i++) {
@@ -118,7 +116,6 @@ export class GloverTextureHolder extends TextureHolder<Image> {
     public getSegmentPaletteAddr(id: number) : number | undefined {
         const bank = this.idToBank.get(id);
         const texture = this.idToTexture.get(id);
-        console.log(bank, texture)
         if (bank !== undefined && texture !== undefined) {
             const segmentBaseAddr = (bank + 1) << 24;
             const textureBaseAddr = texture._debug.id.start;
@@ -131,8 +128,6 @@ export class GloverTextureHolder extends TextureHolder<Image> {
     public getSegmentDataAddr(id: number) : number | undefined {
         const bank = this.idToBank.get(id);
         const texture = this.idToTexture.get(id);
-        console.log(bank, texture)
-
         if (bank !== undefined && texture !== undefined) {
             const segmentBaseAddr = (bank + 1) << 24;
             const textureBaseAddr = texture._debug.id.start;

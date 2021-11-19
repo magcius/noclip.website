@@ -21,10 +21,83 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { GloverObjbank, GloverTexbank } from './parsers';
 
-// TODO:
-//  - Separate render boilerplate classes and actor classes into separate files
+// TODO: Separate render boilerplate classes and actor classes into separate files
 
-
+// TODO: proper pipeline initialization:
+// void initializeModes() {
+//     /* @ram_offset: 0x8013CBBC */    
+//     DL_CMD(dl_cursor, gsDPPipelineMode(G_PM_NPRIMITIVE)); // 0xba001701 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetScissor(G_SC_NON_INTERLACE, 0, 0, 320, 240)); // 0xed000000 0x005003c0
+//     DL_CMD(dl_cursor, gsDPSetTextureLOD(G_TL_TILE)); // 0xba001001 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetTextureLUT(G_TT_NONE)); // 0xba000e02 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetTextureDetail(G_TD_CLAMP)); // 0xba001102 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetTexturePersp(G_TP_PERSP)); // 0xba001301 0x00080000
+//     DL_CMD(dl_cursor, gsDPSetTextureFilter(G_TF_BILERP)); // 0xba000c02 0x00002000
+//     DL_CMD(dl_cursor, gsDPSetTextureConvert(G_TC_FILT)); // 0xba000903 0x00000c00
+//     DL_CMD(dl_cursor, gsDPSetCombineKey(G_CK_NONE)); // 0xba000801 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetAlphaCompare(G_AC_NONE)); // 0xb9000002 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetBlendColor(0xFF, 0xFF, 0xFF, 0x00)); // 0xf9000000 0xffffff00
+//     DL_CMD(dl_cursor, gsDPSetColorDither(G_CD_MAGICSQ)); // 0xba000602 0x00000000
+//     DL_CMD(dl_cursor, gsDPSetDepthImage(0x80000430)); // 0xfe000000 0x80000430
+//     DL_CMD(dl_cursor, gsDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, 0xFF)); // 0xfa000000 0x000000ff
+//     DL_CMD(dl_cursor, gsDPSetDepthSource(G_ZS_PIXEL)); // 0xb9000201 0x00000000
+//     DL_CMD(dl_cursor, gsDPPipeSync()); // 0xe7000000 0x00000000
+// }
+// void initializeViewport() {
+//     /* @ram_offset: 0x8013CA1C */
+//     viewport->vscale[0] = qu142(160); // *(u16 *)0x80202270 = 0x0280;
+//     viewport->vscale[1] = qu142(120); // *(u16 *)0x80202272 = 0x01e0;
+//     viewport->vscale[2] = qu142(127.75); // *(u16 *)0x80202274 = 0x01ff;
+//     viewport->vscale[3] = qu142(0); // *(u16 *)0x80202276 = 0x0000;
+//     viewport->vtrans[0] = qu142(160); // *(u16 *)0x80202278 = 0x0280;
+//     viewport->vtrans[1] = qu142(120); // *(u16 *)0x8020227a = 0x01e0;
+//     viewport->vtrans[2] = qu142(127.75); // *(u16 *)0x8020227c = 0x01ff;
+//     viewport->vtrans[3] = qu142(0); // *(u16 *)0x8020227e = 0x0000;
+//     DL_CMD(dl_cursor, gsSPViewport(viewport)); // 0x03800010, viewport
+//     DL_CMD(dl_cursor, gsSPClearGeometryMode(
+//                           G_ZBUFFER | G_SHADE | G_CULL_BOTH | G_FOG |
+//                           G_LIGHTING | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR
+//                           | G_LOD | G_SHADING_SMOOTH)); // 0xb6000010, 0x001f3205);  
+//     DL_CMD(dl_cursor, gsSPSetGeometryMode(G_CULL_BACK)); // 0xb7000000, 0x00002000
+//     if (*G_SHADING_MODE == 1) {
+//         DL_CMD(dl_cursor, gsSPSetGeometryMode(G_SHADE | G_SHADING_SMOOTH)); // 0xb7000000, 0x00000204
+//     } else if (*G_SHADING_MODE == 2) {
+//         DL_CMD(dl_cursor, gsSPSetGeometryMode(G_SHADE | G_LIGHTING | G_SHADING_SMOOTH)); // 0xb7000000, 0x00020204
+//     }
+// }
+// void initializePipeline () {
+//     /* @ram_offset: 0x8013CEEC */
+//     initializeModes();
+//     initializeViewport();
+//     if (*G_TEXTURE_MODE != 0) {
+//         DL_CMD(dl_cursor, gsDPSetTextureFilter(G_TF_BILERP)); // 0xba000c02 0x00002000
+//         if (*G_TEXTURE_MODE == 2) {
+//             DL_CMD(dl_cursor, gsSPTexture(qu016(0.999985), qu016(0.999985), 5, G_TX_RENDERTILE, G_ON)); // 0xbb002801 0xFFFFFFFF
+//             DL_CMD(dl_cursor, gsDPSetTextureDetail(G_TD_CLAMP)); // 0xba001102 0x00000000
+//             DL_CMD(dl_cursor, gsDPSetTextureLOD(G_TL_LOD)); // 0xba001001 0x00010000
+//             DL_CMD(dl_cursor, gsDPPipelineMode(G_PM_1PRIMITIVE)); // 0xba001701 0x00800000
+//             if (*G_SHADING_MODE == 0) {
+//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_TRILERP, G_CC_DECALRGB2)); // 0xfc26a1ff 0x1ffc923c
+//             } else {
+//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_TRILERP, G_CC_MODULATEI2)); // 0xfc26a004 0x1ffc93fc
+//             }
+//         } else {
+//             DL_CMD(dl_cursor,  gsSPTexture(qu016(0.999985), qu016(0.999985), 0, G_TX_RENDERTILE, G_ON)); // 0xbb000001 0xfffffff
+//             if (*G_SHADING_MODE == 0) {
+//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_DECALRGB, G_CC_DECALRGB)); // 0xfcffffff 0xfffcf87c
+//             } else {
+//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_MODULATEI, G_CC_MODULATEI)); // 0xfc127e24 0xfffff9fc
+//             }
+//         }
+//     } else {
+//         DL_CMD(dl_cursor, gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_OFF)); // 0xbb000000 0x00000000
+//         if (*G_SHADING_MODE == 0) {
+//             DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_PRIMITIVE, G_CC_PRIMITIVE)); // 0xfcffffff 0xfffdf6fb
+//         } else {
+//             DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE)); // 0xfcffffff 0xfffe793c
+//         }
+//     }
+// }
 function makeVertexBufferData(v: F3DEX.Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
@@ -213,17 +286,17 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
 
         let dramPalAddr: number;
-        if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
-            const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-            // assert(textlut === RDP.TextureLUT.G_TT_RGBA16);
 
+        const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
+        const forceIndexing = textlut !== 0; 
+        if (tile.fmt === ImageFormat.G_IM_FMT_CI || forceIndexing === true) {
             const palTmem = 0x100 + (tile.palette << 4);
             dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
         } else {
             dramPalAddr = 0;
         }
 
-        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
+        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false, forceIndexing);
     }
 
     private _flushTextures(dc: DrawCall): void {
@@ -303,6 +376,8 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         // Verify that we're loading into LOADTILE.
         assert(tileIndex === 7);
 
+
+
         const tile = this.DP_TileState[tileIndex];
         // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
         // in B-K due to hackery.
@@ -313,7 +388,6 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         tile.lrt = (((numWordsTotal / numWordsInLine) / 4) - 1) << 2;
 
         // Track the TMEM destination back to the originating DRAM address.
-
         const actualAddr = this.textures.getSegmentDataAddr(this.DP_TextureImageState.addr);
         if (actualAddr === undefined){
             console.error(`Texture 0x${this.DP_TextureImageState.addr.toString(16)} not loaded`);
@@ -523,16 +597,39 @@ export class DrawCallInstance {
 }
 
 
+class ActorMeshNode {
+    private static rendererCache: Map<number, GloverMeshRenderer> = new Map<number, GloverMeshRenderer>();
+    public renderer: GloverMeshRenderer;
 
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        segments: ArrayBufferSlice[],
+        textures: Textures.GloverTextureHolder,
+        public mesh: GloverObjbank.Mesh) 
+    {
+        if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
+            ActorMeshNode.rendererCache.set(
+                mesh.id,
+                new GloverMeshRenderer(device, cache, segments, textures, mesh)
+            );
+        }
+        this.renderer = ActorMeshNode.rendererCache.get(mesh.id)!;
+
+
+    }
+    // TODO: store 
+}
 
 export class GloverActorRenderer {
+
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     private inputState: GfxInputState;
 
     public modelMatrix = mat4.create();
 
-    private meshRenderers: GloverMeshRenderer[] = [];
+    public rootMesh: ActorMeshNode;
 
     constructor(
         private device: GfxDevice,
@@ -552,9 +649,8 @@ export class GloverActorRenderer {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        // TODO: tree traversal of mesh children
-        const meshRenderer = new GloverMeshRenderer(device, cache, segments, textures, actorObject.mesh);
-        this.meshRenderers.push(meshRenderer);
+        // TODO: tree traversal of children
+        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, actorObject.mesh)
 
     }
 
@@ -569,9 +665,15 @@ export class GloverActorRenderer {
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-        for (let meshRenderer of this.meshRenderers) {
-            meshRenderer.prepareToRender(device, renderInstManager, viewerInput);
-        }
+        const drawMatrix = mat4.create();
+
+
+        // TODO: traverse children, passing the properly transformed drawMatrix down as necessary:
+        this.rootMesh.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+
+        // for (let meshRenderer of this.meshRenderers) {
+        //     meshRenderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+        // }
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -597,6 +699,10 @@ class GloverMeshRenderer {
 
         const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
 
+        // TODO: choose texture and blend modes properly based on decomp'ed pipeline initialization code
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
+        rspState.gDPSetCombine(0xfc26a1ff, 0x1ffc923c); // (G_CC_TRILERP, G_CC_DECALRGB2)
+
         F3DEX.runDL_F3DEX(rspState, displayListOffs);
         this.rspOutput = rspState.finish();
         if (this.rspOutput !== null) {
@@ -606,14 +712,13 @@ class GloverMeshRenderer {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {
         if (!this.visible)
             return;
 
-        const drawMatrix: mat4 = mat4.create();
-
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
+                // TODO: can we have only one drawMatrix?
                 const drawCallInstance = new DrawCallInstance(drawCall, [drawMatrix, drawMatrix], this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
