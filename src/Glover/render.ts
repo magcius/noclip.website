@@ -9,7 +9,7 @@ import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepthKey, setSortKeyDepth  } from "../gfx/render/GfxRenderInstManager";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -492,9 +492,8 @@ export class DrawCallInstance {
                 this.textureMappings[i].gfxSampler = this.drawCall.renderData!.samplers[idx];
             }
         }
-
         this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
-        this.setBackfaceCullingEnabled(false);
+        this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }
 
@@ -691,6 +690,7 @@ export class GloverActorRenderer {
         segments[0] = new ArrayBufferSlice(actorObject._io.buffer);
 
         this.megaStateFlags = {};
+
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
@@ -739,9 +739,11 @@ class GloverMeshRenderer {
         initializeRenderState(rspState);
 
         // TODO: choose texture and blend modes properly based on decomp'ed pipeline initialization code
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER | F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
         rspState.gDPSetCombine(0xfc26a1ff, 0x1ffc923c); // (G_CC_TRILERP, G_CC_DECALRGB2)
-        
+        rspState.gDPSetOtherModeL(3, 0x1D, 0x00552038); // gsDPSetRenderMode(G_RM_RA_ZB_OPA_SURF, G_RM_RA_ZB_OPA_SURF2);
+
         if (meshData.displayListPtr != 0) {
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
