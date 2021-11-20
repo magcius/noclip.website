@@ -49,7 +49,54 @@ class GloverRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        return [];
+
+        const renderHacksPanel = new UI.Panel();
+
+        // TODO: implement:
+
+        // renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        // renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        // const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
+        // enableCullingCheckbox.onchanged = () => {
+        //     for (let renderer of this.actorRenderers) {
+        //         renderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+        //     }
+        // };
+        // renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
+
+        // const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        // enableVertexColorsCheckbox.onchanged = () => {
+        //     for (let renderer of this.actorRenderers) {
+        //         renderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        //     }
+        // };
+        // renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
+        // const enableTextures = new UI.Checkbox('Enable Textures', true);
+        // enableTextures.onchanged = () => {
+        //     for (let renderer of this.actorRenderers) {
+        //         renderer.setTexturesEnabled(enableTextures.checked);
+        //     }
+        // };
+        // renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        // const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
+        // enableMonochromeVertexColors.onchanged = () => {
+        //     for (let renderer of this.actorRenderers) {
+        //         renderer.setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+        //     }
+        // };
+        // renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
+
+        // const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
+        // enableAlphaVisualizer.onchanged = () => {
+        //     for (let renderer of this.actorRenderers) {
+        //         renderer.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+        //     }
+        // };
+        // renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
+
+        return [renderHacksPanel];
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -82,8 +129,7 @@ class GloverRenderer implements Viewer.SceneGfx {
             });
         });
 
-        // TODO: reenable once we're at Hello Triangle:
-        // pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
@@ -167,7 +213,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const testActor = new GloverActorRenderer(device, cache, textureHolder, object_banks[0]!.directory[0].objRoot);
+        const testActor = new GloverActorRenderer(device, cache, textureHolder, object_banks[2]!.directory[5].objRoot);
         sceneRenderer.actorRenderers.push(testActor)
 
         return sceneRenderer;

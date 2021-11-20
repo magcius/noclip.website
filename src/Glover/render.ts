@@ -488,8 +488,10 @@ export class DrawCallInstance {
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
-        if (this.texturesEnabled && this.drawCall.textureIndices.length)
+        if (this.texturesEnabled && this.drawCall.textureIndices.length) {
             program.defines.set('USE_TEXTURE', '1');
+            program.defines.set(`USE_TEXTFILT_BILERP`, '1');
+        }
 
         const shade = (this.drawCall.SP_GeometryMode & F3DEX.RSP_Geometry.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
@@ -511,6 +513,7 @@ export class DrawCallInstance {
 
         if (this.alphaVisualizerEnabled)
             program.defines.set('USE_ALPHA_VISUALIZER', '1');
+
 
         this.program = program;
         this.gfxProgram = null;
@@ -599,7 +602,12 @@ export class DrawCallInstance {
 
 class ActorMeshNode {
     private static rendererCache: Map<number, GloverMeshRenderer> = new Map<number, GloverMeshRenderer>();
+
     public renderer: GloverMeshRenderer;
+
+    public children: ActorMeshNode[] = [];
+
+    // TODO: store animation data
 
     constructor(
         device: GfxDevice,
@@ -609,16 +617,45 @@ class ActorMeshNode {
         public mesh: GloverObjbank.Mesh) 
     {
         if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
-            ActorMeshNode.rendererCache.set(
-                mesh.id,
-                new GloverMeshRenderer(device, cache, segments, textures, mesh)
-            );
+            this.renderer = new GloverMeshRenderer(device, cache, segments, textures, mesh);
+            ActorMeshNode.rendererCache.set(mesh.id, this.renderer);
+        } else {
+            this.renderer = ActorMeshNode.rendererCache.get(mesh.id)!;
         }
-        this.renderer = ActorMeshNode.rendererCache.get(mesh.id)!;
 
-
+        let current_child = mesh.child;
+    while (current_child !== undefined) {
+            this.children.push(new ActorMeshNode(device, cache, segments, textures, current_child));
+            current_child = current_child.sibling;
+        }
     }
-    // TODO: store 
+
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4, parentScale: number[] = [1,1,1]) {
+        const drawMatrix = mat4.clone(parentMatrix);
+
+        // TODO: animation
+        const rotation = this.mesh.rotation[0];
+        const translation = this.mesh.translation[0];
+        const scale = this.mesh.scale[0];
+
+        const rotXlateMatrix = mat4.create();
+        mat4.fromQuat(rotXlateMatrix, [rotation.v1, rotation.v2, rotation.v3, rotation.v4])
+        rotXlateMatrix[12] = translation.v1 * parentScale[0];
+        rotXlateMatrix[13] = translation.v2 * parentScale[1];
+        rotXlateMatrix[14] = translation.v3 * parentScale[2];
+
+        mat4.mul(drawMatrix, rotXlateMatrix, drawMatrix);
+
+        for (let child of this.children) {
+            child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+        }
+        
+        drawMatrix[0] *= scale.v1;
+        drawMatrix[5] *= scale.v2;
+        drawMatrix[10] *= scale.v3;
+
+        this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+    }
 }
 
 export class GloverActorRenderer {
@@ -649,9 +686,7 @@ export class GloverActorRenderer {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        // TODO: tree traversal of children
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, actorObject.mesh)
-
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -666,14 +701,7 @@ export class GloverActorRenderer {
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         const drawMatrix = mat4.create();
-
-
-        // TODO: traverse children, passing the properly transformed drawMatrix down as necessary:
-        this.rootMesh.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
-
-        // for (let meshRenderer of this.meshRenderers) {
-        //     meshRenderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
-        // }
+        this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -697,13 +725,15 @@ class GloverMeshRenderer {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
 
-        const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
-
         // TODO: choose texture and blend modes properly based on decomp'ed pipeline initialization code
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
         rspState.gDPSetCombine(0xfc26a1ff, 0x1ffc923c); // (G_CC_TRILERP, G_CC_DECALRGB2)
 
-        F3DEX.runDL_F3DEX(rspState, displayListOffs);
+        if (meshData.displayListPtr != 0) {
+            const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
+            F3DEX.runDL_F3DEX(rspState, displayListOffs);
+        }
+
         this.rspOutput = rspState.finish();
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
@@ -718,7 +748,7 @@ class GloverMeshRenderer {
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
-                // TODO: can we have only one drawMatrix?
+                // TODO: change shader params to use only one drawMatrix
                 const drawCallInstance = new DrawCallInstance(drawCall, [drawMatrix, drawMatrix], this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
