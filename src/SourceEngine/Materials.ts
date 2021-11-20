@@ -1669,7 +1669,7 @@ void mainPS() {
 
     if (use_basetexture2) {
         // Blend in BaseTexture2 using blend factor.
-        vec4 t_BaseTexture2 = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
+        vec4 t_BaseTexture2 = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
         t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactorWorld);
     } else {
         t_Albedo = t_BaseTexture;
