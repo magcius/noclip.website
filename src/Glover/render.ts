@@ -428,6 +428,21 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     }
 }
 
+function initializeRenderState(rspState: GloverRSPState): void {
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_PIPELINE, 1, 0x00000000); // G_PM_NPRIMITIVE
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTLOD, 1, 0x00000000); // G_TL_TILE
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTLUT, 2, 0x00000000); // G_TT_NONE
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTDETAIL, 2, 0x00000000); // G_TD_CLAMP
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTPERSP, 1, 0x00080000); // G_TP_PERSP
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, 0x00002000); // G_TF_BILERP
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTCONV, 3, 0x00000c00); // G_TC_FILT
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_COMBKEY, 1, 0x00000000); // G_CK_NONE
+    rspState.gDPSetOtherModeL(RDP.OtherModeL_Layout.G_MDSFT_ALPHACOMPARE, 2, 0x00000000); // G_AC_NONE
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_RGBDITHER, 2, 0x00000000); // G_CD_MAGICSQ
+    rspState.gDPSetOtherModeL(RDP.OtherModeL_Layout.G_MDSFT_ZSRCSEL, 1, 0x00000000); // G_ZS_PIXEL
+}
+
+
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
@@ -466,7 +481,7 @@ export class DrawCallInstance {
     public envAlpha = 1;
     public visible = true;
 
-    constructor(private drawCall: DrawCall, private drawMatrix: mat4[], textureCache: RDP.TextureCache) {
+    constructor(private drawCall: DrawCall, private drawMatrix: mat4, textureCache: RDP.TextureCache) {
         assert(drawCall.renderData !== null);
 
         for (let i = 0; i < this.textureMappings.length; i++) {
@@ -486,11 +501,10 @@ export class DrawCallInstance {
     private createProgram(): void {
         const combParams = vec4.create();
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
-        program.defines.set('BONE_MATRIX_COUNT', '2');
+        program.defines.set('BONE_MATRIX_COUNT', '1');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length) {
             program.defines.set('USE_TEXTURE', '1');
-            program.defines.set(`USE_TEXTFILT_BILERP`, '1');
         }
 
         const shade = (this.drawCall.SP_GeometryMode & F3DEX.RSP_Geometry.G_SHADE) !== 0;
@@ -578,10 +592,7 @@ export class DrawCallInstance {
         else
             computeViewMatrix(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
 
-        mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, this.drawMatrix[0]);
-        offs += fillMatrix4x3(mappedF32, offs, DrawCallInstance.modelViewScratch);
-
-        mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, this.drawMatrix[1]);
+        mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, this.drawMatrix);
         offs += fillMatrix4x3(mappedF32, offs, DrawCallInstance.modelViewScratch);
 
         this.computeTextureMatrix(DrawCallInstance.texMatrixScratch, 0);
@@ -725,10 +736,12 @@ class GloverMeshRenderer {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
 
+        initializeRenderState(rspState);
+
         // TODO: choose texture and blend modes properly based on decomp'ed pipeline initialization code
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
         rspState.gDPSetCombine(0xfc26a1ff, 0x1ffc923c); // (G_CC_TRILERP, G_CC_DECALRGB2)
-
+        
         if (meshData.displayListPtr != 0) {
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
@@ -748,8 +761,7 @@ class GloverMeshRenderer {
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
-                // TODO: change shader params to use only one drawMatrix
-                const drawCallInstance = new DrawCallInstance(drawCall, [drawMatrix, drawMatrix], this.rspOutput.textureCache);
+                const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
         }

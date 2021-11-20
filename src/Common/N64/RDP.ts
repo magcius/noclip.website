@@ -455,7 +455,10 @@ export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
 }
 
 export const enum OtherModeL_Layout {
-    // cycle-independent
+    // non-render-mode fields
+    G_MDSFT_ALPHACOMPARE = 0,
+    G_MDSFT_ZSRCSEL = 2,
+    // cycle-independent render-mode bits
     AA_EN         = 3,
     Z_CMP         = 4,
     Z_UPD         = 5,
@@ -467,7 +470,7 @@ export const enum OtherModeL_Layout {
     ALPHA_CVG_SEL = 13,
     FORCE_BL      = 14,
     // bit 15 unused, was "TEX_EDGE"
-    // cycle-dependent
+    // cycle-dependent render-mode bits
     B_2 = 16,
     B_1 = 18,
     M_2 = 20,
