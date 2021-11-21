@@ -1891,7 +1891,7 @@ function findAnimationSection(anim: AnimDesc, frame: number): AnimSection | null
 }
 
 const scratchVec3 = vec3.create(), scratchQuatb = quat.create();
-export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, frame: number, modelData: StudioModelData): void {
+function calcPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, frame: number, modelData: StudioModelData): void {
     // First, find the relevant section / anim.
     const section = findAnimationSection(anim, frame);
     if (section === null || section.animdata === null)
@@ -1921,7 +1921,7 @@ export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, fr
     }
 }
 
-function setupPoseFromBones(dstBoneMatrix: mat4[], modelData: StudioModelData): void {
+function calcBoneMatrix(dstBoneMatrix: mat4[], modelData: StudioModelData): void {
     for (let i = 0; i < modelData.bone.length; i++) {
         const dst = dstBoneMatrix[i];
         const bone = modelData.bone[i];
@@ -1929,19 +1929,22 @@ function setupPoseFromBones(dstBoneMatrix: mat4[], modelData: StudioModelData): 
     }
 }
 
-function setupPoseFinalize(worldFromPoseMatrix: mat4[], boneMatrix: ReadonlyMat4[], modelMatrix: ReadonlyMat4, modelData: StudioModelData): void {
-    for (let i = 0; i < worldFromPoseMatrix.length; i++) {
+function calcWorldFromBone(worldFromBoneMatrix: mat4[], boneMatrix: ReadonlyMat4[], modelMatrix: ReadonlyMat4, modelData: StudioModelData): void {
+    for (let i = 0; i < worldFromBoneMatrix.length; i++) {
         const bone = modelData.bone[i];
-
-        // World-from-bone
         const parentBoneMatrix = bone.parent >= 0 ? boneMatrix[bone.parent] : modelMatrix;
-        mat4.mul(worldFromPoseMatrix[i], parentBoneMatrix, worldFromPoseMatrix[i]);
+        mat4.mul(worldFromBoneMatrix[i], parentBoneMatrix, worldFromBoneMatrix[i]);
     }
+}
 
-    for (let i = 0; i < worldFromPoseMatrix.length; i++) {
-        // After we've built our world-from-bone array, compute world-from-pose.
-        mat4.mul(worldFromPoseMatrix[i], worldFromPoseMatrix[i], modelData.bone[i].poseToBone);
-    }
+function calcAttachmentMatrix(attachmentMatrix: mat4[], worldFromBoneMatrix: ReadonlyMat4[], modelData: StudioModelData): void {
+    for (let i = 0; i < modelData.attachment.length; i++)
+        mat4.mul(attachmentMatrix[i], worldFromBoneMatrix[modelData.attachment[i].bone], modelData.attachment[i].local);
+}
+
+function calcWorldFromPose(worldFromPoseMatrix: mat4[], worldFromBoneMatrix: ReadonlyMat4[], modelData: StudioModelData): void {
+    for (let i = 0; i < worldFromPoseMatrix.length; i++)
+        mat4.mul(worldFromPoseMatrix[i], worldFromBoneMatrix[i], modelData.bone[i].poseToBone);
 }
 
 const scratchAABB = new AABB();
@@ -1950,6 +1953,7 @@ export class StudioModelInstance {
     // Pose data
     public modelMatrix = mat4.create();
     public worldFromPoseMatrix: mat4[];
+    public attachmentMatrix: mat4[];
 
     private lodInstance: StudioModelLODInstance[] = [];
     private viewBB: AABB;
@@ -1967,8 +1971,11 @@ export class StudioModelInstance {
         }
 
         this.worldFromPoseMatrix = nArray(this.modelData.bone.length, () => mat4.create());
-        setupPoseFromBones(this.worldFromPoseMatrix, this.modelData);
-        setupPoseFinalize(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        this.attachmentMatrix = nArray(this.modelData.attachment.length, () => mat4.create());
+        calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromBone(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelData);
         this.viewBB = this.modelData.viewBB;
     }
 
@@ -2029,22 +2036,18 @@ export class StudioModelInstance {
         const anim = this.modelData.anim[seq.anim[0]];
         let frame = time * anim.fps;
         this.viewBB = seq.viewBB;
-        setupPoseFromBones(this.worldFromPoseMatrix, this.modelData);
+        calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
         if (anim !== undefined) {
             if (seq.isLooping())
                 frame = frame % anim.numframes;
             else
                 frame = Math.min(frame, anim.numframes - 1);
 
-            setupPoseFromAnimation(this.worldFromPoseMatrix, anim, frame, this.modelData);
+            calcPoseFromAnimation(this.worldFromPoseMatrix, anim, frame, this.modelData);
         }
-        setupPoseFinalize(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
-    }
-
-    public getAttachmentMatrix(dst: mat4, attachmentidx: number): void {
-        const attachment = this.modelData.attachment[attachmentidx];
-        const boneidx = attachment.bone;
-        mat4.mul(dst, this.worldFromPoseMatrix[boneidx], attachment.local);
+        calcWorldFromBone(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelData);
     }
 
     public checkFrustum(renderContext: SourceRenderContext): boolean {

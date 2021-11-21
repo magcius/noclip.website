@@ -1,5 +1,5 @@
 
-import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
@@ -331,17 +331,16 @@ export class BaseEntity {
             this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
     }
 
-    private calcParentModelMatrix(dst: mat4): void {
+    private getParentModelMatrix(): ReadonlyMat4 {
         if (this.parentAttachment !== null)
-            this.parentEntity!.getAttachmentMatrix(dst, this.parentAttachment);
+            return this.parentEntity!.getAttachmentMatrix(this.parentAttachment);
         else
-            mat4.copy(dst, this.parentEntity!.updateModelMatrix());
+            return this.parentEntity!.updateModelMatrix();
     }
 
     public setAbsOrigin(origin: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
-            this.calcParentModelMatrix(scratchMat4a);
-            mat4.invert(scratchMat4a, scratchMat4a);
+            mat4.invert(scratchMat4a, this.getParentModelMatrix());
             transformVec3Mat4w1(this.localOrigin, scratchMat4a, origin);
         } else {
             vec3.copy(this.localOrigin, origin);
@@ -350,8 +349,7 @@ export class BaseEntity {
 
     public setAbsOriginAndAngles(origin: ReadonlyVec3, angles: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
-            this.calcParentModelMatrix(scratchMat4a);
-            mat4.invert(scratchMat4a, scratchMat4a);
+            mat4.invert(scratchMat4a, this.getParentModelMatrix());
             computeModelMatrixPosQAngle(scratchMat4b, origin, angles);
             mat4.mul(scratchMat4b, scratchMat4a, scratchMat4b);
             computePosQAngleModelMatrix(this.localOrigin, this.localAngles, scratchMat4b);
@@ -416,26 +414,21 @@ export class BaseEntity {
         return attachmentIndex;
     }
 
-    public getAttachmentMatrix(dst: mat4, attachmentIndex: number): void {
+    public getAttachmentMatrix(attachmentIndex: number): ReadonlyMat4 {
         if (this.modelStudio === null)
             throw "whoops";
 
         this.updateModelMatrix();
         this.updateStudioPose();
-        this.modelStudio.getAttachmentMatrix(dst, attachmentIndex);
+        return this.modelStudio.attachmentMatrix[attachmentIndex];
     }
 
     public updateModelMatrix(): mat4 {
         computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.localAngles);
 
         if (this.parentEntity !== null) {
-            if (this.parentAttachment !== null) {
-                this.parentEntity.getAttachmentMatrix(scratchMat4a, this.parentAttachment);
-                mat4.mul(this.modelMatrix, scratchMat4a, this.modelMatrix);
-            } else {
-                const parentModelMatrix = this.parentEntity.updateModelMatrix();
-                mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
-            }
+            const parentModelMatrix = this.parentAttachment !== null ? this.parentEntity.getAttachmentMatrix(this.parentAttachment) : this.parentEntity.updateModelMatrix();
+            mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
         }
 
         return this.modelMatrix;
