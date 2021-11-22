@@ -340,7 +340,6 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
         translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
     }
 
-
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
 
@@ -369,11 +368,10 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 }
 
 // figure out if two textures with the same underlying data can reuse the same texture object
-// we assume that a texture has only one real size/tiling behavior, so just match on coords
 
 // TODO(jstpierre): Build a better upload tracker
 function textureMatch(a: TileState, b: TileState): boolean {
-    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey;
+    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey && a.cms === b.cms && a.cmt === b.cmt;
 }
 
 export class TextureCache {

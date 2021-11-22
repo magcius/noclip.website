@@ -376,8 +376,6 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         // Verify that we're loading into LOADTILE.
         assert(tileIndex === 7);
 
-
-
         const tile = this.DP_TileState[tileIndex];
         // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
         // in B-K due to hackery.
@@ -603,7 +601,7 @@ export class DrawCallInstance {
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         // TODO: set these properly, this mostly just reproduces vertex*texture
-        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
+        offs += fillVec4(comb, offs, 0, 0, 0, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
         renderInstManager.submitRenderInst(renderInst);
     }
