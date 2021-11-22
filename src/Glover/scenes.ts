@@ -157,7 +157,7 @@ interface GloverSceneBankDescriptor {
 };
 
 // Level ID to bank information
-// TODO, do the rest of them
+// TODO, do the system levels
 const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["00", {
         landscape: "00.HUB1ln.n64.lev",
@@ -420,15 +420,23 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         for (let cmd of landscape.body) {
-            if (cmd.params instanceof GloverLevel.LandActor) {
-                const objRoot = loadedObjects.get(cmd.params.objectId);
-                if (objRoot === undefined) {
-                    console.error(`Object 0x${cmd.params.objectId.toString(16)} is not loaded!`);
-                    continue;
+            if (cmd.params === undefined) {
+                continue;
+            }
+            switch (cmd.params.__type) {
+                case 'LandActor':
+                case 'BackgroundActor0xbc':
+                case 'BackgroundActor0x91': {
+                    const objRoot = loadedObjects.get(cmd.params.objectId);
+                    if (objRoot === undefined) {
+                        console.error(`Object 0x${cmd.params.objectId.toString(16)} is not loaded!`);
+                        continue;
+                    }
+                    const actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
+                    mat4.fromTranslation(actor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    sceneRenderer.actorRenderers.push(actor)
+                    break;
                 }
-                const actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
-                mat4.fromTranslation(actor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
-                sceneRenderer.actorRenderers.push(actor)
             }
         }
 
