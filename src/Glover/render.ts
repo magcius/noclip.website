@@ -672,15 +672,14 @@ export class GloverActorRenderer {
 
     private inputState: GfxInputState;
 
-    public modelMatrix = mat4.create();
-
     public rootMesh: ActorMeshNode;
 
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        private actorObject: GloverObjbank.ObjectRoot)
+        private actorObject: GloverObjbank.ObjectRoot,
+        public modelMatrix: mat4)
     {
         /* Object bank in first segment, then one
            texture bank for each subsequent */
@@ -709,8 +708,7 @@ export class GloverActorRenderer {
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-        const drawMatrix = mat4.create();
-        this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+        this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }

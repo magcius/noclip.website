@@ -410,8 +410,27 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const testActor = new GloverActorRenderer(device, cache, textureHolder, object_banks[2]!.directory[5].objRoot);
-        sceneRenderer.actorRenderers.push(testActor)
+        let loadedObjects = new Map<number, GloverObjbank.ObjectRoot>()
+        for (let bank of object_banks) {
+            if (bank) {
+                for (let entry of bank.directory) {
+                    loadedObjects.set(entry.objId, entry.objRoot);
+                }
+            }
+        }
+
+        for (let cmd of landscape.body) {
+            if (cmd.params instanceof GloverLevel.LandActor) {
+                const objRoot = loadedObjects.get(cmd.params.objectId);
+                if (objRoot === undefined) {
+                    console.error(`Object 0x${cmd.params.objectId.toString(16)} is not loaded!`);
+                    continue;
+                }
+                const actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
+                mat4.fromTranslation(actor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                sceneRenderer.actorRenderers.push(actor)
+            }
+        }
 
         return sceneRenderer;
     }
