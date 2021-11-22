@@ -60,7 +60,7 @@ export var decompress = function (buffer: ArrayBufferSlice, srcOffs: number = 0)
         }
     }
 
-    assert(false);
+    assert(uncompressed_length == bytes_written);
     return new ArrayBufferSlice(uncompressed_data.buffer)
 }
 

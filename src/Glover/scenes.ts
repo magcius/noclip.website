@@ -159,6 +159,68 @@ interface GloverSceneBankDescriptor {
 // Level ID to bank information
 // TODO, do the rest of them
 const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
+    ["00", {
+        landscape: "00.HUB1ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART1.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 1"),
+    ["01", {
+        landscape: "01.HUB2ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART2.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 2"),
+    ["02", {
+        landscape: "02.HUB3ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART3.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 3"),
+    ["03", {
+        landscape: "03.HUB4ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART4.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 4"),
+    ["04", {
+        landscape: "04.HUB5ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART5.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 5"),
+    ["05", {
+        landscape: "05.HUB6ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART6.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 6"),
+    ["06", {
+        landscape: "06.HUB7ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART7.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 7"),
+    ["07", {
+        landscape: "07.HUB8ln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART8.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+    }], //"Hub 8"),
+
+
+    ////////////////////////////////////////////////////////
+    // TODO: figure out banks for these levels:
+    ["08", {
+        landscape: "08.CAVEln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "CAVE.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+    }], //"Castle Cave"),
+    ["09", {
+        landscape: "09.ACOURSE.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "ASSAULT COURSE.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+    }], //"Assault Course"),
+    ["2a", {
+        landscape: "42.WAYROOM.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "WAYROOM.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+    }], //"Wayroom"),
+    /////////////////////////////////////////////////////////
+
+
     ["0a", {
         landscape: "10.AT1lnd.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L1.obj.fla"],
@@ -179,6 +241,141 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         landscape: "14.ATBONUS.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_BONUS.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
+
+    ["0f", {
+        landscape: "15.CK1lnd.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "CARNIVAL_SHARED.obj.fla", "CARNIVAL_L1.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla"]}],
+    ["10", {
+        landscape: "16.CK2Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "CARNIVAL_SHARED.obj.fla", "CARNIVAL_L2A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla"]}],
+    ["11", {
+        landscape: "17.CK3Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "CARNIVAL_SHARED.obj.fla", "CARNIVAL_L3A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla"]}],
+    ["12", {
+        landscape: "18.CKBOSS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "CARNIVAL_SHARED.obj.fla", "CARNIVAL_BOSS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla"]}],
+    ["13", { // TODO: figure out cheat code/easter egg bank hackery
+        landscape: "19.CKBONUS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "CARNIVAL_SHARED.obj.fla", "CARNIVAL_BONUS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla"]}],
+    ["14", {
+        landscape: "20.PC1lnd.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_L1.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
+    }],
+    ["15", {
+        landscape: "21.PC2Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_L2A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
+    }],
+    ["16", {
+        landscape: "21.PC2Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_L3B.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
+    }],
+    ["17", {
+        landscape: "23.PCBOSS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_BOSS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
+    }],
+    ["18", {
+        landscape: "24.PCBONUS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_BONUS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
+    }],
+    ["19", {
+        landscape: "25.PH1Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L1A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+    }],
+    ["1a", {
+        landscape: "26.PH2Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L2A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+    }],
+    ["1b", {
+        landscape: "27.PH3Bln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L3B.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+    }],
+    ["1c", {
+        landscape: "28.PHBOSS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_BOSS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+    }],
+    ["1d", {
+        landscape: "29.PHBONUS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_BONUS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+    }],
+
+    ["1e", {
+        landscape: "30.FF1Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_L1A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+    }],
+    ["1f", {
+        landscape: "31.FF2Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_L2A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+    }],
+    ["20", {
+        landscape: "32.FF3Bln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_L3B.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+    }],
+    ["21", {
+        landscape: "33.FFBOSS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_BOSS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+    }],
+    ["22", {
+        landscape: "34.FFBONUS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_BONUS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+    }],
+
+    ["23", {
+        landscape: "35.OW2Aln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_L2A.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+    ["24", {
+        landscape: "36.OW2Bln.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_L2B.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+    ["25", {
+        landscape: "37.OW3lnd.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_L3.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+    ["26", {
+        landscape: "38.OWBOSS1.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_BOSS1.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+    ["27", {
+        landscape: "39.TWEENl.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "TWEEN.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+    ["28", { // TODO: make sure this is the right object bank setup:
+        landscape: "40.OWBOSS3.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_BOSS1.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+    ["29", {
+        landscape: "41.OWBONUS.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_BONUS.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
+    }],
+
+
 ]);
 
 class SceneDesc implements Viewer.SceneDesc {
@@ -225,13 +422,6 @@ const id = `gv`;
 const name = "Glover";
 
 const sceneDescs = [
-    "System",
-    new SceneDesc(`2c`, "Flythru (title)"),
-    new SceneDesc(`2d`, "Flythru (credits)"),
-    new SceneDesc(`2e`, "Intro cutscene"),
-    new SceneDesc(`2f`, "Outro cutscene"),
-    new SceneDesc(`2b`, "Presentation (studio logos)"),
-
     "Hub world",
     new SceneDesc(`00`, "Hub 1"),
     new SceneDesc(`01`, "Hub 2"),
@@ -278,7 +468,7 @@ const sceneDescs = [
     new SceneDesc(`1f`, "Fortress of Fear Level 2"),
     new SceneDesc(`20`, "Fortress of Fear Level 3"),
     new SceneDesc(`21`, "Fortress of Fear Boss"),
-    new SceneDesc(`22`, "Fortress of Fear BONUS"),
+    new SceneDesc(`22`, "Fortress of Fear Bonus"),
 
     "Out Of This World"
     new SceneDesc(`23`, "Out Of This World Level 1"),
@@ -288,6 +478,13 @@ const sceneDescs = [
     new SceneDesc(`27`, "Out Of This World Boss (phase 2)"),
     new SceneDesc(`28`, "Out Of This World Boss (phase 3)"),
     new SceneDesc(`29`, "Out Of This World Bonus"),
+
+    "System",
+    new SceneDesc(`2c`, "Flythru (title)"),
+    new SceneDesc(`2d`, "Flythru (credits)"),
+    new SceneDesc(`2e`, "Intro cutscene"),
+    new SceneDesc(`2f`, "Outro cutscene"),
+    new SceneDesc(`2b`, "Presentation (studio logos)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
