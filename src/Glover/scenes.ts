@@ -419,6 +419,9 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
+
+        let scratchMatrix = mat4.create();
+        let currentActor: GloverActorRenderer | null = null; 
         for (let cmd of landscape.body) {
             if (cmd.params === undefined) {
                 continue;
@@ -432,11 +435,34 @@ class SceneDesc implements Viewer.SceneDesc {
                         console.error(`Object 0x${cmd.params.objectId.toString(16)} is not loaded!`);
                         continue;
                     }
-                    const actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
-                    mat4.fromTranslation(actor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
-                    sceneRenderer.actorRenderers.push(actor)
+                    currentActor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
+                    mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    sceneRenderer.actorRenderers.push(currentActor)
                     break;
                 }
+                case 'SetActorRotation': {
+                    if (currentActor === null) {
+                        console.error(`No active actor for ${cmd.params.__type}!`);
+                        continue;
+                    }
+                    // TODO: confirm rotation order:
+                    mat4.fromXRotation(scratchMatrix, cmd.params.x);
+                    mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
+                    mat4.fromYRotation(scratchMatrix, cmd.params.y);
+                    mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
+                    mat4.fromZRotation(scratchMatrix, cmd.params.z);
+                    mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
+                    break;
+                }
+                case 'SetActorScale': {
+                    if (currentActor === null) {
+                        console.error(`No active actor for ${cmd.params.__type}!`);
+                        continue;
+                    }
+                    mat4.scale(currentActor.modelMatrix, currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    break;
+                }
+
             }
         }
 
