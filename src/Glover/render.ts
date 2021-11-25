@@ -21,6 +21,16 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { GloverObjbank, GloverTexbank } from './parsers';
 
+// Stray RDP defines
+const G_TX_LOADTILE = 7
+const G_TX_RENDERTILE = 0
+const G_TX_NOMIRROR = 0
+const G_TX_WRAP = 0
+const G_TX_MIRROR = 1
+const G_TX_CLAMP = 2
+const G_TX_NOMASK = 0
+const G_TX_NOLOD = 0
+
 // TODO: Separate render boilerplate classes and actor classes into separate files
 
 // TODO: proper pipeline initialization:
@@ -198,7 +208,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private DP_CombineL: number = 0;
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new F3DEX.TextureImageState();
-    private DP_TileState = nArray(8, () => new RDP.TileState());
+    public DP_TileState = nArray(8, () => new RDP.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
     constructor(public segmentBuffers: ArrayBufferSlice[], private textures: Textures.GloverTextureHolder) {
@@ -280,7 +290,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         }
     }
 
-    private _translateTileTexture(tileIndex: number): number {
+    public _translateTileTexture(tileIndex: number): number {
         const tile = this.DP_TileState[tileIndex];
 
         const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
@@ -323,19 +333,23 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         }
     }
 
+    public _newDrawCall(): DrawCall {
+        const dc = new DrawCall();
+        dc.SP_GeometryMode = this.SP_GeometryMode;
+        dc.SP_TextureState.copy(this.SP_TextureState);
+        dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
+        dc.DP_OtherModeH = this.DP_OtherModeH;
+        dc.DP_OtherModeL = this.DP_OtherModeL;
+        return dc;
+    }
+
     private _flushDrawCall(): void {
         if (this.stateChanged) {
             this.stateChanged = false;
 
-            const dc = new DrawCall();
+            const dc = this._newDrawCall();
             this.currentDrawCall = dc
             this.outputDrawCalls.push(dc);
-
-            dc.SP_GeometryMode = this.SP_GeometryMode;
-            dc.SP_TextureState.copy(this.SP_TextureState);
-            dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
-            dc.DP_OtherModeH = this.DP_OtherModeH;
-            dc.DP_OtherModeL = this.DP_OtherModeL;
             this._flushTextures(dc);
         }
     }
@@ -718,6 +732,37 @@ export class GloverActorRenderer {
     }
 }
 
+function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, faceVertIdx: number, alpha: number = 1.0) : F3DEX.Vertex {
+    const f3dexVertex = new F3DEX.Vertex();
+
+    const vertIdx = (faceVertIdx == 0) ? geo.faces[faceIdx].v0 :
+                            (faceVertIdx == 1) ? geo.faces[faceIdx].v1 :
+                                geo.faces[faceIdx].v2;
+
+    const geoVert = geo.vertices[vertIdx];
+
+    f3dexVertex.x = Math.floor(geoVert.x);
+    f3dexVertex.y = Math.floor(geoVert.y);
+    f3dexVertex.z = Math.floor(geoVert.z);
+
+    f3dexVertex.tx = (faceVertIdx == 0) ? geo.uvs[faceIdx].u1.value :
+                            (faceVertIdx == 1) ? geo.uvs[faceIdx].u2.value :
+                                geo.uvs[faceIdx].u3.value
+    f3dexVertex.ty = (faceVertIdx == 0) ? geo.uvs[faceIdx].v1.value :
+                            (faceVertIdx == 1) ? geo.uvs[faceIdx].v2.value :
+                                geo.uvs[faceIdx].v3.value
+
+
+    const colorsNorms = geo.colorsNorms[vertIdx];
+    f3dexVertex.c0 = ((colorsNorms >>> 24) & 0xFF) / 0xFF;
+    f3dexVertex.c1 = ((colorsNorms >>> 16) & 0xFF) / 0xFF;
+    f3dexVertex.c2 = ((colorsNorms >>>  8) & 0xFF) / 0xFF;
+
+    f3dexVertex.a = alpha;
+
+    return f3dexVertex;
+}
+
 class GloverMeshRenderer {
     private rspOutput: GloverRSPOutput | null;
     private visible = true;
@@ -743,14 +788,103 @@ class GloverMeshRenderer {
         if (meshData.displayListPtr != 0) {
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
+            this.rspOutput = rspState.finish();
+        } else {
+            this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState);
         }
 
-        this.rspOutput = rspState.finish();
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
                 drawCall.renderData = new DrawCallRenderData(device, cache, this.rspOutput.textureCache, drawCall);
             }
         }
+    }
+
+    private loadDynamicModel(geo: GloverObjbank.Geometry, rspState: GloverRSPState): GloverRSPOutput {
+        const drawCalls: DrawCall[] = []
+        const uniqueTextures = new Set<number>()
+        const textureCache = new RDP.TextureCache()
+        for (let textureId of geo.textureIds) {
+            uniqueTextures.add(textureId);
+        }
+        for (let textureId of uniqueTextures) {
+            const texFile = this.textures.idToTexture.get(textureId);
+            const dataAddr = this.textures.getSegmentDataAddr(textureId);
+            const palAddr = this.textures.getSegmentPaletteAddr(textureId);
+            if (texFile === undefined || dataAddr === undefined ||
+                palAddr === undefined)
+            {
+                console.error(`Texture 0x${textureId.toString(16)} not loaded`);
+                continue;
+            }
+
+            const forceIndexing = texFile.compressionFormat == 0 ||
+                                    texFile.compressionFormat == 1; 
+
+            // Set up texture state
+
+            // TODO: figure out how/when to set this:
+            const mirror = false;
+
+            if (forceIndexing) {
+                rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, textureId);
+
+                rspState.gDPSetTile(
+                    texFile.colorFormat,
+                    texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
+                    0, 0x0100, G_TX_LOADTILE, 0,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), 0, 0,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), 0, 0);
+
+                rspState.gDPLoadTLUT(G_TX_LOADTILE, texFile.compressionFormat == 0 ? 15 : 255);
+
+                rspState.gDPSetTextureImage(texFile.colorFormat, ImageSize.G_IM_SIZ_16b, 1, textureId);
+                
+                rspState.gDPSetTile(
+                    texFile.colorFormat,
+                    ImageSize.G_IM_SIZ_16b,
+                    0, 0x0000, G_TX_LOADTILE, 0,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD);
+
+
+                rspState.gDPLoadBlock(G_TX_LOADTILE, 0, 0, 0, 0);
+
+                rspState.gDPSetTile(
+                    texFile.colorFormat,
+                    texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
+                    0, 0x0000, G_TX_RENDERTILE, 0,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD)
+
+                rspState.gDPSetTileSize(G_TX_RENDERTILE,
+                    0, 0,
+                    (texFile.width - 1) * 4, (texFile.height - 1) * 4);
+
+            } else {
+                console.error("TODO: non-indexed texture loads for dynamic models")
+            }
+            // Set up draw call
+            let drawCall = rspState._newDrawCall();
+
+            const textureIdx = textureCache.translateTileTexture(this.segments, dataAddr, palAddr, rspState.DP_TileState[G_TX_RENDERTILE], false, forceIndexing);
+            drawCall.textureIndices.push(textureIdx);
+
+            for (let faceIdx = 0; faceIdx < geo.nFaces; faceIdx++) {
+                if (geo.textureIds[faceIdx] != textureId) {
+                    continue;
+                }
+                drawCall.vertices.push(
+                    f3dexFromGeometry(geo, faceIdx, 0),
+                    f3dexFromGeometry(geo, faceIdx, 1),
+                    f3dexFromGeometry(geo, faceIdx, 2)
+                );
+                drawCall.vertexCount += 3;
+            }
+            drawCalls.push(drawCall)
+        }
+        return new GloverRSPOutput(drawCalls, textureCache);
+
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {

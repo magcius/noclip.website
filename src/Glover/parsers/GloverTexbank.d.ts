@@ -8,7 +8,6 @@ interface DebugPosition {
 
 declare class GloverTexbank {
   constructor(io: any, parent?: any, root?: any);
-  _read(): void;
   __type: 'GloverTexbank';
   _io: any;
 
@@ -24,7 +23,6 @@ declare class GloverTexbank {
 declare namespace GloverTexbank {
   class Texture {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Texture';
     _io: any;
 
@@ -34,7 +32,8 @@ declare namespace GloverTexbank {
     u3: number;
     width: number;
     height: number;
-    u5: number;
+    masks: number;
+    maskt: number;
     length: number;
     colorFormat: GloverTexbank.TextureColorFormat;
     compressionFormat: GloverTexbank.TextureCompressionFormat;
@@ -49,7 +48,8 @@ declare namespace GloverTexbank {
       u3: DebugPosition;
       width: DebugPosition;
       height: DebugPosition;
-      u5: DebugPosition;
+      masks: DebugPosition;
+      maskt: DebugPosition;
       length: DebugPosition;
       colorFormat: DebugPosition & { enumName: string; };
       compressionFormat: DebugPosition & { enumName: string; };

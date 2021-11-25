@@ -45,7 +45,7 @@ function textureToCanvas(texture: Image): Viewer.Texture {
 export class GloverTextureHolder extends TextureHolder<Image> {
     private banks: GloverTexbank[] = [];
     private idToBank = new Map<number, number>();
-    private idToTexture = new Map<number, GloverTexbank.Texture>();
+    public idToTexture = new Map<number, GloverTexbank.Texture>();
 
     public addTextureBank(device: GfxDevice, bank: GloverTexbank) : void {
         this.banks.push(bank)

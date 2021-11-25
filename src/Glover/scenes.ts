@@ -200,23 +200,20 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Hub 8"),
 
-
-    ////////////////////////////////////////////////////////
-    // TODO: figure out banks for these levels:
-    ["08", {
+    ["08", { // TODO: figure out why this is crashing
         landscape: "08.CAVEln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "CAVE.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Castle Cave"),
     ["09", {
         landscape: "09.ACOURSE.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ASSAULT COURSE.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Assault Course"),
     ["2a", {
         landscape: "42.WAYROOM.n64.lev",
         object_banks: ["GENERIC.obj.fla", "WAYROOM.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Wayroom"),
     /////////////////////////////////////////////////////////
 
@@ -229,7 +226,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         landscape: "11.AT2lnd.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L2.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
-    ["0c", {
+    ["0c", { // TODO: figure out why this is crashing
         landscape: "12.AT3Aln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L3A.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
@@ -376,6 +373,35 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     }],
 
 
+
+    // TODO: confirm banks for these:
+    ["2c", {
+        landscape: "44.FLYTHRU.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla"]
+    }], // "Flythru (title)"
+    ["2d", {
+        landscape: "45.FLYTHRU.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla"]
+    }], // "Flythru (credits)"
+    ["2e", {
+        landscape: "46.INTROl.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "INTRO.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+    }], // "Intro cutscene"
+    ["2f", {
+        landscape: "47.OUTROl.n64.lev",
+        object_banks: ["GENERIC.obj.fla", "OUTRO.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+    }], // "Outro cutscene"
+    ["2b", {
+        landscape: "PRESENTATION.obj.fla",
+        object_banks: ["GENERIC.obj.fla", "PRESENTATION.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PRESENT_TEX_BANK.tex.fla"]
+    }], // "Presentation (studio logos)"
+
+    // TODO: compose artificial menu screen scene
 ]);
 
 class SceneDesc implements Viewer.SceneDesc {
@@ -427,6 +453,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 continue;
             }
             switch (cmd.params.__type) {
+                case 'Water':
                 case 'LandActor':
                 case 'BackgroundActor0xbc':
                 case 'BackgroundActor0x91': {

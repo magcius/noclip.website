@@ -8,7 +8,6 @@ interface DebugPosition {
 
 declare class GloverLevel {
   constructor(io: any, parent?: any, root?: any);
-  _read(): void;
   __type: 'GloverLevel';
   _io: any;
 
@@ -26,7 +25,6 @@ declare class GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0x68 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0x68';
     _io: any;
 
@@ -45,7 +43,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x54 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x54';
     _io: any;
 
@@ -82,7 +79,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x460x470x48 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x460x470x48';
     _io: any;
 
@@ -99,7 +95,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSound0xc2 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSound0xc2';
     _io: any;
 
@@ -118,7 +113,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpinPause0x7c {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpinPause0x7c';
     _io: any;
 
@@ -135,7 +129,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMagnet0x8b {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMagnet0x8b';
     _io: any;
 
@@ -164,7 +157,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyInstructionError {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyInstructionError';
     _io: any;
 
@@ -177,7 +169,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatAnimPhase0x5c {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatAnimPhase0x5c';
     _io: any;
 
@@ -192,7 +183,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Backdrop {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Backdrop';
     _io: any;
 
@@ -229,7 +219,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class DiffuseLight {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'DiffuseLight';
     _io: any;
 
@@ -252,7 +241,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Buzzer {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Buzzer';
     _io: any;
 
@@ -297,7 +285,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAny {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAny';
     _io: any;
 
@@ -312,7 +299,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class SetActorRotation {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'SetActorRotation';
     _io: any;
 
@@ -331,7 +317,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst';
     _io: any;
 
@@ -348,7 +333,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMvspn0x5a {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMvspn0x5a';
     _io: any;
 
@@ -365,7 +349,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMvspn0x74 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMvspn0x74';
     _io: any;
 
@@ -384,7 +367,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatOrbit {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatOrbit';
     _io: any;
 
@@ -429,7 +411,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpike {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpike';
     _io: any;
 
@@ -442,7 +423,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0x8e {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0x8e';
     _io: any;
 
@@ -457,7 +437,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x9f {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x9f';
     _io: any;
 
@@ -478,7 +457,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnvironmentalSound {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnvironmentalSound';
     _io: any;
 
@@ -515,7 +493,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyInstructionB {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyInstructionB';
     _io: any;
 
@@ -550,7 +527,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMvspn0x59 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMvspn0x59';
     _io: any;
 
@@ -573,7 +549,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Cameo {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Cameo';
     _io: any;
 
@@ -586,7 +561,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpinFlip0x7d {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpinFlip0x7d';
     _io: any;
 
@@ -603,7 +577,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatRest0x63 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatRest0x63';
     _io: any;
 
@@ -620,7 +593,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0xc3 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0xc3';
     _io: any;
 
@@ -639,7 +611,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EndLevelData {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EndLevelData';
     _io: any;
 
@@ -652,7 +623,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatFan0x8a {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatFan0x8a';
     _io: any;
 
@@ -681,7 +651,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpinBlur0x70 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpinBlur0x70';
     _io: any;
 
@@ -704,7 +673,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpinSound0xc5 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpinSound0xc5';
     _io: any;
 
@@ -723,7 +691,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleCondC {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleCondC';
     _io: any;
 
@@ -748,7 +715,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpin0x7f {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpin0x7f';
     _io: any;
 
@@ -767,7 +733,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x4a {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x4a';
     _io: any;
 
@@ -786,7 +751,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyConditionalInstruction {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyConditionalInstruction';
     _io: any;
 
@@ -801,7 +765,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatPathPoint0x6b {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatPathPoint0x6b';
     _io: any;
 
@@ -822,7 +785,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Enemy0xa1 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Enemy0xa1';
     _io: any;
 
@@ -847,7 +809,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Vent {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Vent';
     _io: any;
 
@@ -878,7 +839,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleCond {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleCond';
     _io: any;
 
@@ -895,7 +855,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMvspn0x73 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMvspn0x73';
     _io: any;
 
@@ -916,7 +875,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class LookAtBall0x61 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'LookAtBall0x61';
     _io: any;
 
@@ -933,7 +891,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class LookAtHand0x60 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'LookAtHand0x60';
     _io: any;
 
@@ -950,7 +907,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst2 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst2';
     _io: any;
 
@@ -977,7 +933,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Unknown0xa9 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Unknown0xa9';
     _io: any;
 
@@ -992,7 +947,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x6c {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x6c';
     _io: any;
 
@@ -1007,7 +961,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatPathSpeed0x6d {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatPathSpeed0x6d';
     _io: any;
 
@@ -1022,7 +975,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class SetExit {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'SetExit';
     _io: any;
 
@@ -1039,7 +991,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatOrbit0x75 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatOrbit0x75';
     _io: any;
 
@@ -1062,7 +1013,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSound0xc1 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSound0xc1';
     _io: any;
 
@@ -1081,7 +1031,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyInstructionC {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyInstructionC';
     _io: any;
 
@@ -1106,7 +1055,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAnd {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAnd';
     _io: any;
 
@@ -1119,7 +1067,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x66 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x66';
     _io: any;
 
@@ -1132,7 +1079,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatPos0xa6 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatPos0xa6';
     _io: any;
 
@@ -1151,7 +1097,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0xc7 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0xc7';
     _io: any;
 
@@ -1170,7 +1115,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Powerup {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Powerup';
     _io: any;
 
@@ -1195,7 +1139,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class SetTeleport {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'SetTeleport';
     _io: any;
 
@@ -1222,7 +1165,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleCondD {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleCondD';
     _io: any;
 
@@ -1243,7 +1185,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class VentAppend0xa3 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'VentAppend0xa3';
     _io: any;
 
@@ -1260,7 +1201,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class UnknownSound0xbd {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'UnknownSound0xbd';
     _io: any;
 
@@ -1279,7 +1219,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x5d {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x5d';
     _io: any;
 
@@ -1292,7 +1231,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatCheckpoint {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatCheckpoint';
     _io: any;
 
@@ -1305,7 +1243,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst4 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst4';
     _io: any;
 
@@ -1328,7 +1265,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class BallSpawnPoint {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'BallSpawnPoint';
     _io: any;
 
@@ -1349,7 +1285,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Unknown0x01 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Unknown0x01';
     _io: any;
 
@@ -1368,7 +1303,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatAnim0xc0 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatAnim0xc0';
     _io: any;
 
@@ -1381,7 +1315,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleOr {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleOr';
     _io: any;
 
@@ -1394,7 +1327,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x56 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x56';
     _io: any;
 
@@ -1415,7 +1347,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Cmd {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Cmd';
     _io: any;
 
@@ -1432,7 +1363,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0xc6 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0xc6';
     _io: any;
 
@@ -1451,7 +1381,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Wind {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Wind';
     _io: any;
 
@@ -1490,7 +1419,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Puzzle {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Puzzle';
     _io: any;
 
@@ -1503,7 +1431,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatPush0x5b {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatPush0x5b';
     _io: any;
 
@@ -1524,7 +1451,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMvspn0x58 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMvspn0x58';
     _io: any;
 
@@ -1541,7 +1467,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatDestructible {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatDestructible';
     _io: any;
 
@@ -1562,7 +1487,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction';
     _io: any;
 
@@ -1579,7 +1503,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0xc4 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0xc4';
     _io: any;
 
@@ -1598,7 +1521,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Water {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Water';
     _io: any;
 
@@ -1641,7 +1563,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x4f {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x4f';
     _io: any;
 
@@ -1666,7 +1587,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Unrecognized {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Unrecognized';
     _io: any;
 
@@ -1679,7 +1599,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Unknown0xbf {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Unknown0xbf';
     _io: any;
 
@@ -1696,7 +1615,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x4b0x4c {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x4b0x4c';
     _io: any;
 
@@ -1711,7 +1629,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class SetActorScale {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'SetActorScale';
     _io: any;
 
@@ -1730,7 +1647,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0xb8 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0xb8';
     _io: any;
 
@@ -1743,7 +1659,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatOrbitFlip0x77 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatOrbitFlip0x77';
     _io: any;
 
@@ -1760,7 +1675,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatDestructibleSound {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatDestructibleSound';
     _io: any;
 
@@ -1779,7 +1693,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Enemy {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Enemy';
     _io: any;
 
@@ -1804,7 +1717,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatPuzzle0x6f {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatPuzzle0x6f';
     _io: any;
 
@@ -1819,7 +1731,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0xa4 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0xa4';
     _io: any;
 
@@ -1832,7 +1743,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatOrActor0x6a {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatOrActor0x6a';
     _io: any;
 
@@ -1847,7 +1757,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpin0x7b {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpin0x7b';
     _io: any;
 
@@ -1860,7 +1769,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0xb6 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0xb6';
     _io: any;
 
@@ -1877,7 +1785,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatCrumb0x67 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatCrumb0x67';
     _io: any;
 
@@ -1896,7 +1803,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleActionDefault {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleActionDefault';
     _io: any;
 
@@ -1917,7 +1823,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Garib {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Garib';
     _io: any;
 
@@ -1940,7 +1845,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class GaribGroup {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'GaribGroup';
     _io: any;
 
@@ -1957,7 +1861,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst6 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst6';
     _io: any;
 
@@ -1978,7 +1881,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x78 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x78';
     _io: any;
 
@@ -1993,7 +1895,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class BackgroundActor0x91 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'BackgroundActor0x91';
     _io: any;
 
@@ -2016,7 +1917,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Enemy0xba {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Enemy0xba';
     _io: any;
 
@@ -2029,7 +1929,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleCondA {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleCondA';
     _io: any;
 
@@ -2046,7 +1945,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSine {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSine';
     _io: any;
 
@@ -2085,7 +1983,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatCat0x69 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatCat0x69';
     _io: any;
 
@@ -2112,7 +2009,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatRope {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatRope';
     _io: any;
 
@@ -2159,7 +2055,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleNumtimes {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleNumtimes';
     _io: any;
 
@@ -2174,7 +2069,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpin0x80 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpin0x80';
     _io: any;
 
@@ -2201,7 +2095,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x7e {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x7e';
     _io: any;
 
@@ -2216,7 +2109,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Unknown0x98 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Unknown0x98';
     _io: any;
 
@@ -2235,7 +2127,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst1 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst1';
     _io: any;
 
@@ -2260,7 +2151,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Plat0x9d {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Plat0x9d';
     _io: any;
 
@@ -2273,7 +2163,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyNormalInstruction {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyNormalInstruction';
     _io: any;
 
@@ -2288,7 +2177,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class FogConfiguration {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'FogConfiguration';
     _io: any;
 
@@ -2313,7 +2201,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Platform0x62 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Platform0x62';
     _io: any;
 
@@ -2330,7 +2217,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst5 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst5';
     _io: any;
 
@@ -2349,7 +2235,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Render0xb3 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Render0xb3';
     _io: any;
 
@@ -2362,7 +2247,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatTopple0x81 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatTopple0x81';
     _io: any;
 
@@ -2391,7 +2275,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatScale0x79 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatScale0x79';
     _io: any;
 
@@ -2410,7 +2293,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x55 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x55';
     _io: any;
 
@@ -2427,7 +2309,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst3 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst3';
     _io: any;
 
@@ -2448,7 +2329,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatGoForwards0x5f {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatGoForwards0x5f';
     _io: any;
 
@@ -2469,7 +2349,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0x9e {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0x9e';
     _io: any;
 
@@ -2490,7 +2369,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyInstruction {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyInstruction';
     _io: any;
 
@@ -2509,7 +2387,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class SetGlobal0xb7 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'SetGlobal0xb7';
     _io: any;
 
@@ -2524,7 +2401,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatConf0x72 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatConf0x72';
     _io: any;
 
@@ -2549,7 +2425,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleCondE {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleCondE';
     _io: any;
 
@@ -2572,7 +2447,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0xb4 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0xb4';
     _io: any;
 
@@ -2587,7 +2461,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatPos0xa7 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatPos0xa7';
     _io: any;
 
@@ -2602,7 +2475,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class BackgroundActor0xbc {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'BackgroundActor0xbc';
     _io: any;
 
@@ -2625,7 +2497,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0x6e {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0x6e';
     _io: any;
 
@@ -2642,7 +2513,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInstDefault {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInstDefault';
     _io: any;
 
@@ -2659,7 +2529,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x350x3b0x3c0x3d0x3e0x3f0x40 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x350x3b0x3c0x3d0x3e0x3f0x40';
     _io: any;
 
@@ -2686,7 +2555,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleCondB {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleCondB';
     _io: any;
 
@@ -2713,7 +2581,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatStr0x7a {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatStr0x7a';
     _io: any;
 
@@ -2736,7 +2603,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Enemy0x84 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Enemy0x84';
     _io: any;
 
@@ -2749,7 +2615,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyInstructionA {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyInstructionA';
     _io: any;
 
@@ -2778,7 +2643,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatSpecial0xb9 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatSpecial0xb9';
     _io: any;
 
@@ -2791,7 +2655,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class EnemyAttackInstruction {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'EnemyAttackInstruction';
     _io: any;
 
@@ -2806,7 +2669,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class LandActor {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'LandActor';
     _io: any;
 
@@ -2829,7 +2691,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatOrbitPause0x76 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatOrbitPause0x76';
     _io: any;
 
@@ -2846,7 +2707,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class MrTip {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'MrTip';
     _io: any;
 
@@ -2867,7 +2727,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PlatMvspnSetparent {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PlatMvspnSetparent';
     _io: any;
 
@@ -2882,7 +2741,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class PuzzleAction0x490x4d {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'PuzzleAction0x490x4d';
     _io: any;
 
@@ -2903,7 +2761,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class CameoInst0 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'CameoInst0';
     _io: any;
 
@@ -2928,7 +2785,6 @@ declare namespace GloverLevel {
 declare namespace GloverLevel {
   class Unknown0x03 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Unknown0x03';
     _io: any;
 

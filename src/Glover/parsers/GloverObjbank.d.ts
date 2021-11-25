@@ -8,7 +8,6 @@ interface DebugPosition {
 
 declare class GloverObjbank {
   constructor(io: any, parent?: any, root?: any);
-  _read(): void;
   __type: 'GloverObjbank';
   _io: any;
 
@@ -22,7 +21,6 @@ declare class GloverObjbank {
 declare namespace GloverObjbank {
   class Uv {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Uv';
     _io: any;
 
@@ -47,7 +45,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class Vertex {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Vertex';
     _io: any;
 
@@ -66,7 +63,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class ObjectRoot {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'ObjectRoot';
     _io: any;
 
@@ -94,7 +90,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class DisplayListCmd {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'DisplayListCmd';
     _io: any;
 
@@ -111,7 +106,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class DirectoryEntry {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'DirectoryEntry';
     _io: any;
 
@@ -129,7 +123,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class AffineFrame {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'AffineFrame';
     _io: any;
 
@@ -152,7 +145,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class Face {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Face';
     _io: any;
 
@@ -171,7 +163,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class Sprite {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Sprite';
     _io: any;
 
@@ -204,7 +195,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class Mesh {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Mesh';
     _io: any;
 
@@ -261,7 +251,6 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class Fixed115 {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Fixed115';
     _io: any;
 
@@ -277,17 +266,16 @@ declare namespace GloverObjbank {
 declare namespace GloverObjbank {
   class Geometry {
     constructor(io: any, parent?: any, root?: any);
-    _read(): void;
     __type: 'Geometry';
     _io: any;
 
     textureIds: number[];
     u5: number[];
     faces: GloverObjbank.Face[];
-    u4: number[];
     vertices: GloverObjbank.Vertex[];
     u1: number[];
     uvs: GloverObjbank.Uv[];
+    colorsNorms: number[];
     nFaces: number;
     nVertices: number;
     verticesPtr: number;
@@ -295,7 +283,7 @@ declare namespace GloverObjbank {
     u1Ptr: number;
     uvsPtr: number;
     u3: number;
-    u4Ptr: number;
+    colorsNormsPtr: number;
     u5Ptr: number;
     textureIdsPtr: number;
 
@@ -307,7 +295,7 @@ declare namespace GloverObjbank {
       u1Ptr: DebugPosition;
       uvsPtr: DebugPosition;
       u3: DebugPosition;
-      u4Ptr: DebugPosition;
+      colorsNormsPtr: DebugPosition;
       u5Ptr: DebugPosition;
       textureIdsPtr: DebugPosition;
     };
