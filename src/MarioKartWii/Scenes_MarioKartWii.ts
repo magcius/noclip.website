@@ -1049,7 +1049,7 @@ const sceneDescs = [
     new MarioKartWiiSceneDesc('old_House_ds', "DS Twilight House"),
     "Extra",
     new MarioKartWiiSceneDesc('ring_mission', "Galaxy Colosseum"),
-    new MarioKartWiiSceneDesc('ending_demo', "Luigi's Circuit (Credits)"),
+    new MarioKartWiiSceneDesc('ending_demo', "Luigi Circuit (Credits)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
