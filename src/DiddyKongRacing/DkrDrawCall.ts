@@ -220,7 +220,7 @@ export class DkrDrawCall {
 
         if(this.isBuilt) {
             const template = renderInstManager.pushTemplateRenderInst();
-            template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
+            template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1, },]);
             template.setInputLayoutAndState(this.defaultInputLayout, this.defaultInputState);
     
             let texLayer;
