@@ -8,9 +8,8 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
-import { StudioPanel } from './Studio';
+import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
 import { Blue, Color, Green, Magenta } from './Color';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
