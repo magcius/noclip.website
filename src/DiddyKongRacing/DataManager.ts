@@ -2,7 +2,6 @@
  * Handles loading assets from the `/data/` directory.
  */
 
-import * as Pako from "pako";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";

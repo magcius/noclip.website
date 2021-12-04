@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 
-import { GfxDevice, GfxBindingLayoutDescriptor, GfxRenderPassDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { colorNewFromRGBA } from "../Color";
 import { CameraController } from '../Camera';
