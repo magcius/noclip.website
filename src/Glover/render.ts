@@ -182,18 +182,24 @@ export class DrawCallRenderData {
     public updateTextures(): void {
         const textures = this.textureCache.textures;
 
-        for (let i = 0; i < this.textures.length; i++)
-            this.device.destroyTexture(this.textures[i]);
-
-        this.textures = []
-        this.samplers = []
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
             const reprocessed_tex = RDP.translateTileTexture(this.segmentBuffers, tex.dramAddr, tex.dramPalAddr, tex.tile, false);
-
-            this.textures.push(RDP.translateToGfxTexture(this.device, reprocessed_tex));
-            this.samplers.push(RDP.translateSampler(this.device, this.renderCache, reprocessed_tex));
+            this.device.uploadTextureData(this.textures[i], 0, [reprocessed_tex.pixels]);
         }
+
+        // for (let i = 0; i < this.textures.length; i++)
+        //     this.device.destroyTexture(this.textures[i]);
+
+        // this.textures = []
+        // this.samplers = []
+        // for (let i = 0; i < textures.length; i++) {
+        //     const tex = textures[i];
+        //     const reprocessed_tex = RDP.translateTileTexture(this.segmentBuffers, tex.dramAddr, tex.dramPalAddr, tex.tile, false);
+
+        //     this.textures.push(RDP.translateToGfxTexture(this.device, reprocessed_tex));
+        //     this.samplers.push(RDP.translateSampler(this.device, this.renderCache, reprocessed_tex));
+        // }
 
     }
 
