@@ -27,9 +27,11 @@ declare namespace GloverTexbank {
     _io: any;
 
     id: number;
-    u2: number;
+    paletteAnimIdxMin: number;
+    paletteAnimIdxMax: number;
     flags: number;
-    u3: number;
+    frameIncrement: number;
+    frameCounter: number;
     width: number;
     height: number;
     masks: number;
@@ -43,9 +45,11 @@ declare namespace GloverTexbank {
 
     _debug: {
       id: DebugPosition;
-      u2: DebugPosition;
+      paletteAnimIdxMin: DebugPosition;
+      paletteAnimIdxMax: DebugPosition;
       flags: DebugPosition;
-      u3: DebugPosition;
+      frameIncrement: DebugPosition;
+      frameCounter: DebugPosition;
       width: DebugPosition;
       height: DebugPosition;
       masks: DebugPosition;

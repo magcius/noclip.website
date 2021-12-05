@@ -47,6 +47,9 @@ export class GloverTextureHolder extends TextureHolder<Image> {
     private idToBank = new Map<number, number>();
     public idToTexture = new Map<number, GloverTexbank.Texture>();
 
+    private animatedTextures: GloverTexbank.Texture[] = [];
+    public lastAnimationTick: number = 0;
+
     public addTextureBank(device: GfxDevice, bank: GloverTexbank) : void {
         this.banks.push(bank)
         let images = [];
@@ -55,6 +58,9 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             this.idToBank.set(texture.id, this.banks.length - 1);
             this.idToTexture.set(texture.id, texture);
 
+            if ((texture.flags & 0x4) != 0) {
+                this.animatedTextures.push(texture);
+            }
             // TODO: properly apply blur to "restart.bmp"
 
             var colorFormat = texture.colorFormat as number as ImageFormat;
@@ -105,6 +111,39 @@ export class GloverTextureHolder extends TextureHolder<Image> {
         this.addTextures(device, images);
     }
 
+    public animatePalettes(viewerInput: Viewer.ViewerRenderInput) : void {
+        if (viewerInput.time > this.lastAnimationTick + 50) {
+            this.lastAnimationTick = viewerInput.time;
+            for (let texture of this.animatedTextures) {
+
+                const palette = ArrayBufferSlice.fromView(texture.data).createTypedArray(Uint16Array, texture.paletteOffset - texture.dataPtr);
+
+                if (texture.frameIncrement < 0) {
+                    texture.frameCounter += -texture.frameIncrement;
+                } else {
+                    texture.frameCounter += texture.frameIncrement;
+                }
+
+                while (texture.frameCounter > 63) {
+                    if (texture.frameIncrement < 1) {
+                        let tmp = palette[texture.paletteAnimIdxMax];
+                        for (let colorIdx = texture.paletteAnimIdxMax; colorIdx > texture.paletteAnimIdxMin; colorIdx -= 1) {
+                            palette[colorIdx] = palette[colorIdx - 1];
+                        }
+                        palette[texture.paletteAnimIdxMin] = tmp;
+                    } else {
+                        let tmp = palette[texture.paletteAnimIdxMin];
+                        for (let colorIdx = texture.paletteAnimIdxMin; colorIdx < texture.paletteAnimIdxMax; colorIdx += 1) {
+                            palette[colorIdx] = palette[colorIdx + 1];
+                        }
+                        palette[texture.paletteAnimIdxMax] = tmp;
+                    }                 
+                    texture.frameCounter -= 64;
+                }
+            }
+        }
+    }
+
     public textureSegments() : ArrayBufferSlice[] {
         const segments: ArrayBufferSlice[] = Array(16);
         for (let bankIdx = 0; bankIdx < this.banks.length; bankIdx++) {
@@ -135,6 +174,15 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             return segmentBaseAddr + textureBaseAddr + offset;
         } else {
             return undefined;
+        }
+    }
+    public isDynamic(id: number) : boolean {
+        const bank = this.idToBank.get(id);
+        const texture = this.idToTexture.get(id);
+        if (bank !== undefined && texture !== undefined) {
+            return (texture.flags & 4) != 0;
+        } else {
+            return false;
         }
     }
 

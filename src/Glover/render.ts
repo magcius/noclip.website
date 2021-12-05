@@ -4,7 +4,7 @@ import * as RDP from '../Common/N64/RDP';
 import * as RSP from '../Common/N64/RSP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 
-import { assert, assertExists, nArray } from "../util";
+import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
@@ -108,6 +108,8 @@ const G_TX_NOLOD = 0
 //         }
 //     }
 // }
+
+
 function makeVertexBufferData(v: F3DEX.Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
@@ -132,15 +134,12 @@ export class DrawCallRenderData {
     public textures: GfxTexture[] = [];
     public samplers: GfxSampler[] = [];
 
-    public dynamicBufferCopies: GfxBuffer[] = [];
-    public dynamicStateCopies: GfxInputState[] = [];
-
     public vertexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
     public vertexBufferData: Float32Array;
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, textureCache: RDP.TextureCache, drawCall: DrawCall) {
+    constructor(private device: GfxDevice, private renderCache: GfxRenderCache, private textureCache: RDP.TextureCache, private segmentBuffers: ArrayBufferSlice[], private drawCall: DrawCall) {
         const textures = textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
@@ -149,7 +148,15 @@ export class DrawCallRenderData {
         }
 
         this.vertexBufferData = makeVertexBufferData(drawCall.vertices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
+        if (drawCall.dynamicGeometry) {
+            this.vertexBuffer = device.createBuffer(
+                align(this.vertexBufferData.byteLength, 4) / 4,
+                GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic
+            );
+            device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
+        } else {
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
+        }
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -172,16 +179,38 @@ export class DrawCallRenderData {
         ], null);
     }
 
+    public updateTextures(): void {
+        const textures = this.textureCache.textures;
+
+        for (let i = 0; i < this.textures.length; i++)
+            this.device.destroyTexture(this.textures[i]);
+
+        this.textures = []
+        this.samplers = []
+        for (let i = 0; i < textures.length; i++) {
+            const tex = textures[i];
+            const reprocessed_tex = RDP.translateTileTexture(this.segmentBuffers, tex.dramAddr, tex.dramPalAddr, tex.tile, false);
+
+            this.textures.push(RDP.translateToGfxTexture(this.device, reprocessed_tex));
+            this.samplers.push(RDP.translateSampler(this.device, this.renderCache, reprocessed_tex));
+        }
+
+    }
+
+    public updateBuffers(): void {
+        assert(this.drawCall.dynamicGeometry);
+        // TODO: just patch the UVs in the old buffer, rather
+        //       than making a whole new one
+        this.vertexBufferData = makeVertexBufferData(this.drawCall.vertices);
+        this.device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textures.length; i++)
             device.destroyTexture(this.textures[i]);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        for (let i = 0; i < this.dynamicBufferCopies.length; i++)
-            device.destroyBuffer(this.dynamicBufferCopies[i]);
-        for (let i = 0; i < this.dynamicStateCopies.length; i++)
-            device.destroyInputState(this.dynamicStateCopies[i]);
     }
 }
 
@@ -298,15 +327,17 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         let dramPalAddr: number;
 
         const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-        const forceIndexing = textlut !== 0; 
-        if (tile.fmt === ImageFormat.G_IM_FMT_CI || forceIndexing === true) {
+        if (textlut !== 0) {
+            tile.fmt = ImageFormat.G_IM_FMT_CI;
+        }
+        if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
             const palTmem = 0x100 + (tile.palette << 4);
             dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
         } else {
             dramPalAddr = 0;
         }
 
-        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false, forceIndexing);
+        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false);
     }
 
     private _flushTextures(dc: DrawCall): void {
@@ -323,6 +354,9 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             const cycletype = RDP.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === RDP.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === RDP.OtherModeH_CycleType.G_CYC_2CYCLE);
 
+            if (this.textures.isDynamic(this.DP_TextureImageState.addr))) {
+                dc.dynamicTextures.add(this.DP_TextureImageState.addr);
+            }
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
             if (this.SP_TextureState.level == 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
@@ -475,6 +509,13 @@ export class DrawCall {
     public vertices: F3DEX.Vertex[] = [];
 
     public renderData: DrawCallRenderData | null = null;
+
+    public dynamicGeometry: boolean = false;
+    public dynamicTextures: Set<number> = new Set<number>();
+    public lastTextureUpdate: number = 0;
+
+    // TODO: delete
+    // public originalUVs: number[] = [];
 }
 
 export class DrawCallInstance {
@@ -495,7 +536,6 @@ export class DrawCallInstance {
 
     constructor(private drawCall: DrawCall, private drawMatrix: mat4, textureCache: RDP.TextureCache) {
         assert(drawCall.renderData !== null);
-
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
@@ -646,7 +686,7 @@ class ActorMeshNode {
         }
 
         let current_child = mesh.child;
-    while (current_child !== undefined) {
+        while (current_child !== undefined) {
             this.children.push(new ActorMeshNode(device, cache, segments, textures, current_child));
             current_child = current_child.sibling;
         }
@@ -659,6 +699,7 @@ class ActorMeshNode {
         const rotation = this.mesh.rotation[0];
         const translation = this.mesh.translation[0];
         const scale = this.mesh.scale[0];
+        const scaleVector = [scale.v1, scale.v2, scale.v3];
 
         const rotXlateMatrix = mat4.create();
         mat4.fromQuat(rotXlateMatrix, [rotation.v1, rotation.v2, rotation.v3, rotation.v4])
@@ -669,12 +710,12 @@ class ActorMeshNode {
         mat4.mul(drawMatrix, rotXlateMatrix, drawMatrix);
 
         for (let child of this.children) {
-            child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+            child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, scaleVector);
         }
         
-        drawMatrix[0] *= scale.v1;
-        drawMatrix[5] *= scale.v2;
-        drawMatrix[10] *= scale.v3;
+        drawMatrix[0] *= scaleVector[0];
+        drawMatrix[5] *= scaleVector[1];
+        drawMatrix[10] *= scaleVector[2];
 
         this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
     }
@@ -711,6 +752,15 @@ export class GloverActorRenderer {
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, actorObject.mesh)
     }
 
+    public getRenderMode() {
+        return this.actorObject.mesh.renderMode;
+    }
+
+    public setRenderMode(value: number, mask: number = 0xFFFFFFFF) {
+        this.actorObject.mesh.renderMode &= ~mask;
+        this.actorObject.mesh.renderMode |= value & mask;
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -745,13 +795,12 @@ function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, faceVer
     f3dexVertex.y = Math.floor(geoVert.y);
     f3dexVertex.z = Math.floor(geoVert.z);
 
-    f3dexVertex.tx = (faceVertIdx == 0) ? geo.uvs[faceIdx].u1.value :
-                            (faceVertIdx == 1) ? geo.uvs[faceIdx].u2.value :
-                                geo.uvs[faceIdx].u3.value
-    f3dexVertex.ty = (faceVertIdx == 0) ? geo.uvs[faceIdx].v1.value :
-                            (faceVertIdx == 1) ? geo.uvs[faceIdx].v2.value :
-                                geo.uvs[faceIdx].v3.value
-
+    f3dexVertex.tx = (faceVertIdx == 0) ? geo.uvs[faceIdx].u1.raw :
+                            (faceVertIdx == 1) ? geo.uvs[faceIdx].u2.raw :
+                                geo.uvs[faceIdx].u3.raw
+    f3dexVertex.ty = (faceVertIdx == 0) ? geo.uvs[faceIdx].v1.raw :
+                            (faceVertIdx == 1) ? geo.uvs[faceIdx].v2.raw :
+                                geo.uvs[faceIdx].v3.raw
 
     const colorsNorms = geo.colorsNorms[vertIdx];
     f3dexVertex.c0 = ((colorsNorms >>> 24) & 0xFF) / 0xFF;
@@ -764,8 +813,17 @@ function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, faceVer
 }
 
 class GloverMeshRenderer {
+    // General rendering attributes
     private rspOutput: GloverRSPOutput | null;
     private visible = true;
+
+    // UV animation
+    private lastFrameAdvance: number = 0;
+    private frameCount: number = 0;
+
+    // TODO: remove:
+    private log: string[] = [];
+    private log_dumped = false;
 
     constructor(
         private device: GfxDevice,
@@ -781,21 +839,22 @@ class GloverMeshRenderer {
 
         // TODO: choose texture and blend modes properly based on decomp'ed pipeline initialization code
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER | F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
         rspState.gDPSetCombine(0xfc26a1ff, 0x1ffc923c); // (G_CC_TRILERP, G_CC_DECALRGB2)
         rspState.gDPSetOtherModeL(3, 0x1D, 0x00552038); // gsDPSetRenderMode(G_RM_RA_ZB_OPA_SURF, G_RM_RA_ZB_OPA_SURF2);
 
         if (meshData.displayListPtr != 0) {
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
+            rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
             this.rspOutput = rspState.finish();
         } else {
+            rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
             this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState);
         }
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
-                drawCall.renderData = new DrawCallRenderData(device, cache, this.rspOutput.textureCache, drawCall);
+                drawCall.renderData = new DrawCallRenderData(device, cache, this.rspOutput.textureCache, this.segments, drawCall);
             }
         }
     }
@@ -818,7 +877,7 @@ class GloverMeshRenderer {
                 continue;
             }
 
-            const forceIndexing = texFile.compressionFormat == 0 ||
+            const indexedImage = texFile.compressionFormat == 0 ||
                                     texFile.compressionFormat == 1; 
 
             // Set up texture state
@@ -826,7 +885,7 @@ class GloverMeshRenderer {
             // TODO: figure out how/when to set this:
             const mirror = false;
 
-            if (forceIndexing) {
+            if (indexedImage) {
                 rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, textureId);
 
                 rspState.gDPSetTile(
@@ -861,13 +920,18 @@ class GloverMeshRenderer {
                     0, 0,
                     (texFile.width - 1) * 4, (texFile.height - 1) * 4);
 
+                rspState.DP_TileState[G_TX_RENDERTILE].fmt = ImageFormat.G_IM_FMT_CI
             } else {
                 console.error("TODO: non-indexed texture loads for dynamic models")
             }
             // Set up draw call
             let drawCall = rspState._newDrawCall();
+            drawCall.dynamicGeometry = true;
+            if ((texFile.flags & 4) != 0) {
+                drawCall.dynamicTextures.add(texFile.id);
+            }
 
-            const textureIdx = textureCache.translateTileTexture(this.segments, dataAddr, palAddr, rspState.DP_TileState[G_TX_RENDERTILE], false, forceIndexing);
+            const textureIdx = textureCache.translateTileTexture(this.segments, dataAddr, palAddr, rspState.DP_TileState[G_TX_RENDERTILE], false);
             drawCall.textureIndices.push(textureIdx);
 
             for (let faceIdx = 0; faceIdx < geo.nFaces; faceIdx++) {
@@ -879,24 +943,122 @@ class GloverMeshRenderer {
                     f3dexFromGeometry(geo, faceIdx, 1),
                     f3dexFromGeometry(geo, faceIdx, 2)
                 );
+                // TODO: delete
+                // drawCall.originalUVs.push(
+                //     drawCall.vertices[drawCall.vertices.length-3].tx,
+                //     drawCall.vertices[drawCall.vertices.length-3].ty,
+                //     drawCall.vertices[drawCall.vertices.length-2].tx,
+                //     drawCall.vertices[drawCall.vertices.length-2].ty,
+                //     drawCall.vertices[drawCall.vertices.length-1].tx,
+                //     drawCall.vertices[drawCall.vertices.length-1].ty,
+                // )
                 drawCall.vertexCount += 3;
             }
             drawCalls.push(drawCall)
         }
         return new GloverRSPOutput(drawCalls, textureCache);
+    }
 
+    private animateWaterUVs(frameCount: number) {
+        if (this.rspOutput === null || this.meshData.geometry.nFaces === 0) {
+            return;
+        }
+        for (let drawCall of this.rspOutput.drawCalls) {
+            if (drawCall.renderData === null) {
+                continue;
+            }
+
+            let faceid = 0;
+            let vtxid = 0;
+
+            // const maxVal = 2.147484e9;
+            // let uvIdx = 0;
+            // assert(drawCall.originalUVs.length === drawCall.vertices.length * 2);
+            for (let vertex of drawCall.vertices) {
+                // let coordSum = vertex.x + vertex.z;
+
+                // let harmonic = drawCall.originalUVs[uvIdx] + Math.sin((frameCount + coordSum) / 20.0) * 300.0;
+                // vertex.tx = (harmonic < maxVal) ? harmonic : harmonic - maxVal;
+
+                // harmonic = drawCall.originalUVs[uvIdx + 1] + Math.sin((coordSum*2 + 12*Math.PI + frameCount) / 25.0) * 300.0; // 12*PI=(double)37.699111848 from ram
+                // vertex.ty = (harmonic < maxVal) ? harmonic : harmonic - maxVal;
+
+                // uvIdx += 2;
+                ///////////////////////////////////////////////////
+                let coordSum = vertex.x + vertex.y + vertex.z;
+
+                vertex.tx += Math.sin((frameCount + coordSum) / 20.0) * 8;
+
+                // In the asm this minus is actually a + ? Audit the asm by hand maybe.
+                vertex.ty += Math.sin((frameCount + Math.floor((coordSum - (coordSum < 0 ? 1 : 0)) / 2.0))/ 20.0) * 8;
+                
+                // vertex.tx = Math.floor(vertex.tx);
+                // vertex.ty = Math.floor(vertex.ty);
+                // vertex.tx = (vertex.tx > 0x7FFF) ? vertex.tx - 0xFFFF : vertex.tx;
+                // vertex.ty = (vertex.ty > 0x7FFF) ? vertex.ty - 0xFFFF : vertex.ty;
+
+                // TODO: remove:
+                // if (!this.log_dumped) {
+                //     this.log.push(frameCount + ",0x" + this.meshData.id.toString(16) + "," + faceid + "," + vtxid + "," + vertex.tx + "," + vertex.ty)
+                //     vtxid += 1;
+                //     if(vtxid==3){
+                //         vtxid=0;
+                //         faceid+=1;
+                //     }
+                // }
+            }
+            drawCall.renderData.updateBuffers();
+        }
+
+        // TODO: remove:
+        // if (frameCount >= 500) {
+        //     if (!this.log_dumped) {
+        //         var data = new Blob([this.log.join("\n")], {type: 'text/plain'});
+
+        //         // https://stackoverflow.com/questions/19327749/javascript-blob-filename-without-link
+        //         var a = document.createElement("a");
+        //         document.body.appendChild(a);
+        //         a.setAttribute("style", "display: none");
+        //         a.href = window.URL.createObjectURL(data);
+        //         a.download = "data.csv";
+        //         a.click();
+        //         window.URL.revokeObjectURL(a.href);
+
+        //         this.log_dumped = true;
+
+        //     }
+        // }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {
         if (!this.visible)
             return;
 
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            if ((this.meshData.renderMode & 0x20) !== 0) {
+                this.animateWaterUVs(this.frameCount);
+            }
+            this.lastFrameAdvance = 0;
+            this.frameCount += 1;
+            this.frameCount &= 0xFFFF;
+        }
+
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
+
+                if (drawCall.dynamicTextures.size > 0) {
+                    if (drawCall.lastTextureUpdate < this.textures.lastAnimationTick) {
+                        drawCall.lastTextureUpdate = viewerInput.time;
+                        drawCall.renderData!.updateTextures();
+                    }
+                }
+
                 const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
         }
+
     }
 
 

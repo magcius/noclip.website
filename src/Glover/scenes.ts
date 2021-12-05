@@ -40,8 +40,11 @@ class GloverRenderer implements Viewer.SceneGfx {
 
     public renderHelper: GfxRenderHelper;
 
+    private initTime: number;
+
     constructor(device: GfxDevice, public textureHolder: GloverTextureHolder) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.initTime = Date.now();
     }
 
     public adjustCameraController(c: CameraController) {
@@ -101,6 +104,8 @@ class GloverRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
+
+        this.textureHolder.animatePalettes(viewerInput);
 
         for (let actorRenderer of this.actorRenderers) {
             actorRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -448,23 +453,40 @@ class SceneDesc implements Viewer.SceneDesc {
 
         let scratchMatrix = mat4.create();
         let currentActor: GloverActorRenderer | null = null; 
+
+        function loadActor(id : number) : GloverActorRenderer | null {
+            const objRoot = loadedObjects.get(id);
+            if (objRoot === undefined) {
+                console.error(`Object 0x${id.toString(16)} is not loaded!`);
+                return null;
+            }
+            let new_actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
+            sceneRenderer.actorRenderers.push(new_actor)
+            return new_actor;
+        }
+
         for (let cmd of landscape.body) {
             if (cmd.params === undefined) {
                 continue;
             }
             switch (cmd.params.__type) {
-                case 'Water':
+                case 'Water': {
+                    currentActor = loadActor(cmd.params.objectId);
+                    if (currentActor == null) {
+                        continue;
+                    }
+                    mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    currentActor.setRenderMode(0x20, 0x20);
+                    break;
+                }
                 case 'LandActor':
                 case 'BackgroundActor0xbc':
                 case 'BackgroundActor0x91': {
-                    const objRoot = loadedObjects.get(cmd.params.objectId);
-                    if (objRoot === undefined) {
-                        console.error(`Object 0x${cmd.params.objectId.toString(16)} is not loaded!`);
+                    currentActor = loadActor(cmd.params.objectId);
+                    if (currentActor == null) {
                         continue;
                     }
-                    currentActor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
-                    sceneRenderer.actorRenderers.push(currentActor)
                     break;
                 }
                 case 'SetActorRotation': {

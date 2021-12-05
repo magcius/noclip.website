@@ -332,11 +332,10 @@ export function texturePadWidth(siz: ImageSize, line: number, width: number): nu
         return padTexels << (siz - 1);
 }
 
-export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false, forceIndexing: boolean = false): Texture {
+export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    const format = forceIndexing ? ImageFormat.G_IM_FMT_CI : tile.fmt;
 
-    if (format === ImageFormat.G_IM_FMT_CI) {
+    if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
         translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
     }
 
@@ -349,7 +348,7 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
-    switch ((format << 4) | tile.siz) {
+    switch ((tile.fmt << 4) | tile.siz) {
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line, deinterleave); break;
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line, deinterleave); break;
     case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
@@ -377,13 +376,12 @@ function textureMatch(a: TileState, b: TileState): boolean {
 export class TextureCache {
     public textures: Texture[] = [];
 
-    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false, forceIndexing: boolean = false): number {
-        const format = forceIndexing ? ImageFormat.G_IM_FMT_CI : tile.fmt;
-        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && (format !== ImageFormat.G_IM_FMT_CI || t.dramPalAddr === dramPalAddr) && textureMatch(t.tile, tile));
+    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): number {
+        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && (tile.fmt !== ImageFormat.G_IM_FMT_CI || t.dramPalAddr === dramPalAddr) && textureMatch(t.tile, tile));
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
-            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile, deinterleave, forceIndexing);
+            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile, deinterleave);
             const index = this.textures.length;
             this.textures.push(texture);
             return index;
