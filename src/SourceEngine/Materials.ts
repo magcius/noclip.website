@@ -11,7 +11,7 @@ import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatri
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
+import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -4110,7 +4110,7 @@ export class LightmapManager {
         m.gfxSampler = this.gfxSampler;
     }
 
-    public appendPackerManager(manager: LightmapPackerManager): number {
+    public appendPackerPages(manager: LightmapPacker): number {
         const startPage = this.lightmapPages.length;
         for (let i = 0; i < manager.pages.length; i++)
             this.lightmapPages.push(new LightmapPage(this.device, manager.pages[i]));
@@ -4321,7 +4321,7 @@ export class SurfaceLightmap {
     // The styles that we built our lightmaps for.
     public lightmapStyleIntensities: number[];
 
-    constructor(public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean, pageIndex: number) {
+    constructor(public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
     }
 
@@ -4340,11 +4340,11 @@ export class SurfaceLightmap {
         return false;
     }
 
-    public buildLightmap(renderContext: SourceRenderContext): void {
+    public buildLightmap(renderContext: SourceRenderContext, managerPageIndex: number): void {
         const worldLightingState = renderContext.worldLightingState;
         const scratchpad = renderContext.lightmapManager.scratchpad;
 
-        const dstPage = renderContext.lightmapManager.getPage(this.lightmapData.pageIndex);
+        const dstPage = renderContext.lightmapManager.getPage(managerPageIndex);
         const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
             const texelCount = this.lightmapData.width * this.lightmapData.height;

@@ -83,10 +83,10 @@ export interface Surface {
     // we move overlays out of being BSP surfaces...
     wantsTexCoord0Scale: boolean;
 
-    // Since our surfaces are merged together from multiple other surfaces, we can have multiple
+    // Since our surfaces are merged together from multiple BSP surfaces, we can have multiple
     // surface lightmaps, but they're guaranteed to have been packed into the same lightmap page.
     lightmapData: SurfaceLightmapData[];
-    lightmapPageIndex: number;
+    lightmapPackerPageIndex: number;
 
     bbox: AABB;
 }
@@ -723,7 +723,7 @@ function decompressLZMA(compressedData: ArrayBufferSlice, uncompressedSize: numb
     return new ArrayBufferSlice(decompress(compressedData.slice(0x11), lzmaProperties, actualSize));
 }
 
-export class LightmapPackerManager {
+export class LightmapPacker {
     public pages: LightmapPackerPage[] = [];
 
     constructor(public pageWidth: number = 2048, public pageHeight: number = 2048) {
@@ -827,7 +827,7 @@ export class BSPFile {
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility;
-    public lightmapPackerManager = new LightmapPackerManager();
+    public lightmapPacker = new LightmapPacker();
 
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
@@ -1116,7 +1116,7 @@ export class BSPFile {
             };
 
             // Allocate ourselves a page.
-            this.lightmapPackerManager.allocate(lightmapData);
+            this.lightmapPacker.allocate(lightmapData);
 
             const plane = readVec3(planes, planenum * 0x14);
             faces.push({ index: i, texinfo, lightmapData, vertnormalBase, plane });
@@ -1423,8 +1423,8 @@ export class BSPFile {
             const tangentSSign = vec3.dot(face.plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = face.lightmapData;
-            const lightmapPageIndex = lightmapData.pageIndex;
-            const lightmapPage = this.lightmapPackerManager.pages[lightmapData.pageIndex];
+            const lightmapPackerPageIndex = lightmapData.pageIndex;
+            const lightmapPage = this.lightmapPacker.pages[lightmapData.pageIndex];
 
             const tangentW = tangentSSign;
 
@@ -1496,7 +1496,7 @@ export class BSPFile {
                 assert(indexCount === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                surface = { texName, onNode, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, bbox: result.bbox };
+                surface = { texName, onNode, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapData: [], lightmapPackerPageIndex, bbox: result.bbox };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -1568,7 +1568,7 @@ export class BSPFile {
                 surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPageIndex, bbox };
+                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPackerPageIndex, bbox };
                     this.surfaces.push(surface);
                 } else {
                     surface.bbox.union(surface.bbox, bbox);
@@ -1679,7 +1679,7 @@ export class BSPFile {
                 dstIndexBase += vertexCount;
 
                 const texName = tex.texName;
-                const surface: Surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPageIndex: 0, bbox: overlayResult.bbox };
+                const surface: Surface = { texName, onNode: false, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPackerPageIndex: 0, bbox: overlayResult.bbox };
 
                 const surfaceIndex = this.surfaces.push(surface) - 1;
                 // Currently, overlays are part of the first model. We need to track origin surfaces / models if this differs...

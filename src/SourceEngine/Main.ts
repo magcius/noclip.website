@@ -333,7 +333,7 @@ export class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
     public lightmaps: SurfaceLightmap[] = [];
-    private lightmapPageIndex: number;
+    private lightmapManagerPage: number;
 
     constructor(public surface: Surface) {
     }
@@ -341,10 +341,10 @@ export class BSPSurfaceRenderer {
     public bindMaterial(materialInstance: BaseMaterial, startLightmapPageIndex: number): void {
         this.materialInstance = materialInstance;
 
-        this.lightmapPageIndex = startLightmapPageIndex + this.surface.lightmapPageIndex;
+        this.lightmapManagerPage = startLightmapPageIndex + this.surface.lightmapPackerPageIndex;
         for (let i = 0; i < this.surface.lightmapData.length; i++) {
             const lightmapData = this.surface.lightmapData[i];
-            this.lightmaps.push(new SurfaceLightmap(lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap, this.lightmapPageIndex));
+            this.lightmaps.push(new SurfaceLightmap(lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
         }
     }
 
@@ -372,11 +372,11 @@ export class BSPSurfaceRenderer {
             if (!lightmap.checkDirty(renderContext))
                 continue;
             if (liveFaceSet === null || liveFaceSet.has(lightmap.lightmapData.faceIndex))
-                lightmap.buildLightmap(renderContext);
+                lightmap.buildLightmap(renderContext, this.lightmapManagerPage);
         }
 
         const renderInst = renderInstManager.newRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, this.lightmapPageIndex);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst, this.lightmapManagerPage);
         this.materialInstance.setOnRenderInstModelMatrix(renderInst, modelMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
         renderInst.debug = this;
@@ -656,7 +656,7 @@ export class BSPRenderer {
         this.entitySystem = new EntitySystem(renderContext, this);
 
         renderContext.materialCache.setUsingHDR(this.bsp.usingHDR);
-        this.startLightmapPageIndex = renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
+        this.startLightmapPageIndex = renderContext.lightmapManager.appendPackerPages(this.bsp.lightmapPacker);
 
         const device = renderContext.device, cache = renderContext.renderCache;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData);
@@ -1040,7 +1040,7 @@ export class SourceWorldViewRenderer {
                 if (!this.skyboxView.calcPVS(bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))
                     continue;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.Entities));
             }
         }
 
