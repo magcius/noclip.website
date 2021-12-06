@@ -112,6 +112,10 @@ export class GloverTextureHolder extends TextureHolder<Image> {
     }
 
     public animatePalettes(viewerInput: Viewer.ViewerRenderInput) : void {
+
+        // TODO: if you go to another level and then back to atlantis 1,
+        //       textures stop animating. look into why.
+        
         if (viewerInput.time > this.lastAnimationTick + 50) {
             this.lastAnimationTick = viewerInput.time;
             for (let texture of this.animatedTextures) {

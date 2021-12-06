@@ -4,6 +4,8 @@ import * as RDP from '../Common/N64/RDP';
 import * as RSP from '../Common/N64/RSP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 
+import * as RDPRenderModes from './rdp_render_modes';
+
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4 } from "gl-matrix";
@@ -110,6 +112,60 @@ const G_TX_NOLOD = 0
 // }
 
 
+function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, zbuffer: boolean, alpha: number): void {    
+    const two_cycle = false;
+
+    if (textured) {
+        // rspState.gDPSetCombineMode(G_CC_MODULATEI, G_CC_MODULATEIA);
+        rspState.gDPSetCombine(0xFC127E24, 0xFF33F9FF);
+    } else {
+        // rspState.gDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE);// 0xFC127E24 0xFFFFF7FB;
+        rspState.gDPSetCombine(0xFC127E24, 0xFFFFF7FB);
+    }
+
+    assert(0 <= alpha && alpha <= 1);
+    // TODO:
+    // rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);
+
+    if (xlu) {
+        if (zbuffer) {
+            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+            rspState.gDPSetRenderMode( // 0xB900031D 0x005049D8
+                RDPRenderModes.G_RM_AA_ZB_XLU_SURF, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
+        } else {
+            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
+            rspState.gDPSetRenderMode( // 0xB900031D 0x0C1841C8/0x005041C8
+                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_XLU_SURF,
+                RDPRenderModes.G_RM_AA_XLU_SURF2);
+        }
+    } else if (textured) {
+        if (zbuffer) {
+            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+            rspState.gDPSetRenderMode( // 0xB900031D 0x0C193078/0x00553078
+                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_ZB_TEX_EDGE,
+                RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
+        } else {
+            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
+            rspState.gDPSetRenderMode( // 0xB900031D 0x0C193048/0x00553048
+                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_TEX_EDGE,
+                RDPRenderModes.G_RM_AA_TEX_EDGE2);
+        }
+    } else {
+        if (zbuffer) {
+            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+            rspState.gDPSetRenderMode( // 0xB900031D 0x0C192078/0x00552078
+                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_ZB_OPA_SURF,
+                RDPRenderModes.G_RM_AA_ZB_OPA_SURF2);
+        } else {
+            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
+            rspState.gDPSetRenderMode( // 0xB900031D 0x0C192048/0x00552048
+                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_OPA_SURF,
+                RDPRenderModes.G_RM_AA_OPA_SURF2);
+        }
+    }
+}
+
+
 function makeVertexBufferData(v: F3DEX.Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
@@ -187,19 +243,6 @@ export class DrawCallRenderData {
             const reprocessed_tex = RDP.translateTileTexture(this.segmentBuffers, tex.dramAddr, tex.dramPalAddr, tex.tile, false);
             this.device.uploadTextureData(this.textures[i], 0, [reprocessed_tex.pixels]);
         }
-
-        // for (let i = 0; i < this.textures.length; i++)
-        //     this.device.destroyTexture(this.textures[i]);
-
-        // this.textures = []
-        // this.samplers = []
-        // for (let i = 0; i < textures.length; i++) {
-        //     const tex = textures[i];
-        //     const reprocessed_tex = RDP.translateTileTexture(this.segmentBuffers, tex.dramAddr, tex.dramPalAddr, tex.tile, false);
-
-        //     this.textures.push(RDP.translateToGfxTexture(this.device, reprocessed_tex));
-        //     this.samplers.push(RDP.translateSampler(this.device, this.renderCache, reprocessed_tex));
-        // }
 
     }
 
@@ -453,6 +496,10 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         this.DP_TileState[tile].setSize(uls, ult, lrs, lrt);
     }
 
+    public gDPSetRenderMode(c0: number, c1: number) {
+        this.gDPSetOtherModeL(3, 0x1D, c0 | c1);
+    }
+
     public gDPSetOtherModeL(sft: number, len: number, w1: number): void {
         const mask = ((1 << len) - 1) << sft;
         const DP_OtherModeL = (this.DP_OtherModeL & ~mask) | (w1 & mask);
@@ -556,7 +603,6 @@ export class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const combParams = vec4.create();
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
@@ -840,13 +886,13 @@ class GloverMeshRenderer {
     {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
+        const xlu = false;
 
         initializeRenderState(rspState);
 
-        // TODO: choose texture and blend modes properly based on decomp'ed pipeline initialization code
-        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER | F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        rspState.gDPSetCombine(0xfc26a1ff, 0x1ffc923c); // (G_CC_TRILERP, G_CC_DECALRGB2)
-        rspState.gDPSetOtherModeL(3, 0x1D, 0x00552038); // gsDPSetRenderMode(G_RM_RA_ZB_OPA_SURF, G_RM_RA_ZB_OPA_SURF2);
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+        setRenderMode(rspState, true, xlu, true, 1.0);
+
 
         if (meshData.displayListPtr != 0) {
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
