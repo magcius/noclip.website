@@ -362,7 +362,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
     }], // "Outro cutscene"
     ["2b", {
-        landscape: "PRESENTATION.obj.fla",
+        landscape: "43.PRESENT.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PRESENTATION.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PRESENT_TEX_BANK.tex.fla"]
     }], // "Presentation (studio logos)"
@@ -418,8 +418,7 @@ class SceneDesc implements Viewer.SceneDesc {
         function loadActor(id : number) : GloverActorRenderer | null {
             const objRoot = loadedObjects.get(id);
             if (objRoot === undefined) {
-                console.error(`Object 0x${id.toString(16)} is not loaded!`);
-                return null;
+                throw `Object 0x${id.toString(16)} is not loaded!`;
             }
             let new_actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
             if ((objRoot.mesh.renderMode & 0x2) == 0) {
@@ -456,22 +455,20 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 case 'SetActorRotation': {
                     if (currentActor === null) {
-                        console.error(`No active actor for ${cmd.params.__type}!`);
-                        continue;
+                        throw `No active actor for ${cmd.params.__type}!`;
                     }
                     // TODO: confirm rotation order:
-                    mat4.fromXRotation(scratchMatrix, cmd.params.x);
+                    mat4.fromZRotation(scratchMatrix, cmd.params.z);
                     mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
                     mat4.fromYRotation(scratchMatrix, cmd.params.y);
                     mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
-                    mat4.fromZRotation(scratchMatrix, cmd.params.z);
+                    mat4.fromXRotation(scratchMatrix, cmd.params.x);
                     mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
                     break;
                 }
                 case 'SetActorScale': {
                     if (currentActor === null) {
-                        console.error(`No active actor for ${cmd.params.__type}!`);
-                        continue;
+                        throw `No active actor for ${cmd.params.__type}!`;
                     }
                     mat4.scale(currentActor.modelMatrix, currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     break;

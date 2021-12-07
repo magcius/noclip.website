@@ -244,7 +244,6 @@ export class DrawCallRenderData {
 
     public updateTextures(): void {
         const textures = this.textureCache.textures;
-
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
             const reprocessed_tex = RDP.translateTileTexture(this.segmentBuffers, tex.dramAddr, tex.dramPalAddr, tex.tile, false);
@@ -410,7 +409,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             const cycletype = RDP.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === RDP.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === RDP.OtherModeH_CycleType.G_CYC_2CYCLE);
 
-            if (this.textures.isDynamic(this.DP_TextureImageState.addr))) {
+            if (this.textures.isDynamic(this.DP_TextureImageState.addr) === true) {
                 dc.dynamicTextures.add(this.DP_TextureImageState.addr);
             }
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
@@ -1107,7 +1106,6 @@ class GloverMeshRenderer {
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
-
                 if (drawCall.dynamicTextures.size > 0) {
                     if (drawCall.lastTextureUpdate < this.textures.lastAnimationTick) {
                         drawCall.lastTextureUpdate = viewerInput.time;
