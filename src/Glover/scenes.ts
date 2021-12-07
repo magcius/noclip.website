@@ -36,7 +36,8 @@ import { KaitaiStream } from 'kaitai-struct';
 const pathBase = `glover`;
 
 class GloverRenderer implements Viewer.SceneGfx {
-    public actorRenderers: GloverActorRenderer[] = [];
+    public opaqueActors: GloverActorRenderer[] = [];
+    public translucentActors: GloverActorRenderer[] = [];
 
     public renderHelper: GfxRenderHelper;
 
@@ -52,54 +53,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-
-        const renderHacksPanel = new UI.Panel();
-
-        // TODO: implement:
-
-        // renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        // renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        // const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
-        // enableCullingCheckbox.onchanged = () => {
-        //     for (let renderer of this.actorRenderers) {
-        //         renderer.setBackfaceCullingEnabled(enableCullingCheckbox.checked);
-        //     }
-        // };
-        // renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
-
-        // const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
-        // enableVertexColorsCheckbox.onchanged = () => {
-        //     for (let renderer of this.actorRenderers) {
-        //         renderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
-        //     }
-        // };
-        // renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
-
-        // const enableTextures = new UI.Checkbox('Enable Textures', true);
-        // enableTextures.onchanged = () => {
-        //     for (let renderer of this.actorRenderers) {
-        //         renderer.setTexturesEnabled(enableTextures.checked);
-        //     }
-        // };
-        // renderHacksPanel.contents.appendChild(enableTextures.elem);
-
-        // const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
-        // enableMonochromeVertexColors.onchanged = () => {
-        //     for (let renderer of this.actorRenderers) {
-        //         renderer.setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
-        //     }
-        // };
-        // renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
-
-        // const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
-        // enableAlphaVisualizer.onchanged = () => {
-        //     for (let renderer of this.actorRenderers) {
-        //         renderer.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
-        //     }
-        // };
-        // renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
-
-        return [renderHacksPanel];
+        return [];
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -107,9 +61,14 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         this.textureHolder.animatePalettes(viewerInput);
 
-        for (let actorRenderer of this.actorRenderers) {
+        for (let actorRenderer of this.opaqueActors) {
             actorRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
+        for (let actorRenderer of this.translucentActors) {
+            // TODO: use sort key to order by camera distance
+            actorRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
+
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -133,7 +92,6 @@ class GloverRenderer implements Viewer.SceneGfx {
                 renderInstManager.drawOnPassRenderer(passRenderer);
             });
         });
-
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
@@ -146,7 +104,10 @@ class GloverRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
 
-        for (let actorRenderer of this.actorRenderers) {
+        for (let actorRenderer of this.opaqueActors) {
+            actorRenderer.destroy(device);
+        }
+        for (let actorRenderer of this.translucentActors) {
             actorRenderer.destroy(device);
         }
 
@@ -461,7 +422,11 @@ class SceneDesc implements Viewer.SceneDesc {
                 return null;
             }
             let new_actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
-            sceneRenderer.actorRenderers.push(new_actor)
+            if ((objRoot.mesh.renderMode & 0x2) == 0) {
+                sceneRenderer.opaqueActors.push(new_actor)
+            } else {
+                sceneRenderer.translucentActors.push(new_actor)
+            }
             return new_actor;
         }
 

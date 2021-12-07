@@ -886,7 +886,7 @@ class GloverMeshRenderer {
     {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
-        const xlu = false;
+        const xlu = (this.meshData.renderMode & 0x2) != 0;
 
         initializeRenderState(rspState);
 
@@ -895,13 +895,14 @@ class GloverMeshRenderer {
 
 
         if (meshData.displayListPtr != 0) {
+            // TODO: incorporate mesh alpha here
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
             rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
             this.rspOutput = rspState.finish();
         } else {
             rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
-            this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState);
+            this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState, meshData.alpha/255);
         }
 
         if (this.rspOutput !== null) {
@@ -911,7 +912,7 @@ class GloverMeshRenderer {
         }
     }
 
-    private loadDynamicModel(geo: GloverObjbank.Geometry, rspState: GloverRSPState): GloverRSPOutput {
+    private loadDynamicModel(geo: GloverObjbank.Geometry, rspState: GloverRSPState, alpha: number): GloverRSPOutput {
         const drawCalls: DrawCall[] = []
         const uniqueTextures = new Set<number>()
         const textureCache = new RDP.TextureCache()
@@ -991,9 +992,9 @@ class GloverMeshRenderer {
                     continue;
                 }
                 drawCall.vertices.push(
-                    f3dexFromGeometry(geo, faceIdx, 0),
-                    f3dexFromGeometry(geo, faceIdx, 1),
-                    f3dexFromGeometry(geo, faceIdx, 2)
+                    f3dexFromGeometry(geo, faceIdx, 0, alpha),
+                    f3dexFromGeometry(geo, faceIdx, 1, alpha),
+                    f3dexFromGeometry(geo, faceIdx, 2, alpha)
                 );
                 // TODO: delete
                 // drawCall.originalUVs.push(
