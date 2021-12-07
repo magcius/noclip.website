@@ -799,6 +799,11 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
     return true;
 }
 
+export function isExistMapCollision(sceneObjHolder: SceneObjHolder, p0: ReadonlyVec3, dir: ReadonlyVec3): boolean {
+    const director = sceneObjHolder.collisionDirector!;
+    return director.keepers[0].checkStrikeLine(sceneObjHolder, p0, dir) !== 0;
+}
+
 export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3): boolean {
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, CollisionKeeperCategory.Map);
 }
@@ -1237,14 +1242,15 @@ export function isBindedGround(actor: Readonly<LiveActor>): boolean {
     return actor.binder.floorHitInfo.distance >= 0.0;
 }
 
-export function isOnGround(actor: LiveActor): boolean {
-    if (actor.binder === null)
+export function getGroundNormal(actor: Readonly<LiveActor>): vec3 {
+    return actor.binder!.floorHitInfo.faceNormal;
+}
+
+export function isOnGround(actor: Readonly<LiveActor>): boolean {
+    if (!isBindedGround(actor))
         return false;
 
-    if (actor.binder.floorHitInfo.distance < 0.0)
-        return false;
-
-    return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) <= 0.0;
+    return vec3.dot(getGroundNormal(actor), actor.velocity) <= 0.0;
 }
 
 export function isBindedRoof(actor: LiveActor): boolean {

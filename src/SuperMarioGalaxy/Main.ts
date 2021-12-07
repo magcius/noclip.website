@@ -53,6 +53,7 @@ import { GalaxyMapController } from './Actors/GalaxyMap';
 import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+import { TakoHeiInkHolder } from './Actors/Enemy';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1097,6 +1098,7 @@ export class SceneObjHolder {
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public starPieceDirector: StarPieceDirector | null = null;
+    public takoHeiInkHolder: TakoHeiInkHolder | null = null;
     public shadowControllerHolder: ShadowControllerHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
@@ -1180,6 +1182,8 @@ export class SceneObjHolder {
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.StarPieceDirector)
             return this.starPieceDirector;
+        else if (sceneObj === SceneObj.TakoHeiInkHolder)
+            return this.takoHeiInkHolder;
         else if (sceneObj === SceneObj.ShadowControllerHolder)
             return this.shadowControllerHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -1260,6 +1264,8 @@ export class SceneObjHolder {
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.StarPieceDirector)
             this.starPieceDirector = new StarPieceDirector(this);
+        else if (sceneObj === SceneObj.TakoHeiInkHolder)
+            this.takoHeiInkHolder = new TakoHeiInkHolder(this);
         else if (sceneObj === SceneObj.ShadowControllerHolder)
             this.shadowControllerHolder = new ShadowControllerHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)

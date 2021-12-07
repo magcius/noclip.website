@@ -1,18 +1,18 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, getRailPointPosStart, getRailPointPosEnd, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, getRailPointPosStart, getRailPointPosEnd, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, getJointMtx } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
-import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit } from '../Collision';
+import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, getGroundNormal, isExistMapCollision } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
 import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, HitSensorInfo, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { isDead, isMsgTypeEnemyAttack, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { MapPartsRailMover, MapPartsRailPointPassChecker } from '../MapParts';
 import { getWaterAreaInfo, isCameraInWater, isInWater, WaterInfo } from '../MiscMap';
@@ -786,10 +786,10 @@ export class RingBeamer extends LiveActor<RingBeamerNrv> {
     }
 }
 
-function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
     const collisionDirector = sceneObjHolder.collisionDirector;
     if (collisionDirector === null)
-        return;
+        return false;
 
     vec3.scaleAndAdd(scratchVec3a, actor.translation, actor.gravityVector, -150.0);
     vec3.scaleAndAdd(scratchVec3b, actor.translation, actor.gravityVector, 1000.0);
@@ -798,10 +798,14 @@ function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveAct
     const mapKeeper = collisionDirector.keepers[CollisionKeeperCategory.Map];
     if (moveLimitKeeper.checkStrikeLine(sceneObjHolder, scratchVec3a, scratchVec3b)) {
         actor.binder!.setExCollisionParts(moveLimitKeeper.strikeInfo[0].collisionParts!);
+        return true;
     } else if (mapKeeper.checkStrikeLine(sceneObjHolder, scratchVec3a, scratchVec3b)) {
         const mapCollisionParts = mapKeeper.strikeInfo[0].collisionParts!;
         const exParts = moveLimitKeeper.searchSameHostParts(mapCollisionParts);
         actor.binder!.setExCollisionParts(exParts);
+        return true;
+    } else {
+        return false;
     }
 }
 
@@ -1283,7 +1287,7 @@ function calcPassiveMovement(actor: LiveActor, param: Readonly<WalkerStateParam>
 function turnDirectionToTargetUseGroundNormalDegree(actor: LiveActor, dst: vec3, targetPos: ReadonlyVec3, speedInDegrees: number): boolean {
     vec3.sub(scratchVec3a, targetPos, actor.translation);
     const speed = Math.cos(MathConstants.DEG_TO_RAD * speedInDegrees);
-    const plane = isBindedGround(actor) ? (actor.binder!.floorHitInfo.faceNormal) : actor.gravityVector;
+    const plane = isBindedGround(actor) ? getGroundNormal(actor) : actor.gravityVector;
     return turnVecToVecCosOnPlane(dst, dst, scratchVec3a, plane, speed);
 }
 
@@ -1375,12 +1379,10 @@ class WalkerStateWander extends ActorStateBaseInterface<WalkerStateWanderNrv> {
 
             calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
 
-            if (!isFallNextMoveActor(sceneObjHolder, this.actor, 150.0, 150.0, 150.0)) {
-                if (this.territoryMover.isReachedTarget(this.actor, this.paramWander.targetRadius) || isGreaterStep(this, this.paramWander.walkStep)) {
-                    this.setNerve(WalkerStateWanderNrv.Wait);
-                }
-            } else {
+            if (isFallNextMoveActor(sceneObjHolder, this.actor, 150.0, 150.0, 150.0)) {
                 vec3.zero(this.actor.velocity);
+                this.setNerve(WalkerStateWanderNrv.Wait);
+            } else if (this.territoryMover.isReachedTarget(this.actor, this.paramWander.targetRadius) || isGreaterStep(this, this.paramWander.walkStep)) {
                 this.setNerve(WalkerStateWanderNrv.Wait);
             }
         }
@@ -1540,7 +1542,7 @@ function makeQuatAndFrontFromRotate(dstQuat: quat, dstFront: vec3, actor: Readon
 
 function blendQuatFromGroundAndFront(dst: quat, actor: Readonly<LiveActor>, front: ReadonlyVec3, speedUp: number, speedFront: number): void {
     if (isBindedGround(actor)) {
-        vec3.copy(scratchVec3a, actor.binder!.floorHitInfo.faceNormal);
+        vec3.copy(scratchVec3a, getGroundNormal(actor));
     } else {
         vec3.negate(scratchVec3a, actor.gravityVector);
     }
@@ -2345,7 +2347,7 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
                     if (this.type === HomingKillerType.HomingKiller) {
                         const groundSensor = this.binder!.floorHitInfo.hitSensor!;
                         if (!groundSensor.isType(HitSensorType.BreakableCage)) {
-                            const groundNormal = this.binder!.floorHitInfo.faceNormal;
+                            const groundNormal = getGroundNormal(this);
                             if (vec3.dot(this.gravityVector, groundNormal) < -0.75) {
                                 emitEffect(sceneObjHolder, this, 'SandColumn');
 
@@ -3269,7 +3271,7 @@ function applyVelocityDampAndGravity(actor: LiveActor, gravitySpeed: number, gro
     vec3.add(actor.velocity, scratchVec3a, scratchVec3b);
 
     if (actorOnGround) {
-        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        const groundNormal = getGroundNormal(actor);
         vecKillElement(scratchVec3a, actor.velocity, groundNormal);
         if (vec3.squaredLength(scratchVec3a) < v4 ** 2.0)
             vec3.scale(actor.velocity, groundNormal, vec3.dot(groundNormal, actor.velocity));
@@ -3986,7 +3988,7 @@ export class KoteBug extends LiveActor<KoteBugNrv> {
 
 function turnDirectionToGround(front: vec3, actor: LiveActor): void {
     if (isBindedGround(actor)) {
-        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        const groundNormal = getGroundNormal(actor);
         vec3.negate(scratchVec3b, groundNormal);
     } else {
         vec3.copy(scratchVec3b, actor.gravityVector);
@@ -3998,7 +4000,7 @@ function turnDirectionToGround(front: vec3, actor: LiveActor): void {
 
 function addVelocityToGravityOrGround(actor: LiveActor, gravitySpeed: number): void {
     if (isBindedGround(actor)) {
-        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        const groundNormal = getGroundNormal(actor);
         vec3.scaleAndAdd(actor.velocity, actor.velocity, groundNormal, -gravitySpeed);
     } else {
         addVelocityToGravity(actor, gravitySpeed);
@@ -4019,7 +4021,7 @@ function calcRotate(actor: LiveActor, front: ReadonlyVec3, turnSpeedDegrees: num
     vec3.copy(scratchVec3c, front);
 
     if (isBindedGround(actor)) {
-        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        const groundNormal = getGroundNormal(actor);
         vec3.copy(scratchVec3a, groundNormal);
     } else {
         vec3.negate(scratchVec3a, actor.gravityVector);
@@ -5750,5 +5752,478 @@ export class BirikyuWithFace extends Birikyu {
 
     protected getCenterJointName(): string {
         return 'Center';
+    }
+}
+
+const enum TakoHeiInkNrv { Wait, }
+class TakoHeiInk extends LiveActor<TakoHeiInkNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
+        super(zoneAndLayer, sceneObjHolder, 'TakoHeiInk');
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'TakoHeiInk');
+        connectToSceneEnemy(sceneObjHolder, this);
+        this.calcGravityFlag = true;
+        this.initHitSensor();
+        addHitSensorEnemy(sceneObjHolder, this, 'body', 8, 50.0, Vec3Zero);
+        this.initBinder(50.0, 0.0, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // this.initSound();
+        initShadowVolumeSphere(sceneObjHolder, this, 50.0);
+        this.initNerve(TakoHeiInkNrv.Wait);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public start(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3, velocity: ReadonlyVec3, noBind: boolean): void {
+        vec3.copy(this.translation, pos);
+        this.setNerve(TakoHeiInkNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+        vec3.copy(this.velocity, velocity);
+        this.calcBinderFlag = !noBind;
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TakoHeiInkNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === TakoHeiInkNrv.Wait) {
+            if (isFirstStep(this))
+                tryStartBck(this, 'Wait');
+            if (isGreaterStep(this, 10) && !this.calcBinderFlag)
+                this.calcBinderFlag = true;
+            addVelocityToGravity(this, 0.8);
+            attenuateVelocity(this, 0.99);
+            if (isBinded(this) || isGreaterStep(this, 240))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('TakoHeiInk');
+    }
+}
+
+export class TakoHeiInkHolder extends LiveActorGroup<TakoHeiInk> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'TakoHeiHolder', 0x10);
+
+        for (let i = 0; i < 0x10; i++) {
+            const bubble = new TakoHeiInk(dynamicSpawnZoneAndLayer, sceneObjHolder, null);
+            this.registerActor(bubble);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        TakoHeiInk.requestArchives(sceneObjHolder);
+    }
+}
+
+function calcPositionUpOffset(dst: vec3, actor: LiveActor, offset: number): void {
+    calcUpVec(dst, actor);
+    vec3.scaleAndAdd(dst, actor.translation, dst, offset);
+}
+
+function spurtTakoHeiInk(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3, velocity: ReadonlyVec3): boolean {
+    const actor = sceneObjHolder.takoHeiInkHolder!.getDeadActor();
+    if (actor === null)
+        return false;
+
+    actor.start(sceneObjHolder, pos, velocity, false);
+    return true;
+}
+
+const enum TakoHeiNrv { Wait, Walk, FindTurn, Find, Pursue, AttackSign, Attack, CoolDown, NonActive, }
+export class TakoHei extends LiveActor<TakoHeiNrv> {
+    private origTranslation = vec3.create();
+    private poseQuat = quat.create();
+    private axisZ = vec3.create();
+    private targetPos = vec3.create();
+    private pushTimer = 0;
+    private hasMoveLimitCollision = false;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'TakoHei');
+
+        sceneObjHolder.create(SceneObj.TakoHeiInkHolder);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'TakoHei');
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        this.calcGravityFlag = true;
+        vec3.copy(this.origTranslation, this.translation);
+        makeQuatAndFrontFromRotate(this.poseQuat, this.axisZ, this);
+        // addToAttributeGroupSearchTurtle(this);
+        this.initBinder(this.scale[1] * 90.0, this.scale[1] * 90.0, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // this.initSound();
+
+        // initSensor
+        this.initHitSensor();
+        vec3.set(scratchVec3a, 0.0, this.scale[0] * 70.0, 0.0);
+        addHitSensorEnemyAttack(sceneObjHolder, this, 'attack', 8, this.scale[0] * 80.0, scratchVec3a);
+        addHitSensorEnemy(sceneObjHolder, this, 'body', 8, this.scale[0] * 80.0, scratchVec3a);
+        // this.initStarPointerTarget();
+
+        initShadowVolumeSphere(sceneObjHolder, this, 60.0);
+        this.initNerve(TakoHeiNrv.Wait);
+        declareStarPiece(sceneObjHolder, this, 3);
+        declareCoin(sceneObjHolder, this, 1);
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        turnQuatUpToGravity(this.poseQuat, this.poseQuat, this);
+        this.hasMoveLimitCollision = trySetMoveLimitCollision(sceneObjHolder, this);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (!this.isNerve(TakoHeiNrv.NonActive)) {
+            if (this.pushTimer > 0)
+                this.pushTimer--;
+
+            this.updatePose();
+            // this.tryPressed();
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TakoHeiNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === TakoHeiNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Wait');
+                startBtp(this, 'Open');
+            }
+
+            this.updateBlink();
+            this.updateNormalVelocity();
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (this.tryFindTurn(sceneObjHolder))
+                return;
+            if (this.tryWalk(sceneObjHolder))
+                return;
+            if (this.tryNonActive(sceneObjHolder))
+                return;
+            } else if (currentNerve === TakoHeiNrv.FindTurn) {
+                if (isFirstStep(this)) {
+                    startBck(this, 'Turn');
+                    startBtp(this, 'Open');
+                }
+    
+                if (this.pushTimer === 1)
+                    startBtp(this, 'Open');
+    
+                getPlayerPos(scratchVec3a, sceneObjHolder);
+                turnDirectionToTargetDegree(this.axisZ, this, scratchVec3a, 6.0);
+                this.updateNormalVelocity();
+    
+                if (this.tryPointBind(sceneObjHolder))
+                    return;
+                if (this.tryFind(sceneObjHolder))
+                    return;
+        } else if (currentNerve === TakoHeiNrv.Find) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Search');
+                startBtp(this, 'Search');
+            }
+
+            this.updateNormalVelocity();
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (this.tryPursue(sceneObjHolder))
+                return;
+        } else if (currentNerve === TakoHeiNrv.Pursue) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Run');
+                startBtp(this, 'Blink');
+            }
+
+            if (this.pushTimer === 1)
+                startBtp(this, 'Blink');
+
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            const nearPlayer = isNearPlayer(sceneObjHolder, this, 700.0);
+            if (nearPlayer) {
+                addVelocityAwayFromTarget(this, scratchVec3a, 0.5);
+            } else {
+                addVelocityMoveToTarget(this, scratchVec3a, 0.5);
+            }
+
+            turnDirectionToTargetDegree(this.axisZ, this, scratchVec3a, 6.0);
+            this.updateNormalVelocity();
+
+            if (!nearPlayer) {
+                calcPositionUpOffset(scratchVec3a, this, 40.0);
+                vec3.scale(scratchVec3b, this.axisZ, 140.0);
+                if (isExistMapCollision(sceneObjHolder, scratchVec3a, scratchVec3b)) {
+                    this.setNerve(TakoHeiNrv.AttackSign);
+                    return;
+                }
+            }
+
+            if (this.tryAttack(sceneObjHolder))
+                return;
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (this.tryPursueEnd(sceneObjHolder))
+                return;
+        } else if (currentNerve === TakoHeiNrv.AttackSign) {
+            if (isFirstStep(this)) {
+                startBck(this, 'ShotStart');
+                startBtp(this, 'Angry');
+            }
+
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            turnDirectionToTargetDegree(this.axisZ, this, scratchVec3a, 8.0);
+            calcPositionUpOffset(scratchVec3a, this, 40.0);
+            vec3.scale(scratchVec3b, this.axisZ, 140.0);
+            if (isExistMapCollision(sceneObjHolder, scratchVec3a, scratchVec3b))
+                vec3.scaleAndAdd(this.velocity, this.velocity, this.axisZ, -0.1);
+            this.updateNormalVelocity();
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (isBckStopped(this))
+                this.setNerve(TakoHeiNrv.Attack);
+        } else if (currentNerve === TakoHeiNrv.Attack) {
+            if (isFirstStep(this)) {
+                const mouthMtx = getJointMtxByName(this, 'Mouth')!;
+                vec3.set(scratchVec3a, 0.0, 20.0, 0.0);
+                transformVec3Mat4w1(scratchVec3a, mouthMtx, scratchVec3a);
+                vec3.scale(scratchVec3b, this.gravityVector, -15.0);
+                vec3.scaleAndAdd(scratchVec3b, scratchVec3b, this.axisZ, 20.0);
+                spurtTakoHeiInk(sceneObjHolder, scratchVec3a, scratchVec3b);
+                startBck(this, 'Shot');
+            }
+
+            this.updateNormalVelocity();
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (isBckStopped(this))
+                this.setNerve(TakoHeiNrv.Wait);
+        } else if (currentNerve === TakoHeiNrv.CoolDown) {
+            if (isFirstStep(this)) {
+                startBck(this, 'CoolDown');
+                startBtp(this, 'Cry');
+            }
+
+            if (this.pushTimer === 1)
+                startBtp(this, 'Cry');
+
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            turnDirectionToTargetDegree(this.axisZ, this, this.axisZ, 0.0);
+            this.updateNormalVelocity();
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (this.tryCoolDownEnd(sceneObjHolder))
+                return;
+        } else if (currentNerve === TakoHeiNrv.Walk) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Walk');
+                startBtp(this, 'Open');
+                this.decideNextTargetPos();
+            }
+
+            this.updateBlink();
+            turnDirectionToTargetDegree(this.axisZ, this, this.targetPos, 6.0);
+            if (isGreaterStep(this, 10))
+                addVelocityMoveToTarget(this, this.targetPos, 0.2);
+            this.updateNormalVelocity();
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+            if (this.tryFindTurn(sceneObjHolder))
+                return;
+            if (this.tryWalkEnd(sceneObjHolder))
+                return;
+        } else if (currentNerve === TakoHeiNrv.NonActive) {
+            if (isFirstStep(this)) {
+                startBtp(this, 'Open');
+                this.updatePose();
+                this.calcBinderFlag = false;
+                offCalcShadow(this);
+                this.calcGravityFlag = false;
+            }
+            vec3.zero(this.velocity);
+            if (this.tryActive(sceneObjHolder)) {
+                this.calcBinderFlag = true;
+                onCalcShadow(this);
+                this.calcGravityFlag = true;
+                validateHitSensors(this);
+            }
+        }
+    }
+
+    private updateBlink(): void {
+        if (this.pushTimer === 1)
+            startBtp(this, 'Open');
+        if (this.getNerveStep() % 60 === 59)
+            startBtp(this, 'Blink');
+    }
+
+    private decideNextTargetPos(): void {
+        getRandomVector(this.targetPos, 500.0);
+        vecKillElement(this.targetPos, this.targetPos, this.gravityVector);
+        vec3.add(this.targetPos, this.targetPos, this.origTranslation);
+    }
+
+    private isInSightMario(sceneObjHolder: SceneObjHolder): boolean {
+        return isInSightFanPlayer(sceneObjHolder, this, this.axisZ, 1600.0, 90.0, 30.0);
+    }
+
+    private tryPointBind(sceneObjHolder: SceneObjHolder): boolean {
+        return false;
+    }
+
+    private tryFindTurn(sceneObjHolder: SceneObjHolder): boolean {
+        if (this.isInSightMario(sceneObjHolder)) {
+            this.setNerve(TakoHeiNrv.FindTurn);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryFind(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterStep(this, 20)) {
+            this.setNerve(TakoHeiNrv.Find);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryPursue(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterStep(this, 30)) {
+            this.setNerve(TakoHeiNrv.Pursue);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryAttack(sceneObjHolder: SceneObjHolder): boolean {
+        const dist = calcDistanceToPlayer(sceneObjHolder, this);
+        if (dist < 650.0)
+            return false;
+        if (dist > 750.0 && !isGreaterStep(this, 250))
+            return false;
+        this.setNerve(TakoHeiNrv.AttackSign);
+        return true;
+    }
+
+    private tryPursueEnd(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterStep(this, 300)) {
+            this.setNerve(TakoHeiNrv.CoolDown);
+            return true;
+        } else if (this.isFallNextMove(sceneObjHolder)) {
+            vec3.zero(this.velocity);
+            this.setNerve(TakoHeiNrv.Wait);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryCoolDownEnd(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterStep(this, 60)) {
+            if (this.isInSightMario(sceneObjHolder))
+                this.setNerve(TakoHeiNrv.Pursue);
+            else
+                this.setNerve(TakoHeiNrv.Wait);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryWalk(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterStep(this, 120)) {
+            this.setNerve(TakoHeiNrv.Walk);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private isFallNextMove(sceneObjHolder: SceneObjHolder): boolean {
+        if (this.hasMoveLimitCollision)
+            return false;
+
+        if (!isOnGround(this))
+            return false;
+
+        return isFallNextMove(sceneObjHolder, this.translation, this.velocity, this.gravityVector, 150.0, this.scale[0] * 90.0 + 2.0, 150.0);
+    }
+
+    private tryWalkEnd(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterStep(this, 120)) {
+            this.setNerve(TakoHeiNrv.Walk);
+            return true;
+        }
+
+        vec3.sub(scratchVec3a, this.targetPos, this.translation);
+        vecKillElement(scratchVec3a, scratchVec3a, this.gravityVector);
+        if (vec3.squaredLength(scratchVec3a) >= 20.0**2 && this.isFallNextMove(sceneObjHolder)) {
+            vec3.zero(this.velocity);
+            this.setNerve(TakoHeiNrv.Wait);
+            return true;
+        }
+
+        return false;
+    }
+
+    private tryNonActive(sceneObjHolder: SceneObjHolder): boolean {
+        if (!isNearPlayerAnyTime(sceneObjHolder, this, 3000.0) && isBindedGround(this)) {
+            vec3.zero(this.velocity);
+            invalidateHitSensors(this);
+            this.setNerve(TakoHeiNrv.NonActive);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryActive(sceneObjHolder: SceneObjHolder): boolean {
+        if (isNearPlayerAnyTime(sceneObjHolder, this, 3000.0)) {
+            this.setNerve(TakoHeiNrv.Wait);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private updateNormalVelocity(): void {
+        if (isBindedGround(this)) {
+            attenuateVelocity(this, 0.85);
+        } else {
+            addVelocityToGravity(this, 1.5);
+            attenuateVelocity(this, 0.99);
+        }
+
+        reboundVelocityFromCollision(this, 0.0, 0.0, 1.0);
+    }
+
+    private updatePose(): void {
+        if (isBindedGround(this)) {
+            blendQuatUpFront(this.poseQuat, this.poseQuat, getGroundNormal(this), this.axisZ, 0.1, 0.2);
+        } else {
+            vec3.negate(scratchVec3a, this.gravityVector);
+            blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.1, 0.2);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        TakoHeiInkHolder.requestArchives(sceneObjHolder);
     }
 }

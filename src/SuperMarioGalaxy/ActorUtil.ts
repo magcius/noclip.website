@@ -13,7 +13,7 @@ import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, ge
 import { assert, assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj, isInAreaObj } from "./AreaObj";
-import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
+import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, getGroundNormal, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, sendMsgPush } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
@@ -1457,10 +1457,6 @@ export function getGroupFromArray<T extends LiveActor>(sceneObjHolder: SceneObjH
     return sceneObjHolder.liveActorGroupArray.getLiveActorGroup(nameObj);
 }
 
-function getGroundNormal(actor: LiveActor): vec3 {
-    return actor.binder!.floorHitInfo.faceNormal;
-}
-
 function calcVelocityMoveToDirectionHorizon(dst: vec3, actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
     vecKillElement(dst, direction, actor.gravityVector);
     normToLength(dst, speed);
@@ -1474,6 +1470,18 @@ export function calcVelocityMoveToDirection(dst: vec3, actor: LiveActor, directi
 
 export function addVelocityMoveToDirection(actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
     calcVelocityMoveToDirection(scratchVec3, actor, direction, speed);
+    vec3.add(actor.velocity, actor.velocity, scratchVec3);
+}
+
+export function addVelocityMoveToTarget(actor: LiveActor, target: ReadonlyVec3, speed: number): void {
+    vec3.sub(scratchVec3, target, actor.translation);
+    calcVelocityMoveToDirection(scratchVec3, actor, scratchVec3, speed);
+    vec3.add(actor.velocity, actor.velocity, scratchVec3);
+}
+
+export function addVelocityAwayFromTarget(actor: LiveActor, target: ReadonlyVec3, speed: number): void {
+    vec3.sub(scratchVec3, actor.translation, target);
+    calcVelocityMoveToDirection(scratchVec3, actor, scratchVec3, speed);
     vec3.add(actor.velocity, actor.velocity, scratchVec3);
 }
 

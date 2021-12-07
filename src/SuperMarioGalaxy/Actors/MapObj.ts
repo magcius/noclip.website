@@ -10,7 +10,7 @@ import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeMod
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
 import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, connectToSceneEnemy, makeMtxTRFromQuatVec, isValidSwitchA, isOnSwitchA, turnDirectionToTargetRadians, quatGetAxisX, quatGetAxisY, connectToClippedMapParts } from '../ActorUtil';
-import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
 import { registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
@@ -1251,7 +1251,7 @@ class Rock extends LiveActor<RockNrv> {
 
         if (this.isNerve(RockNrv.AppearMoveInvalidBind) || this.isNerve(RockNrv.MoveInvalidBind) || (this.isNerve(RockNrv.Move) && isOnGround(this))) {
             if (this.isNerve(RockNrv.Move))
-                vec3.copy(scratchVec3a, this.binder!.floorHitInfo.faceNormal);
+                vec3.copy(scratchVec3a, getGroundNormal(this));
             else
                 vec3.negate(scratchVec3a, this.gravityVector);
 
@@ -1337,7 +1337,7 @@ class Rock extends LiveActor<RockNrv> {
     private isBreakByWall(): boolean {
         if (isBindedWall(this)) {
             getRailDirection(scratchVec3a, this);
-            return vec3.dot(this.binder!.floorHitInfo.faceNormal, scratchVec3a) < -0.5;
+            return vec3.dot(getGroundNormal(this), scratchVec3a) < -0.5;
         } else {
             return false;
         }
@@ -2603,7 +2603,7 @@ export class MeteorStrike extends LiveActor<MeteorStrikeNrv> {
                 let didBreak = false;
 
                 if (!isHiddenModel(this)) {
-                    this.calcBreakPosture(this.effectHostMtx, this.binder!.floorHitInfo.faceNormal);
+                    this.calcBreakPosture(this.effectHostMtx, getGroundNormal(this));
                     emitEffect(sceneObjHolder, this, 'LavaColumn');
 
                     if (!isBindedGroundDamageFire(sceneObjHolder, this)) {
