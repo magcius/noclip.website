@@ -5,9 +5,9 @@ import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj } from '../ActorUtil';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
-import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
+import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
 import { getObjectName, SceneObjHolder } from '../Main';
 import { DrawBufferType } from '../NameObj';
@@ -1482,5 +1482,114 @@ export class RosettaChair extends LiveActor {
         startBck(this, 'RosettaChair');
 
         this.makeActorAppeared(sceneObjHolder);
+    }
+}
+
+const enum CaretakerNrv { Talk }
+export class Caretaker extends NPCActor<CaretakerNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'Caretaker');
+
+        const caps = new NPCActorCaps<CaretakerNrv>('Caretaker');
+        caps.initRailRider = true;
+        caps.initShadowType = InitShadowType.CSV;
+        caps.waitNerve = CaretakerNrv.Talk;
+        caps.hitSensorRadius = 100.0;
+        this.initialize(sceneObjHolder, infoIter, caps);
+
+        const arg3 = fallback(getJMapInfoArg3(infoIter), 0);
+        const type = fallback(getJMapInfoArg4(infoIter), 0);
+        startBrk(this, 'BodyColor');
+        setBrkFrameAndStop(this, type);
+        startBtk(this, 'Dirt');
+        setBtkFrameAndStop(this, 0);
+
+        this.talkParam.turnOnWait = false;
+        // this.talkParam.turnOnTalk = true;
+        this.talkParam.turnSpeed = 3.0;
+        this.talkParam.waitActionName = 'BWaitStand';
+        this.talkParam.waitTurnActionName = 'BWaitStand';
+        this.walkActionName = 'BWaitRun';
+        this.walkTurnActionName = 'BRunTalk';
+        this.desiredRailSpeed = 2.0;
+        this.maxChangeRailSpeed = 0.1;
+        this.railTurnSpeed = 0.05;
+        this.railGrounded = true;
+
+        if (type === 0) {
+            // this.talkParam.talkActionName = 'BTalkNormal';
+            // this.talkParam.talkTurnActionName = 'BTalkNormal';
+        } else if (type === 1) {
+            // this.talkParam.talkActionName = 'BTalkCry';
+            // this.talkParam.talkTurnActionName = 'BTalkCry';
+        } else if (type === 2) {
+            // this.talkParam.talkActionName = 'BTalkSpin';
+            // this.talkParam.talkTurnActionName = 'BTalkSpin';
+        } else if (type === 3) {
+            // this.talkParam.talkActionName = 'BTalkSurprise';
+            // this.talkParam.talkTurnActionName = 'BTalkSurprise';
+        } else if (type === 4) {
+            // this.talkParam.talkActionName = 'BTalkSpring';
+            // this.talkParam.talkTurnActionName = 'BTalkSpring';
+        } else if (type === 5) {
+            this.talkParam.waitActionName = 'BTalkHelp';
+            this.talkParam.waitTurnActionName = 'BTalkHelp';
+            // this.talkParam.talkActionName = 'BTalkHelp';
+            // this.talkParam.talkTurnActionName = 'BTalkHelp';
+        } else if (type === 6) {
+            setBtkFrameAndStop(this, 2.0);
+            this.talkParam.waitActionName = 'BTalkSurvive';
+            // this.talkParam.talkActionName = 'BTalkSurvive';
+            this.talkParam.waitTurnActionName = null;
+            // this.talkParam.talkTurnActionName = null;
+            this.talkParam.turnOnWait = false;
+            // this.talkParam.turnOnTalk = false;
+        }
+
+        const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+        startBckNoInterpole(this, 'Wait');
+        this.calcAnim(sceneObjHolder);
+        // Talk registerEventFunc
+        if (arg0 !== -1 && arg0 !== 1) {
+            // this.spinName = 'SpinHit';
+            // this.reactionName = 'SpinHit';
+            // this.trampledName = 'Trampled';
+            // this.pointingName = 'TalkAngry';
+            this.talkParam.waitActionName = 'Wait';
+            this.talkParam.waitTurnActionName = 'Wait';
+            // this.talkParam.talkActionName = 'TalkNormal';
+            // this.talkParam.talkTurnActionName = 'TalkNormal';
+            this.walkActionName = 'WaitRun';
+            this.walkTurnActionName = 'WaitRun';
+
+            const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Caretaker', 0);
+            this.equipment(sceneObjHolder, itemGoods);
+
+            if (isExistRail(this)) {
+                moveCoordAndFollowTrans(this);
+                vec3.copy(this.initPoseTrans, this.translation);
+            }
+
+            useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+            useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+            // declarePowerStar
+            // TakeOutStar
+
+            // BombTimerLayout
+        }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (isExistRail(this))
+            followRailPoseOnGround(sceneObjHolder, this, this, 1.0);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CaretakerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === CaretakerNrv.Talk) {
+            tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder, this, deltaTimeFrames);
+            // tryStartReactionAndPushNerve(sceneObjHolder, this, CaretakerNrv.Reaction);
+        }
     }
 }

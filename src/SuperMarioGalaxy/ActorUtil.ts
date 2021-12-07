@@ -737,7 +737,7 @@ export function moveCoord(actor: LiveActor, speed: number | null = null): void {
     actor.railRider!.move();
 }
 
-export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
+export function moveCoordAndFollowTrans(actor: LiveActor, speed: number | null = null): void {
     moveCoord(actor, speed);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
