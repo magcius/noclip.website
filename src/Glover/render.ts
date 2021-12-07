@@ -113,11 +113,18 @@ const G_TX_NOLOD = 0
 
 
 function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, zbuffer: boolean, alpha: number): void {    
+    // This isn't exactly right but whatever, good enough
+
     const two_cycle = false;
 
     if (textured) {
-        // rspState.gDPSetCombineMode(G_CC_MODULATEI, G_CC_MODULATEIA);
-        rspState.gDPSetCombine(0xFC127E24, 0xFF33F9FF);
+        if (xlu) {
+            // rspState.gDPSetCombineMode(G_CC_MODULATEI, G_CC_MODULATEIA);
+            rspState.gDPSetCombine(0xFC127E24, 0xFF33F9FF);
+        } else {
+            // rspState.gDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2);
+            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238);
+        }
     } else {
         // rspState.gDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE);// 0xFC127E24 0xFFFFF7FB;
         rspState.gDPSetCombine(0xFC127E24, 0xFFFFF7FB);
@@ -887,11 +894,12 @@ class GloverMeshRenderer {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
         const xlu = (this.meshData.renderMode & 0x2) != 0;
+        const texturing = true;
 
         initializeRenderState(rspState);
 
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        setRenderMode(rspState, true, xlu, true, 1.0);
+        setRenderMode(rspState, texturing, xlu, true, 1.0);
 
 
         if (meshData.displayListPtr != 0) {
