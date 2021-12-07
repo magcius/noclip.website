@@ -498,6 +498,10 @@ export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recv
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackExplosion, sendSensor);
 }
 
+export function sendMsgEnemyAttackElectric(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackElectric, sendSensor);
+}
+
 export function sendMsgPush(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.Push, sendSensor);
 }

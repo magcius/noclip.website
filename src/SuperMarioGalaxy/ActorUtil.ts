@@ -28,7 +28,8 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchMatrix = mat4.create();
-const scratchQuat = quat.create();
+const scratchQuata = quat.create();
+const scratchQuatb = quat.create();
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
@@ -1179,8 +1180,8 @@ export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, f
     quatGetAxisY(axisY, q);
     if (vec3.dot(axisY, up) < 0.0 && isSameDirection(axisY, up, 0.01))
         turnRandomVector(axisY, axisY, 0.001);
-    quatSetRotate(scratchQuat, axisY, up, speedUp, scratch);
-    quat.mul(dst, scratchQuat, q);
+    quatSetRotate(scratchQuata, axisY, up, speedUp, scratch);
+    quat.mul(dst, scratchQuata, q);
 
     quatGetAxisY(axisY, dst);
     vecKillElement(axisY, front, axisY);
@@ -1190,8 +1191,8 @@ export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, f
     if (vec3.dot(axisZ, axisY) < 0.0 && isSameDirection(axisZ, axisY, 0.01))
         turnRandomVector(axisZ, axisZ, 0.001);
 
-    quatSetRotate(scratchQuat, axisZ, axisY, speedFront, scratch);
-    quat.mul(dst, scratchQuat, dst);
+    quatSetRotate(scratchQuata, axisZ, axisY, speedFront, scratch);
+    quat.mul(dst, scratchQuata, dst);
     quat.normalize(dst, dst);
     quatGetAxisZ(scratch, dst);
 }
@@ -1213,8 +1214,8 @@ export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: Reado
     else
         turn = 1.0;
 
-    quatSetRotate(scratchQuat, scratchVec3a, scratchVec3b, turn);
-    quat.mul(dst, scratchQuat, q);
+    quatSetRotate(scratchQuata, scratchVec3a, scratchVec3b, turn);
+    quat.mul(dst, scratchQuata, q);
     quat.normalize(dst, dst);
 
     return theta < 0.015;
@@ -1495,8 +1496,8 @@ export function rotateQuatRollBall(dst: quat, fwd: ReadonlyVec3, up: ReadonlyVec
     calcMomentRollBall(scratchVec3, fwd, up, radius);
     const rollAmount = vec3.length(scratchVec3);
     vec3.normalize(scratchVec3, scratchVec3);
-    quat.setAxisAngle(scratchQuat, scratchVec3, rollAmount);
-    quat.mul(dst, scratchQuat, dst);
+    quat.setAxisAngle(scratchQuata, scratchVec3, rollAmount);
+    quat.mul(dst, scratchQuata, dst);
 }
 
 export function hideMaterial(actor: LiveActor, materialName: string): void {
@@ -1894,4 +1895,15 @@ export function drawSimpleModel(renderInstManager: GfxRenderInstManager, modelDa
 
         renderInstManager.submitRenderInst(renderInst);
     }
+}
+
+export function blendMtx(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4, t: number): void {
+    quatFromMat4(scratchQuata, a);
+    quatFromMat4(scratchQuatb, b);
+    quat.slerp(scratchQuata, scratchQuata, scratchQuatb, t);
+    getMatrixTranslation(scratchVec3a, a);
+    getMatrixTranslation(scratchVec3b, b);
+    vec3.lerp(scratchVec3a, scratchVec3a, scratchVec3b, t);
+    mat4.fromQuat(dst, scratchQuata);
+    setMatrixTranslation(dst, scratchVec3a);
 }
