@@ -22,10 +22,11 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants, scaleMatrix } from '../MathHelpers';
+import { colorNewFromRGBA } from '../Color';
 
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
@@ -40,6 +41,8 @@ class GloverRenderer implements Viewer.SceneGfx {
     public translucentActors: GloverActorRenderer[] = [];
 
     public renderHelper: GfxRenderHelper;
+
+    public renderPassDescriptor = standardFullClearRenderPassDescriptor; 
 
     private initTime: number;
 
@@ -77,8 +80,8 @@ class GloverRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) : void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
@@ -123,7 +126,7 @@ interface GloverSceneBankDescriptor {
 };
 
 // Level ID to bank information
-// TODO, do the system levels
+// TODO: move this into an external ts file
 const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["00", {
         landscape: "00.HUB1ln.n64.lev",
@@ -431,6 +434,8 @@ class SceneDesc implements Viewer.SceneDesc {
             return new_actor;
         }
 
+        let skyboxClearColor = [0,0,0];
+
         for (let cmd of landscape.body) {
             if (cmd.params === undefined) {
                 continue;
@@ -476,9 +481,21 @@ class SceneDesc implements Viewer.SceneDesc {
                     mat4.scale(currentActor.modelMatrix, currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     break;
                 }
+                case 'FogConfiguration': {
+                    // TODO: this isn't actually the right
+                    //       skybox background color (that comes from
+                    //       generic world data), but it'll do for now.
+                    //       later, rip out the skybox values from ROM
+                    //       and use them instead
+                    skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
+                }
 
             }
         }
+
+        sceneRenderer.renderPassDescriptor = makeAttachmentClearDescriptor(
+            colorNewFromRGBA(skyboxClearColor[0], skyboxClearColor[1], skyboxClearColor[2]));
+
 
         return sceneRenderer;
     }
