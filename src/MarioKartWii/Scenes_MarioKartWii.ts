@@ -85,6 +85,7 @@ class ModelCache {
 }
 
 interface BaseObject extends GraphObjBase {
+    visible: boolean;
     modelMatrix: mat4;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
@@ -321,6 +322,7 @@ const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleF
 const FIdx2Rad = MathConstants.TAU / 0xFF;
 
 class CourseBGRenderer implements BaseObject {
+    public visible = true;
     public modelMatrix = mat4.create();
 
     constructor(public modelInstance: MDL0ModelInstance) {
@@ -339,6 +341,8 @@ class CourseBGRenderer implements BaseObject {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
         mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
     }
@@ -348,6 +352,7 @@ class CourseBGRenderer implements BaseObject {
 }
 
 class SimpleObjectRenderer implements BaseObject {
+    public visible = true;
     public modelMatrix = mat4.create();
 
     constructor(public modelInstance: MDL0ModelInstance, public gobj: GOBJ) {
@@ -368,6 +373,8 @@ class SimpleObjectRenderer implements BaseObject {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
         mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
     }
@@ -390,6 +397,9 @@ class Aurora extends SimpleObjectRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         // Update joints.
         // TODO(jstpierre): Do in a less ugly way lol
 

@@ -1896,17 +1896,10 @@ function parsePAT0(buffer: ArrayBufferSlice): PAT0 {
 }
 
 function findFrameData<T extends { frame: number }>(frames: T[], frame: number): T {
-    if (frames.length === 1)
-        return frames[0];
-
-    // Find the left-hand frame.
-    let idx0 = frames.length;
-    while (idx0-- > 0) {
-        if (frame >= frames[idx0].frame)
-            break;
-    }
-
-    return frames[idx0];
+    for (let i = 0; i < frames.length; i++)
+        if (frame < frames[i].frame)
+            return frames[i];
+    return frames[frames.length - 1];
 }
 
 export class PAT0TexAnimator {
