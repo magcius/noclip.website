@@ -382,6 +382,9 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         let dramPalAddr: number;
 
         const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
+
+        const old_fmt = tile.fmt;
+        const old_line = tile.line;
         if (textlut !== 0) {
             tile.fmt = ImageFormat.G_IM_FMT_CI;
         }
@@ -392,7 +395,16 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             dramPalAddr = 0;
         }
 
-        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false);
+        // Glover display lists have a nasty habit of sometimes
+        // setting totally bugged-out line values, but they're
+        // never necessary in this engine for proper rendering,
+        // so we'll force them to 0.
+        tile.line = 0;
+
+        const texIdx = this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false);
+        tile.line = old_line;
+        tile.fmt = old_fmt;
+        return texIdx;
     }
 
     private _flushTextures(dc: DrawCall): void {
@@ -900,16 +912,17 @@ class GloverMeshRenderer {
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         setRenderMode(rspState, texturing, xlu, true, 1.0);
 
-
         if (meshData.displayListPtr != 0) {
             // TODO: incorporate mesh alpha here
             const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
             rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
             this.rspOutput = rspState.finish();
-        } else {
+        } else if (meshData.geometry.nFaces > 0) {
             rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
             this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState, meshData.alpha/255);
+        } else {
+            this.rspOutput = null;
         }
 
         if (this.rspOutput !== null) {
@@ -980,9 +993,32 @@ class GloverMeshRenderer {
                     0, 0,
                     (texFile.width - 1) * 4, (texFile.height - 1) * 4);
 
-                rspState.DP_TileState[G_TX_RENDERTILE].fmt = ImageFormat.G_IM_FMT_CI
+                rspState.DP_TileState[G_TX_RENDERTILE].fmt = ImageFormat.G_IM_FMT_CI;
             } else {
-                console.error("TODO: non-indexed texture loads for dynamic models")
+                const siz = texFile.compressionFormat == 2 ? ImageSize.G_IM_SIZ_16b : ImageSize.G_IM_SIZ_32b;
+                rspState.gDPSetTextureImage(texFile.colorFormat, siz, 1, textureId);
+                
+                rspState.gDPSetTile(
+                    texFile.colorFormat,
+                    siz,
+                    0, 0x0000, G_TX_LOADTILE, 0,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD);
+
+
+                rspState.gDPLoadBlock(G_TX_LOADTILE, 0, 0, 0, 0);
+
+                rspState.gDPSetTile(
+                    texFile.colorFormat,
+                    siz,
+                    0, 0x0000, G_TX_RENDERTILE, 0,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
+                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD)
+
+                rspState.gDPSetTileSize(G_TX_RENDERTILE,
+                    0, 0,
+                    (texFile.width - 1) * 4, (texFile.height - 1) * 4);
+
             }
             // Set up draw call
             let drawCall = rspState._newDrawCall();

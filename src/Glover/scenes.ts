@@ -166,7 +166,11 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Hub 8"),
 
-    ["08", { // TODO: figure out why this is crashing
+    ["08", {
+        // TODO:
+        //      - not loading all crystal textures properly (likely)
+        //        has to do with non-indexed textures in dynamic models,
+        //        which i was winging -- double check them
         landscape: "08.CAVEln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "CAVE.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
@@ -255,7 +259,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L1A.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
     }],
-    ["1a", {
+    ["1a", { // TODO: lava should have water animation
         landscape: "26.PH2Aln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L2A.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
@@ -327,7 +331,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "TWEEN.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
     }],
-    ["28", { // TODO: make sure this is the right object bank setup:
+    ["28", {
         landscape: "40.OWBOSS3.n64.lev",
         object_banks: ["GENERIC.obj.fla", "OOTW_SHARED.obj.fla", "OOTW_BOSS1.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
@@ -338,29 +342,27 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "OOTW_TEX_BANK.tex.fla"]
     }],
 
-
-
-    // TODO: confirm banks for these:
     ["2c", {
         landscape: "44.FLYTHRU.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla"]
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART7.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], // "Flythru (title)"
     ["2d", {
         landscape: "45.FLYTHRU.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla"]
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART7.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], // "Flythru (credits)"
     ["2e", {
         landscape: "46.INTROl.n64.lev",
         object_banks: ["GENERIC.obj.fla", "INTRO.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CAMEO_TEX_BANK.tex.fla"]
     }], // "Intro cutscene"
     ["2f", {
         landscape: "47.OUTROl.n64.lev",
         object_banks: ["GENERIC.obj.fla", "OUTRO.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CAMEO_TEX_BANK.tex.fla"]
     }], // "Outro cutscene"
+
     ["2b", {
         landscape: "43.PRESENT.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PRESENTATION.obj.fla"],
@@ -457,7 +459,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentActor === null) {
                         throw `No active actor for ${cmd.params.__type}!`;
                     }
-                    // TODO: confirm rotation order:
+                    // TODO: confirm rotation order
+                    //       using both the water vents in pirates 1 and the flags at the exit of fortress 3
                     mat4.fromZRotation(scratchMatrix, cmd.params.z);
                     mat4.mul(currentActor.modelMatrix, currentActor.modelMatrix, scratchMatrix);
                     mat4.fromYRotation(scratchMatrix, cmd.params.y);
