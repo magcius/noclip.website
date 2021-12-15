@@ -10,7 +10,7 @@ import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepthKey, setSortKeyDepth  } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../TextureHolder';
@@ -21,7 +21,14 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
+import { Yellow, colorNewCopy, Magenta, White } from "../Color";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+
 import { GloverObjbank, GloverTexbank } from './parsers';
+
+
+const depthScratch = vec3.create();
+const lookatScratch = vec3.create();
 
 // Stray RDP defines
 const G_TX_LOADTILE = 7
@@ -32,85 +39,6 @@ const G_TX_MIRROR = 1
 const G_TX_CLAMP = 2
 const G_TX_NOMASK = 0
 const G_TX_NOLOD = 0
-
-// TODO: Separate render boilerplate classes and actor classes into separate files
-
-// TODO: proper pipeline initialization:
-// void initializeModes() {
-//     /* @ram_offset: 0x8013CBBC */    
-//     DL_CMD(dl_cursor, gsDPPipelineMode(G_PM_NPRIMITIVE)); // 0xba001701 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetScissor(G_SC_NON_INTERLACE, 0, 0, 320, 240)); // 0xed000000 0x005003c0
-//     DL_CMD(dl_cursor, gsDPSetTextureLOD(G_TL_TILE)); // 0xba001001 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetTextureLUT(G_TT_NONE)); // 0xba000e02 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetTextureDetail(G_TD_CLAMP)); // 0xba001102 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetTexturePersp(G_TP_PERSP)); // 0xba001301 0x00080000
-//     DL_CMD(dl_cursor, gsDPSetTextureFilter(G_TF_BILERP)); // 0xba000c02 0x00002000
-//     DL_CMD(dl_cursor, gsDPSetTextureConvert(G_TC_FILT)); // 0xba000903 0x00000c00
-//     DL_CMD(dl_cursor, gsDPSetCombineKey(G_CK_NONE)); // 0xba000801 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetAlphaCompare(G_AC_NONE)); // 0xb9000002 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetBlendColor(0xFF, 0xFF, 0xFF, 0x00)); // 0xf9000000 0xffffff00
-//     DL_CMD(dl_cursor, gsDPSetColorDither(G_CD_MAGICSQ)); // 0xba000602 0x00000000
-//     DL_CMD(dl_cursor, gsDPSetDepthImage(0x80000430)); // 0xfe000000 0x80000430
-//     DL_CMD(dl_cursor, gsDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, 0xFF)); // 0xfa000000 0x000000ff
-//     DL_CMD(dl_cursor, gsDPSetDepthSource(G_ZS_PIXEL)); // 0xb9000201 0x00000000
-//     DL_CMD(dl_cursor, gsDPPipeSync()); // 0xe7000000 0x00000000
-// }
-// void initializeViewport() {
-//     /* @ram_offset: 0x8013CA1C */
-//     viewport->vscale[0] = qu142(160); // *(u16 *)0x80202270 = 0x0280;
-//     viewport->vscale[1] = qu142(120); // *(u16 *)0x80202272 = 0x01e0;
-//     viewport->vscale[2] = qu142(127.75); // *(u16 *)0x80202274 = 0x01ff;
-//     viewport->vscale[3] = qu142(0); // *(u16 *)0x80202276 = 0x0000;
-//     viewport->vtrans[0] = qu142(160); // *(u16 *)0x80202278 = 0x0280;
-//     viewport->vtrans[1] = qu142(120); // *(u16 *)0x8020227a = 0x01e0;
-//     viewport->vtrans[2] = qu142(127.75); // *(u16 *)0x8020227c = 0x01ff;
-//     viewport->vtrans[3] = qu142(0); // *(u16 *)0x8020227e = 0x0000;
-//     DL_CMD(dl_cursor, gsSPViewport(viewport)); // 0x03800010, viewport
-//     DL_CMD(dl_cursor, gsSPClearGeometryMode(
-//                           G_ZBUFFER | G_SHADE | G_CULL_BOTH | G_FOG |
-//                           G_LIGHTING | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR
-//                           | G_LOD | G_SHADING_SMOOTH)); // 0xb6000010, 0x001f3205);  
-//     DL_CMD(dl_cursor, gsSPSetGeometryMode(G_CULL_BACK)); // 0xb7000000, 0x00002000
-//     if (*G_SHADING_MODE == 1) {
-//         DL_CMD(dl_cursor, gsSPSetGeometryMode(G_SHADE | G_SHADING_SMOOTH)); // 0xb7000000, 0x00000204
-//     } else if (*G_SHADING_MODE == 2) {
-//         DL_CMD(dl_cursor, gsSPSetGeometryMode(G_SHADE | G_LIGHTING | G_SHADING_SMOOTH)); // 0xb7000000, 0x00020204
-//     }
-// }
-// void initializePipeline () {
-//     /* @ram_offset: 0x8013CEEC */
-//     initializeModes();
-//     initializeViewport();
-//     if (*G_TEXTURE_MODE != 0) {
-//         DL_CMD(dl_cursor, gsDPSetTextureFilter(G_TF_BILERP)); // 0xba000c02 0x00002000
-//         if (*G_TEXTURE_MODE == 2) {
-//             DL_CMD(dl_cursor, gsSPTexture(qu016(0.999985), qu016(0.999985), 5, G_TX_RENDERTILE, G_ON)); // 0xbb002801 0xFFFFFFFF
-//             DL_CMD(dl_cursor, gsDPSetTextureDetail(G_TD_CLAMP)); // 0xba001102 0x00000000
-//             DL_CMD(dl_cursor, gsDPSetTextureLOD(G_TL_LOD)); // 0xba001001 0x00010000
-//             DL_CMD(dl_cursor, gsDPPipelineMode(G_PM_1PRIMITIVE)); // 0xba001701 0x00800000
-//             if (*G_SHADING_MODE == 0) {
-//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_TRILERP, G_CC_DECALRGB2)); // 0xfc26a1ff 0x1ffc923c
-//             } else {
-//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_TRILERP, G_CC_MODULATEI2)); // 0xfc26a004 0x1ffc93fc
-//             }
-//         } else {
-//             DL_CMD(dl_cursor,  gsSPTexture(qu016(0.999985), qu016(0.999985), 0, G_TX_RENDERTILE, G_ON)); // 0xbb000001 0xfffffff
-//             if (*G_SHADING_MODE == 0) {
-//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_DECALRGB, G_CC_DECALRGB)); // 0xfcffffff 0xfffcf87c
-//             } else {
-//                 DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_MODULATEI, G_CC_MODULATEI)); // 0xfc127e24 0xfffff9fc
-//             }
-//         }
-//     } else {
-//         DL_CMD(dl_cursor, gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_OFF)); // 0xbb000000 0x00000000
-//         if (*G_SHADING_MODE == 0) {
-//             DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_PRIMITIVE, G_CC_PRIMITIVE)); // 0xfcffffff 0xfffdf6fb
-//         } else {
-//             DL_CMD(dl_cursor, gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE)); // 0xfcffffff 0xfffe793c
-//         }
-//     }
-// }
-
 
 function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, zbuffer: boolean, alpha: number): void {    
     // This isn't exactly right but whatever, good enough
@@ -688,7 +616,7 @@ export class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, depthKey = 0): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         if (!this.visible)
             return;
 
@@ -699,8 +627,6 @@ export class DrawCallInstance {
         renderInst.setInputLayoutAndState(this.drawCall.renderData!.inputLayout, this.drawCall.renderData!.inputState);
 
         renderInst.setGfxProgram(this.gfxProgram);
-        if (depthKey > 0)
-            renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, depthKey)
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawPrimitives(this.drawCall.vertexCount);
@@ -762,14 +688,14 @@ class ActorMeshNode {
         }
     }
 
-    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4, parentScale: number[] = [1,1,1]) {
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
         const drawMatrix = mat4.clone(parentMatrix);
 
         // TODO: animation
         const rotation = this.mesh.rotation[0];
         const translation = this.mesh.translation[0];
         const scale = this.mesh.scale[0];
-        const scaleVector = [scale.v1, scale.v2, scale.v3];
+        const scaleVector = vec3.fromValues(scale.v1, scale.v2, scale.v3);
 
         const rotXlateMatrix = mat4.create();
         mat4.fromQuat(rotXlateMatrix, [rotation.v1, rotation.v2, rotation.v3, rotation.v4])
@@ -782,10 +708,8 @@ class ActorMeshNode {
         for (let child of this.children) {
             child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, scaleVector);
         }
-        
-        drawMatrix[0] *= scaleVector[0];
-        drawMatrix[5] *= scaleVector[1];
-        drawMatrix[10] *= scaleVector[2];
+ 
+        mat4.scale(drawMatrix, drawMatrix, scaleVector); 
 
         this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
     }
@@ -799,11 +723,15 @@ export class GloverActorRenderer {
 
     public rootMesh: ActorMeshNode;
 
+    public visible: boolean = true;
+
+    public sortKey: number;
+
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        private actorObject: GloverObjbank.ObjectRoot,
+        public actorObject: GloverObjbank.ObjectRoot,
         public modelMatrix: mat4)
     {
         /* Object bank in first segment, then one
@@ -820,6 +748,10 @@ export class GloverActorRenderer {
         });
 
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, actorObject.mesh)
+
+        const layer = ((this.actorObject.mesh.renderMode & 0x2) != 0) ?
+            GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKey = makeSortKey(layer);
     }
 
     public getRenderMode() {
@@ -832,9 +764,20 @@ export class GloverActorRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.visible !== true) {
+            return;
+        }
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
+
+        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(lookatScratch, this.modelMatrix);
+
+        template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, ""+vec3.distance(depthScratch, lookatScratch), 0, White, { outline: 6 });
+
 
         const sceneParamsSize = 16;
 
@@ -1148,7 +1091,10 @@ class GloverMeshRenderer {
                         drawCall.renderData!.updateTextures();
                     }
                 }
-
+                // TODO: remove
+                // if (this.meshData.id ==  0x52DFE077) {
+                //     console.log(drawCall.vertices);
+                // }
                 const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
@@ -1161,4 +1107,86 @@ class GloverMeshRenderer {
         // TODO
     }
 
+}
+
+export class GloverBackdropRenderer {
+    private rspOutput: GloverRSPOutput | null;
+
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+
+    private inputState: GfxInputState;
+
+    constructor(
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder,
+        private actorObject: GloverObjbank.ObjectRoot,
+        public modelMatrix: mat4)
+    {
+        /* Object bank in first segment, then one
+           texture bank for each subsequent */
+        const segments = textures.textureSegments();
+        segments[0] = new ArrayBufferSlice(actorObject._io.buffer);
+
+        this.megaStateFlags = {};
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+        const rspState = new GloverRSPState(segments, textures);
+
+        rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
+        rspState.gDPSetOtherModeH(0x17, 0x01, 0x0000); // gsDPPipelineMode(G_PM_NPRIMITIVE)
+        rspState.gDPSetOtherModeH(0x10, 0x01, 0x0000); // gsDPSetTextureLOD(G_TL_TILE)
+        rspState.gDPSetOtherModeH(0x0E, 0x02, 0x8000); // gsDPSetTextureLUT(G_TT_RGBA16)
+        rspState.gDPSetOtherModeH(0x11, 0x02, 0x0000); // gsDPSetTextureDetail(G_TD_CLAMP)
+        rspState.gDPSetOtherModeH(0x13, 0x01, 0x0000); // gsDPSetTexturePersp(G_TP_NONE)
+        rspState.gDPSetOtherModeH(0x0C, 0x02, 0x2000); // gsDPSetTextureFilter(G_TF_BILERP)
+        rspState.gDPSetOtherModeH(0x09, 0x03, 0x0C00); // gsDPSetTextureConvert(G_TC_FILT)
+        rspState.gDPSetOtherModeH(0x08, 0x01, 0x0000); // gsDPSetCombineKey(G_CK_NONE)
+        rspState.gDPSetOtherModeH(0x06, 0x02, 0x0040); // gsDPSetColorDither(G_CD_BAYER)
+        rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
+        rspState.gDPSetOtherModeL(0x00, 0x02, 0x0000); // gsDPSetAlphaCompare(G_AC_NONE)
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        rspState.gSPClearGeometryMode(0xFFFFFFFF);
+        rspState.gSPTexture(false, G_TX_RENDERTILE, 0, 0, 0); // hmm
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+
+        this.rspOutput = null; // TODO
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setMegaStateFlags(this.megaStateFlags);
+
+        const sceneParamsSize = 16;
+
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        // TODO: ortho
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+
+        const view = viewerInput.camera.viewMatrix;
+        const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
+        const pitch = Math.asin(view[1]) / (Math.PI * 2);
+        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+
+        const drawMatrix = mat4.create(); // TODO
+
+        if (this.rspOutput !== null) {
+            for (let drawCall of this.rspOutput.drawCalls) {
+                const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
+                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
+            }
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        // TODO
+    }
 }

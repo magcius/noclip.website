@@ -9,11 +9,11 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import { GloverTextureHolder } from './textures';
 
 
-import { GloverActorRenderer } from './render';
+import { GloverActorRenderer, GloverBackdropRenderer } from './render';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
@@ -21,8 +21,11 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists } from '../util';
 import { DataFetcher } from '../DataFetcher';
-import { MathConstants, scaleMatrix } from '../MathHelpers';
+import { MathConstants, scaleMatrix, computeMatrixWithoutScale } from '../MathHelpers';
 import { colorNewFromRGBA } from '../Color';
+
+import { Yellow, colorNewCopy, Magenta, White } from "../Color";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
@@ -36,9 +39,58 @@ import { KaitaiStream } from 'kaitai-struct';
 
 const pathBase = `glover`;
 
+export class GloverPlatform {
+
+    private spinSpeed = vec3.fromValues(0,0,0);
+
+    private eulers = vec3.fromValues(0,0,0);
+    private rotation = quat.create();
+    private position = vec3.fromValues(0,0,0);
+    private scale = vec3.fromValues(1,1,1);
+
+    private scratchMatrix = mat4.create();
+
+    constructor(
+        private actor: GloverActorRenderer)
+    { }
+
+    public setPosition(x: number, y: number, z: number) {
+        this.position[0] = x;
+        this.position[1] = y;
+        this.position[2] = z;
+    }
+
+    public setScale(x: number, y: number, z: number) {
+        this.scale[0] = x;
+        this.scale[1] = y;
+        this.scale[2] = z;
+    }
+
+    public setNeutralSpin(axis: number, initial_theta: number, speed: number) {
+        this.eulers[axis] = initial_theta * 180 / Math.PI;
+        this.spinSpeed[axis] = speed;
+    }
+
+    public advanceFrame(viewerInput: Viewer.ViewerRenderInput): void {
+        this.eulers[0] += this.spinSpeed[0] * viewerInput.deltaTime;
+        this.eulers[1] += this.spinSpeed[1] * viewerInput.deltaTime;
+        this.eulers[2] += this.spinSpeed[2] * viewerInput.deltaTime;
+        this.eulers[0] = this.eulers[0] % 360;
+        this.eulers[1] = this.eulers[1] % 360;
+        this.eulers[2] = this.eulers[2] % 360;
+        quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
+
+        // TODO: remove
+        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, 'Euler: ' + this.eulers, 0, White, { outline: 6 });
+        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.rotation, this.position, this.scale);
+    }
+}
+
 class GloverRenderer implements Viewer.SceneGfx {
     public opaqueActors: GloverActorRenderer[] = [];
     public translucentActors: GloverActorRenderer[] = [];
+    public backdrops: GloverBackdropRenderer[] = [];
+    public platforms: GloverPlatform[] = [];
 
     public renderHelper: GfxRenderHelper;
 
@@ -64,14 +116,36 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         this.textureHolder.animatePalettes(viewerInput);
 
-        for (let actorRenderer of this.opaqueActors) {
-            actorRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        }
-        for (let actorRenderer of this.translucentActors) {
-            // TODO: use sort key to order by camera distance
-            actorRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let platform of this.platforms) {
+            platform.advanceFrame(viewerInput);
         }
 
+        for (let renderer of this.backdrops) {
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
+        for (let renderer of this.opaqueActors) {
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            
+            // TODO: remove
+            // let pos = vec3.fromValues(
+            //     renderer.modelMatrix[12],
+            //     renderer.modelMatrix[13],
+            //     renderer.modelMatrix[14],
+            // );
+            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, pos, renderer.actorObject.objId.toString(16), 0, White, { outline: 6 });
+        }
+        for (let renderer of this.translucentActors) {
+            // TODO: use sort key to order by camera distance
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
+            // TODO: remove
+            // let pos = vec3.fromValues(
+            //     renderer.modelMatrix[12],
+            //     renderer.modelMatrix[13],
+            //     renderer.modelMatrix[14],
+            // );
+            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, pos, renderer.actorObject.objId.toString(16), 0, White, { outline: 6 });
+        }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -243,7 +317,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
     }],
     ["16", {
-        landscape: "21.PC2Aln.n64.lev",
+        landscape: "22.PC3Bln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_L3B.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PIRATES_TEX_BANK.tex.fla"]
     }],
@@ -419,8 +493,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
         let scratchMatrix = mat4.create();
         let currentActor: GloverActorRenderer | null = null; 
+        let currentPlatform: GloverPlatform | null = null; 
+        let currentObject: GloverActorRenderer | GloverPlatform | null = null;
 
-        function loadActor(id : number) : GloverActorRenderer | null {
+        function loadActor(id : number) : GloverActorRenderer {
             const objRoot = loadedObjects.get(id);
             if (objRoot === undefined) {
                 throw `Object 0x${id.toString(16)} is not loaded!`;
@@ -443,9 +519,7 @@ class SceneDesc implements Viewer.SceneDesc {
             switch (cmd.params.__type) {
                 case 'Water': {
                     currentActor = loadActor(cmd.params.objectId);
-                    if (currentActor == null) {
-                        continue;
-                    }
+                    currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     currentActor.setRenderMode(0x20, 0x20);
                     break;
@@ -454,9 +528,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 case 'BackgroundActor0xbc':
                 case 'BackgroundActor0x91': {
                     currentActor = loadActor(cmd.params.objectId);
-                    if (currentActor == null) {
-                        continue;
-                    }
+                    currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     break;
                 }
@@ -488,8 +560,36 @@ class SceneDesc implements Viewer.SceneDesc {
                     //       later, rip out the skybox values from ROM
                     //       and use them instead
                     skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
+                    break;
                 }
-
+                case 'Platform0x62': {
+                    // TODO: special case exitpost.ndo
+                    currentPlatform = new GloverPlatform(loadActor(cmd.params.objectId));
+                    currentObject = currentPlatform;
+                    sceneRenderer.platforms.push(currentPlatform)
+                    break;
+                }
+                case 'PlatPos0xa6': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setPosition(cmd.params.x, cmd.params.y, cmd.params.z);
+                    break;
+                }
+                case 'PlatSpin0x7f': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setNeutralSpin(cmd.params.axis, cmd.params.initialTheta, cmd.params.speed);
+                    break;
+                }
+                case 'PlatScale0x79': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setScale(cmd.params.x, cmd.params.y, cmd.params.z);
+                    break;
+                }
             }
         }
 
