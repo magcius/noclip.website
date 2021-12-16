@@ -7,7 +7,7 @@ import { ModelCache, SceneObjHolder } from "./Main";
 import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
 import { computeModelMatrixR, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
@@ -278,11 +278,11 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
     public drawParticle: boolean = true;
 
     public hostMtx: mat4 | null = null;
-    public hostTranslation: vec3 | null = null;
-    public hostRotation: vec3 | null = null;
-    public hostScale: vec3 | null = null;
+    public hostTranslation: ReadonlyVec3 | null = null;
+    public hostRotation: ReadonlyVec3 | null = null;
+    public hostScale: ReadonlyVec3 | null = null;
 
-    private setEffectSRT(emitter: JPA.JPABaseEmitter, scale: vec3 | null, rot: mat4 | null, trans: vec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
+    private setEffectSRT(emitter: JPA.JPABaseEmitter, scale: ReadonlyVec3 | null, rot: ReadonlyMat4 | null, trans: ReadonlyVec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
         if (!!(srtFlags & SRTFlags.T)) {
             // Bizarrely enough, whether rotation for offset is respect seems to differ between setSRTFromHostMtx
             // and setSRTFromHostSRT. It's always applied in setSRTFromHostMtx, regardless of FlagSRT, and but it
@@ -319,7 +319,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         }
     }
 
-    private setSRTFromHostMtx(emitter: JPA.JPABaseEmitter, mtx: mat4, srtFlags: SRTFlags, isInit: boolean): void {
+    private setSRTFromHostMtx(emitter: JPA.JPABaseEmitter, mtx: ReadonlyMat4, srtFlags: SRTFlags, isInit: boolean): void {
         const scale = scratchVec3a;
         const rot = scratchMatrix;
         const trans = scratchVec3b;
@@ -327,7 +327,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         this.setEffectSRT(emitter, scale, rot, trans, srtFlags, isInit);
     }
 
-    private setSRTFromHostSRT(emitter: JPA.JPABaseEmitter, scale: vec3 | null, rot: vec3 | null, trans: vec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
+    private setSRTFromHostSRT(emitter: JPA.JPABaseEmitter, scale: ReadonlyVec3 | null, rot: ReadonlyVec3 | null, trans: ReadonlyVec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
         let rotMatrix: mat4 | null;
         if (!!(srtFlags & SRTFlags.R)) {
             rotMatrix = scratchMatrix;
@@ -396,7 +396,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         this.hostMtx = hostMtx;
     }
 
-    public setHostSRT(hostTranslation: vec3 | null, hostRotation: vec3 | null, hostScale: vec3 | null): void {
+    public setHostSRT(hostTranslation: ReadonlyVec3 | null, hostRotation: ReadonlyVec3 | null, hostScale: ReadonlyVec3 | null): void {
         this.hostTranslation = hostTranslation;
         this.hostRotation = hostRotation;
         this.hostScale = hostScale;

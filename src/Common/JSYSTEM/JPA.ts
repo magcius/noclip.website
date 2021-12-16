@@ -17,7 +17,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 import * as GX from "../../gx/gx_enum";
 
 import { assert, readString, assertExists, nArray } from "../../util";
-import { vec3, mat4, vec2, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, vec2, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
@@ -1197,7 +1197,7 @@ function JPAGetDirMtx(m: mat4, v: ReadonlyVec3, scratch: vec3 = scratchVec3a): v
     m[14] = 0.0;
 }
 
-export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec3, m: mat4): void {
+export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec3, m: ReadonlyMat4): void {
     // Extract our three column vectors.
     mat4.identity(rot);
 
@@ -2570,7 +2570,7 @@ export class JPABaseParticle {
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
         vec3.scale(scratchVec3a, field.dir, field.mag);
-        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
+        if (!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
@@ -2581,7 +2581,7 @@ export class JPABaseParticle {
         // Prepare
         vec3.normalize(scratchVec3a, field.dir);
         vec3.scale(scratchVec3a, field.dir, field.mag);
-        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
+        if (!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
