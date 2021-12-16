@@ -308,7 +308,7 @@ function shapeInstancesUsePnMtxIdx(shapeInstances: ShapeInstance[]): boolean | u
 const enum ColorRegType { S10, U8, }
 
 const materialParams = new MaterialParams();
-const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
+const scratchMat4a = mat4.create(), scratchMat4b = mat4.create(), scratchMat4c = mat4.create(), scratchMat4d = mat4.create();
 export class MaterialInstance {
     public colorCalc: (ColorCalc | null)[] = [];
     public texMtxCalc: (TexMtxCalc | null)[] = [];
@@ -470,13 +470,13 @@ export class MaterialInstance {
 
         const hasCustomEffectMtx = matrixMode === TexMtxMapMode.EnvmapEffectMtx || matrixMode === TexMtxMapMode.EnvmapOldEffectMtx;
         if (hasCustomEffectMtx && this.effectMtxCallback !== null) {
-            this.effectMtxCallback(matrixScratch4, texMtx);
-            effectMtx = matrixScratch4;
+            this.effectMtxCallback(scratchMat4d, texMtx);
+            effectMtx = scratchMat4d;
         }
 
         // ref. J3DTexMtx::calc()
-        const tmp1 = matrixScratch;
-        const tmp2 = matrixScratch2;
+        const tmp1 = scratchMat4a;
+        const tmp2 = scratchMat4b;
         switch (matrixMode as number) {
         case TexMtxMapMode.EnvmapBasic:
             {
@@ -663,7 +663,7 @@ export class MaterialInstance {
             const flipY = materialParams.m_TextureMapping[i].flipY;
 
             this.calcTexMtxInput(dst, texMtx, scratchModelViewMatrix, modelMatrix);
-            const texSRT = matrixScratch3;
+            const texSRT = scratchMat4c;
             this.calcTexSRT(texSRT, i);
             this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, viewport, flipY);
         }
@@ -904,7 +904,7 @@ export class JointMatrixCalcNoAnm {
     }
 }
 
-export type JointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number) => void;
+export type JointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number, parentJointToWorldMatrix: ReadonlyMat4) => void;
 
 const bboxScratch = new AABB();
 export class J3DModelInstance {
@@ -1223,20 +1223,23 @@ export class J3DModelInstance {
             const dstToParent = shapeInstanceState.jointToParentMatrixArray[jointIndex];
             this.jointMatrixCalc.calcJointMatrix(dstToParent, this.modelData, jointIndex, shapeInstanceState);
 
-            if (this.jointMatrixCalcCallback !== null)
-                this.jointMatrixCalcCallback(dstToParent, this.modelData, jointIndex);
             const dstToWorld = shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
             const parentJointIndex = parentNode.jointIndex;
+            let parentJointToWorldMatrix: ReadonlyMat4;
             if (parentJointIndex < 0) {
                 // Special: construct model matrix.
-                computeModelMatrixS(matrixScratch, this.baseScale[0], this.baseScale[1], this.baseScale[2]);
-                mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
-                mat4.mul(dstToWorld, matrixScratch, dstToParent);
+                computeModelMatrixS(scratchMat4a, this.baseScale[0], this.baseScale[1], this.baseScale[2]);
+                mat4.mul(scratchMat4a, this.modelMatrix, scratchMat4a);
+                parentJointToWorldMatrix = scratchMat4a;
             } else {
-                const parentJointToWorldMatrix = shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
-                mat4.mul(dstToWorld, parentJointToWorldMatrix, dstToParent);
+                parentJointToWorldMatrix = shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
             }
+
+            if (this.jointMatrixCalcCallback !== null)
+                this.jointMatrixCalcCallback(dstToParent, this.modelData, jointIndex, parentJointToWorldMatrix);
+
+            mat4.mul(dstToWorld, parentJointToWorldMatrix, dstToParent);
         }
 
         const parentScaleX = shapeInstanceState.parentScale[0];
@@ -1289,8 +1292,8 @@ export class J3DModelInstance {
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
                     const inverseBindPose = evp1.inverseBinds[weightedBone.jointIndex];
-                    mat4.mul(matrixScratch, this.shapeInstanceState.jointToWorldMatrixArray[weightedBone.jointIndex], inverseBindPose);
-                    mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
+                    mat4.mul(scratchMat4a, this.shapeInstanceState.jointToWorldMatrixArray[weightedBone.jointIndex], inverseBindPose);
+                    mat4.multiplyScalarAndAdd(dst, dst, scratchMat4a, weightedBone.weight);
                 }
 
                 mat4.mul(dst, worldToViewMatrix, dst);

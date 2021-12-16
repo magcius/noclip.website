@@ -4,9 +4,9 @@ import { vec3 } from 'gl-matrix';
 import type { SceneObjHolder } from './Main';
 import type { ZoneAndLayer } from './LiveActor';
 import { MathConstants } from '../MathHelpers';
-import { assertExists, fallback, hexzero, hexzero0x } from '../util';
+import { assertExists, fallback, hexzero0x } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { UI } from '../ui';
+import type { UI } from '../ui';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg0'); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg1'); }
