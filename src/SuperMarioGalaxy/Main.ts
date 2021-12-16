@@ -1064,6 +1064,12 @@ export const enum SceneObj {
     GalaxyNameSortTable            = 0xA0,
 }
 
+class DebugUtils {
+    public createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
+        return createCsvParser(buffer);
+    }
+}
+
 export class SceneObjHolder {
     public sceneDesc: SMGSceneDescBase;
     public modelCache: ModelCache;
@@ -1133,6 +1139,7 @@ export class SceneObjHolder {
     public graphBuilder: GfxrGraphBuilder;
     public viewerInput: Viewer.ViewerRenderInput;
     public uiContainer: HTMLElement;
+    public debugUtils = new DebugUtils();
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)

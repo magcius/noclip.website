@@ -6965,7 +6965,7 @@ export class SkeletalFishBaby extends LiveActor<SkeletalFishBabyNrv> {
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        this.railControl.speed = this.railSpeed;
+        this.railControl.speed = this.railSpeed * getDeltaTimeFrames(viewerInput);
         this.railControl.update();
         this.railControl.getPos(this.translation);
         // this.railRider!.debugDrawRailLine(viewerInput.camera);

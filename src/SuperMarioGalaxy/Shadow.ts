@@ -633,7 +633,7 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
         let scaleXZ = this.radius / 100.0;
         if (this.controller.followHostScale)
             scaleXZ *= this.controller.host.scale[0];
-        const scaleY = this.calcBaseDropLength();
+        const scaleY = this.calcBaseDropLength() / 100.0;
 
         scaleMatrix(scratchMat4a, scratchMat4a, scaleXZ, scaleY, scaleXZ);
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
