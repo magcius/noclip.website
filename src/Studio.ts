@@ -166,6 +166,7 @@ class Playhead {
     }
 
     private x: number = 0;
+    private t: number = 0;
 
     public playheadPath: Path2D;
 
@@ -193,13 +194,18 @@ class Playhead {
         ctx.stroke();
     }
 
-    public updatePosition(x: number) {
+    public updatePosition(x: number, t: number) {
         this.x = x;
+        this.t = t;
         this.updatePath();
     }
 
     public getX(): number {
         return this.x;
+    }
+
+    public getT(): number {
+        return this.t;
     }
 }
 
@@ -211,7 +217,7 @@ class KeyframeIcon {
     static readonly SELECTED_COLOR: string = '#FF500B';
     static readonly ENDFRAME_COLOR: string = '#4EB0FF';
 
-    constructor(public keyframesMap: Map<KeyframeTrackType, Keyframe>, private x: number, public y: number, public type: KeyframeIconType) {
+    constructor(public keyframesMap: Map<KeyframeTrackType, Keyframe>, private x: number, private y: number, private t: number, public type: KeyframeIconType) {
         this.updatePath();
     }
 
@@ -230,12 +236,17 @@ class KeyframeIcon {
 
     public updatePosition(x: number, t: number) {
         this.x = x;
+        this.t = t;
         this.updatePath();
         this.keyframesMap.forEach((k) => { k.time = t });
     }
 
     public getX(): number {
         return this.x;
+    }
+
+    public getT(): number {
+        return this.t;
     }
 
     private updatePath() {
@@ -361,7 +372,7 @@ class Timeline {
 
     public addKeyframeIcon(kfs: Map<KeyframeTrackType, Keyframe>, t: number, y: number, type: KeyframeIconType, selectAfterAdd: boolean) {
         const xPos = (t / MILLISECONDS_IN_SECOND) * (this.pixelsPerSecond / this.timelineScaleFactor);
-        const kfIcon = new KeyframeIcon(kfs, xPos, y, type);
+        const kfIcon = new KeyframeIcon(kfs, xPos, y, t, type);
         this.keyframeIcons.push(kfIcon);
         this.keyframeIcons.sort((a, b) => a.getX() - b.getX());
         if (selectAfterAdd)
@@ -454,7 +465,8 @@ class Timeline {
                     this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
             }
 
-            this.playhead.updatePosition(targetX);
+            const t = targetX / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
+            this.playhead.updatePosition(targetX, t);
         } else if (this.keyframeIconGrabbed && this.selectedKeyframeIcon) {
             // Don't allow a loop keyframe icon to be moved before any other keyframes.
             if (this.selectedKeyframeIcon.type === KeyframeIconType.End)
@@ -529,7 +541,7 @@ class Timeline {
 
     public setPlayheadTimeSeconds(t: number, animationPlaying: boolean) {
         const x = t * this.pixelsPerSecond / this.timelineScaleFactor;
-        this.playhead.updatePosition(x);
+        this.playhead.updatePosition(x, t);
         if (!animationPlaying) {
             const snapKfIndex = this.getClosestSnappingIconIndex(x);
             if (snapKfIndex > -1 && x === this.keyframeIcons[snapKfIndex].getX()) {
@@ -543,12 +555,13 @@ class Timeline {
     }
 
     public jumpToNextKeyframe() {
-        const curX = this.playhead.getX();
+        const curT = this.playhead.getT();
         for (let i = 1; i < this.keyframeIcons.length; i++) {
-            if (curX < this.keyframeIcons[i].getX()) {
+            if (curT < this.keyframeIcons[i].getT()) {
+                const jumpIcon = this.keyframeIcons[i];
                 this.deselectKeyframeIcon();
-                this.playhead.updatePosition(this.keyframeIcons[i].getX());
-                this.selectKeyframeIcon(this.keyframeIcons[i]);
+                this.playhead.updatePosition(jumpIcon.getX(), jumpIcon.getT());
+                this.selectKeyframeIcon(jumpIcon);
                 break;
             }
         }
@@ -556,12 +569,13 @@ class Timeline {
     }
 
     public jumpToPreviousKeyframe() {
-        const curX = this.playhead.getX();
+        const curT = this.playhead.getT();
         for (let i = this.keyframeIcons.length - 1; i > -1; i--) {
-            if (curX > this.keyframeIcons[i].getX()) {
+            if (curT > this.keyframeIcons[i].getT()) {
+                const jumpIcon = this.keyframeIcons[i];
                 this.deselectKeyframeIcon();
-                this.playhead.updatePosition(this.keyframeIcons[i].getX());
-                this.selectKeyframeIcon(this.keyframeIcons[i]);
+                this.playhead.updatePosition(jumpIcon.getX(), jumpIcon.getT());
+                this.selectKeyframeIcon(jumpIcon);
                 break;
             }
         }
