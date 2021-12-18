@@ -313,10 +313,6 @@ export default class InputManager {
         this.dy += dy;
     }
 
-    public setCursor(cursor: string): void {
-        GlobalGrabManager.setCursor(cursor);
-    }
-
     public onGrabReleased() {
         this.buttons = 0;
         if (this.ondraggingmodechanged !== null)

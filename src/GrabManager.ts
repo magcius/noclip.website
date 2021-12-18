@@ -35,7 +35,6 @@ export class GrabManager {
     private grabOptions: GrabOptions | null = null;
     private currentGrabTarget: HTMLElement | null = null;
     private usingPointerLock: boolean = false;
-    private currentCursor: string = '';
 
     private lastX: number = -1;
     private lastY: number = -1;
@@ -97,20 +96,6 @@ export class GrabManager {
         return this.grabListener !== null;
     }
 
-    public setCursor(cursor: string): void {
-        this.currentCursor = cursor;
-
-        // If we're in a pointer lock grab, then the cursor doesn't matter...
-        if (this.grabOptions !== null && this.usingPointerLock)
-            return;
-
-        // Grab cursor takes precedence.
-        if (this.grabOptions !== null && this.grabOptions.useGrabbingCursor)
-            return;
-
-        document.body.style.cursor = cursor;
-    }
-
     public takeGrab(grabListener: GrabListener, e: MouseEvent, grabOptions: GrabOptions): void {
         e.preventDefault();
 
@@ -154,10 +139,10 @@ export class GrabManager {
                 document.exitPointerLock();
         }
 
-        // If we're exiting a pointer lock, or we overrode the cursor with our grabbing one,
-        // then reset the cursor back to the user choice.
-        if (this.grabOptions!.useGrabbingCursor || this.usingPointerLock)
-            setGlobalCursor(this.currentCursor);
+        // If we're exiting a pointer lock and we didn't take pointer lock, then reset the cursor
+        // back to the default one. 
+        if (this.grabOptions!.useGrabbingCursor && !this.usingPointerLock)
+            setGlobalCursor('');
 
         // Call onGrabReleased after we set the grabListener to null so that if the callback calls
         // isDragging() or hasDragListener() we appear as if we have no grab.
