@@ -145,15 +145,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
     public onstatechanged!: () => void;
     public textureHolder: TextureListHolder;
 
-    public isInteractive = true;
-
     private mainColorTemporalTexture = new GfxrTemporalTexture();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private maskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
 
-    constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
+    constructor(private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
 
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
@@ -1786,7 +1784,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
     }
 
-    public patchRenderer(renderer: SMGRenderer): void {
+    protected setup(context: SceneContext, renderer: SMGRenderer): void {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -1856,8 +1854,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.starPieceDirector!.createStarPiece(sceneObjHolder);
         initSyncSleepController(sceneObjHolder);
 
-        const renderer = new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
-        this.patchRenderer(renderer);
+        const renderer = new SMGRenderer(renderHelper, spawner, sceneObjHolder);
+        this.setup(context, renderer);
         return renderer;
     }
 }

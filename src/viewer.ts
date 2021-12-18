@@ -56,7 +56,6 @@ export interface SceneGfx {
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;
     getDefaultWorldMatrix?(dst: mat4): void;
-    isInteractive?: boolean;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;

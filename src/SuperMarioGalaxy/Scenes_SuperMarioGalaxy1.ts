@@ -7,6 +7,7 @@ import { NameObj, MovementType, GameBits } from './NameObj';
 import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
 import { vec3, mat4 } from 'gl-matrix';
 import { TicoRail } from './Actors/NPC';
+import { SceneContext } from '../SceneBase';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     public pathBase: string = `SuperMarioGalaxy`;
@@ -149,8 +150,8 @@ class DayInTheLifeOfALuma extends SMG1SceneDesc {
         this.controller = new DayInTheLifeOfALumaController(sceneObjHolder);
     }
 
-    public patchRenderer(renderer: SMGRenderer): void {
-        renderer.isInteractive = false;
+    protected setup(context: SceneContext, renderer: SMGRenderer): void {
+        context.inputManager.isInteractive = false;
     }
 }
 

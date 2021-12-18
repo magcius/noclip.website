@@ -654,9 +654,6 @@ class Main {
         // Force time to play when loading a map.
         this.ui.togglePlayPause(true);
 
-        const isInteractive = fallbackUndefined<boolean>(scene.isInteractive, true);
-        this.viewer.inputManager.isInteractive = isInteractive;
-
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
         this._saveStateAndUpdateURL();

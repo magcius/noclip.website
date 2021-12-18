@@ -29,7 +29,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 class DKRRenderer implements Viewer.SceneGfx {
     public program: F3DDKR_Program;
     public renderHelper: GfxRenderHelper;
-    public isInteractive = true;
     private hasStarted = false;
 
     public renderPassDescriptor: GfxrAttachmentClearDescriptor;
