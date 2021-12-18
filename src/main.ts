@@ -94,7 +94,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderGraph
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
+import { SceneDesc, SceneGroup, SceneContext, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob } from './DownloadUtils';
 import { DataShare } from './DataShare';
@@ -229,6 +229,10 @@ class AnimationLoop implements ViewerUpdateInfo {
         else
             this.onupdate(this);
     };
+}
+
+function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
+    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
 }
 
 class Main {

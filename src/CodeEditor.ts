@@ -251,7 +251,7 @@ class NumberDragger {
 // XXX: Differing browsers have inconsistent ways of drawing text... specifically,
 // they don't always agree on what 'top' baseline alignment is. This tries to
 // accurately measure the top margin by drawing a character and scanning where the top is...
-function expensiveMeasureTextMargin(document: HTMLDocument, width: number, height: number, font: string): number {
+function expensiveMeasureTextMargin(document: Document, width: number, height: number, font: string): number {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;

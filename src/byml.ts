@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
-import { assert, readString, align, decodeString } from "./util";
+import { assert, readString, align } from "./util";
 import { Endianness } from "./endian";
 
 export const enum FileType {
