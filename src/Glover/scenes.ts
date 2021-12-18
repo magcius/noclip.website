@@ -124,23 +124,26 @@ export class GloverPlatform {
             // TODO: remove
             // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, '' + this.path, 0, White, { outline: 6 });
 
-            // if (distRemaining < curSpeed * viewerInput.deltaTime) {
-            //     this.pathTimeLeft = this.path[this.pathCurPt].duration;
-            //     vec3.copy(this.position, dstPt);
-            //     vec3.zero(this.velocity);
-            //     curSpeed = 0;
-            // }
-            // vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, this.pathAccel * viewerInput.deltaTime);
-            // if (!isNaN(this.pathTimeLeft)) {
-            //     this.pathTimeLeft -= viewerInput.deltaTime;
-            //     if (this.pathTimeLeft <= 0) {
-            //         this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
-            //         this.pathTimeLeft = NaN;
-            //     }
-            // }
+            let effectiveAccel = this.pathAccel;
+            const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
+            if (speedCutoff > distRemaining) {
+                // This is more accurate than the active version of this code block,
+                // but IMO looks worse:
+                // if (curSpeed > distRemaining) {
+                //     vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+                // }
+                vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+            } else {
+                vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, effectiveAccel);
+            }
 
+            if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
+                const damping = this.pathMaxVel / curSpeed;
+                this.velocity[0] *= damping;
+                this.velocity[1] *= damping;
+                this.velocity[2] *= damping;
+            }
 
-            vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, this.pathAccel);
 
             if (this.pathTimeLeft > 0) {
                 this.pathTimeLeft -= deltaTime;
@@ -157,14 +160,7 @@ export class GloverPlatform {
 
         // TODO: add deceleration
         
-        if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
-            const damping = this.pathMaxVel / curSpeed;
-            this.velocity[0] *= damping;
-            this.velocity[1] *= damping;
-            this.velocity[2] *= damping;
-        }
 
-        // vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
         vec3.add(this.position, this.position, this.velocity);
 
         this.eulers[0] += this.spinSpeed[0] * deltaTime;
