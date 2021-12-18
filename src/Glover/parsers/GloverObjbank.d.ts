@@ -209,17 +209,17 @@ declare namespace GloverObjbank {
     id: number;
     name: string;
     alpha: number;
-    nScale: number;
-    nTranslation: number;
-    nRotation: number;
+    numScale: number;
+    numTranslation: number;
+    numRotation: number;
     geometryPtr: number;
     displayListPtr: number;
     scalePtr: number;
     translationPtr: number;
     rotationPtr: number;
-    nSprites: number;
+    numSprites: number;
     spritesPtr: number;
-    nChildren: number;
+    numChildren: number;
     renderMode: number;
     childPtr: number;
     siblingPtr: number;
@@ -229,17 +229,17 @@ declare namespace GloverObjbank {
       id: DebugPosition;
       name: DebugPosition;
       alpha: DebugPosition;
-      nScale: DebugPosition;
-      nTranslation: DebugPosition;
-      nRotation: DebugPosition;
+      numScale: DebugPosition;
+      numTranslation: DebugPosition;
+      numRotation: DebugPosition;
       geometryPtr: DebugPosition;
       displayListPtr: DebugPosition;
       scalePtr: DebugPosition;
       translationPtr: DebugPosition;
       rotationPtr: DebugPosition;
-      nSprites: DebugPosition;
+      numSprites: DebugPosition;
       spritesPtr: DebugPosition;
-      nChildren: DebugPosition;
+      numChildren: DebugPosition;
       renderMode: DebugPosition;
       childPtr: DebugPosition;
       siblingPtr: DebugPosition;
@@ -276,8 +276,8 @@ declare namespace GloverObjbank {
     u1: number[];
     uvs: GloverObjbank.Uv[];
     colorsNorms: number[];
-    nFaces: number;
-    nVertices: number;
+    numFaces: number;
+    numVertices: number;
     verticesPtr: number;
     facesPtr: number;
     u1Ptr: number;
@@ -288,8 +288,8 @@ declare namespace GloverObjbank {
     textureIdsPtr: number;
 
     _debug: {
-      nFaces: DebugPosition;
-      nVertices: DebugPosition;
+      numFaces: DebugPosition;
+      numVertices: DebugPosition;
       verticesPtr: DebugPosition;
       facesPtr: DebugPosition;
       u1Ptr: DebugPosition;

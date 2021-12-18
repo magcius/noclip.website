@@ -36,23 +36,63 @@ import { decompress } from './fla2';
 
 import { KaitaiStream } from 'kaitai-struct';
 
+const SRC_FRAMERATE = 20;
+const DST_FRAMERATE = 60;
+const SRC_FRAME_TO_MS = (1/SRC_FRAMERATE)*1000;
+const DST_FRAME_TO_MS = (1/DST_FRAMERATE)*1000;
+const CONVERT_FRAMERATE = (SRC_FRAMERATE / DST_FRAMERATE);
 
 const pathBase = `glover`;
 
+class PlatformPathPoint {
+    constructor(public pos: vec3, public duration: number) {}
+
+    public toString() {
+        return "PathPoint("+this.pos+","+this.duration+")";
+    }
+}
+
 export class GloverPlatform {
 
+    private scratchMatrix = mat4.create();
+    private scratchVec3 = vec3.create();
+
+    // Spin
+
     private spinSpeed = vec3.fromValues(0,0,0);
+
+    // General actor state
 
     private eulers = vec3.fromValues(0,0,0);
     private rotation = quat.create();
     private position = vec3.fromValues(0,0,0);
+    private velocity = vec3.fromValues(0,0,0);
     private scale = vec3.fromValues(1,1,1);
 
-    private scratchMatrix = mat4.create();
+
+    // Path
+
+    private path : PlatformPathPoint[] = [];
+    private pathDirection : number = 1;
+    private pathTimeLeft : number = 0;
+    private pathCurPt : number = 0;
+    public pathAccel : number = 0;
+    public pathMaxVel : number = NaN;
+
+
+    // Implementation
 
     constructor(
         private actor: GloverActorRenderer)
     { }
+
+    public pushPathPoint(point: PlatformPathPoint) {
+        this.path.push(point);
+        if (this.path.length == 1) {
+            this.setPosition(point.pos[0], point.pos[1], point.pos[2]);
+            this.pathTimeLeft = point.duration;
+        }
+    }
 
     public setPosition(x: number, y: number, z: number) {
         this.position[0] = x;
@@ -68,13 +108,68 @@ export class GloverPlatform {
 
     public setNeutralSpin(axis: number, initial_theta: number, speed: number) {
         this.eulers[axis] = initial_theta * 180 / Math.PI;
-        this.spinSpeed[axis] = speed;
+        this.spinSpeed[axis] = -speed;
     }
 
-    public advanceFrame(viewerInput: Viewer.ViewerRenderInput): void {
-        this.eulers[0] += this.spinSpeed[0] * viewerInput.deltaTime;
-        this.eulers[1] += this.spinSpeed[1] * viewerInput.deltaTime;
-        this.eulers[2] += this.spinSpeed[2] * viewerInput.deltaTime;
+    public advanceFrame(deltaTime : number): void {
+        let curSpeed = vec3.length(this.velocity);
+
+        if (this.path.length > 0) {
+            const dstPt = this.path[this.pathCurPt].pos;
+            const journeyVector = this.scratchVec3;
+            vec3.sub(journeyVector, dstPt, this.position);
+            const distRemaining = vec3.length(journeyVector);
+            vec3.normalize(journeyVector, journeyVector);
+
+            // TODO: remove
+            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, '' + this.path, 0, White, { outline: 6 });
+
+            // if (distRemaining < curSpeed * viewerInput.deltaTime) {
+            //     this.pathTimeLeft = this.path[this.pathCurPt].duration;
+            //     vec3.copy(this.position, dstPt);
+            //     vec3.zero(this.velocity);
+            //     curSpeed = 0;
+            // }
+            // vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, this.pathAccel * viewerInput.deltaTime);
+            // if (!isNaN(this.pathTimeLeft)) {
+            //     this.pathTimeLeft -= viewerInput.deltaTime;
+            //     if (this.pathTimeLeft <= 0) {
+            //         this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
+            //         this.pathTimeLeft = NaN;
+            //     }
+            // }
+
+
+            vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, this.pathAccel);
+
+            if (this.pathTimeLeft > 0) {
+                this.pathTimeLeft -= deltaTime;
+            } else {
+                if (distRemaining < curSpeed + 0.01) {
+                    this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
+                    this.pathTimeLeft = this.path[this.pathCurPt].duration;
+                    vec3.copy(this.position, dstPt);
+                    vec3.zero(this.velocity);
+                    curSpeed = 0;
+                }                
+            }
+        }
+
+        // TODO: add deceleration
+        
+        if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
+            const damping = this.pathMaxVel / curSpeed;
+            this.velocity[0] *= damping;
+            this.velocity[1] *= damping;
+            this.velocity[2] *= damping;
+        }
+
+        // vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
+        vec3.add(this.position, this.position, this.velocity);
+
+        this.eulers[0] += this.spinSpeed[0] * deltaTime;
+        this.eulers[1] += this.spinSpeed[1] * deltaTime;
+        this.eulers[2] += this.spinSpeed[2] * deltaTime;
         this.eulers[0] = this.eulers[0] % 360;
         this.eulers[1] = this.eulers[1] % 360;
         this.eulers[2] = this.eulers[2] % 360;
@@ -117,7 +212,7 @@ class GloverRenderer implements Viewer.SceneGfx {
         this.textureHolder.animatePalettes(viewerInput);
 
         for (let platform of this.platforms) {
-            platform.advanceFrame(viewerInput);
+            platform.advanceFrame(viewerInput.deltaTime);
         }
 
         for (let renderer of this.backdrops) {
@@ -562,14 +657,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
                     break;
                 }
-                case 'Platform0x62': {
+                case 'Platform': {
                     // TODO: special case exitpost.ndo
                     currentPlatform = new GloverPlatform(loadActor(cmd.params.objectId));
                     currentObject = currentPlatform;
                     sceneRenderer.platforms.push(currentPlatform)
                     break;
                 }
-                case 'PlatPos0xa6': {
+                case 'PlatSetInitialPos': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
@@ -580,14 +675,66 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
+                    // TODO: account for frame rate difference?
                     currentPlatform.setNeutralSpin(cmd.params.axis, cmd.params.initialTheta, cmd.params.speed);
                     break;
                 }
-                case 'PlatScale0x79': {
+                case 'PlatScale': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     currentPlatform.setScale(cmd.params.x, cmd.params.y, cmd.params.z);
+                    break;
+                }
+                case 'PlatPathPoint': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    const duration = (cmd.params.duration == 0) ? SRC_FRAME_TO_MS : cmd.params.duration * SRC_FRAME_TO_MS;
+                    currentPlatform.pushPathPoint(new PlatformPathPoint(
+                        vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z), duration))
+                    break;
+                }
+                case 'PlatPathAcceleration': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.pathAccel = cmd.params.acceleration * CONVERT_FRAMERATE;
+                    break;
+                }
+                case 'PlatMaxVelocity': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.pathMaxVel = cmd.params.velocity * CONVERT_FRAMERATE;
+                    break;
+                }
+                case 'PlatVentAdvanceFrames': {
+                    // TODO: support vent objects, too
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    for (let i = 0; i < cmd.params.numFrames / CONVERT_FRAMERATE; i++) {
+                        currentPlatform.advanceFrame(DST_FRAME_TO_MS);
+                    }
+                    break;
+                }
+                case 'Backdrop': {
+                    assert(cmd.params.flipX === 0 && cmd.params.flipY === 0);
+                    assert(cmd.params.offsetY === 0);
+                    assert(cmd.params.decalPosX === 0 && cmd.params.decalPosY === 0);
+                    assert(cmd.params.decalParentIdx === 0);
+                    assert(cmd.params.scrollSpeedX > 0);
+                    const backdrops = sceneRenderer.backdrops;
+                    let idx = 0;
+                    for (; idx < backdrops.length; idx++) {
+                        if (backdrops[idx].sortKey < cmd.params.sortKey) {
+                            break;
+                        } else if (backdrops[idx].textureId === cmd.params.textureId && backdrops[idx].sortKey === cmd.params.sortKey) {
+                            break;
+                        }
+                    }
+                    sceneRenderer.backdrops.splice(idx, 0, new GloverBackdropRenderer(device, cache, textureHolder, cmd.params));
                     break;
                 }
             }

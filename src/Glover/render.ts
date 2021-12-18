@@ -749,6 +749,8 @@ export class GloverActorRenderer {
 
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, actorObject.mesh)
 
+        // TODO: use render mode and actor type to identify other layers
+
         const layer = ((this.actorObject.mesh.renderMode & 0x2) != 0) ?
             GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKey = makeSortKey(layer);
@@ -776,8 +778,10 @@ export class GloverActorRenderer {
         mat4.getTranslation(lookatScratch, this.modelMatrix);
 
         template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+        // TODO: remove
         // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, ""+vec3.distance(depthScratch, lookatScratch), 0, White, { outline: 6 });
-
+        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.renderMode.toString(2), 0, White, { outline: 6 });
+        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.name, 0, White, { outline: 6 });
 
         const sceneParamsSize = 16;
 
@@ -861,7 +865,7 @@ class GloverMeshRenderer {
             rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
             F3DEX.runDL_F3DEX(rspState, displayListOffs);
             this.rspOutput = rspState.finish();
-        } else if (meshData.geometry.nFaces > 0) {
+        } else if (meshData.geometry.numFaces > 0) {
             rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
             this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState, meshData.alpha/255);
         } else {
@@ -973,7 +977,7 @@ class GloverMeshRenderer {
             const textureIdx = textureCache.translateTileTexture(this.segments, dataAddr, palAddr, rspState.DP_TileState[G_TX_RENDERTILE], false);
             drawCall.textureIndices.push(textureIdx);
 
-            for (let faceIdx = 0; faceIdx < geo.nFaces; faceIdx++) {
+            for (let faceIdx = 0; faceIdx < geo.numFaces; faceIdx++) {
                 if (geo.textureIds[faceIdx] != textureId) {
                     continue;
                 }
@@ -999,7 +1003,7 @@ class GloverMeshRenderer {
     }
 
     private animateWaterUVs(frameCount: number) {
-        if (this.rspOutput === null || this.meshData.geometry.nFaces === 0) {
+        if (this.rspOutput === null || this.meshData.geometry.numFaces === 0) {
             return;
         }
         for (let drawCall of this.rspOutput.drawCalls) {
@@ -1116,17 +1120,23 @@ export class GloverBackdropRenderer {
 
     private inputState: GfxInputState;
 
+    private drawMatrix = mat4.create();
+
+    public sortKey: number;
+    public textureId: number;
+
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        private actorObject: GloverObjbank.ObjectRoot,
-        public modelMatrix: mat4)
+        backdropObject: GloverLevel.Backdrop)
     {
         /* Object bank in first segment, then one
            texture bank for each subsequent */
         const segments = textures.textureSegments();
-        segments[0] = new ArrayBufferSlice(actorObject._io.buffer);
+
+        this.sortKey = backdropObject.sortKey;
+        this.textureId = backdropObject.textureId;
 
         this.megaStateFlags = {};
 
@@ -1174,11 +1184,11 @@ export class GloverBackdropRenderer {
         const pitch = Math.asin(view[1]) / (Math.PI * 2);
         const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
 
-        const drawMatrix = mat4.create(); // TODO
+        mat4.fromTranslation(this.drawMatrix, [0, 0, 0]);
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
-                const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
+                const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
         }

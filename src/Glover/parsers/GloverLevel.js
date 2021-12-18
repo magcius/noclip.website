@@ -241,25 +241,6 @@ var GloverLevel = (function() {
     return EnemyInstructionError;
   })();
 
-  var PlatAnimPhase0x5c = GloverLevel.PlatAnimPhase0x5c = (function() {
-    function PlatAnimPhase0x5c(_io, _parent, _root) {
-      this.__type = 'PlatAnimPhase0x5c';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatAnimPhase0x5c.prototype._read = function() {
-      this._debug.value = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.value = this._io.readU2be();
-      this._debug.value.end = this._io.pos;
-    }
-
-    return PlatAnimPhase0x5c;
-  })();
-
   var Backdrop = GloverLevel.Backdrop = (function() {
     function Backdrop(_io, _parent, _root) {
       this.__type = 'Backdrop';
@@ -274,39 +255,39 @@ var GloverLevel = (function() {
       this._debug.textureId = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.textureId = this._io.readU4be();
       this._debug.textureId.end = this._io.pos;
-      this._debug.h10x04 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h10x04 = this._io.readU2be();
-      this._debug.h10x04.end = this._io.pos;
-      this._debug.h10x06 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h10x06 = this._io.readU2be();
-      this._debug.h10x06.end = this._io.pos;
-      this._debug.h10x08 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h10x08 = this._io.readU2be();
-      this._debug.h10x08.end = this._io.pos;
-      this._debug.h20x0a = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x0a = this._io.readU2be();
-      this._debug.h20x0a.end = this._io.pos;
-      this._debug.h20x0c = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x0c = this._io.readU2be();
-      this._debug.h20x0c.end = this._io.pos;
-      this._debug.h20x0e = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x0e = this._io.readU2be();
-      this._debug.h20x0e.end = this._io.pos;
-      this._debug.h20x10 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x10 = this._io.readU2be();
-      this._debug.h20x10.end = this._io.pos;
-      this._debug.h20x12 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x12 = this._io.readU2be();
-      this._debug.h20x12.end = this._io.pos;
-      this._debug.h20x14 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x14 = this._io.readU2be();
-      this._debug.h20x14.end = this._io.pos;
-      this._debug.h20x16 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h20x16 = this._io.readU2be();
-      this._debug.h20x16.end = this._io.pos;
-      this._debug.mysteryDeref = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.mysteryDeref = this._io.readU2be();
-      this._debug.mysteryDeref.end = this._io.pos;
+      this._debug.decalPosX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.decalPosX = this._io.readU2be();
+      this._debug.decalPosX.end = this._io.pos;
+      this._debug.decalPosY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.decalPosY = this._io.readU2be();
+      this._debug.decalPosY.end = this._io.pos;
+      this._debug.sortKey = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.sortKey = this._io.readU2be();
+      this._debug.sortKey.end = this._io.pos;
+      this._debug.offsetY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.offsetY = this._io.readS2be();
+      this._debug.offsetY.end = this._io.pos;
+      this._debug.scaleX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.scaleX = this._io.readU2be();
+      this._debug.scaleX.end = this._io.pos;
+      this._debug.scaleY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.scaleY = this._io.readU2be();
+      this._debug.scaleY.end = this._io.pos;
+      this._debug.flipX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.flipX = this._io.readU2be();
+      this._debug.flipX.end = this._io.pos;
+      this._debug.flipY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.flipY = this._io.readU2be();
+      this._debug.flipY.end = this._io.pos;
+      this._debug.scrollSpeedX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.scrollSpeedX = this._io.readU2be();
+      this._debug.scrollSpeedX.end = this._io.pos;
+      this._debug.unused = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.unused = this._io.readU2be();
+      this._debug.unused.end = this._io.pos;
+      this._debug.decalParentIdx = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.decalParentIdx = this._io.readU2be();
+      this._debug.decalParentIdx.end = this._io.pos;
     }
 
     return Backdrop;
@@ -341,6 +322,25 @@ var GloverLevel = (function() {
     }
 
     return DiffuseLight;
+  })();
+
+  var PlatPathAcceleration = GloverLevel.PlatPathAcceleration = (function() {
+    function PlatPathAcceleration(_io, _parent, _root) {
+      this.__type = 'PlatPathAcceleration';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatPathAcceleration.prototype._read = function() {
+      this._debug.acceleration = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.acceleration = this._io.readF4be();
+      this._debug.acceleration.end = this._io.pos;
+    }
+
+    return PlatPathAcceleration;
   })();
 
   var Buzzer = GloverLevel.Buzzer = (function() {
@@ -724,6 +724,31 @@ var GloverLevel = (function() {
     return EnvironmentalSound;
   })();
 
+  var PlatSetInitialPos = GloverLevel.PlatSetInitialPos = (function() {
+    function PlatSetInitialPos(_io, _parent, _root) {
+      this.__type = 'PlatSetInitialPos';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatSetInitialPos.prototype._read = function() {
+      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.x = this._io.readF4be();
+      this._debug.x.end = this._io.pos;
+      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.y = this._io.readF4be();
+      this._debug.y.end = this._io.pos;
+      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.z = this._io.readF4be();
+      this._debug.z.end = this._io.pos;
+    }
+
+    return PlatSetInitialPos;
+  })();
+
   var EnemyInstructionB = GloverLevel.EnemyInstructionB = (function() {
     function EnemyInstructionB(_io, _parent, _root) {
       this.__type = 'EnemyInstructionB';
@@ -771,6 +796,25 @@ var GloverLevel = (function() {
     }
 
     return EnemyInstructionB;
+  })();
+
+  var PlatMaxVelocity = GloverLevel.PlatMaxVelocity = (function() {
+    function PlatMaxVelocity(_io, _parent, _root) {
+      this.__type = 'PlatMaxVelocity';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatMaxVelocity.prototype._read = function() {
+      this._debug.velocity = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.velocity = this._io.readF4be();
+      this._debug.velocity.end = this._io.pos;
+    }
+
+    return PlatMaxVelocity;
   })();
 
   var PlatMvspn0x59 = GloverLevel.PlatMvspn0x59 = (function() {
@@ -1104,34 +1148,6 @@ var GloverLevel = (function() {
     return EnemyConditionalInstruction;
   })();
 
-  var PlatPathPoint0x6b = GloverLevel.PlatPathPoint0x6b = (function() {
-    function PlatPathPoint0x6b(_io, _parent, _root) {
-      this.__type = 'PlatPathPoint0x6b';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatPathPoint0x6b.prototype._read = function() {
-      this._debug.frameId = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.frameId = this._io.readU2be();
-      this._debug.frameId.end = this._io.pos;
-      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.x = this._io.readF4be();
-      this._debug.x.end = this._io.pos;
-      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.y = this._io.readF4be();
-      this._debug.y.end = this._io.pos;
-      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.z = this._io.readF4be();
-      this._debug.z.end = this._io.pos;
-    }
-
-    return PlatPathPoint0x6b;
-  })();
-
   var Enemy0xa1 = GloverLevel.Enemy0xa1 = (function() {
     function Enemy0xa1(_io, _parent, _root) {
       this.__type = 'Enemy0xa1';
@@ -1387,9 +1403,9 @@ var GloverLevel = (function() {
     return Unknown0xa9;
   })();
 
-  var Plat0x6c = GloverLevel.Plat0x6c = (function() {
-    function Plat0x6c(_io, _parent, _root) {
-      this.__type = 'Plat0x6c';
+  var PlatVentAdvanceFrames = GloverLevel.PlatVentAdvanceFrames = (function() {
+    function PlatVentAdvanceFrames(_io, _parent, _root) {
+      this.__type = 'PlatVentAdvanceFrames';
       this._io = _io;
       this._parent = _parent;
       this._root = _root || this;
@@ -1397,32 +1413,13 @@ var GloverLevel = (function() {
 
       this._read();
     }
-    Plat0x6c.prototype._read = function() {
-      this._debug.f0x1c = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.f0x1c = this._io.readF4be();
-      this._debug.f0x1c.end = this._io.pos;
+    PlatVentAdvanceFrames.prototype._read = function() {
+      this._debug.numFrames = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.numFrames = this._io.readU2be();
+      this._debug.numFrames.end = this._io.pos;
     }
 
-    return Plat0x6c;
-  })();
-
-  var PlatPathSpeed0x6d = GloverLevel.PlatPathSpeed0x6d = (function() {
-    function PlatPathSpeed0x6d(_io, _parent, _root) {
-      this.__type = 'PlatPathSpeed0x6d';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatPathSpeed0x6d.prototype._read = function() {
-      this._debug.speed = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.speed = this._io.readF4be();
-      this._debug.speed.end = this._io.pos;
-    }
-
-    return PlatPathSpeed0x6d;
+    return PlatVentAdvanceFrames;
   })();
 
   var SetExit = GloverLevel.SetExit = (function() {
@@ -1567,31 +1564,6 @@ var GloverLevel = (function() {
     }
 
     return Plat0x66;
-  })();
-
-  var PlatPos0xa6 = GloverLevel.PlatPos0xa6 = (function() {
-    function PlatPos0xa6(_io, _parent, _root) {
-      this.__type = 'PlatPos0xa6';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatPos0xa6.prototype._read = function() {
-      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.x = this._io.readF4be();
-      this._debug.x.end = this._io.pos;
-      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.y = this._io.readF4be();
-      this._debug.y.end = this._io.pos;
-      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.z = this._io.readF4be();
-      this._debug.z.end = this._io.pos;
-    }
-
-    return PlatPos0xa6;
   })();
 
   var PlatSpecial0xc7 = GloverLevel.PlatSpecial0xc7 = (function() {
@@ -2024,7 +1996,7 @@ var GloverLevel = (function() {
         this.params = new PlatMvspnSetparent(this._io, this, this._root);
         break;
       case 121:
-        this.params = new PlatScale0x79(this._io, this, this._root);
+        this.params = new PlatScale(this._io, this, this._root);
         break;
       case 96:
         this.params = new LookAtHand0x60(this._io, this, this._root);
@@ -2069,7 +2041,7 @@ var GloverLevel = (function() {
         this.params = new PlatPush0x5b(this._io, this, this._root);
         break;
       case 107:
-        this.params = new PlatPathPoint0x6b(this._io, this, this._root);
+        this.params = new PlatPathPoint(this._io, this, this._root);
         break;
       case 143:
         this.params = new PlatOrbit(this._io, this, this._root);
@@ -2081,7 +2053,7 @@ var GloverLevel = (function() {
         this.params = new PlatSpecial0x68(this._io, this, this._root);
         break;
       case 98:
-        this.params = new Platform0x62(this._io, this, this._root);
+        this.params = new Platform(this._io, this, this._root);
         break;
       case 197:
         this.params = new PlatSpinSound0xc5(this._io, this, this._root);
@@ -2153,7 +2125,7 @@ var GloverLevel = (function() {
         this.params = new PuzzleAny(this._io, this, this._root);
         break;
       case 166:
-        this.params = new PlatPos0xa6(this._io, this, this._root);
+        this.params = new PlatSetInitialPos(this._io, this, this._root);
         break;
       case 114:
         this.params = new PlatConf0x72(this._io, this, this._root);
@@ -2174,7 +2146,7 @@ var GloverLevel = (function() {
         this.params = new Unknown0x98(this._io, this, this._root);
         break;
       case 109:
-        this.params = new PlatPathSpeed0x6d(this._io, this, this._root);
+        this.params = new PlatPathAcceleration(this._io, this, this._root);
         break;
       case 32000:
         this.params = new EndLevelData(this._io, this, this._root);
@@ -2210,7 +2182,7 @@ var GloverLevel = (function() {
         this.params = new PlatSpecial0xb6(this._io, this, this._root);
         break;
       case 108:
-        this.params = new Plat0x6c(this._io, this, this._root);
+        this.params = new PlatMaxVelocity(this._io, this, this._root);
         break;
       case 189:
         this.params = new UnknownSound0xbd(this._io, this, this._root);
@@ -2270,7 +2242,7 @@ var GloverLevel = (function() {
         this.params = new Enemy0x84(this._io, this, this._root);
         break;
       case 92:
-        this.params = new PlatAnimPhase0x5c(this._io, this, this._root);
+        this.params = new PlatVentAdvanceFrames(this._io, this, this._root);
         break;
       case 198:
         this.params = new Plat0xc6(this._io, this, this._root);
@@ -2466,9 +2438,9 @@ var GloverLevel = (function() {
       this._debug.flags = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.flags = this._io.readU2be();
       this._debug.flags.end = this._io.pos;
-      this._debug.nParticles = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.nParticles = this._io.readU4be();
-      this._debug.nParticles.end = this._io.pos;
+      this._debug.numParticles = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.numParticles = this._io.readU4be();
+      this._debug.numParticles.end = this._io.pos;
       this._debug.particleObjectId = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.particleObjectId = this._io.readU4be();
       this._debug.particleObjectId.end = this._io.pos;
@@ -2697,6 +2669,31 @@ var GloverLevel = (function() {
     }
 
     return Unrecognized;
+  })();
+
+  var PlatScale = GloverLevel.PlatScale = (function() {
+    function PlatScale(_io, _parent, _root) {
+      this.__type = 'PlatScale';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatScale.prototype._read = function() {
+      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.x = this._io.readF4be();
+      this._debug.x.end = this._io.pos;
+      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.y = this._io.readF4be();
+      this._debug.y.end = this._io.pos;
+      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.z = this._io.readF4be();
+      this._debug.z.end = this._io.pos;
+    }
+
+    return PlatScale;
   })();
 
   var Unknown0xbf = GloverLevel.Unknown0xbf = (function() {
@@ -3086,6 +3083,34 @@ var GloverLevel = (function() {
     }
 
     return CameoInst6;
+  })();
+
+  var PlatPathPoint = GloverLevel.PlatPathPoint = (function() {
+    function PlatPathPoint(_io, _parent, _root) {
+      this.__type = 'PlatPathPoint';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatPathPoint.prototype._read = function() {
+      this._debug.duration = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.duration = this._io.readU2be();
+      this._debug.duration.end = this._io.pos;
+      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.x = this._io.readF4be();
+      this._debug.x.end = this._io.pos;
+      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.y = this._io.readF4be();
+      this._debug.y.end = this._io.pos;
+      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.z = this._io.readF4be();
+      this._debug.z.end = this._io.pos;
+    }
+
+    return PlatPathPoint;
   })();
 
   var Plat0x78 = GloverLevel.Plat0x78 = (function() {
@@ -3538,28 +3563,6 @@ var GloverLevel = (function() {
     return FogConfiguration;
   })();
 
-  var Platform0x62 = GloverLevel.Platform0x62 = (function() {
-    function Platform0x62(_io, _parent, _root) {
-      this.__type = 'Platform0x62';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    Platform0x62.prototype._read = function() {
-      this._debug.objectId = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.objectId = this._io.readU4be();
-      this._debug.objectId.end = this._io.pos;
-      this._debug.name = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.name = KaitaiStream.bytesToStr(this._io.readBytes(8), "ASCII");
-      this._debug.name.end = this._io.pos;
-    }
-
-    return Platform0x62;
-  })();
-
   var CameoInst5 = GloverLevel.CameoInst5 = (function() {
     function CameoInst5(_io, _parent, _root) {
       this.__type = 'CameoInst5';
@@ -3639,31 +3642,6 @@ var GloverLevel = (function() {
     }
 
     return PlatTopple0x81;
-  })();
-
-  var PlatScale0x79 = GloverLevel.PlatScale0x79 = (function() {
-    function PlatScale0x79(_io, _parent, _root) {
-      this.__type = 'PlatScale0x79';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatScale0x79.prototype._read = function() {
-      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.x = this._io.readF4be();
-      this._debug.x.end = this._io.pos;
-      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.y = this._io.readF4be();
-      this._debug.y.end = this._io.pos;
-      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.z = this._io.readF4be();
-      this._debug.z.end = this._io.pos;
-    }
-
-    return PlatScale0x79;
   })();
 
   var PuzzleAction0x55 = GloverLevel.PuzzleAction0x55 = (function() {
@@ -3958,6 +3936,28 @@ var GloverLevel = (function() {
     }
 
     return PuzzleCondE;
+  })();
+
+  var Platform = GloverLevel.Platform = (function() {
+    function Platform(_io, _parent, _root) {
+      this.__type = 'Platform';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    Platform.prototype._read = function() {
+      this._debug.objectId = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.objectId = this._io.readU4be();
+      this._debug.objectId.end = this._io.pos;
+      this._debug.name = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.name = KaitaiStream.bytesToStr(this._io.readBytes(8), "ASCII");
+      this._debug.name.end = this._io.pos;
+    }
+
+    return Platform;
   })();
 
   var PlatSpecial0xb4 = GloverLevel.PlatSpecial0xb4 = (function() {
