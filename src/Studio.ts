@@ -1432,8 +1432,12 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private movePlayhead(moveAmountSeconds: number) {
-        const curTime = parseFloat(this.timeline.getPlayheadTimeSeconds());
-        this.playheadTimePositionInput.value = (curTime + moveAmountSeconds).toFixed(2);
+        const moveTime = parseFloat(this.timeline.getPlayheadTimeSeconds()) + moveAmountSeconds;
+        if (moveTime * MILLISECONDS_IN_SECOND > this.timeline.getTimelineLengthMs()) {
+            this.timelineLengthInput.value = moveTime.toFixed(2);
+            this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        this.playheadTimePositionInput.value = (moveTime).toFixed(2);
         this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
@@ -1906,7 +1910,7 @@ export class StudioPanel extends FloatingPanel {
         this.updatePreviewSteps();
 
         if (advancePlayhead)
-            this.movePlayhead(parseFloat(this.timelineLengthInput.value) / 10);
+            this.movePlayhead(3);
 
         this.timeline.draw();
         this.saveState();
