@@ -742,6 +742,7 @@ class Main {
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
         const inputManager = this.viewer.inputManager;
+        inputManager.reset();
         const context: SceneContext = {
             device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager,
         };

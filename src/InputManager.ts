@@ -289,4 +289,8 @@ export default class InputManager {
         if (this.ondraggingmodechanged !== null)
             this.ondraggingmodechanged();
     }
+
+    public reset(): void {
+        this.isInteractive = true;
+    }
 }
