@@ -8,9 +8,8 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
-import { StudioPanel } from './Studio';
+import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
 import { Blue, Color, Green, Magenta } from './Color';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
@@ -537,7 +536,7 @@ export class StudioCameraController extends FPSCameraController {
                 this.camera.worldMatrixUpdated();
             }
             if (inputManager.isKeyDownEventTriggered('Escape'))
-                this.stopAnimation();
+                this.studioPanel.stopAnimation();
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
@@ -579,7 +578,7 @@ export class StudioCameraController extends FPSCameraController {
 
     public updateAnimation(dt: number): CameraUpdateResult {
         if (this.animationManager.isAnimationFinished()) {
-            this.stopAnimation();
+            this.studioPanel.stopAnimation();
             return CameraUpdateResult.Unchanged;
         }
 
@@ -598,14 +597,6 @@ export class StudioCameraController extends FPSCameraController {
         this.camera.worldMatrixUpdated();
     }
 
-    public playAnimation() {
-        this.isAnimationPlaying = true;
-    }
-
-    public stopAnimation() {
-        this.isAnimationPlaying = false;
-        this.studioPanel.onAnimationStopped();
-    }
 }
 
 export class XRCameraController {
