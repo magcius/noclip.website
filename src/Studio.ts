@@ -541,7 +541,7 @@ class Timeline {
 
     public setPlayheadTimeSeconds(t: number, animationPlaying: boolean) {
         const x = t * this.pixelsPerSecond / this.timelineScaleFactor;
-        this.playhead.updatePosition(x, t);
+        this.playhead.updatePosition(x, t * MILLISECONDS_IN_SECOND);
         if (!animationPlaying) {
             const snapKfIndex = this.getClosestSnappingIconIndex(x);
             if (snapKfIndex > -1 && x === this.keyframeIcons[snapKfIndex].getX()) {
@@ -586,18 +586,14 @@ class Timeline {
      * Return the playhead time in milliseconds, for logic purposes.
      */
     public getPlayheadTimeMs(): number {
-        return this.getPlayheadTime() * MILLISECONDS_IN_SECOND;
+        return this.playhead.getT();
     }
 
     /**
      * Return the playhead time rounded in seconds, for display purposes.
      */
     public getPlayheadTimeSeconds(): string {
-        return this.getPlayheadTime().toFixed(2);
-    }
-
-    private getPlayheadTime(): number {
-        return this.playhead.getX() / this.pixelsPerSecond * this.timelineScaleFactor;
+        return (this.playhead.getT() / MILLISECONDS_IN_SECOND).toFixed(2);
     }
 
     public getLastKeyframeTimeMs(): number {
@@ -1357,11 +1353,13 @@ export class StudioPanel extends FloatingPanel {
             } else if (ev.key === 'j') {
                 this.timeline.jumpToPreviousKeyframe();
                 this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
+                if (this.timeline.livePreview)
+                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
             } else if (ev.key === 'k') {
                 this.timeline.jumpToNextKeyframe();
                 this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
+                if (this.timeline.livePreview)
+                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
             } else if (ev.key === ',') {
                 this.movePlayhead(-1 / 60);
             } else if (ev.key === '.') {
