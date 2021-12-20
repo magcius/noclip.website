@@ -78,12 +78,13 @@ import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeOfTheFlyingDutchman/scenes";
 import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes';
+import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { assertExists, assert, fallbackUndefined } from './util';
+import { assertExists, assert } from './util';
 import { DataFetcher } from './DataFetcher';
 import { atob, btoa } from './Ascii85';
 import { mat4 } from 'gl-matrix';
@@ -191,6 +192,7 @@ const sceneGroups = [
     Scenes_HalfLife2Ep2.sceneGroup,
     Scenes_MarioKart8Deluxe.sceneGroup,
     Scenes_TheStanleyParable.sceneGroup,
+    Scenes_JetSetRadio.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {

@@ -1,31 +1,18 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert } from "../../util";
-import { DataStream } from "./DataStream";
-import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
-import { TextureHolder, LoadedTexture, TextureBase } from "../../TextureHolder";
-import * as Viewer from '../../viewer';
-import { convertToCanvas } from "../../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { readString } from "../util";
+
 
 // Ported for JSR to TS from
 //  https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
 // A more complete PVRT implementation is can be found here:
 //  https://github.com/inolen/redream/blob/master/src/guest/pvr/tex.c
 
-// wrapper for chunked data prefixed with a 4-char magic
-interface ChunkData {
-    magic: string;
-    data: ArrayBufferSlice;
-}
-
-function readChunk(stream: DataStream, lengthOverride?: number): ChunkData {
-    const magic = stream.readString(4);
-    const length = stream.readUint32();
-    const data = stream.readSlice((lengthOverride !== undefined) ? lengthOverride : length);
-    return {magic, data};
-}
-
-export interface PVR_Texture extends TextureBase {
+export interface PVR_Texture {
+    name: string;
+    id: number;
+    width: number;
+    height: number;
     format: PVRTFormat;
     mask: PVRTMask;
     levels: PVR_TextureLevel[];
@@ -89,94 +76,29 @@ export function getMaskName(mask: PVRTMask): string {
     }
 }
 
-function readGlobalIndex(stream: DataStream): PVR_GlobalIndex {
-    const chunk = readChunk(stream);
-    assert(chunk.magic === "GBIX");
-
-    const id = chunk.data.createDataView().getUint32(0x00, true);
-    return { id };
-}
-
-function readTexture(stream: DataStream, length?: number): PVR_Texture {
-    
-    const chunk = readChunk(stream, length);
-    assert(chunk.magic === "PVRT");
-
-    const view = chunk.data.createDataView();
+export function readPVRTChunk(buffer: ArrayBufferSlice, offs: number): [PVR_Texture, number] {
+    const view = buffer.createDataView(offs + 0x08);
 
     const format = view.getUint8(0x00);
     const mask = view.getUint8(0x01);
     const width = view.getUint16(0x04, true);
     const height = view.getUint16(0x06, true);
 
-    const dataView = chunk.data.slice(8).createDataView();
+    const dataView = buffer.slice(offs + 0x10).createDataView();
 
     const params = decideParams(mask, width);
-    const levels = decideLevels(width, height, params);
+    const mipChain = decideMipChain(width, height, params);
 
-    const texture: PVR_Texture = { name: "", width, height, format, mask, levels: [] };
+    const id = 0;
+    const texture: PVR_Texture = { name: "", id, width, height, format, mask, levels: [] };
 
-    for(let i = 0; i < levels.length; i++) {
-        if (levels[i].offset > dataView.byteLength)
-            throw new Error(`Corrupted data or incorrect texture level ${i} (offset=${levels[i].offset}/ size=${dataView.byteLength})`);
-
-        const level = extractLevel(dataView, format, mask, params, levels[i]);
+    for (let i = 0; i < mipChain.levels.length; i++) {
+        const level = extractLevel(dataView, format, mask, params, mipChain.levels[i]);
         texture.levels.push(level);
     }
 
-    return texture;
-}
-
-export function parse(buffer: ArrayBufferSlice, name: string): PVR_Texture {
-
-    const stream = new DataStream(buffer);
- 
-    return parseFromStream(stream, name);
-}
-
-export function parseFromStream(buffer: DataStream, name: string): PVR_Texture {
-    const index = readGlobalIndex(buffer);
-
-    let lengthOverride: number | undefined;
-
-    // todo: investigate why this header is wrong
-    if (index.id === 12009)
-        lengthOverride = 18440;
-
-    let imageData = readTexture(buffer, lengthOverride);
-    imageData.name = name;
-    
-    return imageData;
-}
-
-function surfaceToCanvas(textureLevel: PVR_TextureLevel): HTMLCanvasElement {
-    return convertToCanvas(ArrayBufferSlice.fromView(textureLevel.data), textureLevel.width, textureLevel.height);
-}
-
-function textureToCanvas(texture: PVR_Texture): Viewer.Texture {
-
-    const surfaces = texture.levels.reverse().map((textureLevel) => surfaceToCanvas(textureLevel));
-
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatName(texture.format));
-
-    return { name: texture.name, surfaces, extraInfo };
-}
-
-export class PVRTextureHolder extends TextureHolder<PVR_Texture> {
-    public loadTexture(device: GfxDevice, textureEntry: PVR_Texture): LoadedTexture {
-
-        //console.log(textureEntry);
-
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
-    
-
-        device.uploadTextureData(gfxTexture, 0, textureEntry.levels.reverse().map((level) => level.data));
-
-        const viewerTexture: Viewer.Texture = textureToCanvas(textureEntry);
-
-        return { gfxTexture, viewerTexture };
-    }
+    const size = mipChain.size + 0x10;
+    return [texture, size];
 }
 
 function untwiddleValue(value: number) : number {
@@ -246,7 +168,7 @@ interface UnpackedLevel {
     offset: number;
 }
 
-interface UnpackedParams {
+interface UnpackParams {
     numCodedComponents: number;
     kSrcStride: number;
     kDstStride: number;
@@ -257,8 +179,8 @@ interface UnpackedParams {
     codeBookSize: number;
 }
 
-function decideParams(mask: PVRTMask, width: number): UnpackedParams {
-    const params: UnpackedParams = {numCodedComponents: 4, kSrcStride: 2, kDstStride: 4, twiddled: false, mipMaps: false, vqCompressed: false, codeBookSize: 0};
+function decideParams(mask: PVRTMask, width: number): UnpackParams {
+    const params: UnpackParams = {numCodedComponents: 4, kSrcStride: 2, kDstStride: 4, twiddled: false, mipMaps: false, vqCompressed: false, codeBookSize: 0};
 
     if (mask === PVRTMask.TwiddledMipMaps) {
         params.twiddled = true;
@@ -297,7 +219,12 @@ function decideParams(mask: PVRTMask, width: number): UnpackedParams {
     return params;
 }
 
-function decideLevels(width: number, height: number, params: UnpackedParams): UnpackedLevel[] {
+interface MipChain {
+    levels: UnpackedLevel[];
+    size: number;
+}
+
+function decideMipChain(width: number, height: number, params: UnpackParams): MipChain {
     let levels: UnpackedLevel[] = [];
 
     let srcOffset = 0;
@@ -313,26 +240,25 @@ function decideLevels(width: number, height: number, params: UnpackedParams): Un
         const mipHeight = (height >> (mipMapCount - 1));
         const mipSize = mipWidth * mipHeight;
 
-        const level: UnpackedLevel = {width: mipWidth, height: mipHeight, size: mipSize, offset: srcOffset};
+        const level: UnpackedLevel = { width: mipWidth, height: mipHeight, size: mipSize, offset: srcOffset };
         levels.push(level);
 
         mipMapCount--;
-        if (mipMapCount > 0) {
-            if (params.vqCompressed) {
-                if (params.mipMaps)
-                    srcOffset += Math.max(1, mipSize / 4);
-                else
-                    srcOffset += mipSize / 4;
-            } else {
-                srcOffset += (params.kSrcStride * mipSize);
-            }
+        if (params.vqCompressed) {
+            if (params.mipMaps)
+                srcOffset += Math.max(1, mipSize / 4);
+            else
+                srcOffset += mipSize / 4;
+        } else {
+            srcOffset += (params.kSrcStride * mipSize);
         }
     }
 
-    return levels;
+    const size = srcOffset;
+    return { levels, size };
 }
 
-function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, params: UnpackedParams, level: UnpackedLevel): PVR_TextureLevel {
+function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, params: UnpackParams, level: UnpackedLevel): PVR_TextureLevel {
     // Size of RGBA output
     const dstData = new Uint8Array(level.width * level.height * 4);
 
@@ -350,7 +276,7 @@ function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, par
     //extract image data
     let x = 0;
     let y = 0;
-    
+
     let processed = 0;
     while (processed < mipSize) {
         if (params.vqCompressed) {
