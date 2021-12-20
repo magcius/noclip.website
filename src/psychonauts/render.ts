@@ -67,13 +67,13 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
         }
 
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.mipData.length));
-
         device.uploadTextureData(gfxTexture, 0, levelDatas);
 
         const extraInfo = new Map<string, string>();
         extraInfo.set('Format', getTextureFormatName(texture.format));
         const displayName = texture.name.split('/').pop()!;
         const viewerTexture: Viewer.Texture = { name: displayName, surfaces, extraInfo };
+        device.setResourceName(gfxTexture, displayName);
 
         this.ppakTextures.push(texture);
 
@@ -134,7 +134,7 @@ void main() {
 #endif
 
 #ifdef USE_LIGHTMAP
-    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord.zw);
+    t_Color.rgb *= texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord.zw).rgb;
 #endif
 
 #ifdef USE_VERTEX_COLOR
@@ -200,7 +200,7 @@ class MeshFragData {
             { location: PsychonautsProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB },
             { location: PsychonautsProgram.a_Color, bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.U8_RGBA_NORM },
             { location: PsychonautsProgram.a_TexCoord0, bufferIndex: 2, bufferByteOffset: 0x00, format: GfxFormat.F32_RG },
-            { location: PsychonautsProgram.a_TexCoord1, bufferIndex: 2, bufferByteOffset: 0x08, format: GfxFormat.F32_RG },
+            { location: PsychonautsProgram.a_TexCoord1, bufferIndex: 2, bufferByteOffset: 0x08 * (meshFrag.streamUVCount - 1), format: GfxFormat.F32_RG },
         ];
         const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
             { byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -280,6 +280,7 @@ class MeshFragInstance {
     private textureMapping = nArray(3, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor> = {};
     private sortKey: number = 0;
+    private visible = true;
 
     constructor(cache: GfxRenderCache, scene: EScene, textureHolder: PsychonautsTextureHolder, public meshFragData: MeshFragData) {
         this.program = new PsychonautsProgram();
@@ -355,6 +356,9 @@ class MeshFragInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, viewerInput: Viewer.ViewerRenderInput) {
+        if (!this.visible)
+            return;
+
         const meshFrag = this.meshFragData.meshFrag;
 
         const renderInst = renderInstManager.newRenderInst();
@@ -397,6 +401,7 @@ class MeshInstance {
     private meshFragInstance: MeshFragInstance[] = [];
     private submeshInstance: MeshInstance[] = [];
     public modelMatrix = mat4.create();
+    private visible = true;
 
     constructor(cache: GfxRenderCache, scene: EScene, textureHolder: PsychonautsTextureHolder, public meshData: MeshData) {
         for (let i = 0; i < this.meshData.meshFragData.length; i++)
@@ -406,6 +411,9 @@ class MeshInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         for (let i = 0; i < this.meshFragInstance.length; i++)
             this.meshFragInstance[i].prepareToRender(device, renderInstManager, this.modelMatrix, viewerInput);
         for (let i = 0; i < this.submeshInstance.length; i++)
@@ -423,6 +431,7 @@ class MeshInstance {
 class DomainInstance {
     public meshInstance: MeshInstance[] = [];
     public subdomainInstance: DomainInstance[] = [];
+    private visible = true;
 
     constructor(cache: GfxRenderCache, scene: EScene, textureHolder: PsychonautsTextureHolder, public domainData: DomainData) {
         for (let i = 0; i < this.domainData.meshData.length; i++)
@@ -432,6 +441,9 @@ class DomainInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         for (let i = 0; i < this.meshInstance.length; i++)
             this.meshInstance[i].prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.subdomainInstance.length; i++)
