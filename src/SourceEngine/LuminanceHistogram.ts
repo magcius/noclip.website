@@ -4,7 +4,7 @@ import { IS_DEVELOPMENT } from "../BuildVersion";
 import { colorLerp, colorNewCopy, colorToCSS, Green, Red, White } from "../Color";
 import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform";
 import { GfxProgram, GfxQueryPool } from "../gfx/platform/GfxPlatformImpl";

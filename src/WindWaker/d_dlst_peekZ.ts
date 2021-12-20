@@ -6,7 +6,7 @@ import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelper
 import { assert, assertExists } from "../util";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 // TODO(jstpierre): Port the PeekZ system to occlusion queries?

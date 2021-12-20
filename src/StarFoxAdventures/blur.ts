@@ -1,5 +1,5 @@
 import { DeviceProgram } from "../Program";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxWrapMode, GfxTexture, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";

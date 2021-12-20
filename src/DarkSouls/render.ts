@@ -22,7 +22,7 @@ import { interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { colorNewCopy, White } from "../Color";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { dfRange, dfShow } from "../DebugFloaters";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {

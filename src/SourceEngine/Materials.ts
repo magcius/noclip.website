@@ -15,7 +15,7 @@ import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFi
 import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 import { ParticleStaticResource } from "./Particles_Simple";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";

@@ -1,5 +1,5 @@
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";

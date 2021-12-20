@@ -19,7 +19,7 @@ import { Camera } from "../Camera";
 import { isFirstStep, isGreaterStep, isLessStep } from "./Spine";
 import { invlerp, saturate, setMatrixTranslation, Vec3Zero } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
 import { generateBlurFunction } from "./ImageEffect";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";

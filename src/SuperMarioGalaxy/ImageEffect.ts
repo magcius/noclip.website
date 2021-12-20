@@ -18,7 +18,7 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInst
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 import { GXShaderLibrary } from "../gx/gx_material";
 

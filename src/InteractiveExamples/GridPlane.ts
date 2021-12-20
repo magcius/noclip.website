@@ -9,7 +9,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helper
 import { White, colorNewCopy } from "../Color";
 import { mat4 } from "gl-matrix";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;

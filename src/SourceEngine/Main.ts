@@ -26,7 +26,7 @@ import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTextur
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import * as UI from "../ui";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";

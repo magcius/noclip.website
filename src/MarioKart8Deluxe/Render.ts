@@ -23,7 +23,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { getMatrixTranslation, MathConstants, Vec3Zero } from '../MathHelpers';
 
 import * as SARC from "../fres_nx/sarc";

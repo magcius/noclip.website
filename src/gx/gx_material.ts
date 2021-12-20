@@ -12,7 +12,7 @@ import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers';
 import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
 import { DeviceProgram } from '../Program';
-import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;

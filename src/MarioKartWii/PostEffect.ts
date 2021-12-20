@@ -7,7 +7,7 @@ import { Camera } from "../Camera";
 import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, colorScale, OpaqueBlack } from "../Color";
 import { copyMegaState, fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
 import { fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";

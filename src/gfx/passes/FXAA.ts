@@ -3,7 +3,7 @@ import { DeviceProgram } from "../../Program";
 import { TextureMapping } from "../../TextureHolder";
 import { nArray } from "../../util";
 import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 

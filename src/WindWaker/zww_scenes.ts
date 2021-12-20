@@ -47,7 +47,7 @@ import { d_a_sea } from './d_a_sea';
 import { dPa_control_c } from './d_particle';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
-import { GfxShaderLibrary } from '../gfx/helpers/ShaderHelpers';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
