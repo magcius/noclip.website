@@ -2346,13 +2346,13 @@ class Material_Generic extends BaseMaterial {
         if (this.shaderType === GenericShaderType.UnlitGeneric)
             return;
 
-        let projectedLight = renderContext.currentProjectedLight;
-        if (projectedLight !== null) {
-            if (!projectedLight.frustumView.frustum.contains(bbox))
-                projectedLight = null;
+        let renderer = renderContext.currentProjectedLightRenderer;
+        if (renderer !== null) {
+            if (!renderer.light.frustumView.frustum.contains(bbox))
+                renderer = null;
         }
 
-        this.projectedLight = projectedLight;
+        this.projectedLight = renderer !== null ? renderer.light : null;
 
         this.wantsProjectedTexture = this.projectedLight !== null && this.projectedLight.texture !== null;
         if (this.program.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))
@@ -3894,14 +3894,22 @@ export function worldLightingCalcColorForPoint(dst: Color, bspRenderer: BSPRende
     }
 }
 
-export interface ProjectedLight {
-    depthTexture: GfxrTemporalTexture;
-    texture: VTF | null;
-    textureFrame: number;
-    frustumView: SourceEngineView;
-    lightColor: Color;
-    brightnessScale: number;
-    farZ: number;
+export class ProjectedLight {
+    public farZ: number = 1000;
+    public frustumView = new SourceEngineView();
+    public texture: VTF | null = null;
+    public textureFrame: number = 0;
+    public lightColor = colorNewCopy(White);
+    public brightnessScale: number = 1.0;
+    public depthTexture = new GfxrTemporalTexture();
+
+    constructor() {
+        this.frustumView.viewType = SourceEngineViewType.ShadowMap;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.depthTexture.destroy(device);
+    }
 }
 
 const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ ] as const;

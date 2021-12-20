@@ -21,7 +21,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem, env_projectedtexture, point_camera, sky_camera, worldspawn } from "./EntitySystem";
+import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, point_camera, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -33,6 +33,7 @@ import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelper
 import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
+import InputManager from "../InputManager";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -916,6 +917,113 @@ class DebugStatistics {
     }
 }
 
+export class ProjectedLightRenderer {
+    public light = new ProjectedLight();
+    public debugName: string = 'ProjectedLight';
+    public depthTextureValid = false;
+
+    private lastInstCount = -1;
+
+    public preparePasses(renderer: SourceRenderer): void {
+        const renderContext = renderer.renderContext;
+        renderContext.currentView = this.light.frustumView;
+        const renderInstManager = renderer.renderHelper.renderInstManager;
+
+        for (let i = 0; i < renderer.bspRenderers.length; i++) {
+            const bspRenderer = renderer.bspRenderers[i];
+
+            if (!this.light.frustumView.calcPVS(bspRenderer.bsp, false))
+                continue;
+
+            bspRenderer.prepareToRenderView(renderContext, renderInstManager);
+        }
+
+        // Use the inst count as an approximation for which objects have been drawn into the shadow map.
+        // Doesn't work if the objects or the lights move...
+        const instCount = renderContext.currentView.mainList.renderInsts.length;
+        if (this.depthTextureValid && this.lastInstCount === instCount) {
+            this.light.frustumView.reset();
+        } else {
+            this.depthTextureValid = false;
+        }
+
+        renderContext.currentView = null!;
+    }
+
+    public pushPasses(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder): void {
+        if (this.depthTextureValid)
+            return;
+
+        const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+        depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
+        depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+
+        const depthTargetID = builder.createRenderTargetID(depthTargetDesc, `Projected Texture Depth - ${this.debugName}`);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName(`Projected Texture Depth - ${this.debugName}`);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, depthTargetID);
+
+            pass.exec((passRenderer) => {
+                this.lastInstCount = this.light.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        this.light.depthTexture.setDescription(renderInstManager.gfxRenderCache.device, depthTargetDesc);
+        builder.resolveRenderTargetToExternalTexture(depthTargetID, this.light.depthTexture.getTextureForResolving());
+
+        this.depthTextureValid = true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.light.destroy(device);
+    }
+}
+
+class Flashlight {
+    public projectedLightRenderer = new ProjectedLightRenderer();
+    public enabled = false;
+    private fovY = 90;
+    private nearZ = 5;
+    private offset = vec3.fromValues(0, 0, -10);
+
+    constructor(renderContext: SourceRenderContext) {
+        this.fetchTexture(renderContext, 'effects/flashlight001');
+        this.projectedLightRenderer.light.farZ = 1000;
+    }
+
+    public isReady(): boolean {
+        return this.projectedLightRenderer.light.texture !== null;
+    }
+
+    private async fetchTexture(renderContext: SourceRenderContext, textureName: string) {
+        const materialCache = renderContext.materialCache;
+        this.projectedLightRenderer.light.texture = await materialCache.fetchVTF(textureName, true);
+    }
+
+    private updateFrustumView(renderContext: SourceRenderContext): void {
+        const frustumView = this.projectedLightRenderer.light.frustumView;
+        this.projectedLightRenderer.depthTextureValid = false;
+
+        const worldFromViewMatrix = renderContext.currentView.worldFromViewMatrix;
+
+        // Move the flashlight in front of us a bit to provide a bit of cool perspective...
+        mat4.translate(frustumView.worldFromViewMatrix, worldFromViewMatrix, this.offset);
+        mat4.invert(frustumView.viewFromWorldMatrix, frustumView.worldFromViewMatrix);
+
+        const aspect = 1.0;
+        calcFrustumViewProjection(frustumView, renderContext, this.fovY, aspect, this.nearZ, this.projectedLightRenderer.light.farZ);
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        this.updateFrustumView(renderContext);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.projectedLightRenderer.destroy(device);
+    }
+}
+
 export class SourceRenderContext {
     public entityFactoryRegistry = new EntityFactoryRegistry();
     public lightmapManager: LightmapManager;
@@ -931,8 +1039,9 @@ export class SourceRenderContext {
     public colorCorrection: SourceColorCorrection;
     public toneMapParams = new ToneMapParams();
     public renderCache: GfxRenderCache;
-    public currentProjectedLight: env_projectedtexture | null = null;
+    public currentProjectedLightRenderer: ProjectedLightRenderer | null = null;
     public currentPointCamera: point_camera | null = null;
+    public flashlight: Flashlight;
 
     // Public settings
     public enableFog = true;
@@ -953,6 +1062,7 @@ export class SourceRenderContext {
         this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);
         this.studioModelCache = new StudioModelCache(this, this.filesystem);
         this.colorCorrection = new SourceColorCorrection(device, this.renderCache);
+        this.flashlight = new Flashlight(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -961,6 +1071,7 @@ export class SourceRenderContext {
         this.materialCache.destroy(device);
         this.studioModelCache.destroy(device);
         this.colorCorrection.destroy(device);
+        this.flashlight.destroy(device);
     }
 }
 
@@ -1343,14 +1454,12 @@ export class SourceRenderer implements SceneGfx {
     public mainViewRenderer = new SourceWorldViewRenderer(`Main View`, SourceEngineViewType.MainView);
     public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`, SourceEngineViewType.WaterReflectView);
 
-    constructor(context: SceneContext, public renderContext: SourceRenderContext) {
+    constructor(private sceneContext: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
-        // TODO(jstpierre): There seems to be a bug with indirect objects in the water reflection view. Must be some form of confusion...
-        // this.reflectViewRenderer.drawIndirect = false;
         this.reflectViewRenderer.pvsFallback = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
 
-        this.renderHelper = new GfxRenderHelper(renderContext.device, context, renderContext.renderCache);
+        this.renderHelper = new GfxRenderHelper(renderContext.device, sceneContext, renderContext.renderCache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
@@ -1369,8 +1478,17 @@ export class SourceRenderer implements SceneGfx {
         list.drawOnPassRenderer(cache, passRenderer);
     }
 
+    private processInput(): void {
+        if (this.sceneContext.inputManager.isKeyDownEventTriggered('KeyF')) {
+            // happy birthday shigeru miyamoto
+            this.renderContext.flashlight.enabled = !this.renderContext.flashlight.enabled;
+        }
+    }
+
     private movement(): void {
         // Update render context.
+
+        this.processInput();
 
         // TODO(jstpierre): The world lighting state should probably be moved to the BSP? Or maybe SourceRenderContext is moved to the BSP...
         this.renderContext.worldLightingState.update(this.renderContext.globalTime);
@@ -1467,7 +1585,7 @@ export class SourceRenderer implements SceneGfx {
 
     private calcProjectedLight(): void {
         let bestDistance = Infinity;
-        let bestProjectedLight: env_projectedtexture | null = null;
+        let bestProjectedLight: ProjectedLightRenderer | null = null;
 
         for (let i = 0; i < this.bspRenderers.length; i++) {
             const bspRenderer = this.bspRenderers[i];
@@ -1480,12 +1598,21 @@ export class SourceRenderer implements SceneGfx {
                 const dist = vec3.squaredDistance(this.mainViewRenderer.mainView.cameraPos, scratchVec3);
                 if (dist < bestDistance) {
                     bestDistance = dist;
-                    bestProjectedLight = projectedLight;
+                    bestProjectedLight = projectedLight.projectedLightRenderer;
                 }
             }
         }
 
-        this.renderContext.currentProjectedLight = bestProjectedLight;
+        const renderContext = this.renderContext, flashlight = renderContext.flashlight;
+        if (bestProjectedLight === null && flashlight.enabled) {
+            renderContext.currentView = this.mainViewRenderer.mainView;
+            flashlight.movement(renderContext);
+            renderContext.currentView = null!;
+            if (flashlight.isReady())
+                bestProjectedLight = flashlight.projectedLightRenderer;
+        }
+
+        this.renderContext.currentProjectedLightRenderer = bestProjectedLight;
     }
 
     private overrideView: SourceEngineView | null = null;
@@ -1516,8 +1643,8 @@ export class SourceRenderer implements SceneGfx {
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
 
-        if (renderContext.currentProjectedLight !== null)
-            renderContext.currentProjectedLight.preparePasses(this);
+        if (renderContext.currentProjectedLightRenderer !== null)
+            renderContext.currentProjectedLightRenderer.preparePasses(this);
 
         if (renderContext.currentPointCamera !== null)
             (renderContext.currentPointCamera as point_camera).preparePasses(this);
@@ -1681,8 +1808,8 @@ export class SourceRenderer implements SceneGfx {
             renderContext.currentPointCamera.pushPasses(this, builder, mainColorDesc);
 
         // Render the depth map first if necessary
-        if (renderContext.currentProjectedLight !== null)
-            renderContext.currentProjectedLight.pushPasses(renderContext, renderInstManager, builder);
+        if (renderContext.currentProjectedLightRenderer !== null)
+            renderContext.currentProjectedLightRenderer.pushPasses(renderContext, renderInstManager, builder);
 
         // Render reflection view first.
         if (this.reflectViewRenderer.enabled)
