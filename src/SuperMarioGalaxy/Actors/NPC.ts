@@ -1592,4 +1592,10 @@ export class Caretaker extends NPCActor<CaretakerNrv> {
             // tryStartReactionAndPushNerve(sceneObjHolder, this, CaretakerNrv.Reaction);
         }
     }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('Caretaker');
+        const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
+        requestArchivesForNPCGoods(sceneObjHolder, 'Caretaker', itemGoodsIdx);
+    }
 }

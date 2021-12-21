@@ -7093,8 +7093,10 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneCollisionMapObj(sceneObjHolder, this);
-        // this.initSensorType()
-        // initCollisionParts(sceneObjHolder, this, this.name, sensor);
+        this.initHitSensor();
+        this.initSensorType(sceneObjHolder);
+        initCollisionParts(sceneObjHolder, this, this.name, this.getSensor(null)!);
+        tryCreateCollisionMoveLimit(sceneObjHolder, this, this.getSensor(null)!);
         this.initEffectKeeper(sceneObjHolder, null);
 
         if (isConnectedWithRail(infoIter)) {
@@ -7120,6 +7122,12 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         } else {
             this.initNerve(UFOBaseNrv.WaitForPlayerOn);
         }
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected initSensorType(sceneObjHolder: SceneObjHolder): void {
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
     }
 
     private initSubModel(): void {
