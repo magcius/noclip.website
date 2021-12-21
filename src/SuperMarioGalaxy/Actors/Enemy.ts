@@ -6462,7 +6462,7 @@ export class Metbo extends LiveActor<MetboNrv> {
     }
 
     private tryNonActive(sceneObjHolder: SceneObjHolder): boolean {
-        if (!isNearPlayerAnyTime(sceneObjHolder, this, 3000.0) && !isBindedGround(this)) {
+        if (!isNearPlayerAnyTime(sceneObjHolder, this, 3000.0) && isBindedGround(this)) {
             this.setNerve(MetboNrv.NonActive);
             return true;
         } else {
