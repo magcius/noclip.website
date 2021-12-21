@@ -303,11 +303,14 @@ class GloverRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
 
-        for (let actorRenderer of this.opaqueActors) {
-            actorRenderer.destroy(device);
+        for (let renderer of this.opaqueActors) {
+            renderer.destroy(device);
         }
-        for (let actorRenderer of this.translucentActors) {
-            actorRenderer.destroy(device);
+        for (let renderer of this.translucentActors) {
+            renderer.destroy(device);
+        }
+        for (let renderer of this.backdrops) {
+            renderer.destroy(device);
         }
 
         this.textureHolder.destroy(device);
@@ -318,7 +321,8 @@ class GloverRenderer implements Viewer.SceneGfx {
 interface GloverSceneBankDescriptor {
     landscape: string,
     object_banks: string[],
-    texture_banks: string[]
+    texture_banks: string[],
+    backdrop_primitive_color?: number[]
 };
 
 // Level ID to bank information
@@ -327,42 +331,50 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["00", {
         landscape: "00.HUB1ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART1.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xff, 0xff, 0xff, 0xff]
     }], //"Hub 1"),
     ["01", {
         landscape: "01.HUB2ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART2.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xff, 0xff, 0xff, 0xff]
     }], //"Hub 2"),
     ["02", {
         landscape: "02.HUB3ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART3.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xff, 0x3c, 0x00, 0xff]
     }], //"Hub 3"),
     ["03", {
         landscape: "03.HUB4ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART4.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xff, 0x80, 0x00, 0xff]
     }], //"Hub 4"),
     ["04", {
         landscape: "04.HUB5ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART5.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xc8, 0xc8, 0xff, 0xff]
     }], //"Hub 5"),
     ["05", {
         landscape: "05.HUB6ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART6.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xe6, 0xff, 0xff, 0xff]
     }], //"Hub 6"),
     ["06", {
         landscape: "06.HUB7ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART7.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xff, 0xff, 0xff, 0x64]
     }], //"Hub 7"),
     ["07", {
         landscape: "07.HUB8ln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART8.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"],
+        backdrop_primitive_color: [0xff, 0xff, 0xff, 0xff]
     }], //"Hub 8"),
 
     ["08", {
@@ -760,7 +772,10 @@ class SceneDesc implements Viewer.SceneDesc {
                             break;
                         }
                     }
-                    sceneRenderer.backdrops.splice(idx, 0, new GloverBackdropRenderer(device, cache, textureHolder, cmd.params));
+                    if (bankDescriptor.backdrop_primitive_color === undefined) {
+                        bankDescriptor.backdrop_primitive_color = [0xFF, 0xFF, 0xFF, 0xFF];
+                    }
+                    sceneRenderer.backdrops.splice(idx, 0, new GloverBackdropRenderer(device, cache, textureHolder, cmd.params, bankDescriptor.backdrop_primitive_color));
                     break;
                 }
             }

@@ -21,7 +21,7 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { Yellow, colorNewCopy, Magenta, White } from "../Color";
+import { Color, colorNewFromRGBA, colorNewCopy } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 import { GloverObjbank, GloverTexbank } from './parsers';
@@ -59,8 +59,7 @@ function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean
     }
 
     assert(0 <= alpha && alpha <= 1);
-    // TODO:
-    // rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);
+    rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);
 
     if (xlu) {
         if (zbuffer) {
@@ -215,6 +214,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private SP_TextureState = new F3DEX.TextureState();
     private SP_MatrixStackDepth = 0;
 
+    private DP_PrimColor: Color = colorNewFromRGBA(1,1,1,1);
     private DP_OtherModeL: number = 0;
     private DP_OtherModeH: number = 0;
     private DP_CombineL: number = 0;
@@ -367,6 +367,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
         dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
         dc.DP_OtherModeH = this.DP_OtherModeH;
         dc.DP_OtherModeL = this.DP_OtherModeL;
+        dc.DP_PrimColor = colorNewCopy(this.DP_PrimColor);
         return dc;
     }
 
@@ -388,6 +389,14 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             new F3DEX.Vertex().copy(this.vertexCache[i1]),
             new F3DEX.Vertex().copy(this.vertexCache[i2]));
         this.currentDrawCall.vertexCount += 3;
+    }
+
+    public gDPSetPrimColor(m: number, l: number, r: number, g: number, b: number, a: number) {
+        this.DP_PrimColor.r = r / 0xFF;
+        this.DP_PrimColor.g = g / 0xFF;
+        this.DP_PrimColor.b = b / 0xFF;
+        this.DP_PrimColor.a = a / 0xFF;
+        this.stateChanged = true;
     }
 
     public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
@@ -498,6 +507,7 @@ export class DrawCall {
     public DP_OtherModeL: number = 0;
     public DP_OtherModeH: number = 0;
     public DP_Combine: RDP.CombineParams;
+    public DP_PrimColor: Color = colorNewFromRGBA(1,1,1,1);
 
     public textureIndices: number[] = [];
     public textureCache: RDP.TextureCache;
@@ -513,6 +523,13 @@ export class DrawCall {
 
     // TODO: delete
     // public originalUVs: number[] = [];
+
+    public destroy(device: GfxDevice): void {
+        if (this.renderData !== null) {
+            this.renderData.destroy(device);
+            this.renderData = null;
+        }
+    }
 }
 
 export class DrawCallInstance {
@@ -647,10 +664,11 @@ export class DrawCallInstance {
         this.computeTextureMatrix(DrawCallInstance.texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, DrawCallInstance.texMatrixScratch);
 
+        const primColor = this.drawCall.DP_PrimColor;
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        // TODO: set these properly, this mostly just reproduces vertex*texture
-        offs += fillVec4(comb, offs, 0, 0, 0, 1);   // primitive color
+        offs += fillVec4(comb, offs, primColor.r, primColor.g, primColor.b, primColor.a);
+        // TODO: set this properly:
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -719,6 +737,17 @@ class ActorMeshNode {
 
         this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
     }
+
+    public destroy(device: GfxDevice): void {
+        if (ActorMeshNode.rendererCache.has(this.renderer.id)) {
+            ActorMeshNode.rendererCache.delete(this.renderer.id);
+            this.renderer.destroy(device);
+        }
+        for (let child of this.children) {
+            child.destroy(device);
+        }
+    }
+
 
 }
 
@@ -806,7 +835,7 @@ export class GloverActorRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        // TODO
+        this.rootMesh.destroy(device);
     }
 }
 
@@ -933,6 +962,8 @@ function loadRspTexture(rspState: GloverRSPState, textureHolder: Textures.Glover
 }
 
 class GloverMeshRenderer {
+    public id: number;
+
     // General rendering attributes
     private rspOutput: GloverRSPOutput | null;
     private vertexColorsEnabled = true;
@@ -956,6 +987,8 @@ class GloverMeshRenderer {
         const rspState = new GloverRSPState(segments, textures);
         const xlu = (this.meshData.renderMode & 0x2) != 0;
         const texturing = true;
+
+        this.id = meshData.id;
 
         initializeRenderState(rspState);
 
@@ -1144,7 +1177,11 @@ class GloverMeshRenderer {
 
 
     public destroy(device: GfxDevice): void {
-        // TODO
+        if (this.rspOutput !== null) {
+            for (let drawCall of this.rspOutput.drawCalls) {
+                drawCall.destroy(device);
+            }
+        }
     }
 
 }
@@ -1170,7 +1207,8 @@ export class GloverBackdropRenderer {
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        private backdropObject: GloverLevel.Backdrop)
+        private backdropObject: GloverLevel.Backdrop,
+        private primitiveColor: number[])
     {
         /* Object bank in first segment, then one
            texture bank for each subsequent */
@@ -1193,30 +1231,14 @@ export class GloverBackdropRenderer {
         });
         const rspState = new GloverRSPState(segments, textures);
 
-        // rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
-        // rspState.gDPSetOtherModeH(0x17, 0x01, 0x0000); // gsDPPipelineMode(G_PM_NPRIMITIVE)
-        // rspState.gDPSetOtherModeH(0x10, 0x01, 0x0000); // gsDPSetTextureLOD(G_TL_TILE)
-        // rspState.gDPSetOtherModeH(0x0E, 0x02, 0x8000); // gsDPSetTextureLUT(G_TT_RGBA16)
-        // rspState.gDPSetOtherModeH(0x11, 0x02, 0x0000); // gsDPSetTextureDetail(G_TD_CLAMP)
-        // rspState.gDPSetOtherModeH(0x13, 0x01, 0x0000); // gsDPSetTexturePersp(G_TP_NONE)
-        // rspState.gDPSetOtherModeH(0x0C, 0x02, 0x2000); // gsDPSetTextureFilter(G_TF_BILERP)
-        // rspState.gDPSetOtherModeH(0x09, 0x03, 0x0C00); // gsDPSetTextureConvert(G_TC_FILT)
-        // rspState.gDPSetOtherModeH(0x08, 0x01, 0x0000); // gsDPSetCombineKey(G_CK_NONE)
-        // rspState.gDPSetOtherModeH(0x06, 0x02, 0x0040); // gsDPSetColorDither(G_CD_BAYER)
-        // rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
-        // rspState.gDPSetOtherModeL(0x00, 0x02, 0x0000); // gsDPSetAlphaCompare(G_AC_NONE)
-        // rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
-        // rspState.gSPClearGeometryMode(0xFFFFFFFF);
-        // rspState.gSPTexture(false, G_TX_RENDERTILE, 0, 0, 0); // hmm
-        // rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-
         initializeRenderState(rspState);
         setRenderMode(rspState, true, false, true, 1.0);
 
         rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
+        rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
-        rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+        rspState.gDPSetPrimColor(0, 0, primitiveColor[0], primitiveColor[1], primitiveColor[2], 0xFF);
 
         let drawCall = rspState._newDrawCall();
 
@@ -1309,6 +1331,10 @@ export class GloverBackdropRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        // TODO
+        if (this.rspOutput !== null) {
+            for (let drawCall of this.rspOutput.drawCalls) {
+                drawCall.destroy(device);
+            }
+        }
     }
 }
