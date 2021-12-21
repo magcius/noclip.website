@@ -208,7 +208,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
 
     private stateChanged: boolean = false;
 
-    private textureCache: RDP.TextureCache = new RDP.TextureCache();
+    public textureCache: RDP.TextureCache = new RDP.TextureCache();
     private vertexCache: F3DEX.Vertex[] = [];
 
     private SP_GeometryMode: number = 0;
@@ -323,11 +323,9 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             dramPalAddr = 0;
         }
 
-        // Glover display lists have a nasty habit of sometimes
-        // setting totally bugged-out line values, but they're
-        // never necessary in this engine for proper rendering,
-        // so we'll force them to 0.
-        tile.line = 0;
+        // TODO: at one point this seemed necessary, unclear why.
+        //       figure that out and remove it if it's really not:
+        // tile.line = 0;
 
         const texIdx = this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false);
         tile.line = old_line;
@@ -634,10 +632,11 @@ export class DrawCallInstance {
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2);
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
-        if (isSkybox)
-            computeViewMatrixSkybox(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
-        else
+        if (!isSkybox) {
             computeViewMatrix(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
+        } else {
+            mat4.identity(DrawCallInstance.viewMatrixScratch), viewerInput.camera);
+        }
 
         mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, this.drawMatrix);
         offs += fillMatrix4x3(mappedF32, offs, DrawCallInstance.modelViewScratch);
@@ -688,6 +687,13 @@ class ActorMeshNode {
         }
     }
 
+    public setVertexColorsEnabled(enabled: boolean): void {
+        this.renderer.setVertexColorsEnabled(enabled);
+        for (let child of this.children) {
+            child.setVertexColorsEnabled(enabled);
+        }
+    }
+
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
         const drawMatrix = mat4.clone(parentMatrix);
 
@@ -713,6 +719,7 @@ class ActorMeshNode {
 
         this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
     }
+
 }
 
 export class GloverActorRenderer {
@@ -763,6 +770,10 @@ export class GloverActorRenderer {
     public setRenderMode(value: number, mask: number = 0xFFFFFFFF) {
         this.actorObject.mesh.renderMode &= ~mask;
         this.actorObject.mesh.renderMode |= value & mask;
+    }
+
+    public setVertexColorsEnabled(enabled: boolean): void {
+        this.rootMesh.setVertexColorsEnabled(enabled);        
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -829,10 +840,102 @@ function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, faceVer
     return f3dexVertex;
 }
 
+function loadRspTexture(rspState: GloverRSPState, textureHolder: Textures.GloverTextureHolder, textureId: number,
+    cmS: number = G_TX_WRAP | G_TX_NOMIRROR,
+    cmT: number = G_TX_WRAP | G_TX_NOMIRROR,): number
+{
+
+    const texFile = textureHolder.idToTexture.get(textureId);
+    const dataAddr = textureHolder.getSegmentDataAddr(textureId);
+    const palAddr = textureHolder.getSegmentPaletteAddr(textureId);
+    if (texFile === undefined || dataAddr === undefined ||
+        palAddr === undefined)
+    {
+        throw `Texture 0x${textureId.toString(16)} not loaded`;
+        return 0;
+    }
+
+    const indexedImage = texFile.compressionFormat == 0 ||
+                            texFile.compressionFormat == 1; 
+
+    // Set up texture state
+
+    // TODO: figure out how/when to set cmS/cmT
+
+    if (indexedImage) {
+        rspState.gDPSetOtherModeH(0x0E, 0x02, 0x8000); // gsDPSetTextureLUT(G_TT_RGBA16)
+
+        rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, textureId);
+
+        rspState.gDPSetTile(
+            texFile.colorFormat,
+            texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
+            0, 0x0100, G_TX_LOADTILE, 0,
+            cmT, 0, 0,
+            cmS, 0, 0);
+
+        rspState.gDPLoadTLUT(G_TX_LOADTILE, texFile.compressionFormat == 0 ? 15 : 255);
+
+        rspState.gDPSetTextureImage(texFile.colorFormat, ImageSize.G_IM_SIZ_16b, 1, textureId);
+        
+        rspState.gDPSetTile(
+            texFile.colorFormat,
+            ImageSize.G_IM_SIZ_16b,
+            0, 0x0000, G_TX_LOADTILE, 0,
+            cmT, texFile.maskt, G_TX_NOLOD,
+            cmS, texFile.masks, G_TX_NOLOD);
+
+
+        rspState.gDPLoadBlock(G_TX_LOADTILE, 0, 0, 0, 0);
+
+        rspState.gDPSetTile(
+            texFile.colorFormat,
+            texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
+            0, 0x0000, G_TX_RENDERTILE, 0,
+            cmT, texFile.maskt, G_TX_NOLOD,
+            cmS, texFile.masks, G_TX_NOLOD)
+
+        rspState.gDPSetTileSize(G_TX_RENDERTILE,
+            0, 0,
+            (texFile.width - 1) * 4, (texFile.height - 1) * 4);
+
+        rspState.DP_TileState[G_TX_RENDERTILE].fmt = ImageFormat.G_IM_FMT_CI;
+    } else {
+        rspState.gDPSetOtherModeH(0x0E, 0x02, 0x0000); // gsDPSetTextureLUT(G_TT_NONE)
+
+        const siz = texFile.compressionFormat == 2 ? ImageSize.G_IM_SIZ_16b : ImageSize.G_IM_SIZ_32b;
+        rspState.gDPSetTextureImage(texFile.colorFormat, siz, 1, textureId);
+        
+        rspState.gDPSetTile(
+            texFile.colorFormat,
+            siz,
+            0, 0x0000, G_TX_LOADTILE, 0,
+            cmT, texFile.maskt, G_TX_NOLOD,
+            cmS, texFile.masks, G_TX_NOLOD);
+
+
+        rspState.gDPLoadBlock(G_TX_LOADTILE, 0, 0, 0, 0);
+
+        rspState.gDPSetTile(
+            texFile.colorFormat,
+            siz,
+            0, 0x0000, G_TX_RENDERTILE, 0,
+            cmT, 0, G_TX_NOLOD,
+            cmS, 0, G_TX_NOLOD)
+
+        rspState.gDPSetTileSize(G_TX_RENDERTILE,
+            0, 0,
+            (texFile.width - 1) * 4, (texFile.height - 1) * 4);
+
+    }
+
+    return rspState.textureCache.translateTileTexture(rspState.segmentBuffers, dataAddr, palAddr, rspState.DP_TileState[G_TX_RENDERTILE], false);
+}
+
 class GloverMeshRenderer {
     // General rendering attributes
     private rspOutput: GloverRSPOutput | null;
-    private visible = true;
+    private vertexColorsEnabled = true;
 
     // UV animation
     private lastFrameAdvance: number = 0;
@@ -859,16 +962,21 @@ class GloverMeshRenderer {
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         setRenderMode(rspState, texturing, xlu, true, 1.0);
 
-        if (meshData.displayListPtr != 0) {
-            // TODO: incorporate mesh alpha here
-            const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
-            rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
-            F3DEX.runDL_F3DEX(rspState, displayListOffs);
-            this.rspOutput = rspState.finish();
-        } else if (meshData.geometry.numFaces > 0) {
-            rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
-            this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState, meshData.alpha/255);
-        } else {
+        try {
+            if (meshData.displayListPtr != 0) {
+                // TODO: incorporate mesh alpha here
+                const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
+                rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
+                F3DEX.runDL_F3DEX(rspState, displayListOffs);
+                this.rspOutput = rspState.finish();
+            } else if (meshData.geometry.numFaces > 0) {
+                rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+                this.rspOutput = this.loadDynamicModel(meshData.geometry, rspState, meshData.alpha/255);
+            } else {
+                this.rspOutput = null;
+            }
+        } catch (exc) {
+            console.error(exc);
             this.rspOutput = null;
         }
 
@@ -882,100 +990,24 @@ class GloverMeshRenderer {
     private loadDynamicModel(geo: GloverObjbank.Geometry, rspState: GloverRSPState, alpha: number): GloverRSPOutput {
         const drawCalls: DrawCall[] = []
         const uniqueTextures = new Set<number>()
-        const textureCache = new RDP.TextureCache()
         for (let textureId of geo.textureIds) {
             uniqueTextures.add(textureId);
         }
         for (let textureId of uniqueTextures) {
+            // Set up draw call
             const texFile = this.textures.idToTexture.get(textureId);
-            const dataAddr = this.textures.getSegmentDataAddr(textureId);
-            const palAddr = this.textures.getSegmentPaletteAddr(textureId);
-            if (texFile === undefined || dataAddr === undefined ||
-                palAddr === undefined)
-            {
-                console.error(`Texture 0x${textureId.toString(16)} not loaded`);
+
+            if (texFile === undefined) {
                 continue;
             }
 
-            const indexedImage = texFile.compressionFormat == 0 ||
-                                    texFile.compressionFormat == 1; 
-
-            // Set up texture state
-
-            // TODO: figure out how/when to set this:
-            const mirror = false;
-
-            if (indexedImage) {
-                rspState.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 1, textureId);
-
-                rspState.gDPSetTile(
-                    texFile.colorFormat,
-                    texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
-                    0, 0x0100, G_TX_LOADTILE, 0,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), 0, 0,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), 0, 0);
-
-                rspState.gDPLoadTLUT(G_TX_LOADTILE, texFile.compressionFormat == 0 ? 15 : 255);
-
-                rspState.gDPSetTextureImage(texFile.colorFormat, ImageSize.G_IM_SIZ_16b, 1, textureId);
-                
-                rspState.gDPSetTile(
-                    texFile.colorFormat,
-                    ImageSize.G_IM_SIZ_16b,
-                    0, 0x0000, G_TX_LOADTILE, 0,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD);
-
-
-                rspState.gDPLoadBlock(G_TX_LOADTILE, 0, 0, 0, 0);
-
-                rspState.gDPSetTile(
-                    texFile.colorFormat,
-                    texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
-                    0, 0x0000, G_TX_RENDERTILE, 0,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD)
-
-                rspState.gDPSetTileSize(G_TX_RENDERTILE,
-                    0, 0,
-                    (texFile.width - 1) * 4, (texFile.height - 1) * 4);
-
-                rspState.DP_TileState[G_TX_RENDERTILE].fmt = ImageFormat.G_IM_FMT_CI;
-            } else {
-                const siz = texFile.compressionFormat == 2 ? ImageSize.G_IM_SIZ_16b : ImageSize.G_IM_SIZ_32b;
-                rspState.gDPSetTextureImage(texFile.colorFormat, siz, 1, textureId);
-                
-                rspState.gDPSetTile(
-                    texFile.colorFormat,
-                    siz,
-                    0, 0x0000, G_TX_LOADTILE, 0,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD);
-
-
-                rspState.gDPLoadBlock(G_TX_LOADTILE, 0, 0, 0, 0);
-
-                rspState.gDPSetTile(
-                    texFile.colorFormat,
-                    siz,
-                    0, 0x0000, G_TX_RENDERTILE, 0,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.maskt, G_TX_NOLOD,
-                    G_TX_WRAP | (mirror ? G_TX_MIRROR : G_TX_NOMIRROR), texFile.masks, G_TX_NOLOD)
-
-                rspState.gDPSetTileSize(G_TX_RENDERTILE,
-                    0, 0,
-                    (texFile.width - 1) * 4, (texFile.height - 1) * 4);
-
-            }
-            // Set up draw call
             let drawCall = rspState._newDrawCall();
             drawCall.dynamicGeometry = true;
             if ((texFile.flags & 4) != 0) {
                 drawCall.dynamicTextures.add(texFile.id);
             }
 
-            const textureIdx = textureCache.translateTileTexture(this.segments, dataAddr, palAddr, rspState.DP_TileState[G_TX_RENDERTILE], false);
-            drawCall.textureIndices.push(textureIdx);
+            drawCall.textureIndices.push(loadRspTexture(rspState, this.textures, textureId));
 
             for (let faceIdx = 0; faceIdx < geo.numFaces; faceIdx++) {
                 if (geo.textureIds[faceIdx] != textureId) {
@@ -999,7 +1031,7 @@ class GloverMeshRenderer {
             }
             drawCalls.push(drawCall)
         }
-        return new GloverRSPOutput(drawCalls, textureCache);
+        return new GloverRSPOutput(drawCalls, rspState.textureCache);
     }
 
     private animateWaterUVs(frameCount: number) {
@@ -1073,10 +1105,11 @@ class GloverMeshRenderer {
         // }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {
-        if (!this.visible)
-            return;
+    public setVertexColorsEnabled(enabled: boolean): void {
+        this.vertexColorsEnabled = enabled;        
+    }
 
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {
         this.lastFrameAdvance += viewerInput.deltaTime;
         if (this.lastFrameAdvance > 50) {
             if ((this.meshData.renderMode & 0x20) !== 0) {
@@ -1098,8 +1131,11 @@ class GloverMeshRenderer {
                 // TODO: remove
                 // if (this.meshData.id ==  0x52DFE077) {
                 //     console.log(drawCall.vertices);
-                // }
+                // },
                 const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
+                if (!this.vertexColorsEnabled) {
+                    drawCallInstance.setVertexColorsEnabled(false);
+                }
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
             }
         }
@@ -1114,6 +1150,8 @@ class GloverMeshRenderer {
 }
 
 export class GloverBackdropRenderer {
+    static projectionMatrix = mat4.create();
+
     private rspOutput: GloverRSPOutput | null;
 
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -1122,6 +1160,9 @@ export class GloverBackdropRenderer {
 
     private drawMatrix = mat4.create();
 
+    private backdropWidth: number = 0; 
+    private backdropHeight: number = 0; 
+
     public sortKey: number;
     public textureId: number;
 
@@ -1129,7 +1170,7 @@ export class GloverBackdropRenderer {
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        backdropObject: GloverLevel.Backdrop)
+        private backdropObject: GloverLevel.Backdrop)
     {
         /* Object bank in first segment, then one
            texture bank for each subsequent */
@@ -1140,6 +1181,11 @@ export class GloverBackdropRenderer {
 
         this.megaStateFlags = {};
 
+        const texFile = this.textures.idToTexture.get(this.textureId);
+        if (texFile === undefined) {
+            throw `Texture 0x${this.textureId.toString(16)} not loaded`;
+        }
+
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
@@ -1147,24 +1193,86 @@ export class GloverBackdropRenderer {
         });
         const rspState = new GloverRSPState(segments, textures);
 
-        rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
-        rspState.gDPSetOtherModeH(0x17, 0x01, 0x0000); // gsDPPipelineMode(G_PM_NPRIMITIVE)
-        rspState.gDPSetOtherModeH(0x10, 0x01, 0x0000); // gsDPSetTextureLOD(G_TL_TILE)
-        rspState.gDPSetOtherModeH(0x0E, 0x02, 0x8000); // gsDPSetTextureLUT(G_TT_RGBA16)
-        rspState.gDPSetOtherModeH(0x11, 0x02, 0x0000); // gsDPSetTextureDetail(G_TD_CLAMP)
-        rspState.gDPSetOtherModeH(0x13, 0x01, 0x0000); // gsDPSetTexturePersp(G_TP_NONE)
-        rspState.gDPSetOtherModeH(0x0C, 0x02, 0x2000); // gsDPSetTextureFilter(G_TF_BILERP)
-        rspState.gDPSetOtherModeH(0x09, 0x03, 0x0C00); // gsDPSetTextureConvert(G_TC_FILT)
-        rspState.gDPSetOtherModeH(0x08, 0x01, 0x0000); // gsDPSetCombineKey(G_CK_NONE)
-        rspState.gDPSetOtherModeH(0x06, 0x02, 0x0040); // gsDPSetColorDither(G_CD_BAYER)
-        rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
-        rspState.gDPSetOtherModeL(0x00, 0x02, 0x0000); // gsDPSetAlphaCompare(G_AC_NONE)
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
-        rspState.gSPClearGeometryMode(0xFFFFFFFF);
-        rspState.gSPTexture(false, G_TX_RENDERTILE, 0, 0, 0); // hmm
-        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+        // rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
+        // rspState.gDPSetOtherModeH(0x17, 0x01, 0x0000); // gsDPPipelineMode(G_PM_NPRIMITIVE)
+        // rspState.gDPSetOtherModeH(0x10, 0x01, 0x0000); // gsDPSetTextureLOD(G_TL_TILE)
+        // rspState.gDPSetOtherModeH(0x0E, 0x02, 0x8000); // gsDPSetTextureLUT(G_TT_RGBA16)
+        // rspState.gDPSetOtherModeH(0x11, 0x02, 0x0000); // gsDPSetTextureDetail(G_TD_CLAMP)
+        // rspState.gDPSetOtherModeH(0x13, 0x01, 0x0000); // gsDPSetTexturePersp(G_TP_NONE)
+        // rspState.gDPSetOtherModeH(0x0C, 0x02, 0x2000); // gsDPSetTextureFilter(G_TF_BILERP)
+        // rspState.gDPSetOtherModeH(0x09, 0x03, 0x0C00); // gsDPSetTextureConvert(G_TC_FILT)
+        // rspState.gDPSetOtherModeH(0x08, 0x01, 0x0000); // gsDPSetCombineKey(G_CK_NONE)
+        // rspState.gDPSetOtherModeH(0x06, 0x02, 0x0040); // gsDPSetColorDither(G_CD_BAYER)
+        // rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
+        // rspState.gDPSetOtherModeL(0x00, 0x02, 0x0000); // gsDPSetAlphaCompare(G_AC_NONE)
+        // rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        // rspState.gSPClearGeometryMode(0xFFFFFFFF);
+        // rspState.gSPTexture(false, G_TX_RENDERTILE, 0, 0, 0); // hmm
+        // rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
 
-        this.rspOutput = null; // TODO
+        initializeRenderState(rspState);
+        setRenderMode(rspState, true, false, true, 1.0);
+
+        rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+
+        let drawCall = rspState._newDrawCall();
+
+        drawCall.textureIndices.push(loadRspTexture(rspState, this.textures, this.textureId, 
+            G_TX_WRAP | G_TX_NOMIRROR,
+            G_TX_CLAMP | G_TX_NOMIRROR
+        ));
+
+        let sX = 0;
+        let sY = 0;
+        let sW = texFile.width * 2;
+        let sH = texFile.height;
+
+        let ulS = 0;
+        let ulT = 0;
+        let lrS = sW * 32;
+        let lrT = sH * 32;
+
+        if (backdropObject.flipY != 0) {
+            [ulT, lrT] = [lrT, ulT];
+        } 
+
+        sW *= backdropObject.scaleX / 1024;
+        sH *= backdropObject.scaleY / 1024;
+
+        const spriteCoords = [
+            [sX, sY, ulS, ulT],
+            [sX, sY + sH, ulS, lrT],
+            [sX + sW, sY + sH, lrS, lrT],
+
+            [sX, sY, ulS, ulT],
+            [sX + sW, sY, lrS, ulT],
+            [sX + sW, sY + sH,  lrS, lrT],
+        ];
+
+        for (let coords of spriteCoords) {
+            const v = new F3DEX.Vertex();
+            v.x = coords[0];
+            v.y = coords[1];
+            v.z = 0;
+            v.tx = coords[2];
+            v.ty = coords[3];
+            v.c0 = 0xFF;
+            v.c1 = 0xFF;
+            v.c2 = 0xFF;
+            v.a = 0xFF;
+            drawCall.vertexCount += 1;
+            drawCall.vertices.push(v)
+        }
+
+        drawCall.renderData = new DrawCallRenderData(device, cache, rspState.textureCache, rspState.segmentBuffers, drawCall);
+        this.rspOutput = new GloverRSPOutput([drawCall], rspState.textureCache);
+
+        this.backdropWidth = sW;
+        this.backdropHeight = sH;
+
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1173,23 +1281,27 @@ export class GloverBackdropRenderer {
         template.setMegaStateFlags(this.megaStateFlags);
 
         const sceneParamsSize = 16;
+        const view = viewerInput.camera.viewMatrix;
+        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+        const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
+        const pitch = Math.asin(view[6]) / (Math.PI * 2);
 
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-        // TODO: ortho
-        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-        const view = viewerInput.camera.viewMatrix;
-        const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
-        const pitch = Math.asin(view[1]) / (Math.PI * 2);
-        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+        mat4.ortho(GloverBackdropRenderer.projectionMatrix, 0, 640, 640 / aspect, 0, -1, 1);
+        offs += fillMatrix4x4(mappedF32, offs, GloverBackdropRenderer.projectionMatrix);
 
-        mat4.fromTranslation(this.drawMatrix, [0, 0, 0]);
+        mat4.fromTranslation(this.drawMatrix, [
+            -(yaw + 0.5) * this.backdropObject.scrollSpeedX * this.backdropWidth / 2,
+            Math.min(((-Math.sin(pitch*2*Math.PI)*500 + this.backdropObject.offsetY)/2) + (136/(this.backdropObject.scaleY/1024)), 0),
+            0
+        ]);
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
                 const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
-                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
+                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, true);
             }
         }
 

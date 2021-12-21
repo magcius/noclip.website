@@ -3097,7 +3097,7 @@ var GloverLevel = (function() {
     }
     PlatPathPoint.prototype._read = function() {
       this._debug.duration = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.duration = this._io.readU2be();
+      this.duration = this._io.readS2be();
       this._debug.duration.end = this._io.pos;
       this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.x = this._io.readF4be();

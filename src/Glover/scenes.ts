@@ -71,11 +71,13 @@ export class GloverPlatform {
 
 
     // Path
-
+    // TODO: use time deltas instead of frames for this
+    
     private path : PlatformPathPoint[] = [];
     private pathDirection : number = 1;
     private pathTimeLeft : number = 0;
     private pathCurPt : number = 0;
+    private pathPaused : boolean = false;
     public pathAccel : number = 0;
     public pathMaxVel : number = NaN;
 
@@ -83,7 +85,7 @@ export class GloverPlatform {
     // Implementation
 
     constructor(
-        private actor: GloverActorRenderer)
+        public actor: GloverActorRenderer)
     { }
 
     public pushPathPoint(point: PlatformPathPoint) {
@@ -91,6 +93,7 @@ export class GloverPlatform {
         if (this.path.length == 1) {
             this.setPosition(point.pos[0], point.pos[1], point.pos[2]);
             this.pathTimeLeft = point.duration;
+            this.pathPaused = point.duration < 0;
         }
     }
 
@@ -111,7 +114,7 @@ export class GloverPlatform {
         this.spinSpeed[axis] = -speed;
     }
 
-    public advanceFrame(deltaTime : number): void {
+    public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
         let curSpeed = vec3.length(this.velocity);
 
         if (this.path.length > 0) {
@@ -122,7 +125,9 @@ export class GloverPlatform {
             vec3.normalize(journeyVector, journeyVector);
 
             // TODO: remove
-            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, '' + this.path, 0, White, { outline: 6 });
+            // if (viewerInput !== null) {
+            //     drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, '' + this.path, 0, White, { outline: 6 });
+            // }
 
             let effectiveAccel = this.pathAccel;
             const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
@@ -145,22 +150,23 @@ export class GloverPlatform {
             }
 
 
-            if (this.pathTimeLeft > 0) {
-                this.pathTimeLeft -= deltaTime;
-            } else {
-                if (distRemaining < curSpeed + 0.01) {
-                    this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
-                    this.pathTimeLeft = this.path[this.pathCurPt].duration;
-                    vec3.copy(this.position, dstPt);
-                    vec3.zero(this.velocity);
-                    curSpeed = 0;
-                }                
+            if (!this.pathPaused) {
+                if (this.pathTimeLeft > 0) {
+                    this.pathTimeLeft -= deltaTime;
+                } else {
+                    if (distRemaining < curSpeed + 0.01) {
+                        this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
+                        this.pathTimeLeft = this.path[this.pathCurPt].duration;
+                        this.pathPaused = this.path[this.pathCurPt].duration < 0;
+                        vec3.copy(this.position, dstPt);
+                        vec3.zero(this.velocity);
+                        curSpeed = 0;
+                    }                
+                }
             }
         }
 
-        // TODO: add deceleration
-        
-
+        // TODO: add deceleration        
         vec3.add(this.position, this.position, this.velocity);
 
         this.eulers[0] += this.spinSpeed[0] * deltaTime;
@@ -199,7 +205,32 @@ class GloverRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        return [];
+        const renderHacksPanel = new UI.Panel();
+
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const hideDynamicsCheckbox = new UI.Checkbox('Hide dynamic objects', false);
+        hideDynamicsCheckbox.onchanged = () => {
+            for (let platform of this.platforms) {
+                platform.actor.visible = !hideDynamicsCheckbox.checked;
+            }
+        };
+        renderHacksPanel.contents.appendChild(hideDynamicsCheckbox.elem);
+
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let actor of this.opaqueActors) {
+                actor.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            }
+            for (let actor of this.translucentActors) {
+                actor.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            }
+
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
+        return [renderHacksPanel];
+
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -208,7 +239,7 @@ class GloverRenderer implements Viewer.SceneGfx {
         this.textureHolder.animatePalettes(viewerInput);
 
         for (let platform of this.platforms) {
-            platform.advanceFrame(viewerInput.deltaTime);
+            platform.advanceFrame(viewerInput.deltaTime, viewerInput);
         }
 
         for (let renderer of this.backdrops) {
@@ -716,11 +747,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Backdrop': {
-                    assert(cmd.params.flipX === 0 && cmd.params.flipY === 0);
-                    assert(cmd.params.offsetY === 0);
                     assert(cmd.params.decalPosX === 0 && cmd.params.decalPosY === 0);
                     assert(cmd.params.decalParentIdx === 0);
                     assert(cmd.params.scrollSpeedX > 0);
+                    // TODO: implement alternative primitive colors for hub world
                     const backdrops = sceneRenderer.backdrops;
                     let idx = 0;
                     for (; idx < backdrops.length; idx++) {
