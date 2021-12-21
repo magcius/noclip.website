@@ -25,6 +25,26 @@ export interface Image {
     dataOffs: number;
 }
 
+function blur_ci8(data: Uint8Array, width: number, height: number): void {
+    if (width == 0) {
+        return;
+    }
+    let idx = 0;
+    const pixels = width * height;
+    const palette_shift = 2;
+    for (let i = 0; i < width; i += 1) {
+        for (let j = 0; j < width; j += 1) {
+            const right = (idx + 1) % pixels;
+            const left = (idx + pixels - 1) % pixels;
+            const bottom = (idx + height) % pixels;
+            const top = ((idx - height) + pixels) % pixels;
+            data[idx] = ((data[right] + data[left] + data[bottom] + data[top]) / 4) + palette_shift;
+            idx += 1;
+        }
+    }
+}
+
+
 function textureToCanvas(texture: Image): Viewer.Texture {
     const surfaces: HTMLCanvasElement[] = [];
 
@@ -61,7 +81,13 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             if ((texture.flags & 0x4) != 0) {
                 this.animatedTextures.push(texture);
             }
-            // TODO: properly apply blur to "restart.bmp"
+
+            // Hard-coded blur for animated portal texture
+            if (texture.id == 0x0fe4919b) {
+                for (let i = 0; i < 50; i++) {
+                    blur_ci8(texture.data, texture.width, texture.height);
+                }
+            }
 
             var colorFormat = texture.colorFormat as number as ImageFormat;
             if (texture.compressionFormat == GloverTexbank.TextureCompressionFormat.CI4 || 
@@ -115,10 +141,21 @@ export class GloverTextureHolder extends TextureHolder<Image> {
 
         // TODO: if you go to another level and then back to atlantis 1,
         //       textures stop animating. look into why.
-        
-        
+
         if (viewerInput.time > this.lastAnimationTick + 50) {
             this.lastAnimationTick = viewerInput.time;
+
+            let portalTex = this.idToTexture.get(0x0fe4919b)
+            if (portalTex !== undefined) {
+                blur_ci8(portalTex.data, portalTex.width, portalTex.height);
+            }
+
+            let bubbleTex = this.idToTexture.get(0x6d9343f9)
+            if (bubbleTex !== undefined) {
+                blur_ci8(bubbleTex.data, bubbleTex.width, bubbleTex.height);
+            }
+
+
             for (let texture of this.animatedTextures) {
 
                 const palette = ArrayBufferSlice.fromView(texture.data).createTypedArray(Uint16Array, texture.paletteOffset - texture.dataPtr);
@@ -182,6 +219,10 @@ export class GloverTextureHolder extends TextureHolder<Image> {
         }
     }
     public isDynamic(id: number) : boolean {
+
+        if (id === 0x0fe4919b) return true; // portal texture
+        if (id === 0x6d9343f9) return true; // bubble texture
+
         const bank = this.idToBank.get(id);
         const texture = this.idToTexture.get(id);
         if (bank !== undefined && texture !== undefined) {
