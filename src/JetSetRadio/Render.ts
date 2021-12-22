@@ -13,6 +13,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { computeModelMatrixR, lerpAngle } from "../MathHelpers";
 import { PVR_Texture } from "./PVRT";
 import { PVRTextureHolder } from "./Scenes";
+import { nArray } from "../util";
 
 export class JSRProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -268,12 +269,13 @@ function translateBlendFactor(blendAlpha: Ninja.NJS_BLENDALPHA, isSource: boolea
 export class NjsMeshInstance {
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
-    private textureMappings: TextureMapping[] = [];
+    private textureMappings = nArray(1, () => new TextureMapping());
     private textureMatrix = mat4.create();
     public layer = GfxRendererLayer.OPAQUE;
     public depthSort = false;
+    public visible = true;
 
-    constructor(cache: GfxRenderCache, public data: NjsMeshData, texlist: number[], textureHolder: PVRTextureHolder) {
+    constructor(cache: GfxRenderCache, public data: NjsMeshData, texlist: (number | null)[], textureHolder: PVRTextureHolder) {
         const program = new JSRProgram();
 
         const doubleSided = !!(this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.DOUBLE_SIDED);
@@ -302,10 +304,9 @@ export class NjsMeshInstance {
         const texture = material.texture;
         if (texture) {
             const textureId = texlist[texture.texture];
-            const textureName = textureHolder.getTextureName(textureId);
-            if (textureName !== null) {
-                const textureMapping = new TextureMapping();
-                const enabled = textureHolder.fillTextureMapping(textureMapping, textureName);
+            if (textureId !== undefined && textureId !== null) {
+                const textureName = textureHolder.getTextureName(textureId);
+                const enabled = textureHolder.fillTextureMapping(this.textureMappings[0], textureName);
 
                 if (enabled) {
                     const filterMode = texture.filterMode;
@@ -315,14 +316,13 @@ export class NjsMeshInstance {
                     const wrapS = texture.clampU ? GfxWrapMode.Clamp : GfxWrapMode.Mirror;
                     const wrapT = texture.clampV ? GfxWrapMode.Clamp : GfxWrapMode.Mirror;
 
-                    textureMapping.gfxSampler = cache.createSampler({
+                    this.textureMappings[0].gfxSampler = cache.createSampler({
                         minFilter, magFilter, mipFilter,
                         wrapS, wrapT,
                         minLOD: 0, maxLOD: 100,
                     });
 
                     program.setDefineBool('TEXTURE', true);
-                    this.textureMappings.push(textureMapping);
                 }
             }
         }
@@ -331,6 +331,9 @@ export class NjsMeshInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrix: mat4): void {
+        if (!this.visible)
+            return;
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
         template.sortKey = makeSortKey(this.layer);
@@ -490,6 +493,7 @@ export class NjsActionInstance {
     public motions: NjsMotionInstance[] = [];
 
     public frame: number = -1;
+    public visible = true;
 
     constructor (cache: GfxRenderCache, public data: NjsActionData, texlist: number[], textureHolder: PVRTextureHolder) {
         for (let i = 0; i < this.data.objects.length; ++i)
@@ -552,9 +556,11 @@ export class NjsActionInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.data.objects.length; ++i) {
+        if (!this.visible)
+            return;
+
+        for (let i = 0; i < this.data.objects.length; ++i)
             this.objects[i].prepareToRender(renderInstManager, viewerInput);
-        }
     }
 }
 
