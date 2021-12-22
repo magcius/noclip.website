@@ -262,8 +262,6 @@ function translateBlendFactor(blendAlpha: Ninja.NJS_BLENDALPHA, isSource: boolea
             return GfxBlendFactor.DstAlpha;
         case Ninja.NJS_BLENDALPHA.ONE_MINUS_DST_ALPHA:
             return GfxBlendFactor.OneMinusDstAlpha;
-        default:
-            return isSource ? GfxBlendFactor.One : GfxBlendFactor.Zero;
     }
 }
 
@@ -278,7 +276,7 @@ export class NjsMeshInstance {
     constructor(cache: GfxRenderCache, public data: NjsMeshData, texlist: number[], textureHolder: PVRTextureHolder) {
         const program = new JSRProgram();
 
-        const doubleSided = (this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.DOUBLE_SIDED) != 0;
+        const doubleSided = !!(this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.DOUBLE_SIDED);
 
         this.megaStateFlags = {
             depthCompare: GfxCompareMode.GreaterEqual,
@@ -286,9 +284,9 @@ export class NjsMeshInstance {
             cullMode: doubleSided ? GfxCullMode.None : GfxCullMode.None,
         };
 
-        const useAlpha = (this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.USE_ALPHA) != 0;
-        const srcAlpha = useAlpha ? this.data.mesh.material.srcAlpha : -1;
-        const dstAlpha = useAlpha ? this.data.mesh.material.dstAlpha : -1;
+        const useAlpha = !!(this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.USE_ALPHA);
+        const srcAlpha = useAlpha ? this.data.mesh.material.srcAlpha : Ninja.NJS_BLENDALPHA.ONE;
+        const dstAlpha = useAlpha ? this.data.mesh.material.dstAlpha : Ninja.NJS_BLENDALPHA.ZERO;
 
         if (useAlpha) {
             this.layer = GfxRendererLayer.ALPHA_TEST | GfxRendererLayer.TRANSLUCENT;
@@ -405,11 +403,11 @@ export class NjsObjectInstance {
     public model: NjsModelInstance;
 
     constructor(cache: GfxRenderCache, public data: NjsObjectData, texlist: number[], textureHolder: PVRTextureHolder) {
-        const usePosition = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_POS) == 0;
+        const usePosition = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_POS);
         this.position = usePosition ? this.data.object.position : vec3.create();
-        const useRotation = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_ROT) == 0;
+        const useRotation = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_ROT);
         this.rotation = useRotation ? this.data.object.rotation : vec3.create();
-        const useScale = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_SCL) == 0;
+        const useScale = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_SCL);
         this.scale = useScale ? this.data.object.scale : vec3.fromValues(1, 1, 1);
 
         this.update(mat4.create());
@@ -424,9 +422,9 @@ export class NjsObjectInstance {
         const skip = (this.data.object.flags & 0x07) === 0x07;
 
         if (evalZXY) {
-            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, OperationOrder.SRT, EulerOrder.ZXY);
+            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, EulerOrder.ZXY);
         } else {
-            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, OperationOrder.SRT, EulerOrder.XYZ);
+            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, EulerOrder.XYZ);
         }
     }
 
@@ -577,26 +575,10 @@ mat4.fromXRotation(toNoclip, Math.PI);
 
 const scratchMatrix = mat4.create();
 
-const enum OperationOrder {
-    SRT,
-    RST,
-    TSR,
-    STR,
-    RTS,
-    TRS,
-}
-
-const computeMatrixMap = [
-    (out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, order: EulerOrder): mat4 => { mat4.translate(out, a, t); rotateMatrixMap[order](out, out, r); mat4.scale(out, out, s); return out; }, // SRT
-    (out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, order: EulerOrder): mat4 => { mat4.translate(out, a, t); mat4.scale(out, out, s); rotateMatrixMap[order](out, out, r); return out; }, // RST
-    (out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, order: EulerOrder): mat4 => { rotateMatrixMap[order](out, a, r); mat4.scale(out, out, s); mat4.translate(out, out, t); return out; }, // TSR
-    (out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, order: EulerOrder): mat4 => { rotateMatrixMap[order](out, a, r); mat4.translate(out, out, t); mat4.scale(out, out, s); return out; }, // STR
-    (out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, order: EulerOrder): mat4 => { mat4.scale(out, a, s); mat4.translate(out, out, t); rotateMatrixMap[order](out, out, r); return out; }, // RTS
-    (out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, order: EulerOrder): mat4 => { mat4.scale(out, a, s); rotateMatrixMap[order](out, out, r); mat4.translate(out, out, t); return out; }, // TRS
-]
-
-function computeMatrix(out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, operationorder: OperationOrder, eulerOrder: EulerOrder): mat4 {
-    return computeMatrixMap[operationorder](out, a, s, r, t, eulerOrder);
+function computeMatrix(out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyVec3, t: ReadonlyVec3, eulerOrder: EulerOrder): void {
+    mat4.translate(out, a, t);
+    rotateMatrixMap[eulerOrder](out, out, r);
+    mat4.scale(out, out, s);
 }
 
 const enum EulerOrder {

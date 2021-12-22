@@ -264,6 +264,8 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
     return models;
 }
 
+const rotToRadians = Math.PI / 0x8000;
+
 function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference, tableAddr: number, tableCount: number): ObjectData[] {
     const tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
     const objGroupPtrs = execBuffer.createTypedArray(Uint32Array, tableOffs, tableCount);
@@ -287,16 +289,17 @@ function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference,
                 // TODO(jstpierre): what does it mean??????
                 continue;
             }
+
             const translationX = stageView.getFloat32(instanceOffs + 0x04, true);
             const translationY = stageView.getFloat32(instanceOffs + 0x08, true);
             const translationZ = stageView.getFloat32(instanceOffs + 0x0C, true);
-            const rotationP = stageView.getInt16(instanceOffs + 0x10, true);
-            const rotationY = stageView.getInt16(instanceOffs + 0x14, true);
-            const rotationR = stageView.getInt16(instanceOffs + 0x18, true);
+            const rotationX = rotToRadians * stageView.getInt16(instanceOffs + 0x10, true);
+            const rotationY = rotToRadians * stageView.getInt16(instanceOffs + 0x14, true);
+            const rotationZ = rotToRadians * stageView.getInt16(instanceOffs + 0x18, true);
             objects.push({
                 ModelID: modelID,
                 Translation: [translationX, translationY, translationZ],
-                Rotation: [rotationP, rotationY, rotationR],
+                Rotation: [rotationX, rotationY, rotationZ],
             });
         }
     }
