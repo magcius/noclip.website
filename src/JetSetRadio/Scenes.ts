@@ -19,7 +19,7 @@ import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelper
 import { mat4 } from "gl-matrix";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DataFetcher } from "../DataFetcher";
-import { computeModelMatrixT } from "../MathHelpers";
+import { computeModelMatrixT, matrixHasUniformScale } from "../MathHelpers";
 
 const pathBase = `JetSetRadio`;
 
@@ -282,7 +282,12 @@ class JetSetRadioSceneDesc implements SceneDesc {
                 continue;
             const actionInstance = new NjsActionInstance(modelCache.cache, modelData, modelData.texlist, modelCache.textureHolder);
             const modelMatrix = mat4.create();
+            
             mat4.fromTranslation(modelMatrix, object.Translation);
+            mat4.rotateX(modelMatrix,modelMatrix,  Math.PI * ( object.Rotation[0]/ 0x7FFF) );
+            mat4.rotateY(modelMatrix,modelMatrix,Math.PI *  ( object.Rotation[1]/ 0x7FFF) );
+            mat4.rotateZ(modelMatrix,modelMatrix,Math.PI *  ( object.Rotation[2]/ 0x7FFF) );
+
             actionInstance.update(modelMatrix, 0);
             renderer.actions.push(actionInstance);
         }

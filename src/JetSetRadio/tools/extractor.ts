@@ -275,6 +275,28 @@ function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference,
         if (instanceListAddr === 0)
             continue;
         let instanceListOffs = instanceListAddr - STAGE_ALLOCATION_ADDRESS;
+        const instanceAddr = stageView.getUint32(instanceListOffs + 0x00, true);
+        if (((instanceAddr & 0xF0000000) >>> 0) !== 0x80000000) { 
+            const instanceOffs = instanceListOffs;
+            const modelID = stageView.getUint32(instanceOffs + 0x00, true);
+            if (modelID === 0xFFFFFFFF) {
+                // TODO(jstpierre): what does it mean??????
+                continue;
+            }
+            const translationX = stageView.getFloat32(instanceOffs + 0x04, true);
+            const translationY = stageView.getFloat32(instanceOffs + 0x08, true);
+            const translationZ = stageView.getFloat32(instanceOffs + 0x0C, true);
+            const rotationP = stageView.getInt16(instanceOffs + 0x10, true);
+            const rotationY = stageView.getInt16(instanceOffs + 0x14, true);
+            const rotationR = stageView.getInt16(instanceOffs + 0x18, true);
+            objects.push({
+                ModelID: modelID,
+                Translation: [translationX, translationY, translationZ],
+                Rotation: [rotationP, rotationY, rotationR],
+            });
+            continue;
+        }
+
         while (true) {
             const instanceAddr = stageView.getUint32(instanceListOffs + 0x00, true);
             if (((instanceAddr & 0xF0000000) >>> 0) !== 0x80000000)
@@ -303,6 +325,27 @@ function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference,
     return objects;
 }
 
+function mergeStageSlide(stageDat1 : StageData, stageDat2 : StageData) {
+    const ofMod = stageDat1.Models.length;
+    const ofTex = stageDat1.TexlistData.Texlists.length;
+
+    for (let i = 0; i < stageDat2.Models.length; i++)  {
+        const instModel = stageDat2.Models[i];
+        instModel.TexlistIndex+=ofTex; // Offset texlist index by new merged stage index. 
+        stageDat1.Models.push(instModel);
+    }
+
+    for (let i = 0; i < stageDat2.Objects.length; i++) {
+        const instObj = stageDat2.Objects[i];
+        instObj.ModelID+=ofMod; // Offset model list by previous data 
+        stageDat1.Objects.push(instObj);
+    }
+
+    for (let i = 0; i < stageDat2.TexlistData.Texlists.length; i++) {
+        stageDat1.TexlistData.Texlists.push(stageDat2.TexlistData.Texlists[i]);
+    }
+}
+
 function packStageData(texChunk: TexChunk, models: ModelData[], objects: ObjectData[]): StageData {
     const TexlistData = packTexListData(texChunk);
     const Models = models;
@@ -316,20 +359,52 @@ function saveStageData(dstFilename: string, crg1: StageData): void {
 }
 
 function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void {
-    const ASSET_TABLE_ADDRESS = 0x8c1063b4;
-    const TEXTURE_TABLE_ADDRESS = 0x8c106648;
-    const OBJECT_TABLE_ADDRESS = 0x8c105e98;
-    // const GLOBAL_TEXLIST_TABLE_ADDRESS = 0x8c1a27c8;
-    const TEXLOAD_TABLE_ADDRESS = 0x8c185b30;
-    const SCENE_FILE = afsLoad('STAGE1.AFS', 0);
-    const ASSET_COUNT = 165;
-    const OBJECT_COUNT = 62;
 
-    const texChunk = extractTexLoadTable(execBuffer, TEXLOAD_TABLE_ADDRESS);
-    const models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-    const objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+    let TEXLOAD_TABLE_ADDRESS = 0x8c185b30;
+    let SCENE_FILE = afsLoad('STAGE1.AFS', 0);
+    let texChunk = extractTexLoadTable(execBuffer, TEXLOAD_TABLE_ADDRESS);
 
-    const crg1 = packStageData(texChunk, models, objects);
+    let ASSET_TABLE_ADDRESS = 0x8c106f9c;
+    let TEXTURE_TABLE_ADDRESS = 0x8c107064;
+    let OBJECT_TABLE_ADDRESS = 0x8c105f94;
+    let ASSET_COUNT = 50;
+    let OBJECT_COUNT = 62;
+
+    let models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+    let objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+    let crg1 = packStageData(texChunk, models, objects);
+
+
+    ASSET_TABLE_ADDRESS = 0x8c1063b4;
+    TEXTURE_TABLE_ADDRESS = 0x8c106648;
+    OBJECT_TABLE_ADDRESS = 0x8c105e98;
+    ASSET_COUNT = 165;
+    OBJECT_COUNT = 62;
+
+
+    models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+    objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+    let crg2 = packStageData(texChunk, models, objects);
+
+    mergeStageSlide(crg1,crg2);
+
+
+    
+    ASSET_TABLE_ADDRESS = 0x8c10712c;
+    TEXTURE_TABLE_ADDRESS = 0x8c107204;
+    OBJECT_TABLE_ADDRESS = 0x8c106090
+    ASSET_COUNT = 56;
+    OBJECT_COUNT = 51;
+
+
+    models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+    objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+    let crg3 = packStageData(texChunk, models, objects);
+
+    mergeStageSlide(crg1,crg3);
+
+
+
     saveStageData(dstFilename, crg1);
 }
 
