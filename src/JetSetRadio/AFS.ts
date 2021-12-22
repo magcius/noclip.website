@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { NamedArrayBufferSlice } from "../DataFetcher";
+import type { NamedArrayBufferSlice } from "../DataFetcher";
 import { assert, readString } from "../util";
 
 export interface AFS {
