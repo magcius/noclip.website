@@ -9,7 +9,7 @@ import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
+import { MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, range, setMatrixTranslation } from "../MathHelpers";
@@ -130,12 +130,12 @@ class StudioModelMeshData {
 
         // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: MaterialProgramBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: MaterialProgramBase.a_Normal,      bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_TangentS,    bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_TexCoord,    bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RG, },
-            { location: MaterialProgramBase.a_BoneWeights, bufferIndex: 0, bufferByteOffset: 13*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_BoneIDs,     bufferIndex: 0, bufferByteOffset: 17*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_Normal,      bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TangentS,    bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TexCoord,    bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_BoneWeights, bufferIndex: 0, bufferByteOffset: 13*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_BoneIDs,     bufferIndex: 0, bufferByteOffset: 17*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+4+4+2+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -145,7 +145,7 @@ class StudioModelMeshData {
 
         // Tack on the color mesh.
         vertexAttributeDescriptors.push(
-            { location: MaterialProgramBase.a_StaticVertexLighting, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+            { location: MaterialShaderTemplateBase.a_StaticVertexLighting, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
         );
         vertexBufferDescriptors.push(
             { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -1392,7 +1392,7 @@ export class StudioModelData {
                                         assert(vtxBoneID[i] === vvdBoneIdx[i]);
 
                                         // TODO(jstpierre): Re-pack a new hardware bone table.
-                                        assert(vtxBoneID[i] < MaterialProgramBase.MaxSkinningParamsBoneMatrix);
+                                        assert(vtxBoneID[i] < MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix);
                                     }
                                 }
 
@@ -1477,7 +1477,7 @@ export class StudioModelData {
                                 // If this is a software skinned system, then the bone IDs stored in the vertices should be
                                 // the same as the overall bone table, not the hardware bone table. As such, set the table
                                 // to be identity.
-                                for (let i = 0; i < MaterialProgramBase.MaxSkinningParamsBoneMatrix; i++)
+                                for (let i = 0; i < MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix; i++)
                                     hardwareBoneTable[i] = i;
                             }
 

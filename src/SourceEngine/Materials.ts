@@ -1,5 +1,4 @@
 
-import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
@@ -23,6 +22,7 @@ import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
 import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
+import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -85,7 +85,7 @@ export class FogParams {
     }
 }
 
-export class MaterialProgramBase extends DeviceProgram {
+export class MaterialShaderTemplateBase extends UberShaderTemplateBasic {
     public static a_Position = 0;
     public static a_Normal = 1;
     public static a_TangentS = 2;
@@ -108,7 +108,7 @@ layout(std140) uniform ub_SceneParams {
 
 layout(std140) uniform ub_SkinningParams {
 #if SKINNING_MODE == ${SkinningMode.Smooth}
-    Mat4x3 u_BoneMatrix[${MaterialProgramBase.MaxSkinningParamsBoneMatrix}];
+    Mat4x3 u_BoneMatrix[${MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix}];
 #else
     Mat4x3 u_ModelMatrix;
 #endif
@@ -191,19 +191,19 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 }
 
 #ifdef VERT
-layout(location = ${MaterialProgramBase.a_Position}) in vec3 a_Position;
-layout(location = ${MaterialProgramBase.a_Normal}) in vec4 a_Normal;
-layout(location = ${MaterialProgramBase.a_TangentS}) in vec4 a_TangentS;
-layout(location = ${MaterialProgramBase.a_TexCoord}) in vec4 a_TexCoord;
+layout(location = ${MaterialShaderTemplateBase.a_Position}) in vec3 a_Position;
+layout(location = ${MaterialShaderTemplateBase.a_Normal}) in vec4 a_Normal;
+layout(location = ${MaterialShaderTemplateBase.a_TangentS}) in vec4 a_TangentS;
+layout(location = ${MaterialShaderTemplateBase.a_TexCoord}) in vec4 a_TexCoord;
 #ifdef USE_VERTEX_COLOR
-layout(location = ${MaterialProgramBase.a_Color}) in vec4 a_Color;
+layout(location = ${MaterialShaderTemplateBase.a_Color}) in vec4 a_Color;
 #endif
 #ifdef USE_STATIC_VERTEX_LIGHTING
-layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) in vec3 a_StaticVertexLighting;
+layout(location = ${MaterialShaderTemplateBase.a_StaticVertexLighting}) in vec3 a_StaticVertexLighting;
 #endif
 #if SKINNING_MODE == ${SkinningMode.Smooth}
-layout(location = ${MaterialProgramBase.a_BoneWeights}) in vec4 a_BoneWeights;
-layout(location = ${MaterialProgramBase.a_BoneIDs}) in vec4 a_BoneIndices;
+layout(location = ${MaterialShaderTemplateBase.a_BoneWeights}) in vec4 a_BoneWeights;
+layout(location = ${MaterialShaderTemplateBase.a_BoneIDs}) in vec4 a_BoneIndices;
 #endif
 
 Mat4x3 CalcWorldFromLocalMatrix() {
@@ -284,8 +284,8 @@ function fillScaleBias(d: Float32Array, offs: number, m: ReadonlyMat4): number {
 }
 
 export function fillSceneParamsOnRenderInst(renderInst: GfxRenderInst, view: Readonly<SourceEngineView>, toneMapParams: Readonly<ToneMapParams>, fogParams: Readonly<FogParams> = view.fogParams): void {
-    let offs = renderInst.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 28);
-    const d = renderInst.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
+    let offs = renderInst.allocateUniformBuffer(MaterialShaderTemplateBase.ub_SceneParams, 28);
+    const d = renderInst.mapUniformBufferF32(MaterialShaderTemplateBase.ub_SceneParams);
     fillSceneParams(d, offs, view, toneMapParams, fogParams);
 }
 
@@ -610,7 +610,7 @@ export class EntityMaterialParameters {
 }
 
 const enum AlphaBlendMode {
-    None, Blend, Add, BlendAdd,
+    None, Blend, Add, Glow,
 }
 
 function fillGammaColor(d: Float32Array, offs: number, c: Color, a: number = c.a): number {
@@ -655,7 +655,7 @@ export abstract class BaseMaterial {
 
         this.initStaticBeforeResourceFetch();
         await this.fetchResources(renderContext.materialCache);
-        this.initStatic(renderContext.device, renderContext.renderCache);
+        this.initStatic(renderContext.materialCache);
     }
 
     public isMaterialLoaded(): boolean {
@@ -855,11 +855,11 @@ export abstract class BaseMaterial {
         return texture.isTranslucent();
     }
 
-    protected setSkinningMode(p: MaterialProgramBase): void {
+    protected setSkinningMode(p: UberShaderInstanceBasic): void {
         p.setDefineString('SKINNING_MODE', '' + this.skinningMode);
     }
 
-    protected setFogMode(p: MaterialProgramBase): void {
+    protected setFogMode(p: UberShaderInstanceBasic): void {
         p.setDefineBool('USE_FOG', !this.paramGetBoolean('$nofog'));
     }
 
@@ -871,7 +871,7 @@ export abstract class BaseMaterial {
     }
 
     protected setAlphaBlendMode(megaStateFlags: Partial<GfxMegaStateDescriptor>, alphaBlendMode: AlphaBlendMode): void {
-        if (alphaBlendMode === AlphaBlendMode.BlendAdd) {
+        if (alphaBlendMode === AlphaBlendMode.Glow) {
             setAttachmentStateSimple(megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
                 blendSrcFactor: GfxBlendFactor.SrcAlpha,
@@ -917,7 +917,7 @@ export abstract class BaseMaterial {
             isTranslucent = true;
 
         if (isTranslucent && this.paramGetBoolean('$additive'))
-            return AlphaBlendMode.BlendAdd;
+            return AlphaBlendMode.Glow;
         else if (this.paramGetBoolean('$additive'))
             return AlphaBlendMode.Add;
         else if (isTranslucent)
@@ -1022,7 +1022,7 @@ export abstract class BaseMaterial {
         vec2.set(this.texCoord0Scale, 1 / w, 1 / h);
     }
 
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+    protected initStatic(materialCache: MaterialCache) {
         if (this.representativeTexture === null)
             this.representativeTexture = this.calcRepresentativeTexture();
 
@@ -1059,8 +1059,8 @@ export abstract class BaseMaterial {
     public setOnRenderInstModelMatrix(renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
         if (this.skinningMode === SkinningMode.None) {
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+            let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_SkinningParams, 12);
+            const d = renderInst.mapUniformBufferF32(ShaderTemplate_Generic.ub_SkinningParams);
 
             if (modelMatrix !== null) {
                 offs += fillMatrix4x3(d, offs, modelMatrix);
@@ -1073,13 +1073,13 @@ export abstract class BaseMaterial {
 
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
         if (this.skinningMode === SkinningMode.Smooth) {
-            assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+            assert(bonePaletteTable.length <= ShaderTemplate_Generic.MaxSkinningParamsBoneMatrix);
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+            let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_SkinningParams, 12 * ShaderTemplate_Generic.MaxSkinningParamsBoneMatrix);
+            const d = renderInst.mapUniformBufferF32(ShaderTemplate_Generic.ub_SkinningParams);
 
             mat4.identity(scratchMat4a);
-            for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
+            for (let i = 0; i < ShaderTemplate_Generic.MaxSkinningParamsBoneMatrix; i++) {
                 const boneIndex = bonePaletteTable[i];
                 const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMat4a;
                 offs += fillMatrix4x3(d, offs, m);
@@ -1087,8 +1087,8 @@ export abstract class BaseMaterial {
         } else if (this.skinningMode === SkinningMode.Rigid) {
             assert(bonePaletteTable.length === 1);
 
-            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 12);
-            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+            let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_SkinningParams, 12);
+            const d = renderInst.mapUniformBufferF32(ShaderTemplate_Generic.ub_SkinningParams);
 
             const boneIndex = bonePaletteTable[0];
             const m = boneMatrix[boneIndex];
@@ -1114,18 +1114,29 @@ const enum ShaderWorldLightType {
     None, Point, Spot, Directional,
 }
 
-class Material_Generic_Program extends MaterialProgramBase {
+function getDefineString(defines: Map<string, string>, name: string): string | null {
+    return nullify(defines.get(name));
+}
+
+function getDefineBool(defines: Map<string, string>, name: string): boolean {
+    const str = getDefineString(defines, name);
+    if (str !== null)
+        assert(str === '1');
+    return str !== null;
+}
+
+class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
     public static MaxDynamicWorldLights = 4;
 
-    public finish(): void {
-        this.both = `
+    protected generateProgramString(variantSettings: Map<string, string>): string {
+        return `
 precision mediump float;
 precision mediump sampler2DArray;
 precision mediump sampler2DShadow;
 
-${MaterialProgramBase.Common}
+${MaterialShaderTemplateBase.Common}
 
 struct WorldLight {
     // w = ShaderWorldLightType.
@@ -1145,7 +1156,7 @@ layout(std140) uniform ub_ObjectParams {
 #endif
 #ifdef USE_DYNAMIC_LIGHTING
     // We support up to N lights.
-    WorldLight u_WorldLights[${Material_Generic_Program.MaxDynamicWorldLights}];
+    WorldLight u_WorldLights[${ShaderTemplate_Generic.MaxDynamicWorldLights}];
 #endif
     Mat4x2 u_BaseTextureTransform;
 #ifdef USE_BUMPMAP
@@ -1285,7 +1296,7 @@ vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld
 
 vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
     vec4 t_FinalAtten = vec4(0.0);
-    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+    for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
         t_FinalAtten[i] = WorldLightCalcAttenuation(u_WorldLights[i], t_PositionWorld);
     return t_FinalAtten;
 }
@@ -1329,7 +1340,7 @@ vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
     return vec3(0.0);
 #else
     vec3 t_FinalLight = vec3(0.0);
-    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+    for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
         t_FinalLight += WorldLightCalcDiffuse(t_DiffuseLightInput.PositionWorld, t_DiffuseLightInput.NormalWorld, t_DiffuseLightInput.HalfLambert, t_DiffuseLightInput.LightAttenuation[i], u_WorldLights[i]);
     return t_FinalLight;
 #endif
@@ -1458,11 +1469,11 @@ void mainVS() {
 #define COMBINE_MODE_SSBUMP_BUMP                             (10)
 
 vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
-    bool use_detail = ${this.getDefineBool('USE_DETAIL')};
+    bool use_detail = ${getDefineBool(variantSettings, 'USE_DETAIL')};
     if (!use_detail)
         return t_BaseTexture;
 
-    int t_CombineMode = ${this.getDefineString('DETAIL_COMBINE_MODE')};
+    int t_CombineMode = ${getDefineString(variantSettings, 'DETAIL_COMBINE_MODE')};
     float t_BlendFactor = u_DetailBlendFactor;
 
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
@@ -1487,11 +1498,11 @@ vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
 }
 
 vec3 CalcDetailPostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture) {
-    bool use_detail = ${this.getDefineBool('USE_DETAIL')};
+    bool use_detail = ${getDefineBool(variantSettings, 'USE_DETAIL')};
     if (!use_detail)
         return t_DiffuseColor;
 
-    int t_CombineMode = ${this.getDefineString('DETAIL_COMBINE_MODE')};
+    int t_CombineMode = ${getDefineString(variantSettings, 'DETAIL_COMBINE_MODE')};
     float t_BlendFactor = u_DetailBlendFactor;
 
     if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM) {
@@ -1567,7 +1578,7 @@ SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in Wor
 
 SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
     SpecularLightResult t_FinalLight = SpecularLightResult_New();
-    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+    for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
         SpecularLightResult_Sum(t_FinalLight, WorldLightCalcSpecular(t_Input, u_WorldLights[i]));
     return t_FinalLight;
 }
@@ -1591,14 +1602,14 @@ vec3 SampleLightmapTexture(in vec4 t_TextureSample) {
 }
 
 vec4 UnpackNormalMap(vec4 t_Sample) {
-    bool use_ssbump = ${this.getDefineBool(`USE_SSBUMP`)};
+    bool use_ssbump = ${getDefineBool(variantSettings, `USE_SSBUMP`)};
     if (!use_ssbump)
         t_Sample = UnpackUnsignedNormalMap(t_Sample);
     return t_Sample;
 }
 
 vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
-    bool use_seamless = ${this.getDefineBool(`USE_SEAMLESS`)};
+    bool use_seamless = ${getDefineBool(variantSettings, `USE_SEAMLESS`)};
     if (use_seamless) {
         // Seamless ignores the base texture coordinate, and instead blends three copies
         // of the same texture based on world position (similar to tri-planar).
@@ -1655,11 +1666,11 @@ void mainPS() {
 
     vec4 t_BaseTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
 
-    bool use_basetexture2 = ${this.getDefineBool(`USE_BASETEXTURE2`)};
+    bool use_basetexture2 = ${getDefineBool(variantSettings, `USE_BASETEXTURE2`)};
 
     float t_BlendFactorWorld = v_PositionWorld.w;
 
-    bool use_blend_modulate = ${this.getDefineBool(`USE_BLEND_MODULATE`)};
+    bool use_blend_modulate = ${getDefineBool(variantSettings, `USE_BLEND_MODULATE`)};
     if (use_blend_modulate) {
         vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord0.zw);
         float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
@@ -1692,11 +1703,11 @@ void mainPS() {
     // TODO(jstpierre): It seems like $bumptransform might not even be respected in lightmappedgeneric shaders?
     vec4 t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), v_TexCoord2.xy));
 
-    bool use_bumpmap2 = ${this.getDefineBool(`USE_BUMPMAP2`)};
+    bool use_bumpmap2 = ${getDefineBool(variantSettings, `USE_BUMPMAP2`)};
     if (use_bumpmap2) {
         vec4 t_Bumpmap2Sample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap2), v_TexCoord2.zw));
 
-        bool use_bumpmask = ${this.getDefineBool(`USE_BUMPMASK`)};
+        bool use_bumpmask = ${getDefineBool(variantSettings, `USE_BUMPMASK`)};
         if (use_bumpmask) {
             vec4 t_BumpMaskSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureBumpMask), v_TexCoord0.xy));
             t_BumpmapSample.rgb = normalize(t_BumpmapSample.rgb + t_Bumpmap2Sample.rgb);
@@ -1709,13 +1720,13 @@ void mainPS() {
         }
     }
 
-    bool use_normalmap_alpha_envmap_mask = ${this.getDefineBool(`USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
+    bool use_normalmap_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
     if (use_normalmap_alpha_envmap_mask)
         t_EnvmapFactor *= t_BumpmapSample.a;
 
     vec3 t_BumpmapNormal;
 
-    bool use_ssbump = ${this.getDefineBool(`USE_SSBUMP`)};
+    bool use_ssbump = ${getDefineBool(variantSettings, `USE_SSBUMP`)};
     if (use_ssbump) {
         // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
         t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
@@ -1732,8 +1743,8 @@ void mainPS() {
 
     vec3 t_DiffuseLighting = vec3(0.0);
 
-    bool use_lightmap = ${this.getDefineBool(`USE_LIGHTMAP`)};
-    bool use_diffuse_bumpmap = ${this.getDefineBool(`USE_DIFFUSE_BUMPMAP`)};
+    bool use_lightmap = ${getDefineBool(variantSettings, `USE_LIGHTMAP`)};
+    bool use_diffuse_bumpmap = ${getDefineBool(variantSettings, `USE_DIFFUSE_BUMPMAP`)};
 
     if (use_lightmap) {
         vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
@@ -1795,8 +1806,8 @@ void mainPS() {
         discard;
 #endif
 
-    bool use_half_lambert = ${this.getDefineBool(`USE_HALF_LAMBERT`)};
-    bool use_phong = ${this.getDefineBool(`USE_PHONG`)};
+    bool use_half_lambert = ${getDefineBool(variantSettings, `USE_HALF_LAMBERT`)};
+    bool use_phong = ${getDefineBool(variantSettings, `USE_PHONG`)};
 
 #ifdef USE_DYNAMIC_PIXEL_LIGHTING
     bool t_HalfLambert = use_half_lambert;
@@ -1855,8 +1866,8 @@ void mainPS() {
 #ifdef USE_SELFILLUM
     vec3 t_SelfIllumMask;
 
-    bool use_selfillum_envmapmask_alpha = ${this.getDefineBool(`USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
-    bool use_selfillum_mask = ${this.getDefineBool(`USE_SELFILLUM_MASK`)};
+    bool use_selfillum_envmapmask_alpha = ${getDefineBool(variantSettings, `USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
+    bool use_selfillum_mask = ${getDefineBool(variantSettings, `USE_SELFILLUM_MASK`)};
     if (use_selfillum_envmapmask_alpha) {
         t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
     } else if (use_selfillum_mask) {
@@ -1890,12 +1901,12 @@ void mainPS() {
     t_Fresnel = CalcFresnelTerm5(t_FresnelDot);
 #endif
 
-    bool use_base_alpha_envmap_mask = ${this.getDefineBool(`USE_BASE_ALPHA_ENVMAP_MASK`)};
+    bool use_base_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_ENVMAP_MASK`)};
 
 #ifdef USE_ENVMAP
     t_EnvmapFactor *= u_EnvmapTint.rgb;
 
-    bool use_envmap_mask = ${this.getDefineBool(`USE_ENVMAP_MASK`)};
+    bool use_envmap_mask = ${getDefineBool(variantSettings, `USE_ENVMAP_MASK`)};
     if (use_envmap_mask)
         t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
 
@@ -1923,7 +1934,7 @@ void mainPS() {
         t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
         t_SpecularLightInput.Fresnel = t_Fresnel;
 
-        bool use_phong_exponent_texture = ${this.getDefineBool(`USE_PHONG_EXPONENT_TEXTURE`)};
+        bool use_phong_exponent_texture = ${getDefineBool(variantSettings, `USE_PHONG_EXPONENT_TEXTURE`)};
         if (use_phong_exponent_texture) {
             vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
             t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
@@ -1935,7 +1946,7 @@ void mainPS() {
 
         // Specular mask is either in base map or normal map alpha.
         float t_SpecularMask;
-        bool use_base_alpha_phong_mask = ${this.getDefineBool(`USE_BASE_ALPHA_PHONG_MASK`)};
+        bool use_base_alpha_phong_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_PHONG_MASK`)};
         if (use_base_alpha_phong_mask) {
             t_SpecularMask = t_BaseTexture.a;
         } else {
@@ -1946,7 +1957,7 @@ void mainPS() {
 #endif
         }
 
-        bool use_phong_mask_invert = ${this.getDefineBool(`USE_PHONG_MASK_INVERT`)};
+        bool use_phong_mask_invert = ${getDefineBool(variantSettings, `USE_PHONG_MASK_INVERT`)};
         if (use_phong_mask_invert)
             t_SpecularMask = 1.0 - t_SpecularMask;
 
@@ -1991,7 +2002,7 @@ class Material_Generic extends BaseMaterial {
     private wantsProjectedTexture = false;
     private shaderType: GenericShaderType;
 
-    private program: Material_Generic_Program;
+    private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -2026,11 +2037,11 @@ class Material_Generic extends BaseMaterial {
         }
 
         let changed = false;
-        changed = this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting) || changed;
-        changed = this.program.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', wantsDynamicVertexLighting) || changed;
-        changed = this.program.setDefineBool('USE_DYNAMIC_PIXEL_LIGHTING', wantsDynamicPixelLighting) || changed;
-        changed = this.program.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting) || changed;
-        changed = this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', wantsDynamicVertexLighting) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_DYNAMIC_PIXEL_LIGHTING', wantsDynamicPixelLighting) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube) || changed;
 
         if (changed)
             this.gfxProgram = null;
@@ -2103,8 +2114,7 @@ class Material_Generic extends BaseMaterial {
 
     private recacheProgram(cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            this.program.finish();
-            this.gfxProgram = cache.createProgram(this.program);
+            this.gfxProgram = this.shaderInstance.getGfxProgram(cache);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
         }
     }
@@ -2143,89 +2153,89 @@ class Material_Generic extends BaseMaterial {
             this.paramGetTexture('$envmap').ref = null;
     }
 
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
+    protected initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
 
-        this.program = new Material_Generic_Program();
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Generic);
 
         if (this.shaderType === GenericShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
             // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
             this.shaderType = GenericShaderType.Skin;
             this.wantsPhong = true;
-            this.program.setDefineBool('USE_PHONG', true);
+            this.shaderInstance.setDefineBool('USE_PHONG', true);
 
             if (this.paramGetVTF('$phongexponenttexture') !== null) {
                 this.wantsPhongExponentTexture = true;
-                this.program.setDefineBool('USE_PHONG_EXPONENT_TEXTURE', true);
+                this.shaderInstance.setDefineBool('USE_PHONG_EXPONENT_TEXTURE', true);
             }
         }
 
         if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
-            this.program.setDefineBool('USE_DETAIL', true);
+            this.shaderInstance.setDefineBool('USE_DETAIL', true);
             const detailBlendMode = this.paramGetNumber('$detailblendmode');
-            this.program.setDefineString('DETAIL_COMBINE_MODE', '' + detailBlendMode);
+            this.shaderInstance.setDefineString('DETAIL_COMBINE_MODE', '' + detailBlendMode);
         } else {
-            this.program.setDefineString('DETAIL_COMBINE_MODE', '-1');
+            this.shaderInstance.setDefineString('DETAIL_COMBINE_MODE', '-1');
         }
 
         if (this.paramGetVTF('$bumpmap') !== null) {
             this.wantsBumpmap = true;
-            this.program.setDefineBool('USE_BUMPMAP', true);
+            this.shaderInstance.setDefineBool('USE_BUMPMAP', true);
             const wantsDiffuseBumpmap = !this.paramGetBoolean('$nodiffusebumplighting');
-            this.program.setDefineBool('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap);
+            this.shaderInstance.setDefineBool('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap);
             this.wantsBumpmappedLightmap = wantsDiffuseBumpmap;
 
             if (this.paramGetVTF('$bumpmap2') !== null) {
                 this.wantsBumpmap2 = true;
-                this.program.setDefineBool(`USE_BUMPMAP2`, true);
+                this.shaderInstance.setDefineBool(`USE_BUMPMAP2`, true);
 
                 if (this.paramGetVTF('$bumpmask'))
-                    this.program.setDefineBool(`USE_BUMPMASK`, true);
+                    this.shaderInstance.setDefineBool(`USE_BUMPMASK`, true);
             }
         }
 
         if (this.paramGetVTF('$envmapmask') !== null) {
             this.wantsEnvmapMask = true;
-            this.program.setDefineBool('USE_ENVMAP_MASK', true);
+            this.shaderInstance.setDefineBool('USE_ENVMAP_MASK', true);
         }
 
         if (this.paramGetVTF('$envmap') !== null) {
             this.wantsEnvmap = true;
-            this.program.setDefineBool('USE_ENVMAP', true);
+            this.shaderInstance.setDefineBool('USE_ENVMAP', true);
         }
 
         if (this.paramGetBoolean('$selfillum')) {
             this.wantsSelfIllum = true;
-            this.program.setDefineBool('USE_SELFILLUM', true);
+            this.shaderInstance.setDefineBool('USE_SELFILLUM', true);
 
             if (this.paramGetVTF('$selfillummask')) {
-                this.program.setDefineBool('USE_SELFILLUM_MASK', true);
+                this.shaderInstance.setDefineBool('USE_SELFILLUM_MASK', true);
             }
 
             if (this.paramGetBoolean('$selfillumfresnel')) {
                 this.wantsSelfIllumFresnel = true;
-                this.program.setDefineBool('USE_SELFILLUM_FRESNEL', true);
+                this.shaderInstance.setDefineBool('USE_SELFILLUM_FRESNEL', true);
             }
         }
 
         if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
             this.wantsLightmap = true;
-            this.program.setDefineBool('USE_LIGHTMAP', true);
+            this.shaderInstance.setDefineBool('USE_LIGHTMAP', true);
         }
 
         if (this.shaderType === GenericShaderType.WorldVertexTransition) {
             this.wantsBaseTexture2 = true;
-            this.program.setDefineBool('USE_BASETEXTURE2', true);
+            this.shaderInstance.setDefineBool('USE_BASETEXTURE2', true);
         }
 
         if (this.wantsBaseTexture2 && this.paramGetVTF('$blendmodulatetexture') !== null) {
             this.wantsBlendModulate = true;
-            this.program.setDefineBool('USE_BLEND_MODULATE', true);
+            this.shaderInstance.setDefineBool('USE_BLEND_MODULATE', true);
         }
     
         if (this.paramGetNumber('$seamless_scale') > 0.0)
-            this.program.setDefineBool('USE_SEAMLESS', true);
+            this.shaderInstance.setDefineBool('USE_SEAMLESS', true);
 
         // Modulation color is used differently between lightmapped and non-lightmapped.
         // In vertexlit / unlit, then the modulation color is multiplied in with the texture (and possibly blended).
@@ -2234,37 +2244,37 @@ class Material_Generic extends BaseMaterial {
         // USE_MODULATIONCOLOR_COLOR only handles the vertexlit / unlit case. USE_LIGHTMAP will also use the modulation
         // color if necessary.
         if (this.wantsLightmap) {
-            this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', false);
+            this.shaderInstance.setDefineBool('USE_MODULATIONCOLOR_COLOR', false);
             // TODO(jstpierre): Figure out if modulation alpha is used in lightmappedgeneric.
-            this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', false);
+            this.shaderInstance.setDefineBool('USE_MODULATIONCOLOR_ALPHA', false);
         } else {
-            this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', true);
-            this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', true);
+            this.shaderInstance.setDefineBool('USE_MODULATIONCOLOR_COLOR', true);
+            this.shaderInstance.setDefineBool('USE_MODULATIONCOLOR_ALPHA', true);
         }
 
         if (this.hasVertexColorInput && (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha')))
-            this.program.setDefineBool('USE_VERTEX_COLOR', true);
+            this.shaderInstance.setDefineBool('USE_VERTEX_COLOR', true);
 
         if (this.paramGetBoolean('$basealphaenvmapmask'))
-            this.program.setDefineBool('USE_BASE_ALPHA_ENVMAP_MASK', true);
+            this.shaderInstance.setDefineBool('USE_BASE_ALPHA_ENVMAP_MASK', true);
 
         if (this.paramGetBoolean('$normalmapalphaenvmapmask') && this.wantsBumpmap)
-            this.program.setDefineBool('USE_NORMALMAP_ALPHA_ENVMAP_MASK', true);
+            this.shaderInstance.setDefineBool('USE_NORMALMAP_ALPHA_ENVMAP_MASK', true);
 
         if (this.paramGetBoolean('$basemapalphaphongmask'))
-            this.program.setDefineBool('USE_BASE_ALPHA_PHONG_MASK', true);
+            this.shaderInstance.setDefineBool('USE_BASE_ALPHA_PHONG_MASK', true);
 
         if (this.paramGetBoolean('$invertphongmask'))
-            this.program.setDefineBool('USE_PHONG_MASK_INVERT', true);
+            this.shaderInstance.setDefineBool('USE_PHONG_MASK_INVERT', true);
 
         if (this.paramGetBoolean('$ssbump'))
-            this.program.setDefineBool('USE_SSBUMP', true);
+            this.shaderInstance.setDefineBool('USE_SSBUMP', true);
 
         if (this.paramGetBoolean('$halflambert'))
-            this.program.setDefineBool('USE_HALF_LAMBERT', true);
+            this.shaderInstance.setDefineBool('USE_HALF_LAMBERT', true);
 
         if (this.paramGetBoolean('$alphatest')) {
-            this.program.setDefineBool('USE_ALPHATEST', true);
+            this.shaderInstance.setDefineBool('USE_ALPHATEST', true);
         } else if (this.shaderType === GenericShaderType.DecalModulate) {
             this.isTranslucent = true;
             this.isToneMapped = false;
@@ -2279,7 +2289,7 @@ class Material_Generic extends BaseMaterial {
             const renderMode: RenderMode = this.paramGetNumber('$rendermode');
 
             if (renderMode === RenderMode.Glow || renderMode === RenderMode.WorldGlow) {
-                this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.BlendAdd);
+                this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Glow);
                 // TODO(jstpierre): Once we support glow traces, re-enable this.
                 // this.megaStateFlags.depthCompare = GfxCompareMode.Always;
             } else if (renderMode === RenderMode.TransAdd) {
@@ -2297,14 +2307,14 @@ class Material_Generic extends BaseMaterial {
             this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         }
 
-        this.setSkinningMode(this.program);
-        this.setFogMode(this.program);
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
-        this.recacheProgram(cache);
+        this.recacheProgram(materialCache.cache);
     }
 
     private updateTextureMappings(dst: TextureMapping[], renderContext: SourceRenderContext, lightmapPageIndex: number | null): void {
@@ -2355,7 +2365,7 @@ class Material_Generic extends BaseMaterial {
         this.projectedLight = renderer !== null ? renderer.light : null;
 
         this.wantsProjectedTexture = this.projectedLight !== null && this.projectedLight.texture !== null;
-        if (this.program.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))
+        if (this.shaderInstance.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))
             this.gfxProgram = null;
     }
 
@@ -2368,8 +2378,8 @@ class Material_Generic extends BaseMaterial {
         this.setupOverrideSceneParams(renderContext, renderInst);
 
         // TODO(jstpierre): Carve down this allocation a bit.
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 152);
-        const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_ObjectParams, 152);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_Generic.ub_ObjectParams);
 
         if (this.wantsAmbientCube) {
             const lightCache = assertExists(assertExists(this.entityParams).lightCache);
@@ -2464,13 +2474,13 @@ class Material_Generic extends BaseMaterial {
 }
 
 // Modulate
-class ModulateProgram extends MaterialProgramBase {
+class ShaderTemplate_Modulate extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public both = `
+    public program = `
 precision mediump float;
 
-${MaterialProgramBase.Common}
+${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     Mat4x2 u_BaseTextureTransform;
@@ -2508,7 +2518,7 @@ void mainPS() {
 }
 
 class Material_Modulate extends BaseMaterial {
-    private program: ModulateProgram;
+    private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -2522,15 +2532,15 @@ class Material_Modulate extends BaseMaterial {
         p['$writez']                       = new ParameterBoolean(false, false);
     }
 
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
+    protected initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
 
-        this.program = new ModulateProgram();
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Modulate);
 
         const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture');
         const blendMode = this.getAlphaBlendMode(isTranslucent);
 
-        const opaque = this.paramGetBoolean('$writez') && !(blendMode === AlphaBlendMode.Blend || blendMode === AlphaBlendMode.BlendAdd);
+        const opaque = this.paramGetBoolean('$writez') && !(blendMode === AlphaBlendMode.Blend || blendMode === AlphaBlendMode.Glow);
 
         this.megaStateFlags.depthWrite = opaque;
         this.isTranslucent = !opaque;
@@ -2544,11 +2554,11 @@ class Material_Modulate extends BaseMaterial {
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
-        this.setSkinningMode(this.program);
-        this.setFogMode(this.program);
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(this.program);
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -2563,8 +2573,8 @@ class Material_Modulate extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ModulateProgram.ub_ObjectParams, 8);
-        const d = renderInst.mapUniformBufferF32(ModulateProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Modulate.ub_ObjectParams, 8);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_Modulate.ub_ObjectParams);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
@@ -2575,13 +2585,13 @@ class Material_Modulate extends BaseMaterial {
 }
 
 // UnlitTwoTexture
-class UnlitTwoTextureProgram extends MaterialProgramBase {
+class ShaderTemplate_UnlitTwoTexture extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public both = `
+    public program = `
 precision mediump float;
 
-${MaterialProgramBase.Common}
+${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     Mat4x2 u_Texture1Transform;
@@ -2623,7 +2633,7 @@ void mainPS() {
 }
 
 class Material_UnlitTwoTexture extends BaseMaterial {
-    private program: UnlitTwoTextureProgram;
+    private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -2640,21 +2650,21 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         // TODO(jstpierre): MonitorScreen tint/constrast/saturation.
     }
 
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
+    protected initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
 
-        this.program = new UnlitTwoTextureProgram();
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.UnlitTwoTexture);
 
         const isTranslucent = this.paramGetBoolean('$translucent') || this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
         this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
-        this.setSkinningMode(this.program);
-        this.setFogMode(this.program);
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(this.program);
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -2670,8 +2680,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 20);
-        const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_UnlitTwoTexture.ub_ObjectParams, 20);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_UnlitTwoTexture.ub_ObjectParams);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', this.paramGetNumber('$alpha'));
@@ -2685,14 +2695,14 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 //#endregion
 
 //#region Water
-class WaterMaterialProgram extends MaterialProgramBase {
+class ShaderTemplate_Water extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public both = `
+    public program = `
 precision mediump float;
 precision mediump sampler2DArray;
 
-${MaterialProgramBase.Common}
+${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
@@ -3012,7 +3022,7 @@ void mainPS() {
 }
 
 class Material_Water extends BaseMaterial {
-    private program: WaterMaterialProgram;
+    private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram | null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -3071,25 +3081,25 @@ class Material_Water extends BaseMaterial {
 
     private recacheProgram(cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(this.program);
+            this.gfxProgram = this.shaderInstance.getGfxProgram(cache);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
         }
     }
 
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
+    protected initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
 
-        this.program = new WaterMaterialProgram();
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Water);
 
         if (this.paramGetVTF('$flowmap') !== null) {
             this.wantsFlowmap = true;
-            this.program.setDefineBool('USE_FLOWMAP', true);
+            this.shaderInstance.setDefineBool('USE_FLOWMAP', true);
 
             if (this.paramGetVTF('$basetexture') !== null)
-                this.program.setDefineBool('USE_FLOWMAP_BASETEXTURE', true);
+                this.shaderInstance.setDefineBool('USE_FLOWMAP_BASETEXTURE', true);
 
             if (this.paramGetBoolean('$lightmapwaterfog')) {
-                this.program.setDefineBool('USE_LIGHTMAP_WATER_FOG', true);
+                this.shaderInstance.setDefineBool('USE_LIGHTMAP_WATER_FOG', true);
                 this.wantsLightmap = true;
             }
 
@@ -3097,23 +3107,23 @@ class Material_Water extends BaseMaterial {
         } else {
             if (this.paramGetVector('$scroll1').get(0) !== 0) {
                 this.wantsTexScroll = true;
-                this.program.setDefineBool('USE_TEXSCROLL', true);
+                this.shaderInstance.setDefineBool('USE_TEXSCROLL', true);
             }
         }
 
         if (this.paramGetVTF('$refracttexture') !== null)
-            this.program.setDefineBool('USE_REFRACT', true);
+            this.shaderInstance.setDefineBool('USE_REFRACT', true);
 
         this.isIndirect = this.textureIsIndirect('$refracttexture') || this.textureIsIndirect('$reflecttexture');
 
         const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
-        this.setSkinningMode(this.program);
-        this.setFogMode(this.program);
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(this.program);
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -3136,8 +3146,8 @@ class Material_Water extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(textureMappings[11], this.paramGetInt('$envmapframe'));
         this.paramGetTexture('$depthtexture').fillTextureMapping(textureMappings[12], 0);
 
-        let offs = renderInst.allocateUniformBuffer(WaterMaterialProgram.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(WaterMaterialProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Water.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_Water.ub_ObjectParams);
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
         if (this.wantsTexScroll) {
@@ -3207,13 +3217,13 @@ class Material_Water extends BaseMaterial {
 //#endregion
 
 //#region Refract
-class RefractMaterialProgram extends MaterialProgramBase {
+class ShaderTemplate_Refract extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public both = `
+    public program = `
 precision mediump float;
 
-${MaterialProgramBase.Common}
+${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
@@ -3368,7 +3378,7 @@ class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
 
-    private program: RefractMaterialProgram;
+    private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -3398,27 +3408,27 @@ class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$basetexture').ref = '_rt_RefractTexture';
     }
 
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
+    protected initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
 
-        this.program = new RefractMaterialProgram();
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Refract);
 
         if (this.paramGetVTF('$envmap') !== null) {
-            this.program.setDefineBool('USE_ENVMAP', true);
+            this.shaderInstance.setDefineBool('USE_ENVMAP', true);
             this.wantsEnvmap = true;
         }
 
         if (this.paramGetVTF('$refracttinttexture') !== null) {
-            this.program.setDefineBool('USE_REFRACT_TINT_TEXTURE', true);
+            this.shaderInstance.setDefineBool('USE_REFRACT_TINT_TEXTURE', true);
         }
 
         if (this.paramGetBoolean('$localrefract')) {
-            this.program.setDefineBool('USE_LOCAL_REFRACT', true);
+            this.shaderInstance.setDefineBool('USE_LOCAL_REFRACT', true);
             this.wantsLocalRefract = true;
         }
 
         const blurAmount = this.paramGetNumber('$bluramount') | 0;
-        this.program.defines.set('BLUR_AMOUNT', '' + blurAmount);
+        this.shaderInstance.setDefineString('BLUR_AMOUNT', '' + blurAmount);
 
         const isTranslucent = this.textureIsTranslucent('$basetexture');
         this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
@@ -3426,11 +3436,11 @@ class Material_Refract extends BaseMaterial {
         this.sortKeyBase = makeSortKey(sortLayer);
         this.isIndirect = this.textureIsIndirect('$basetexture');
 
-        this.setSkinningMode(this.program);
-        this.setFogMode(this.program);
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(this.program);
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
@@ -3448,8 +3458,8 @@ class Material_Refract extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 20);
-        const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
@@ -3546,6 +3556,14 @@ class StaticResources {
     }
 }
 
+class ShaderTemplates {
+    public Generic = new ShaderTemplate_Generic();
+    public Modulate = new ShaderTemplate_Modulate();
+    public UnlitTwoTexture = new ShaderTemplate_UnlitTwoTexture();
+    public Water = new ShaderTemplate_Water();
+    public Refract = new ShaderTemplate_Refract();
+}
+
 export class MaterialCache {
     private textureCache = new Map<string, VTF>();
     private texturePromiseCache = new Map<string, Promise<VTF>>();
@@ -3554,8 +3572,9 @@ export class MaterialCache {
     public staticResources: StaticResources;
     public materialDefines: string[] = [];
     public deviceNeedsFlipY: boolean;
+    public shaderTemplates = new ShaderTemplates();
 
-    constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
+    constructor(public device: GfxDevice, public cache: GfxRenderCache, private filesystem: SourceFileSystem) {
         // Install render targets
         const _rt_Camera = new VTF(device, cache, null, '_rt_Camera', false, LateBindingTexture.Camera);
         _rt_Camera.width = 256;
@@ -3917,7 +3936,7 @@ export class LightCache {
     private leaf: number = -1;
     public envCubemap: Cubemap | null;
 
-    private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
+    private worldLights: LightCacheWorldLight[] = nArray(ShaderTemplate_Generic.MaxDynamicWorldLights, () => new LightCacheWorldLight());
     private ambientCube: AmbientCube = newAmbientCube();
 
     constructor(bspRenderer: BSPRenderer, private pos: ReadonlyVec3) {
