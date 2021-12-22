@@ -292,6 +292,8 @@ export class NjsMeshInstance {
 
         if (useAlpha) {
             this.layer = GfxRendererLayer.ALPHA_TEST | GfxRendererLayer.TRANSLUCENT;
+            // TODO(jstpierre): Turn this on when we get sorting done.
+            // this.megaStateFlags.depthWrite = false;
         }
 
         setAttachmentStateSimple(this.megaStateFlags, {
@@ -500,6 +502,7 @@ export class NjsActionInstance {
 
     public frame: number = -1;
     public visible = true;
+    public modelID: number;
 
     constructor (cache: GfxRenderCache, public data: NjsActionData, texlist: (number | null)[] | null, textureHolder: PVRTextureHolder) {
         for (let i = 0; i < this.data.objects.length; ++i)

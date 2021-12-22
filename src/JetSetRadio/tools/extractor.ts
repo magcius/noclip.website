@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, hexzero0x, nArray, readString } from "../../util";
+import { assert, hexzero0x, readString } from "../../util";
 import * as AFS from '../AFS';
 import * as BYML from "../../byml";
 
@@ -66,23 +66,6 @@ function txpHasTexture(file: AFSReference, offset: number): boolean {
     return readString(file.buffer, offset, 0x04, false) === 'GBIX';
 }
 
-function txpSearch(files: AFSReference[], offs: number): AFSReference | null {
-    let candidate: AFSReference | null = null;
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-
-        if (txpHasTexture(file, offs)) {
-            if (candidate !== null)
-                throw "whoops";
-
-            candidate = file;
-        }
-    }
-
-    return candidate;
-}
-
 function afsLoad(afsFilename: string, afsIndex: number): AFSReference {
     const data = AFS.parse(fetchDataSync(`${pathBaseOut}/JETRADIO/${afsFilename}`));
     const buffer = data.files[afsIndex];
@@ -119,9 +102,9 @@ interface Texlist {
     entries: number[];
 }
 
-interface TexChunk {
-    textures: TexData[];
-    texlists: Texlist[];
+class TexChunk {
+    public textures: TexData[] = [];
+    public texlists: Texlist[] = [];
 }
 
 function packTexListData(texChunk: TexChunk): TexlistData {
@@ -166,8 +149,8 @@ function extractTexPackTable_01(dst: TexChunk, execBuffer: ArrayBufferSlice, txp
     while (true) {
         const refTableAddr = view.getUint32(tableOffs + 0x00, true);
         const txpAddr = view.getUint32(tableOffs + 0x04, true);
-        tableOffs += 0x08;
 
+        tableOffs += 0x08;
         if (refTableAddr === 0x00000000 && txpAddr === 0xFFFFFFFF)
             break;
         if (txpAddr === 0x00000000)
@@ -214,12 +197,52 @@ function extractTexPackTable_02(dst: TexChunk, execBuffer: ArrayBufferSlice, txp
     }
 }
 
-function extractTexLoadTable(execBuffer: ArrayBufferSlice, tableAddr: number): TexChunk {
+function extractTexPackTable_03(dst: TexChunk, execBuffer: ArrayBufferSlice, txpFile: AFSReference, tableAddr: number, texLoadAddr: number): void {
+    const view = execBuffer.createDataView();
+
+    const getTexlist = (addr: number) => {
+        let existing = dst.texlists.find((v) => v.addr === addr);
+        if (existing === undefined) {
+            existing = { addr, entries: [] };
+            dst.texlists.push(existing);
+        }
+        return existing;
+    };
+
+    const insertRef = (ref: TexlistRefTableEntry, index: number) => {
+        const texlist = getTexlist(ref.texlistAddr);
+        // console.log(`  ${hexzero0x(ref.texlistAddr)} ${hexzero0x(ref.slot)}`);
+        texlist.entries[ref.slot] = index;
+    };
+
+    let tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
+    // console.log(`01 ${txpFile.afsFilename} ${hexzero0x(tableAddr)} ${hexzero0x(tableOffs)}`);
+    while (true) {
+        const refTableAddr = view.getUint32(tableOffs + 0x00, true);
+        const txpAddr = view.getUint32(tableOffs + 0x04, true);
+
+        tableOffs += 0x08;
+        if (refTableAddr === 0x00000000 && txpAddr === 0x00000000)
+            break;
+        if (txpAddr === 0x00000000)
+            continue;
+
+        const txpOffs = txpAddr - texLoadAddr;
+        assert(txpOffs >= 0);
+
+        const texDataIndex = dst.textures.push({ ... txpFile.getRefData(), Offset: txpOffs }) - 1;
+
+        const refTable = parseTexlistRefTable(execBuffer, refTableAddr);
+        for (let i = 0; i < refTable.length; i++)
+            insertRef(refTable[i], texDataIndex);
+    }
+}
+
+function extractTexLoadTable(texChunk: TexChunk, execBuffer: ArrayBufferSlice, tableAddr: number): void {
     const filenames = extractFilenameTable(execBuffer);
 
     const view = execBuffer.createDataView();
 
-    const texChunk: TexChunk = { textures: [], texlists: [] };
     let tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
     while (true) {
         const afsFileID = view.getUint32(tableOffs + 0x00, true);
@@ -239,11 +262,11 @@ function extractTexLoadTable(execBuffer: ArrayBufferSlice, tableAddr: number): T
             extractTexPackTable_01(texChunk, execBuffer, txpFile, texPackTableAddr, texLoadAddr);
         else if (texListType === 0x02)
             extractTexPackTable_02(texChunk, execBuffer, txpFile, texPackTableAddr, texLoadAddr);
+        else if (texListType === 0x03 || texListType === 0x04 || texListType === 0x05)
+            extractTexPackTable_03(texChunk, execBuffer, txpFile, texPackTableAddr, 0x8CDA0000);
         else
             throw "whoops";
     }
-
-    return texChunk;
 }
 
 function findTexlistIndex(texlists: Texlist[], texlistAddr: number): number {
@@ -261,7 +284,7 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
         const texlistAddr = texlistTable[i];
         const texlistIndex = findTexlistIndex(texlists, texlistAddr);
         if (texlistIndex < 0)
-            console.warn(`Model ${i} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
+            console.warn(`Model ${hexzero0x(modelTableAddr)} / ${hexzero0x(i, 2)} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
         models.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
     }
     return models;
@@ -269,7 +292,30 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
 
 const rotToRadians = Math.PI / 0x8000;
 
-function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference, tableAddr: number, tableCount: number): ObjectData[] {
+function extractObjectInstance(stageBuffer: ArrayBufferSlice, instanceAddr: number): ObjectData | null {
+    const stageView = stageBuffer.createDataView();
+
+    const instanceOffs = instanceAddr - STAGE_ALLOCATION_ADDRESS;
+    const modelID = stageView.getUint32(instanceOffs + 0x00, true);
+    if (modelID === 0xFFFFFFFF) {
+        // TODO(jstpierre): what does it mean??????
+        return null;
+    }
+
+    const translationX = stageView.getFloat32(instanceOffs + 0x04, true);
+    const translationY = stageView.getFloat32(instanceOffs + 0x08, true);
+    const translationZ = stageView.getFloat32(instanceOffs + 0x0C, true);
+    const rotationX = rotToRadians * stageView.getInt16(instanceOffs + 0x10, true);
+    const rotationY = rotToRadians * stageView.getInt16(instanceOffs + 0x14, true);
+    const rotationZ = rotToRadians * stageView.getInt16(instanceOffs + 0x18, true);
+    return {
+        ModelID: modelID,
+        Translation: [translationX, translationY, translationZ],
+        Rotation: [rotationX, rotationY, rotationZ],
+    };
+}
+
+function extractObjectTableGrouped(execBuffer: ArrayBufferSlice, afsFile: AFSReference, tableAddr: number, tableCount: number): ObjectData[] {
     const tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
     const objGroupPtrs = execBuffer.createTypedArray(Uint32Array, tableOffs, tableCount);
 
@@ -285,26 +331,28 @@ function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference,
             if (((instanceAddr & 0xF0000000) >>> 0) !== 0x80000000)
                 break;
             instanceListOffs += 0x04;
-
-            const instanceOffs = instanceAddr - STAGE_ALLOCATION_ADDRESS;
-            const modelID = stageView.getUint32(instanceOffs + 0x00, true);
-            if (modelID === 0xFFFFFFFF) {
-                // TODO(jstpierre): what does it mean??????
+            const object = extractObjectInstance(afsFile.buffer, instanceAddr);
+            if (object === null)
                 continue;
-            }
-
-            const translationX = stageView.getFloat32(instanceOffs + 0x04, true);
-            const translationY = stageView.getFloat32(instanceOffs + 0x08, true);
-            const translationZ = stageView.getFloat32(instanceOffs + 0x0C, true);
-            const rotationX = rotToRadians * stageView.getInt16(instanceOffs + 0x10, true);
-            const rotationY = rotToRadians * stageView.getInt16(instanceOffs + 0x14, true);
-            const rotationZ = rotToRadians * stageView.getInt16(instanceOffs + 0x18, true);
-            objects.push({
-                ModelID: modelID,
-                Translation: [translationX, translationY, translationZ],
-                Rotation: [rotationX, rotationY, rotationZ],
-            });
+            objects.push(object);
         }
+    }
+    return objects;
+}
+
+function extractObjectTableSingles(execBuffer: ArrayBufferSlice, afsFile: AFSReference, tableAddr: number, tableCount: number): ObjectData[] {
+    const tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
+    const objGroupPtrs = execBuffer.createTypedArray(Uint32Array, tableOffs, tableCount);
+
+    const objects: ObjectData[] = [];
+    for (let i = 0; i < tableCount; i++) {
+        const instanceAddr = objGroupPtrs[i];
+        if (instanceAddr === 0)
+            continue;
+        const object = extractObjectInstance(afsFile.buffer, instanceAddr);
+        if (object === null)
+            continue;
+        objects.push(object);
     }
     return objects;
 }
@@ -333,19 +381,25 @@ function saveStageData(dstFilename: string, crg1: StageData): void {
 }
 
 function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void {
-    const TEXLOAD_TABLE_ADDRESS = 0x8c185b30;
+    const texChunk = new TexChunk();
+
+    extractTexLoadTable(texChunk, execBuffer, 0x8c185b30);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1a49a8);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1a49c8);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1a4a28);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1a4a88);
+
     const SCENE_FILE = afsLoad('STAGE1.AFS', 0);
-    const texChunk = extractTexLoadTable(execBuffer, TEXLOAD_TABLE_ADDRESS);
 
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c106f9c;
         const TEXTURE_TABLE_ADDRESS = 0x8c107064;
         const OBJECT_TABLE_ADDRESS = 0x8c105f94;
-        const ASSET_COUNT = 50;
-        const OBJECT_COUNT = 62;
+        const ASSET_COUNT = 49;
+        const OBJECT_COUNT = 50;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
         return { Models, Objects };
     }
 
@@ -357,14 +411,27 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const OBJECT_COUNT = 62;
     
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        return { Models, Objects };
+    }
+
+    function extractSlice3() {
+        const ASSET_TABLE_ADDRESS = 0x8c10712c;
+        const TEXTURE_TABLE_ADDRESS = 0x8c107204;
+        const OBJECT_TABLE_ADDRESS = 0x8c106090
+        const ASSET_COUNT = 54;
+        const OBJECT_COUNT = 51;
+  
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSingles(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
         return { Models, Objects };
     }
 
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
+    const slice3 = extractSlice3();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
     saveStageData(dstFilename, crg1);
 }
 

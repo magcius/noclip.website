@@ -290,6 +290,7 @@ class JetSetRadioSceneDesc implements SceneDesc {
             const object = stageData.Objects[i];
             const modelData = modelCache.loadModelData(object.ModelID);
             const actionInstance = new NjsActionInstance(modelCache.cache, modelData, modelData.texlist, modelCache.textureHolder);
+            actionInstance.modelID = object.ModelID;
             const modelMatrix = mat4.create();
             mat4.fromTranslation(modelMatrix, object.Translation);
             mat4.rotateX(modelMatrix, modelMatrix, object.Rotation[0]);
