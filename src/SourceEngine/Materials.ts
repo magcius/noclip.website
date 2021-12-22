@@ -1130,7 +1130,7 @@ class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
 
     public static MaxDynamicWorldLights = 4;
 
-    protected generateProgramString(variantSettings: Map<string, string>): string {
+    public generateProgramString(variantSettings: Map<string, string>): string {
         return `
 precision mediump float;
 precision mediump sampler2DArray;

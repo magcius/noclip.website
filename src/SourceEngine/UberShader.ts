@@ -5,10 +5,65 @@
 // This is basically replacement for DeviceProgram that has better caching behavior
 // and support for a wider variety of variants.
 
+import CodeEditor from "../CodeEditor";
+import { GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { hashCodeNumberUpdate, HashMap } from "../HashMap";
+import { assertExists } from "../util";
+
+class ShaderTextEditor {
+    public onchanged: ((newText: string) => void) | null = null;
+    private window: WindowProxy | null = null;
+
+    constructor(private name: string, private initialText: string) {
+    }
+
+    public open(): void {
+        assertExists(this.window === null);
+        this.window = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
+
+        const win = this.window;
+        const init = () => {
+            const editor = new CodeEditor(win.document);
+            const document = win.document;
+            document.title = this.name;
+            document.body.style.margin = '0';
+            editor.setValue(this.initialText);
+            editor.setFontSize('16px');
+            let timeout: number = 0;
+
+            const textChanged = () => {
+                timeout = 0;
+                if (this.onchanged !== null)
+                    this.onchanged(editor.getValue());
+            };
+
+            editor.onvaluechanged = (immediate: boolean) => {
+                if (timeout > 0)
+                    clearTimeout(timeout);
+
+                if (immediate) {
+                    textChanged();
+                } else {
+                    // debounce
+                    timeout = window.setTimeout(textChanged, 500);
+                }
+            };
+            const onresize = win.onresize = () => {
+                editor.setSize(document.body.offsetWidth, window.innerHeight);
+            };
+            onresize();
+            win.document.body.appendChild(editor.elem);
+        };
+
+        if (win.document.readyState === 'complete')
+            init();
+        else
+            win.onload = init;
+    }
+}
 
 export abstract class UberShaderTemplate<T> {
     protected cache: HashMap<T, GfxProgram>;
@@ -51,6 +106,13 @@ function definesHash(m: DefinesMap): number {
     return hash;
 }
 
+function getGfxProgramDescriptorBasic(cache: GfxRenderCache, programString: string, variantSettings: DefinesMap): GfxProgramDescriptorSimple {
+    const vendorInfo = cache.device.queryVendorInfo();
+    const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', programString, variantSettings);
+    const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', programString, variantSettings);
+    return { preprocessedVert, preprocessedFrag };
+}
+
 export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
     public program: string = '';
 
@@ -59,25 +121,23 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         this.cache = new HashMap<DefinesMap, GfxProgram>(definesEqual, definesHash);
     }
 
-    protected generateProgramString(variantSettings: DefinesMap): string {
+    public generateProgramString(variantSettings: DefinesMap): string {
         return this.program;
     }
 
     protected createGfxProgram(cache: GfxRenderCache, variantSettings: DefinesMap): GfxProgram {
-        const vendorInfo = cache.device.queryVendorInfo();
-        const programString = this.generateProgramString(variantSettings);
-        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', programString, variantSettings);
-        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', programString, variantSettings);
         // We do our own caching here; no need to use the render cache for this.
-        return cache.device.createProgramSimple({ preprocessedVert, preprocessedFrag });
+        const programString = this.generateProgramString(variantSettings);
+        return cache.device.createProgramSimple(getGfxProgramDescriptorBasic(cache, programString, variantSettings));
     }
 }
 
 export class UberShaderInstance<T> {
-    private gfxProgram: GfxProgram | null = null;
+    protected gfxProgram: GfxProgram | null = null;
+    protected gfxRenderCache: GfxRenderCache | null = null;
     protected variantSettings: T;
 
-    constructor(private template: UberShaderTemplate<T>) {
+    constructor(protected template: UberShaderTemplate<T>) {
     }
 
     public invalidate(): void {
@@ -85,14 +145,20 @@ export class UberShaderInstance<T> {
     }
 
     public getGfxProgram(cache: GfxRenderCache): GfxProgram {
-        if (this.gfxProgram === null)
+        if (this.gfxProgram === null) {
             this.gfxProgram = this.template.getGfxProgram(cache, this.variantSettings);
+
+            // For easy editor support.
+            this.gfxRenderCache = cache;
+        }
 
         return this.gfxProgram;
     }
 }
 
 export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
+    private shaderTextEditor: ShaderTextEditor | null = null;
+
     constructor(template: UberShaderTemplateBasic) {
         super(template);
         this.variantSettings = new Map<string, string>();
@@ -108,11 +174,32 @@ export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
                 return false;
             this.variantSettings.delete(name);
         }
+
         this.invalidate();
         return true;
     }
 
     public setDefineBool(name: string, v: boolean): boolean {
         return this.setDefineString(name, v ? '1' : null);
+    }
+
+    private patchProgram(newText: string): void {
+        if (this.gfxRenderCache === null)
+            return;
+
+        if (this.gfxProgram === null)
+            return;
+
+        this.gfxRenderCache.device.programPatched(this.gfxProgram, getGfxProgramDescriptorBasic(this.gfxRenderCache, newText, this.variantSettings));
+    }
+
+    public edit(): void {
+        const template = this.template as UberShaderTemplateBasic;
+        const programString = template.generateProgramString(this.variantSettings);
+        this.shaderTextEditor = new ShaderTextEditor(this.template.constructor.name, programString);
+        this.shaderTextEditor.onchanged = (newText: string) => {
+            this.patchProgram(newText);
+        };
+        this.shaderTextEditor.open();
     }
 }
