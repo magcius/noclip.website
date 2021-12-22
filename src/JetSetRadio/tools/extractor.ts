@@ -14,12 +14,37 @@ const pathBaseIn  = `../../../data/JetSetRadio_Raw`;
 const pathBaseOut = `../../../data/JetSetRadio`;
 
 const EXECUTABLE_ALLOCATION_ADDRESS = 0x8C010000;
-const TEXTURE_ALLOCATION_ADDRESS = 0x8c800000;
 const STAGE_ALLOCATION_ADDRESS = 0x8CB00000;
 
 interface AFSRefData {
     AFSFileName: string;
     AFSFileIndex: number;
+}
+
+interface TexData extends AFSRefData {
+    Offset: number;
+}
+
+interface TexlistData {
+    Textures: TexData[];
+    Texlists: number[][];
+}
+
+interface ModelData extends AFSRefData {
+    Offset: number;
+    TexlistIndex: number;
+}
+
+interface ObjectData {
+    ModelID: number;
+    Translation: [number, number, number];
+    Rotation: [number, number, number];
+}
+
+interface StageData {
+    TexlistData: TexlistData;
+    Models: ModelData[];
+    Objects: ObjectData[];
 }
 
 class AFSReference {
@@ -84,15 +109,6 @@ function parseTexlistRefTable(execBuffer: ArrayBufferSlice, refTableAddr: number
     }
 
     return refTable;
-}
-
-interface TexData extends AFSRefData {
-    Offset: number;
-}
-
-interface TexlistData {
-    Textures: TexData[];
-    Texlists: number[][];
 }
 
 interface Texlist {
@@ -231,37 +247,67 @@ function findTexlistIndex(texlists: Texlist[], texlistAddr: number): number {
     return texlists.findIndex((v) => v.addr === texlistAddr);
 }
 
-interface ModelData extends AFSRefData {
-    Offset: number;
-    TexlistIndex: number;
-}
-
 function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], afsFile: AFSReference, modelTableAddr: number, texlistTableAddr: number, tableCount: number): ModelData[] {
     const modelTable = execBuffer.createTypedArray(Uint32Array, modelTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
     const texlistTable = execBuffer.createTypedArray(Uint32Array, texlistTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
 
-    const assets: ModelData[] = [];
+    const models: ModelData[] = [];
     for (let i = 0; i < tableCount; i++) {
         const modelAddr = modelTable[i];
         const modelOffs = modelAddr - STAGE_ALLOCATION_ADDRESS;
         const texlistAddr = texlistTable[i];
         const texlistIndex = findTexlistIndex(texlists, texlistAddr);
         if (texlistIndex < 0)
-            console.warn(`Asset ${i} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
-        assets.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
+            console.warn(`Model ${i} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
+        models.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
     }
-    return assets;
+    return models;
 }
 
-interface StageData {
-    TexListData: TexlistData;
-    Models: ModelData[];
+function extractObjectTable(execBuffer: ArrayBufferSlice, afsFile: AFSReference, tableAddr: number, tableCount: number): ObjectData[] {
+    const tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
+    const objGroupPtrs = execBuffer.createTypedArray(Uint32Array, tableOffs, tableCount);
+
+    const stageView = afsFile.buffer.createDataView();
+    const objects: ObjectData[] = [];
+    for (let i = 0; i < tableCount; i++) {
+        const instanceListAddr = objGroupPtrs[i];
+        if (instanceListAddr === 0)
+            continue;
+        let instanceListOffs = instanceListAddr - STAGE_ALLOCATION_ADDRESS;
+        while (true) {
+            const instanceAddr = stageView.getUint32(instanceListOffs + 0x00, true);
+            if (((instanceAddr & 0xF0000000) >>> 0) !== 0x80000000)
+                break;
+            instanceListOffs += 0x04;
+
+            const instanceOffs = instanceAddr - STAGE_ALLOCATION_ADDRESS;
+            const modelID = stageView.getUint32(instanceOffs + 0x00, true);
+            if (modelID === 0xFFFFFFFF) {
+                // TODO(jstpierre): what does it mean??????
+                continue;
+            }
+            const translationX = stageView.getFloat32(instanceOffs + 0x04, true);
+            const translationY = stageView.getFloat32(instanceOffs + 0x08, true);
+            const translationZ = stageView.getFloat32(instanceOffs + 0x0C, true);
+            const rotationP = stageView.getInt16(instanceOffs + 0x10, true);
+            const rotationY = stageView.getInt16(instanceOffs + 0x14, true);
+            const rotationR = stageView.getInt16(instanceOffs + 0x18, true);
+            objects.push({
+                ModelID: modelID,
+                Translation: [translationX, translationY, translationZ],
+                Rotation: [rotationP, rotationY, rotationR],
+            });
+        }
+    }
+    return objects;
 }
 
-function packStageData(texChunk: TexChunk, models: ModelData[]): StageData {
-    const TexListData = packTexListData(texChunk);
+function packStageData(texChunk: TexChunk, models: ModelData[], objects: ObjectData[]): StageData {
+    const TexlistData = packTexListData(texChunk);
     const Models = models;
-    return { TexListData, Models };
+    const Objects = objects;
+    return { TexlistData, Models, Objects };
 }
 
 function saveStageData(dstFilename: string, crg1: StageData): void {
@@ -281,8 +327,9 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
     const texChunk = extractTexLoadTable(execBuffer, TEXLOAD_TABLE_ADDRESS);
     const models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+    const objects = extractObjectTable(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
 
-    const crg1 = packStageData(texChunk, models);
+    const crg1 = packStageData(texChunk, models, objects);
     saveStageData(dstFilename, crg1);
 }
 

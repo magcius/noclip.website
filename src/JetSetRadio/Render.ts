@@ -227,8 +227,9 @@ export class NjsObjectData {
 export class NjsActionData {
     public objects: NjsObjectData[] = [];
     public motions: Ninja.NJS_MOTION[] = [];
+    public texlist: number[] | null;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, public action: Ninja.NJS_ACTION, public wrapMode: number) {
+    constructor (device: GfxDevice, cache: GfxRenderCache, public action: Ninja.NJS_ACTION, public wrapMode: number = 0) {
         for (let i = 0; i < this.action.objects.length; ++i) {
             this.objects.push(new NjsObjectData(device, cache, this.action.objects[i]));
         }
@@ -274,7 +275,7 @@ export class NjsMeshInstance {
     public layer = GfxRendererLayer.OPAQUE;
     public depthSort = false;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, public data: NjsMeshData, textureHolder: PVRTextureHolder) {
+    constructor(cache: GfxRenderCache, public data: NjsMeshData, texlist: number[], textureHolder: PVRTextureHolder) {
         const program = new JSRProgram();
 
         const doubleSided = (this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.DOUBLE_SIDED) != 0;
@@ -302,7 +303,7 @@ export class NjsMeshInstance {
         const material = this.data.mesh.material;
         const texture = material.texture;
         if (texture) {
-            const textureId = texture.texture + 16;
+            const textureId = texlist[texture.texture];
             const textureName = textureHolder.getTextureName(textureId);
             if (textureName !== null) {
                 const textureMapping = new TextureMapping();
@@ -369,29 +370,27 @@ export class NjsModelInstance {
     public meshes: NjsMeshInstance[] = [];
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public data: NjsModelData, textureHolder: PVRTextureHolder) {
+    constructor(cache: GfxRenderCache, public data: NjsModelData, texlist: number[], textureHolder: PVRTextureHolder) {
         for (let i = 0; i < this.data.meshes.length; i++)
-            this.meshes.push(new NjsMeshInstance(device, cache, this.data.meshes[i], textureHolder));
+            this.meshes.push(new NjsMeshInstance(cache, this.data.meshes[i], texlist, textureHolder));
     }
 
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4): void {
         if (!this.visible)
             return;
-
-        mat4.mul(scratchMatrix, mat4.create(), modelMatrix);
 
         const bounds: vec4 = this.data.model.bounds;
         const center: vec3 = vec3.fromValues(bounds[0], bounds[1], bounds[2]);
         const radius: number = bounds[3];
-        vec3.transformMat4(center, center, modelMatrix);
+        vec3.transformMat4(center, center, parentMatrix);
         if (!viewerInput.camera.frustum.containsSphere(center, radius))
             return;
 
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, parentMatrix);
 
         for (let i = 0; i < this.meshes.length; i++)
             this.meshes[i].prepareToRender(renderInstManager, scratchMatrix);
@@ -399,51 +398,47 @@ export class NjsModelInstance {
 }
 
 export class NjsObjectInstance {
-    position: vec3 = vec3.create();
-    rotation: vec3 = vec3.create();
-    scale: vec3 = vec3.fromValues(1, 1, 1);
+    public position = vec3.create();
+    public rotation = vec3.create();
+    public scale = vec3.fromValues(1, 1, 1);
+    public modelMatrix = mat4.create();
+    public model: NjsModelInstance;
 
-    transform: mat4;
-
-    model?: NjsModelInstance;
-
-    constructor (device: GfxDevice, cache: GfxRenderCache, public data: NjsObjectData, textureHolder: PVRTextureHolder) {
+    constructor(cache: GfxRenderCache, public data: NjsObjectData, texlist: number[], textureHolder: PVRTextureHolder) {
         const usePosition = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_POS) == 0;
         this.position = usePosition ? this.data.object.position : vec3.create();
         const useRotation = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_ROT) == 0;
         this.rotation = useRotation ? this.data.object.rotation : vec3.create();
         const useScale = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_SCL) == 0;
         this.scale = useScale ? this.data.object.scale : vec3.fromValues(1, 1, 1);
-        this.transform = mat4.create();
 
         this.update(mat4.create());
 
         if (this.data.model) {
-            this.model = new NjsModelInstance(device, cache, this.data.model, textureHolder);
+            this.model = new NjsModelInstance(cache, this.data.model, texlist, textureHolder);
         }
     }
 
-    public update(modelMatrix: mat4) {
-        const evalZXY = (this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_ZXY_ANG) != 0;
-        const skip = (this.data.object.flags & 7) == 7;
+    public update(modelMatrix: ReadonlyMat4): void {
+        const evalZXY = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_ZXY_ANG);
+        const skip = (this.data.object.flags & 0x07) === 0x07;
 
         if (evalZXY) {
-            computeMatrix(this.transform, modelMatrix, this.scale, this.rotation, this.position, OperationOrder.SRT, EulerOrder.ZXY);
+            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, OperationOrder.SRT, EulerOrder.ZXY);
         } else {
-            computeMatrix(this.transform, modelMatrix, this.scale, this.rotation, this.position, OperationOrder.SRT, EulerOrder.XYZ);
+            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, OperationOrder.SRT, EulerOrder.XYZ);
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.model) {
-            mat4.mul(scratchMatrix, modelMatrix, this.transform);
-            this.model.prepareToRender(renderInstManager, viewerInput, scratchMatrix);
+            this.model.prepareToRender(renderInstManager, viewerInput, this.modelMatrix);
         }
     }
 }
 
 export class NjsMotionInstance {
-    constructor (device: GfxDevice, cache: GfxRenderCache, public object: NjsObjectInstance, public data: Ninja.NJS_MOTION) {
+    constructor (cache: GfxRenderCache, public object: NjsObjectInstance, public data: Ninja.NJS_MOTION) {
     }
 
     public update(frame: number) {
@@ -498,14 +493,12 @@ export class NjsActionInstance {
 
     public frame: number = -1;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, public data: NjsActionData, textureHolder: PVRTextureHolder) {
-        for (let i = 0; i < this.data.objects.length; ++i) {
-            this.objects.push(new NjsObjectInstance(device, cache, this.data.objects[i], textureHolder));
-        }
+    constructor (cache: GfxRenderCache, public data: NjsActionData, texlist: number[], textureHolder: PVRTextureHolder) {
+        for (let i = 0; i < this.data.objects.length; ++i)
+            this.objects.push(new NjsObjectInstance(cache, this.data.objects[i], texlist, textureHolder));
 
-        for (let i = 0; i < this.data.motions.length; ++i) {
-            this.motions.push(new NjsMotionInstance(device, cache, this.objects[i], this.data.motions[i]));
-        }
+        for (let i = 0; i < this.data.motions.length; ++i)
+            this.motions.push(new NjsMotionInstance(cache, this.objects[i], this.data.motions[i]));
     }
 
     public update(modelMatrix: mat4, frameDelta: number) {
@@ -554,15 +547,15 @@ export class NjsActionInstance {
 
         for (let i = 0; i < this.data.objects.length; ++i) {
             const parent = this.objects[i].data.object.parent;
-            const parentTransform = parent < 0 ? modelMatrix : this.objects[parent].transform;
+            const parentTransform = parent < 0 ? modelMatrix : this.objects[parent].modelMatrix;
 
             this.objects[i].update(parentTransform);
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         for (let i = 0; i < this.data.objects.length; ++i) {
-            this.objects[i].prepareToRender(renderInstManager, viewerInput, modelMatrix);
+            this.objects[i].prepareToRender(renderInstManager, viewerInput);
         }
     }
 }
@@ -647,19 +640,6 @@ const rotateMatrixMap = [
     (out: mat4, a: ReadonlyMat4, v: ReadonlyVec3) => rotateMatrix(out, a, v, EulerOrder.YZX), // YZX
     (out: mat4, a: ReadonlyMat4, v: ReadonlyVec3) => rotateMatrix(out, a, v, EulerOrder.ZYX), // ZYX
 ]
-
-function computeRotationMatrix(dst: mat4, angles: vec3, order: EulerOrder): void {
-    if (order === EulerOrder.XYZ)
-        computeModelMatrixR(dst, angles[0], angles[1], angles[2]);
-    else {
-        const matrixOrder = computeRotationOrderMap[order];
-        const componentOrder = componentOrderMap[order];
-        dst = mat4.create();
-        matrixOrder[2](dst, dst, angles[componentOrder[2]]);
-        matrixOrder[1](dst, dst, angles[componentOrder[1]]);
-        matrixOrder[0](dst, dst, angles[componentOrder[0]]);
-    }
-}
 
 function rotateMatrix(out: mat4, a: ReadonlyMat4, v: ReadonlyVec3, order: EulerOrder): mat4 {
     const matrixOrder = computeRotationOrderMap[order];
