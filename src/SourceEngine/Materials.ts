@@ -23,6 +23,7 @@ import { AABB } from "../Geometry";
 import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
+import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -3482,17 +3483,6 @@ class Material_Refract extends BaseMaterial {
 //#endregion
 
 //#region Material Cache
-function makeSolidColorTexture2D(device: GfxDevice, color: Color): GfxTexture {
-    const tex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
-    const data = new Uint8Array(4);
-    data[0] = color.r * 0xFF;
-    data[1] = color.g * 0xFF;
-    data[2] = color.b * 0xFF;
-    data[3] = color.a * 0xFF;
-    device.uploadTextureData(tex, 0, [data]);
-    return tex;
-}
-
 class StaticResources {
     public whiteTexture2D: GfxTexture;
     public opaqueBlackTexture2D: GfxTexture;

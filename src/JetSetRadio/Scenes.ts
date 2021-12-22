@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { LoadedTexture, TextureHolder } from "../TextureHolder";
@@ -19,7 +19,8 @@ import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelper
 import { mat4 } from "gl-matrix";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DataFetcher } from "../DataFetcher";
-import { computeModelMatrixR, computeModelMatrixT } from "../MathHelpers";
+import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
+import { Cyan, Magenta, Yellow } from "../Color";
 
 const pathBase = `JetSetRadio`;
 
@@ -177,9 +178,16 @@ class ModelCache {
     public textureHolder = new PVRTextureHolder();
     private archiveCache = new Map<string, AFS.AFS>();
     private archivePromiseCache = new Map<string, Promise<AFS.AFS>>();
+    private texOpaqueMagenta: GfxTexture;
+    private texOpaqueYellow: GfxTexture;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, private dataFetcher: DataFetcher, private stageData: StageData) {
         this.cache = new GfxRenderCache(device);
+
+        this.texOpaqueMagenta = makeSolidColorTexture2D(device, Magenta);
+        this.texOpaqueYellow = makeSolidColorTexture2D(device, Yellow);
+        this.textureHolder.setTextureOverride('_magenta', { gfxTexture: this.texOpaqueMagenta, width: 1, height: 1, flipY: false });
+        this.textureHolder.setTextureOverride('_yellow', { gfxTexture: this.texOpaqueYellow, width: 1, height: 1, flipY: false });
     }
 
     public waitForLoad(): Promise<void> {
@@ -257,6 +265,9 @@ class ModelCache {
 
     public destroy(device: GfxDevice): void {
         this.cache.destroy();
+        this.textureHolder.destroy(device);
+        device.destroyTexture(this.texOpaqueMagenta);
+        device.destroyTexture(this.texOpaqueYellow);
         for (const v of this.modelData.values())
             v.destroy(device);
     }
@@ -278,8 +289,6 @@ class JetSetRadioSceneDesc implements SceneDesc {
         for (let i = 0; i < stageData.Objects.length; i++) {
             const object = stageData.Objects[i];
             const modelData = modelCache.loadModelData(object.ModelID);
-            if (modelData.texlist === null)
-                continue;
             const actionInstance = new NjsActionInstance(modelCache.cache, modelData, modelData.texlist, modelCache.textureHolder);
             const modelMatrix = mat4.create();
             mat4.fromTranslation(modelMatrix, object.Translation);

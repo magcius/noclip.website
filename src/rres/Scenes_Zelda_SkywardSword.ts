@@ -19,9 +19,10 @@ import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/Gf
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { ColorKind } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
-import { colorNewCopy, White } from '../Color';
+import { colorNewCopy, TransparentBlack, White } from '../Color';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -174,9 +175,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         const flipY = gfxDeviceNeedsFlipY(device);
         this.textureHolder.setTextureOverride('DummyWater', { gfxTexture: null, lateBinding: 'opaque-scene-texture', width: EFB_WIDTH, height: EFB_HEIGHT, flipY })
         // Override the "Add" textures with a black texture to prevent things from being overly bright.
-        this.blackTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+        this.blackTexture = makeSolidColorTexture2D(device, TransparentBlack);
 
-        device.uploadTextureData(this.blackTexture, 0, [new Uint8Array([0, 0, 0, 0])]);
         this.textureHolder.setTextureOverride('LmChaAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
         this.textureHolder.setTextureOverride('LmBGAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
 
