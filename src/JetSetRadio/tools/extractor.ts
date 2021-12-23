@@ -131,7 +131,7 @@ function extractFilenameTable(execBuffer: ArrayBufferSlice, tableAddr: number = 
 function extractTexPackTable_01(dst: TexChunk, execBuffer: ArrayBufferSlice, txpFile: AFSReference, tableAddr: number, texLoadAddr: number): void {
     const view = execBuffer.createDataView();
     
-    console.log(`01 EXEC ARC  ${txpFile.afsFilename} ${txpFile.afsIndex} ${hexzero0x(tableAddr)}`);
+    //console.log(`01 EXEC ARC  ${txpFile.afsFilename} ${txpFile.afsIndex} ${hexzero0x(tableAddr)}`);
 
 
     const getTexlist = (addr: number) => {
@@ -308,7 +308,7 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
         const modelOffs = modelAddr - STAGE_ALLOCATION_ADDRESS;
         const texlistAddr = texlistTable[i];
         const texlistIndex = findTexlistIndex(texlists, texlistAddr);
-        if (texlistIndex < 0)
+        if (texlistIndex < 0 && texlistAddr!=0)
             console.warn(`Model ${hexzero0x(modelTableAddr)} / ${hexzero0x(i, 2)} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
         models.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
     }
@@ -333,7 +333,7 @@ function extractObjectInstance_01(stageBuffer: ArrayBufferSlice, instanceAddr: n
         ModelID: modelID,
         Translation: [translationX, translationY, translationZ],
         Rotation: [rotationX, rotationY, rotationZ],
-        Scale: [1,1,1], //xayrga: is there actually scale in this struct? 
+        Scale: [1,1,1], 
         Flags: 0
     };
 }
@@ -352,7 +352,7 @@ function extractObjectInstance_02(stageBuffer: ArrayBufferSlice, instanceAddr: n
     const rotationX = rotToRadians * stageView.getInt16(instanceOffs + 0x10, true);
     const rotationY = rotToRadians * stageView.getInt16(instanceOffs + 0x14, true);
     const rotationZ = rotToRadians * stageView.getInt16(instanceOffs + 0x18, true);
-    const scaleX = stageView.getFloat32(instanceOffs + 0x1C, true);
+    const scaleX = stageView.getFloat32(instanceOffs + 0x1C, true); // xayrga: todo, figure out why these are 0 on a lot of objects.
     const scaleY = stageView.getFloat32(instanceOffs + 0x20, true);
     const scaleZ = stageView.getFloat32(instanceOffs + 0x24, true);
     let flags = 0;
@@ -363,8 +363,8 @@ function extractObjectInstance_02(stageBuffer: ArrayBufferSlice, instanceAddr: n
         ModelID: modelID,
         Translation: [translationX, translationY, translationZ],
         Rotation: [rotationX, rotationY, rotationZ],
-        Scale: [scaleX,scaleY,scaleZ], //xayrga: is there actually scale in this struct? 
-        Flags: flags
+        Scale: [scaleX,scaleY,scaleZ], //xayrga: todo, confirm if this is actually scaling in the data
+        Flags: flags // xayrga: todo, confirm if this actually functions as a flag.
     };
 }
 
@@ -639,8 +639,8 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
-    //extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-    //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+    extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
+    extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
     extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
 }
 
