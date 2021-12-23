@@ -292,15 +292,11 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
 
 const rotToRadians = Math.PI / 0x8000;
 
-function extractObjectInstance(stageBuffer: ArrayBufferSlice, instanceAddr: number): ObjectData | null {
+function extractObjectInstance(stageBuffer: ArrayBufferSlice, instanceAddr: number): ObjectData {
     const stageView = stageBuffer.createDataView();
 
     const instanceOffs = instanceAddr - STAGE_ALLOCATION_ADDRESS;
     const modelID = stageView.getUint32(instanceOffs + 0x00, true);
-    if (modelID === 0xFFFFFFFF) {
-        // TODO(jstpierre): what does it mean??????
-        return null;
-    }
 
     const translationX = stageView.getFloat32(instanceOffs + 0x04, true);
     const translationY = stageView.getFloat32(instanceOffs + 0x08, true);
@@ -332,7 +328,7 @@ function extractObjectTableGrouped(execBuffer: ArrayBufferSlice, afsFile: AFSRef
                 break;
             instanceListOffs += 0x04;
             const object = extractObjectInstance(afsFile.buffer, instanceAddr);
-            if (object === null)
+            if (object.ModelID === 0xFFFFFFFF)
                 continue;
             objects.push(object);
         }
@@ -350,9 +346,19 @@ function extractObjectTableSingles(execBuffer: ArrayBufferSlice, afsFile: AFSRef
         if (instanceAddr === 0)
             continue;
         const object = extractObjectInstance(afsFile.buffer, instanceAddr);
-        if (object === null)
-            continue;
-        objects.push(object);
+        if (object.ModelID === 0xFFFFFFFF) {
+            // Subgroup kinda beat goin' on here
+            let subgroupAddr = instanceAddr + 0x28;
+            while (true) {
+                const subobject = extractObjectInstance(afsFile.buffer, subgroupAddr + 0x00);
+                if (subobject.ModelID === 0xFFFFFFFE)
+                    break;
+                objects.push(subobject);
+                subgroupAddr += 0x28;
+            }
+        } else {
+            objects.push(object);
+        }
     }
     return objects;
 }
