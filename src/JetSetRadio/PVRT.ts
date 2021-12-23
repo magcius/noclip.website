@@ -215,11 +215,20 @@ function decideParams(mask: PVRTMask, width: number): UnpackParams {
         throw new Error(`Unhandled mask ${mask}`);
     }
 
-    if (mask === PVRTMask.VectorQuantizedCustomCodeBook || mask === PVRTMask.VectorQuantizedCustomCodeBookMipMaps) {
-        if (width < 16)
+    if (mask === PVRTMask.VectorQuantizedCustomCodeBook) {
+        if (width <= 16)
             params.codeBookSize = 16;
-        else if (width === 64)
+        else if (width <= 32)
+            params.codeBookSize = 32;
+        else if (width <= 64)
             params.codeBookSize = 128;
+        else
+            params.codeBookSize = 256;
+    } else if (mask === PVRTMask.VectorQuantizedCustomCodeBookMipMaps) {
+        if (width <= 16)
+            params.codeBookSize = 16;
+        else if (width <= 32)
+            params.codeBookSize = 64;
         else
             params.codeBookSize = 256;
     }
