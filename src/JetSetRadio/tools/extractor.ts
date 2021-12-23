@@ -322,11 +322,10 @@ function extractObjectTableGrouped(execBuffer: ArrayBufferSlice, afsFile: AFSRef
         if (instanceListAddr === 0)
             continue;
         let instanceListOffs = instanceListAddr - STAGE_ALLOCATION_ADDRESS;
-        while (true) {
+        for (;; instanceListOffs += 0x04) {
             const instanceAddr = stageView.getUint32(instanceListOffs + 0x00, true);
             if (((instanceAddr & 0xF0000000) >>> 0) !== 0x80000000)
                 break;
-            instanceListOffs += 0x04;
             const object = extractObjectInstance(afsFile.buffer, instanceAddr);
             if (object.ModelID === 0xFFFFFFFF)
                 continue;
@@ -342,21 +341,16 @@ function extractObjectTableSingles(execBuffer: ArrayBufferSlice, afsFile: AFSRef
 
     const objects: ObjectData[] = [];
     for (let i = 0; i < tableCount; i++) {
-        const instanceAddr = objGroupPtrs[i];
+        let instanceAddr = objGroupPtrs[i];
         if (instanceAddr === 0)
             continue;
-        const object = extractObjectInstance(afsFile.buffer, instanceAddr);
-        if (object.ModelID === 0xFFFFFFFF) {
-            // Subgroup kinda beat goin' on here
-            let subgroupAddr = instanceAddr + 0x28;
-            while (true) {
-                const subobject = extractObjectInstance(afsFile.buffer, subgroupAddr + 0x00);
-                if (subobject.ModelID === 0xFFFFFFFE)
-                    break;
-                objects.push(subobject);
-                subgroupAddr += 0x28;
+        for (;; instanceAddr += 0x28) {
+            const object = extractObjectInstance(afsFile.buffer, instanceAddr);
+            if (object.ModelID === 0xFFFFFFFF) {
+                continue;
+            } else if (object.ModelID === 0xFFFFFFFE) {
+                break;
             }
-        } else {
             objects.push(object);
         }
     }

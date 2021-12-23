@@ -293,9 +293,9 @@ class JetSetRadioSceneDesc implements SceneDesc {
             actionInstance.modelID = object.ModelID;
             const modelMatrix = mat4.create();
             mat4.fromTranslation(modelMatrix, object.Translation);
-            mat4.rotateX(modelMatrix, modelMatrix, object.Rotation[0]);
-            mat4.rotateY(modelMatrix, modelMatrix, object.Rotation[1]);
             mat4.rotateZ(modelMatrix, modelMatrix, object.Rotation[2]);
+            mat4.rotateY(modelMatrix, modelMatrix, object.Rotation[1]);
+            mat4.rotateX(modelMatrix, modelMatrix, object.Rotation[0]);
             actionInstance.update(modelMatrix, 0);
             renderer.actions.push(actionInstance);
         }
