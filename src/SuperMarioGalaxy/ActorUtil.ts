@@ -934,9 +934,7 @@ export function isZeroGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor):
 
 export function makeMtxTRFromQuatVec(dst: mat4, q: ReadonlyQuat, translation: ReadonlyVec3): void {
     mat4.fromQuat(dst, q);
-    dst[12] = translation[0];
-    dst[13] = translation[1];
-    dst[14] = translation[2];
+    setMatrixTranslation(dst, translation);
 }
 
 export function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3): void {

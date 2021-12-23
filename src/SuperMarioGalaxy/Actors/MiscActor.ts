@@ -27,6 +27,7 @@ import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptAc
 import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
+import { addBaseMatrixFollowTarget } from '../Follow';
 import { initFurPlanet } from '../Fur';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
@@ -7110,7 +7111,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
 
-        // addBaseMatrixFollowTarget
+        addBaseMatrixFollowTarget(sceneObjHolder, this, infoIter);
         this.initSubModel();
 
         calcFrontVec(this.front, this);

@@ -54,6 +54,7 @@ import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { TakoHeiInkHolder } from './Actors/Enemy';
+import { BaseMatrixFollowTargetHolder } from './Follow';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1098,6 +1099,7 @@ export class SceneObjHolder {
     public furDrawManager: FurDrawManager | null = null;
     public namePosHolder: NamePosHolder | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
+    public baseMatrixFollowTargetHolder: BaseMatrixFollowTargetHolder | null = null;
     public coinHolder: CoinHolder | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -1179,6 +1181,8 @@ export class SceneObjHolder {
             return this.namePosHolder;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
+        else if (sceneObj === SceneObj.BaseMatrixFollowTargetHolder)
+            return this.baseMatrixFollowTargetHolder;
         else if (sceneObj === SceneObj.CoinHolder)
             return this.coinHolder;
         else if (sceneObj === SceneObj.CoinRotater)
@@ -1261,6 +1265,8 @@ export class SceneObjHolder {
             this.namePosHolder = new NamePosHolder(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
+        else if (sceneObj === SceneObj.BaseMatrixFollowTargetHolder)
+            this.baseMatrixFollowTargetHolder = new BaseMatrixFollowTargetHolder(this);
         else if (sceneObj === SceneObj.CoinHolder)
             this.coinHolder = new CoinHolder(this);
         else if (sceneObj === SceneObj.CoinRotater)
