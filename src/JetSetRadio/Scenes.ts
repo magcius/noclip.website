@@ -42,6 +42,7 @@ export class PVRTextureHolder extends TextureHolder<PVRT.PVR_Texture> {
 
     protected loadTexture(device: GfxDevice, textureEntry: PVRT.PVR_Texture): LoadedTexture | null {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
+        device.setResourceName(gfxTexture, textureEntry.name);
         device.uploadTextureData(gfxTexture, 0, textureEntry.levels.reverse().map((level) => level.data));
         const viewerTexture = textureToCanvas(textureEntry);
         return { gfxTexture, viewerTexture };

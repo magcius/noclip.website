@@ -298,18 +298,21 @@ function findTexlistIndex(texlists: Texlist[], texlistAddr: number): number {
     return texlists.findIndex((v) => v.addr === texlistAddr);
 }
 
-function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], afsFile: AFSReference, modelTableAddr: number, texlistTableAddr: number, tableCount: number): ModelData[] {
+function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], afsFile: AFSReference, modelTableAddr: number, texlistTableAddr: number | null, tableCount: number): ModelData[] {
     const modelTable = execBuffer.createTypedArray(Uint32Array, modelTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
-    const texlistTable = execBuffer.createTypedArray(Uint32Array, texlistTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
+    const texlistTable = texlistTableAddr !== null ? execBuffer.createTypedArray(Uint32Array, texlistTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount) : null;
 
     const models: ModelData[] = [];
     for (let i = 0; i < tableCount; i++) {
         const modelAddr = modelTable[i];
         const modelOffs = modelAddr - STAGE_ALLOCATION_ADDRESS;
-        const texlistAddr = texlistTable[i];
-        const texlistIndex = findTexlistIndex(texlists, texlistAddr);
-        if (texlistIndex < 0 && texlistAddr!=0)
-            console.warn(`Model ${hexzero0x(modelTableAddr)} / ${hexzero0x(i, 2)} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
+        let texlistIndex = -1;
+        if (texlistTable !== null) {
+            const texlistAddr = texlistTable[i];
+            texlistIndex = findTexlistIndex(texlists, texlistAddr);
+            if (texlistIndex < 0 && texlistAddr !== 0)
+                console.warn(`Model ${hexzero0x(modelTableAddr)} / ${hexzero0x(i, 2)} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
+        }
         models.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
     }
     return models;
@@ -450,6 +453,7 @@ function packStageData(texChunk: TexChunk, slices: StageSliceData[]): StageData 
         const modelsStart = Models.length;
         Models.push(... slice.Models);
         Objects.push(... slice.Objects.map((v) => {
+            assert(v.ModelID < slice.Models.length);
             return { ...v, ModelID: v.ModelID + modelsStart };
         }));
     }
@@ -490,7 +494,7 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const TEXTURE_TABLE_ADDRESS = 0x8c106ed4;
         const OBJECT_TABLE_ADDRESS = 0x8c105f94;
         const ASSET_COUNT = 49;
-        const OBJECT_COUNT = 63;
+        const OBJECT_COUNT = 61;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
         const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
@@ -509,9 +513,25 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
+    // Seems to be used for shadows, but uses CNK_VOL chunks as shadow casters for their shadow system.
+    /*
+    function extractSlice4() {
+        const ASSET_TABLE_ADDRESS = 0x8c1076bc;
+        const TEXTURE_TABLE_ADDRESS = null;
+        const OBJECT_TABLE_ADDRESS = 0x8c106288;
+        const ASSET_COUNT = 34;
+        const OBJECT_COUNT = 63;
+  
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSingles(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        return { Models, Objects };
+    }
+    */
+
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
+    // const slice4 = extractSlice4();
 
     const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
     saveStageData(dstFilename, crg1);

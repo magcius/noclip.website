@@ -10,8 +10,7 @@ import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { computeModelMatrixR, lerpAngle } from "../MathHelpers";
-import { PVR_Texture } from "./PVRT";
+import { lerpAngle } from "../MathHelpers";
 import { PVRTextureHolder } from "./Scenes";
 import { assert, nArray } from "../util";
 
@@ -578,7 +577,7 @@ function translateTextureFilter(filter: Ninja.FILTER_MODE): [GfxTexFilterMode, G
         case Ninja.FILTER_MODE.POINT:
             return [GfxTexFilterMode.Point, GfxMipFilterMode.NoMip];
         case Ninja.FILTER_MODE.BILINEAR:
-            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         case Ninja.FILTER_MODE.TRILINEAR:
             return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         default: throw new Error();

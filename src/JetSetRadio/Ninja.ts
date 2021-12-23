@@ -697,25 +697,6 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
 
         const strips = meshset.strips;
 
-        let obj_str = '';
-
-        if (isSimple) {
-            for (let i = 0; i < vertices.positions.length; ++i) {
-                const position = vertices.positions[i];
-                obj_str += `v ${position[0]} ${position[1]} ${position[2]}\n`;
-            }
-
-            for (let i = 0; i < vertices.normals.length; ++i) {
-                const normal = vertices.normals[i];
-                obj_str += `vn ${normal[0]} ${normal[1]} ${normal[2]}\n`;
-            }
-
-            for (let i = 0; i < vertices.uvs.length; ++i) {
-                const uvs = vertices.uvs[i];
-                obj_str += `vt ${uvs[0]} ${uvs[1]}\n`;
-            }
-        }
-
         for (let strip of strips) {
             let flip = strip.flip;
             const index: number[] = [strip.indices[0], strip.indices[1], -1];
@@ -732,7 +713,6 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
                     const f0 = indices[indices.length - 3] + 1;
                     const f1 = indices[indices.length - 2] + 1;
                     const f2 = indices[indices.length - 1] + 1;
-                    obj_str += `f ${f0}/${f0}/${f0} ${f1}/${f1}/${f1} ${f2}/${f2}/${f2}\n`;
                 } else {
                     const length = indices.length;
                     consume(indices, [length + 0, length + 1, length + 2]);
@@ -768,8 +748,6 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
                 flip = !flip;
             }
         }
-
-        //downloadText(`test_${new Date().toISOString()}.obj`, obj_str);
 
         return {material: meshset.material, type: meshset.type, flags: meshset.flags, vertices, indices};
     }

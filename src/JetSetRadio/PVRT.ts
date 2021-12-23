@@ -180,7 +180,15 @@ interface UnpackParams {
 }
 
 function decideParams(mask: PVRTMask, width: number): UnpackParams {
-    const params: UnpackParams = {numCodedComponents: 4, kSrcStride: 2, kDstStride: 4, twiddled: false, mipMaps: false, vqCompressed: false, codeBookSize: 0};
+    const params: UnpackParams = {
+        numCodedComponents: 4,
+        kSrcStride: 2,
+        kDstStride: 4,
+        twiddled: false,
+        mipMaps: false,
+        vqCompressed: false,
+        codeBookSize: 0,
+    };
 
     if (mask === PVRTMask.TwiddledMipMaps) {
         params.twiddled = true;
@@ -210,7 +218,7 @@ function decideParams(mask: PVRTMask, width: number): UnpackParams {
     if (mask === PVRTMask.VectorQuantizedCustomCodeBook || mask === PVRTMask.VectorQuantizedCustomCodeBookMipMaps) {
         if (width < 16)
             params.codeBookSize = 16;
-        else if (width == 64)
+        else if (width === 64)
             params.codeBookSize = 128;
         else
             params.codeBookSize = 256;
@@ -272,7 +280,7 @@ function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, par
         mipHeight /= 2;
         mipSize = mipWidth * mipHeight;
     }
-    
+
     //extract image data
     let x = 0;
     let y = 0;
@@ -283,16 +291,14 @@ function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, par
             const codebookIndex = getUntwiddledTexelPosition(x, y);
 
             // Index of codebook * numbers of 2x2 block components
-            let vqIndex = srcData.getUint8(level.offset + codebookIndex) * params.numCodedComponents;
+            const vqIndex = srcData.getUint8(level.offset + codebookIndex) * params.numCodedComponents;
 
             // Bypass elements in 2x2 block
-            for (let yoffset = 0; yoffset < 2; ++yoffset) {
-                for (let xoffset = 0; xoffset < 2; ++xoffset) {   
-                    const srcPos = (vqIndex + (xoffset * 2 + yoffset)) * params.kSrcStride;
+            for (let yy = 0; yy < 2; ++yy) {
+                for (let xx = 0; xx < 2; ++xx) {   
+                    const srcPos = (vqIndex + (xx * 2 + yy)) * params.kSrcStride;
                     const srcTexel = srcData.getUint16(srcPos, true);
-                                    
-                    const dstPos = ((y * 2 + yoffset) * 2 * mipWidth + (x * 2 + xoffset)) * params.kDstStride;
-
+                    const dstPos = ((y * 2 + yy) * 2 * mipWidth + (x * 2 + xx)) * params.kDstStride;
                     unpackTexelToRGBA(srcTexel, format, dstData, dstPos);
                 }
             }
@@ -304,11 +310,9 @@ function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, par
         } else {
             x = processed % mipWidth;
             y = Math.floor(processed / mipWidth);
-            
             const srcPos = (params.twiddled ? getUntwiddledTexelPosition(x, y) : processed) * params.kSrcStride;
             const srcTexel = srcData.getUint16(level.offset + srcPos, true);
             const dstPos = processed * params.kDstStride;
-
             unpackTexelToRGBA(srcTexel, format, dstData, dstPos);
         }
         
