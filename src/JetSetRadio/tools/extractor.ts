@@ -266,20 +266,20 @@ function extractTexLoadTable(texChunk: TexChunk, execBuffer: ArrayBufferSlice, t
         const texPackTableAddr = view.getUint32(tableOffs + 0x0C, true);
         let texListType = view.getUint32(tableOffs + 0x10, true);
         tableOffs += 0x20;
-        if (texPackTableAddr == 0x00000000 && afsFileID==0 && afsIndex==0 && texListType==0 && texLoadAddr==0)
+        if (texPackTableAddr === 0x00000000 && afsFileID===0 && afsIndex===0 && texListType===0 && texLoadAddr===0)
             break;
-        if (texPackTableAddr==0) 
+        if (texPackTableAddr===0) 
             continue;
         if (texLoadOverride > 0)
             texLoadAddr = texLoadOverride;
         // xayrga: will we ever load the segalogo?
-        if (afsFileID==0)
+        if (afsFileID===0)
             continue;
         const afsFilename = filenames[afsFileID];
         if (!afsFilename)
             continue;
         const txpFile = afsLoad(afsFilename, afsIndex);
-        if (texListType==0)
+        if (texListType===0)
             continue;
         if (textableFormatOverride > 0)
             texListType = textableFormatOverride;
@@ -579,14 +579,9 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
 
-
-   //extractTexLoadTable(texChunk, execBuffer, 0x8c1b3f28, 0x8cDA0000, 1, 2);
-   // extractTexLoadTable(texChunk, execBuffer, 0x8c1b3f88, 0x8CDA0000, 1, 2);
     extractTexLoadTable(texChunk, execBuffer, 0x8c1c7350,0x8cf00000, 1, 4);
     extractTexLoadTable(texChunk, execBuffer, 0x8c185db0);
-    
     extractTexLoadTable(texChunk, execBuffer, 0x8c1c6430, 0x8Cf00000,1,5);
-    //
     extractTexLoadTable(texChunk, execBuffer, 0x8c1c7290, 0x8Cf00000,1);
     const SCENE_FILE = afsLoad('STAGE3.AFS', 0);
 
