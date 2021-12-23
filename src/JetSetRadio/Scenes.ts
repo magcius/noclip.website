@@ -253,6 +253,7 @@ class ModelCache {
             return this.modelData.get(id)!;
 
         const model = this.stageData.Models[id];
+        //console.warn(`${hexzero0x(id)}`)
         const binData = this.getAFSRef(model);
         const stageLoadAddr = 0x8CB00000;
         const objects = Ninja.parseNjsObjects(binData, stageLoadAddr, model.Offset);
@@ -308,6 +309,8 @@ export const id = 'JetSetRadio';
 export const name = "Jet Set Radio";
 export const sceneDescs = [
     new JetSetRadioSceneDesc('Stage1'),
+	new JetSetRadioSceneDesc('Stage2'),
+	new JetSetRadioSceneDesc('Stage3'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
