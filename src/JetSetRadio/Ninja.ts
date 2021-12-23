@@ -2,6 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec2, vec3, vec4 } from "gl-matrix";
 import { Color, colorNewFromRGBA, TransparentBlack, White } from "../Color";
+import { hexzero0x } from "../util";
 
 function colorNewFromARGB8(n: number): Color {
     const a = ((n >>> 24) & 0xFF) / 0xFF;
@@ -807,7 +808,10 @@ function parseNjsObject(buffer: ArrayBufferSlice, baseOffset: number, offset: nu
 	const scale:    vec3 = readVec3(view, offset + 0x20, true);
 
     const modelOffset = parseOffset(view.getUint32(offset + 0x04, true), baseOffset);
-    const model = parseNjsModel(buffer, baseOffset, modelOffset);
+   
+    let model 
+    if (modelOffset > 0) 
+        model = parseNjsModel(buffer, baseOffset, modelOffset);   
 
     return { flags, index, parent, child, sibling, position, rotation, scale, model };
 }
