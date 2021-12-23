@@ -392,24 +392,24 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const SCENE_FILE = afsLoad('STAGE1.AFS', 0);
 
     function extractSlice1() {
-        const ASSET_TABLE_ADDRESS = 0x8c106f9c;
-        const TEXTURE_TABLE_ADDRESS = 0x8c107064;
-        const OBJECT_TABLE_ADDRESS = 0x8c105f94;
-        const ASSET_COUNT = 49;
-        const OBJECT_COUNT = 50;
-
-        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
-        return { Models, Objects };
-    }
-
-    function extractSlice2() {
         const ASSET_TABLE_ADDRESS = 0x8c1063b4;
         const TEXTURE_TABLE_ADDRESS = 0x8c106648;
         const OBJECT_TABLE_ADDRESS = 0x8c105e98;
         const ASSET_COUNT = 165;
         const OBJECT_COUNT = 62;
     
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        return { Models, Objects };
+    }
+
+    function extractSlice2() {
+        const ASSET_TABLE_ADDRESS = 0x8c106e0c;
+        const TEXTURE_TABLE_ADDRESS = 0x8c106ed4;
+        const OBJECT_TABLE_ADDRESS = 0x8c105f94;
+        const ASSET_COUNT = 49;
+        const OBJECT_COUNT = 50;
+
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
         const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
         return { Models, Objects };
