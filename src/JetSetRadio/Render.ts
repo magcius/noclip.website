@@ -282,7 +282,7 @@ export class NjsMeshInstance {
         this.megaStateFlags = {
             depthCompare: GfxCompareMode.GreaterEqual,
             depthWrite: true,
-            cullMode: doubleSided ? GfxCullMode.None : GfxCullMode.None,
+            cullMode: doubleSided ? GfxCullMode.None : GfxCullMode.Back,
         };
 
         const useAlpha = !!(this.data.mesh.flags & Ninja.NJS_ATTRIBUTE_FLAGS.USE_ALPHA);
