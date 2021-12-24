@@ -997,7 +997,7 @@ class GloverMeshRenderer {
         private cache: GfxRenderCache,
         private segments: ArrayBufferSlice[],
         private textures: Textures.GloverTextureHolder,
-        private meshData: GloverObjbank.Mesh)
+        public meshData: GloverObjbank.Mesh)
     {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
@@ -1377,6 +1377,9 @@ export class GloverFlipbookRenderer {
     
     public isGarib: boolean = false;
 
+    public shadowPosition: vec3 | null = null;
+    public shadowNormal: vec3 | null = null;
+
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
@@ -1524,6 +1527,11 @@ export class GloverFlipbookRenderer {
                 const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, true);
             }
+        }
+
+        if (this.shadowPosition !== null) {
+            // TODO: draw an actual shadow
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.shadowPosition, "o", 0, White, { outline: 6 });
         }
 
         renderInstManager.popTemplateRenderInst();

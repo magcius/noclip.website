@@ -34,6 +34,8 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
 import { framesets, collectibleFlipbooks } from './framesets';
+import { rayTriangleIntersection } from './shadow';
+
 
 import { KaitaiStream } from 'kaitai-struct';
 
@@ -865,9 +867,63 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
+        // TODO: decompose and calculate for shadow-flagged actors, as well
+        for (let flipbookRenderer of sceneRenderer.flipbooks) {
+            // TODO: only do this on the bounding box which is both
+            //       overlapping in x+z, and also has the smallest
+            //       positive y distance between the bottom of the
+            //       shadow-caster bbox and top of the shadow-surface
+            //       bbox
+            let closestIntersection = null;
+            let closestFace = null;
+            let closestIntersectionDist = Infinity;
+            const casterOrigin = vec3.create();
+            mat4.getTranslation(casterOrigin, flipbookRenderer.drawMatrix);
+            // const ray = vec3.fromValues(casterOrigin[0], casterOrigin[1]-1, casterOrigin[2]);
+            const ray = vec3.fromValues(0, -1, 0);
+            for (let actorRenderer of sceneRenderer.opaqueActors) {
+                const geo = actorRenderer.rootMesh.renderer.meshData.geometry;
+                if (geo === undefined || geo.numFaces === 0) {
+                    continue;
+                }
+                for (let faceIdx = 0; faceIdx < geo.faces.length; faceIdx++) {
+                    const surfaceOrigin = vec3.create();
+                    mat4.getTranslation(surfaceOrigin, actorRenderer.modelMatrix);
+                    const face = geo.faces[faceIdx];
+                    const v0 = geo.vertices[face.v0];
+                    const v1 = geo.vertices[face.v1];
+                    const v2 = geo.vertices[face.v2];
+                    // TODO: don't reallocate every tri
+                    const triangle = [
+                        vec3.fromValues(v0.x + surfaceOrigin[0], v0.y + surfaceOrigin[1], v0.z + surfaceOrigin[2]),
+                        vec3.fromValues(v1.x + surfaceOrigin[0], v1.y + surfaceOrigin[1], v1.z + surfaceOrigin[2]),
+                        vec3.fromValues(v2.x + surfaceOrigin[0], v2.y + surfaceOrigin[1], v2.z + surfaceOrigin[2])
+                    ]
+                    const intersection = rayTriangleIntersection(casterOrigin, ray, triangle);
+                    if (intersection === null) {
+                        continue;
+                    } else {
+                        const dist = vec3.dist(intersection, casterOrigin);
+                        if (dist < closestIntersectionDist) {
+                            closestIntersection = intersection;
+                            closestIntersectionDist = dist;
+                            closestFace = triangle;
+                        }
+                    }
+                }
+            } 
+            if (closestIntersection !== null && closestFace !== null) {
+                flipbookRenderer.shadowPosition = closestIntersection;
+                const v1 = vec3.sub(closestFace[1], closestFace[1], closestFace[0]);
+                const v2 = vec3.sub(closestFace[1], closestFace[2], closestFace[0]);
+                vec3.cross(closestFace[0], v1, v2)
+                flipbookRenderer.shadowNormal = closestFace[0];
+            }
+        }
+
+
         sceneRenderer.renderPassDescriptor = makeAttachmentClearDescriptor(
             colorNewFromRGBA(skyboxClearColor[0], skyboxClearColor[1], skyboxClearColor[2]));
-
 
         return sceneRenderer;
     }
