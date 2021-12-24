@@ -19,13 +19,14 @@ import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, getSizBit
 import { DeviceProgram } from "../Program";
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { Color, colorNewFromRGBA, colorNewCopy } from "../Color";
+import { Color, colorNewFromRGBA, colorNewCopy, White } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 import { GloverObjbank, GloverTexbank } from './parsers';
-
+import { Flipbook } from './framesets';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -631,7 +632,7 @@ export class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean = false, isBillboard: boolean = false): void {
         if (!this.visible)
             return;
 
@@ -656,7 +657,11 @@ export class DrawCallInstance {
         }
 
         mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, this.drawMatrix);
+        if (isBillboard) {
+            calcBillboardMatrix(DrawCallInstance.modelViewScratch, DrawCallInstance.modelViewScratch, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
+        }
         offs += fillMatrix4x3(mappedF32, offs, DrawCallInstance.modelViewScratch);
+
 
         this.computeTextureMatrix(DrawCallInstance.texMatrixScratch, 0);
         offs += fillMatrix4x2(mappedF32, offs, DrawCallInstance.texMatrixScratch);
@@ -763,6 +768,8 @@ export class GloverActorRenderer {
 
     public sortKey: number;
 
+    private showDebugInfo: boolean = false;
+
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
@@ -805,6 +812,10 @@ export class GloverActorRenderer {
         this.rootMesh.setVertexColorsEnabled(enabled);        
     }
 
+    public setDebugInfoVisible(enabled: boolean): void {
+        this.showDebugInfo = enabled; 
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.visible !== true) {
             return;
@@ -818,10 +829,15 @@ export class GloverActorRenderer {
         mat4.getTranslation(lookatScratch, this.modelMatrix);
 
         template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
-        // TODO: remove
-        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, ""+vec3.distance(depthScratch, lookatScratch), 0, White, { outline: 6 });
-        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.renderMode.toString(2), 0, White, { outline: 6 });
-        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.name, 0, White, { outline: 6 });
+
+        if (this.showDebugInfo) {
+            const txt = this.actorObject.mesh.name.replace(/\0/g, '') + "(0x" + this.actorObject.objId.toString(16) + ")\n" + this.actorObject.mesh.renderMode.toString(16);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, txt, 0, White, { outline: 6 });
+            // TODO: remove
+            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, ""+vec3.distance(depthScratch, lookatScratch), 0, White, { outline: 6 });
+            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.renderMode.toString(2), 0, White, { outline: 6 });
+            // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.name, 0, White, { outline: 6 });
+        }
 
         const sceneParamsSize = 16;
 
@@ -1324,6 +1340,189 @@ export class GloverBackdropRenderer {
             for (let drawCall of this.rspOutput.drawCalls) {
                 const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, true);
+            }
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.rspOutput !== null) {
+            for (let drawCall of this.rspOutput.drawCalls) {
+                drawCall.destroy(device);
+            }
+        }
+    }
+}
+
+export class GloverFlipbookRenderer {
+    private rspOutput: GloverRSPOutput | null;
+
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+
+    private inputState: GfxInputState;
+
+    public drawMatrix: mat4 = mat4.create();
+
+    private frameDelay: number;
+    private lastFrameAdvance: number = 0;
+    private frameCounter: number = 0;
+    private curFrame: number;
+
+    private frames: number[] = [];
+
+    private sortKey: number;
+
+    public visible: boolean = true;
+    
+    public isGarib: boolean = false;
+
+    constructor(
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder,
+        flipbookMetadata: Flipbook,
+        startFrame: number = 0)
+    {
+        this.curFrame = startFrame;
+
+        const layer = GfxRendererLayer.OPAQUE + 1; // TODO
+        this.sortKey = makeSortKey(layer);
+
+        this.megaStateFlags = {};
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+
+        this.reloadFrameset(flipbookMetadata)
+    }
+
+    public reloadFrameset(flipbookMetadata: Flipbook): void {
+        /* Object bank in first segment, then one
+           texture bank for each subsequent */
+        const segments = this.textures.textureSegments();
+
+        // TODO: dispose of old render data, if it exists
+
+        // TODO: implement flipbook frame delays
+
+        this.curFrame = this.curFrame % flipbookMetadata.frameset.length;
+        this.frameDelay = flipbookMetadata.frameDelay;
+
+        let frame_textures = []
+        for (let frame_id of flipbookMetadata.frameset) {
+            const texFile = this.textures.idToTexture.get(frame_id);
+            if (texFile === undefined) {
+                throw `Texture 0x${frame_id.toString(16)} not loaded`;
+            }
+            frame_textures.push(texFile);
+        }
+
+        const rspState = new GloverRSPState(segments, this.textures);
+
+        initializeRenderState(rspState);
+        setRenderMode(rspState, true, false, true, 1.0);
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+
+        let drawCall = rspState._newDrawCall();
+
+        this.frames = []
+        for (let texture of frame_textures) {
+            this.frames.push(loadRspTexture(rspState, this.textures, texture.id, 
+                G_TX_CLAMP | G_TX_NOMIRROR,
+                G_TX_CLAMP | G_TX_NOMIRROR
+            ))
+        }
+
+        drawCall.textureIndices.push(this.frames[this.curFrame]);
+
+        // TODO: scale properly, based on values from engine
+        let sW = frame_textures[0].width;
+        let sH = frame_textures[0].height;
+        let sX = -sW/2;
+        let sY = -sH/2;
+
+        let ulS = 0;
+        let ulT = 0;
+        let lrS = sW * 32;
+        let lrT = sH * 32;
+
+        const spriteCoords = [
+            [sX, sY, ulS, lrT],
+            [sX, sY + sH, ulS, ulT],
+            [sX + sW, sY + sH, lrS, ulT],
+
+            [sX, sY, ulS, lrT],
+            [sX + sW, sY, lrS, lrT],
+            [sX + sW, sY + sH,  lrS, ulT],
+        ];
+
+        for (let coords of spriteCoords) {
+            const v = new F3DEX.Vertex();
+            v.x = coords[0];
+            v.y = coords[1];
+            v.z = 0;
+            v.tx = coords[2];
+            v.ty = coords[3];
+            v.c0 = 0xFF;
+            v.c1 = 0xFF;
+            v.c2 = 0xFF;
+            v.a = 0xFF;
+            drawCall.vertexCount += 1;
+            drawCall.vertices.push(v)
+        }
+
+        drawCall.renderData = new DrawCallRenderData(this.device, this.cache, rspState.textureCache, rspState.segmentBuffers, drawCall);
+        this.rspOutput = new GloverRSPOutput([drawCall], rspState.textureCache);
+
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+
+        if (this.visible !== true) {
+            return;
+        }
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setMegaStateFlags(this.megaStateFlags);
+
+        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(lookatScratch, this.drawMatrix);
+
+        template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+
+        const sceneParamsSize = 16;
+
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            this.lastFrameAdvance = 0;
+
+            if (this.frameCounter > 0) {
+                this.frameCounter -= 0x20;
+            } else {
+                this.frameCounter = this.frameDelay;
+                this.curFrame += 1;
+                if (this.curFrame >= this.frames.length) {
+                    this.curFrame = 0;
+                }
+            }
+        }
+
+        if (this.rspOutput !== null) {
+            this.rspOutput.drawCalls[0].textureIndices[0] = this.frames[this.curFrame];
+
+            for (let drawCall of this.rspOutput.drawCalls) {
+                const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
+                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, true);
             }
         }
 

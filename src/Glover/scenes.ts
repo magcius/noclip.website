@@ -9,7 +9,7 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import { GloverTextureHolder } from './textures';
 
 
-import { GloverActorRenderer, GloverBackdropRenderer } from './render';
+import { GloverActorRenderer, GloverBackdropRenderer, GloverFlipbookRenderer } from './render';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -33,6 +33,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
+import { framesets, collectibleFlipbooks } from './framesets';
 
 import { KaitaiStream } from 'kaitai-struct';
 
@@ -69,6 +70,7 @@ export class GloverPlatform {
     private velocity = vec3.fromValues(0,0,0);
     private scale = vec3.fromValues(1,1,1);
 
+    public parent: GloverPlatform | undefined = undefined;
 
     // Path
     // TODO: use time deltas instead of frames for this
@@ -115,6 +117,12 @@ export class GloverPlatform {
     }
 
     public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
+        // TODO: make sure this actually pauses
+
+        if (deltaTime == 0) {
+            return;
+        }
+
         let curSpeed = vec3.length(this.velocity);
 
         if (this.path.length > 0) {
@@ -166,7 +174,7 @@ export class GloverPlatform {
             }
         }
 
-        // TODO: add deceleration        
+        // TODO: add deceleration
         vec3.add(this.position, this.position, this.velocity);
 
         this.eulers[0] += this.spinSpeed[0] * deltaTime;
@@ -177,9 +185,16 @@ export class GloverPlatform {
         this.eulers[2] = this.eulers[2] % 360;
         quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
 
+
+        let finalPosition = this.position;
+        if (this.parent !== undefined) {
+            finalPosition = this.scratchVec3
+            vec3.add(finalPosition, this.position, this.parent.position);
+        }
+
         // TODO: remove
         // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, 'Euler: ' + this.eulers, 0, White, { outline: 6 });
-        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.rotation, this.position, this.scale);
+        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.rotation, finalPosition, this.scale);
     }
 }
 
@@ -187,7 +202,11 @@ class GloverRenderer implements Viewer.SceneGfx {
     public opaqueActors: GloverActorRenderer[] = [];
     public translucentActors: GloverActorRenderer[] = [];
     public backdrops: GloverBackdropRenderer[] = [];
+    public flipbooks: GloverFlipbookRenderer[] = [];
+
     public platforms: GloverPlatform[] = [];
+    public platformByTag = new Map<number, GloverPlatform>();
+
 
     public renderHelper: GfxRenderHelper;
 
@@ -209,6 +228,7 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
         const hideDynamicsCheckbox = new UI.Checkbox('Hide dynamic objects', false);
         hideDynamicsCheckbox.onchanged = () => {
             for (let platform of this.platforms) {
@@ -228,6 +248,30 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
+        const madGaribsCheckbox = new UI.Checkbox('Mad garibs', false);
+        madGaribsCheckbox.onchanged = () => {
+            // C-Down, C-Right, C-Down, C-Up, C-Left, C-Down, C-Left, C-Up
+            const flipbookMetadata = madGaribsCheckbox.checked ? collectibleFlipbooks.get(3) : collectibleFlipbooks.get(0);
+            for (let flipbook of this.flipbooks) {
+                if (flipbook.isGarib) {
+                    flipbook.reloadFrameset(flipbookMetadata!);
+                }
+            }
+        };
+        renderHacksPanel.contents.appendChild(madGaribsCheckbox.elem);
+
+
+        const enableDebugInfoCheckbox = new UI.Checkbox('Show debug information', false);
+        enableDebugInfoCheckbox.onchanged = () => {
+            for (let actor of this.opaqueActors) {
+                actor.setDebugInfoVisible(enableDebugInfoCheckbox.checked);
+            }
+            for (let actor of this.translucentActors) {
+                actor.setDebugInfoVisible(enableDebugInfoCheckbox.checked);
+            }
+        };
+        renderHacksPanel.contents.appendChild(enableDebugInfoCheckbox.elem);
 
         return [renderHacksPanel];
 
@@ -255,6 +299,9 @@ class GloverRenderer implements Viewer.SceneGfx {
             //     renderer.modelMatrix[14],
             // );
             // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, pos, renderer.actorObject.objId.toString(16), 0, White, { outline: 6 });
+        }
+        for (let renderer of this.flipbooks) {
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
         for (let renderer of this.translucentActors) {
             // TODO: use sort key to order by camera distance
@@ -310,6 +357,9 @@ class GloverRenderer implements Viewer.SceneGfx {
             renderer.destroy(device);
         }
         for (let renderer of this.backdrops) {
+            renderer.destroy(device);
+        }
+        for (let renderer of this.flipbooks) {
             renderer.destroy(device);
         }
 
@@ -748,6 +798,24 @@ class SceneDesc implements Viewer.SceneDesc {
                     currentPlatform.pathMaxVel = cmd.params.velocity * CONVERT_FRAMERATE;
                     break;
                 }
+                case 'PlatSetParent': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    const parent = sceneRenderer.platformByTag.get(cmd.params.tag);
+                    if (parent === null) {
+                        throw `No parent tagged ${cmd.params.tag}!`;   
+                    }
+                    currentPlatform.parent = parent;
+                    break;
+                }
+                case 'PlatSetTag': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    sceneRenderer.platformByTag.set(cmd.params.tag, currentPlatform);
+                    break;
+                }
                 case 'PlatVentAdvanceFrames': {
                     // TODO: support vent objects, too
                     if (currentPlatform === null) {
@@ -758,6 +826,22 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     break;
                 }
+                case 'Garib': {
+                    // TODO: extra lives don't look right,
+                    //       investigate what else they need
+                    //       to render properly
+                    const flipbookMetadata = collectibleFlipbooks.get(cmd.params.type);
+                    if (flipbookMetadata === undefined) {
+                        throw `Unrecognized collectible type!`;
+                    }
+                    const startFrame = Math.floor(Math.random() * flipbookMetadata.frameset.length);
+                    const flipbook = new GloverFlipbookRenderer(device, cache, textureHolder, flipbookMetadata, startFrame)
+                    flipbook.isGarib = cmd.params.type == 0;
+                    mat4.fromTranslation(flipbook.drawMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    sceneRenderer.flipbooks.push(flipbook);
+                    break;
+                }
+
                 case 'Backdrop': {
                     assert(cmd.params.decalPosX === 0 && cmd.params.decalPosY === 0);
                     assert(cmd.params.decalParentIdx === 0);
