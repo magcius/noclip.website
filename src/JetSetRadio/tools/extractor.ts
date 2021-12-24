@@ -254,7 +254,7 @@ function extractTexLoadTable(texChunk: TexChunk, execBuffer: ArrayBufferSlice, t
     let depth = 0;
     let tableOffs = tableAddr - EXECUTABLE_ALLOCATION_ADDRESS;
     while (true) {
-        if (depth==maxDepth&&maxDepth!=0)
+        if (depth === maxDepth && maxDepth !== 0)
             break;
 
         depth++;
@@ -290,7 +290,9 @@ function extractTexLoadTable(texChunk: TexChunk, execBuffer: ArrayBufferSlice, t
         else if (texListType === 0x03 || texListType === 0x04 || texListType === 0x05)
             extractTexPackTable_03(texChunk, execBuffer, txpFile, texPackTableAddr, 0x8CDA0000);
         else
-            throw `Invalid texlist format ${texListType}`;
+            throw `Invalid texlist format  ${texListType}`;
+
+            
     }
 }
 
@@ -447,7 +449,6 @@ function packStageData(texChunk: TexChunk, slices: StageSliceData[]): StageData 
 
     const Models: ModelData[] = [];
     const Objects: ObjectData[] = [];
-
     for (let i = 0; i < slices.length; i++) {
         const slice = slices[i];
         const modelsStart = Models.length;
@@ -528,12 +529,27 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     }
     */
 
+
+    function extractInteractables() {
+        const ASSET_TABLE_ADDRESS = 0x8c107564;
+        const TEXTURE_TABLE_ADDRESS = 0x8c1075d4;
+        const OBJECT_TABLE_ADDRESS = 0x8c10618c
+        const ASSET_COUNT = 28;
+        const OBJECT_COUNT = 63;
+  
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        return { Models, Objects };
+    }
+
+
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
+    const interactables = extractInteractables();
     // const slice4 = extractSlice4();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables]);
     saveStageData(dstFilename, crg1);
 }
 
@@ -578,7 +594,7 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const ASSET_TABLE_ADDRESS = 0x8c109728;
         const TEXTURE_TABLE_ADDRESS = 0x8c10985c;
         const OBJECT_TABLE_ADDRESS = 0x8c1080bc;
-        const ASSET_COUNT = 80;
+        const ASSET_COUNT = 77;
         const OBJECT_COUNT = 21;
         const OBJECTDATA_SIZE = 0x34;
     
@@ -587,11 +603,28 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
+
+    
+    function extractInteractables() {
+        const ASSET_TABLE_ADDRESS = 0x8c10a004;
+        const TEXTURE_TABLE_ADDRESS = 0x8c10a170;
+        const OBJECT_TABLE_ADDRESS = 0x8c1080c0;
+        const ASSET_COUNT = 91;
+        const OBJECT_COUNT = 113;
+        const OBJECTDATA_SIZE = 0x34;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT,OBJECTDATA_SIZE);
+        return { Models, Objects };
+    }
+
+
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
+    const interactables = extractInteractables();
 
-    const crg1 = packStageData(texChunk, [slice1 , slice2, slice3]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables]);
     saveStageData(dstFilename, crg1);
 }
 
