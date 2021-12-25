@@ -9,7 +9,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
-import { computeModelMatrixR, vec3SetAll } from "../MathHelpers";
+import { computeModelMatrixR, computeRotationMatrixFromSRTMatrix, getMatrixAxisX, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
@@ -152,6 +152,16 @@ class ParticleEmitter {
     public setGlobalTranslation(v: ReadonlyVec3): void {
         if (this.baseEmitter !== null)
             this.baseEmitter.setGlobalTranslation(v);
+    }
+
+    public setGlobalSRTMatrix(v: ReadonlyMat4): void {
+        if (this.baseEmitter !== null) {
+            getMatrixTranslation(this.baseEmitter.globalTranslation, v);
+            this.baseEmitter.globalScale[0] = Math.hypot(v[0], v[4], v[8]);
+            this.baseEmitter.globalScale[1] = Math.hypot(v[1], v[5], v[9]);
+            this.baseEmitter.globalScale[2] = Math.hypot(v[2], v[6], v[10]);
+            computeRotationMatrixFromSRTMatrix(this.baseEmitter.globalRotation, v);
+        }
     }
 
     public setGlobalScale(v: ReadonlyVec3): void {
@@ -590,6 +600,20 @@ export class MultiEmitter {
         }
     }
 
+    public setGlobalSRTMatrix(v: ReadonlyMat4, emitterIndex: number = -1): void {
+        if (emitterIndex === -1) {
+            for (let i = 0; i < this.singleEmitters.length; i++) {
+                const emitter = this.singleEmitters[i];
+                if (emitter.isValid())
+                    emitter.particleEmitter!.setGlobalSRTMatrix(v);
+            }
+        } else {
+            const emitter = this.singleEmitters[emitterIndex];
+            if (emitter.isValid())
+                emitter.particleEmitter!.setGlobalSRTMatrix(v);
+        }
+    }
+
     public setGlobalScale(v: ReadonlyVec3, emitterIndex: number = -1): void {
         if (emitterIndex === -1) {
             for (let i = 0; i < this.singleEmitters.length; i++) {
@@ -921,7 +945,7 @@ export class EffectKeeper {
         this.updateFloorCode(sceneObjHolder);
     }
 
-    private updateFloorCodeTriangle(sceneObjHolder: SceneObjHolder, triangle: Triangle): void {
+    public updateFloorCodeTriangle(sceneObjHolder: SceneObjHolder, triangle: Triangle): void {
         this.oldFloorCode = this.floorCode;
         this.floorCode = getFloorCodeIndex(sceneObjHolder, triangle);
     }
@@ -1135,7 +1159,7 @@ export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, nam
     actor.effectKeeper.createEmitter(sceneObjHolder, name);
 }
 
-export function emitEffectHit(sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: ReadonlyVec3, name: string | null = null): void {
+export function emitEffectHitPos(sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: ReadonlyVec3, name: string | null = null): void {
     if (actor.effectKeeper === null)
         return;
     if (name === null)
@@ -1143,6 +1167,16 @@ export function emitEffectHit(sceneObjHolder: SceneObjHolder, actor: LiveActor, 
     const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
     if (emitter !== null)
         emitter.setGlobalTranslation(pos);
+}
+
+export function emitEffectHitMtx(sceneObjHolder: SceneObjHolder, actor: LiveActor, mtx: ReadonlyMat4, name: string | null = null): void {
+    if (actor.effectKeeper === null)
+        return;
+    if (name === null)
+        name = 'HitMarkNormal';
+    const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
+    if (emitter !== null)
+        emitter.setGlobalSRTMatrix(mtx);
 }
 
 export function isEffectValid(actor: LiveActor, name: string): boolean {

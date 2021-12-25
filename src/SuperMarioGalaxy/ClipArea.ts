@@ -31,7 +31,7 @@ import { reverseDepthForDepthOffset } from "../gfx/helpers/ReversedDepthHelpers"
 import { isConnectedWithRail } from "./RailRider";
 import { MapPartsRailMover, MapPartsRotator } from "./MapParts";
 import { addHitSensorMapObj } from "./HitSensor";
-import { emitEffectHit } from "./EffectSystem";
+import { emitEffectHitPos } from "./EffectSystem";
 import { createStageSwitchCtrl, isExistStageSwitchAppear, StageSwitchCtrl } from "./Switch";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { TDDraw } from "./DDraw";
@@ -409,7 +409,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
 
                 const dropSize = fallback(getRailPointArg0(this, passPoint), -1.0);
                 if (dropSize > 0.0) {
-                    emitEffectHit(sceneObjHolder, this, scratchVec3a, 'Splash');
+                    emitEffectHitPos(sceneObjHolder, this, scratchVec3a, 'Splash');
                     appearClipAreaDrop(sceneObjHolder, scratchVec3a, dropSize);
                 }
             }

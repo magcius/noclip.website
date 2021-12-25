@@ -8,7 +8,7 @@ import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
 import { dfRange, dfShow } from '../../DebugFloaters';
-import { drawWorldSpaceBasis, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -18,7 +18,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegX, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegX, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
 import * as Viewer from '../../viewer';
@@ -2433,32 +2433,60 @@ export class SpinDriverPathDrawInit extends NameObj {
     }
 }
 
-function calcParabolicFunctionParam(dst: { coef2: number, coef1: number }, a: number, b: number): void {
-    const v0 = a * (a - b);
-    if (v0 > 0.0) {
+function calcParabolicFunctionParam(dst: { coef2: number, coef1: number }, height: number, b: number): void {
+    const v0 = height * (height - b);
+    if (v0 > 0.0 && !isNearZero(b, 0.001)) {
         const v1 = Math.sqrt(v0);
-        const v2 = (a + v1) / b;
-        const v3 = -a / v2**2;
+        let v2 = (height + v1) / b;
+        if (v2 < 0.0 || v2 > 1.0) {
+            v2 = (height - v1) / b;
+            if (v2 < 0.0 || v2 > 1.0)
+                v2 = 1.0;
+        }
+        const v3 = -height / v2**2;
         dst.coef2 = v3;
         dst.coef1 = v2 * v3 * -2.0;
+    } else if (v0 > 0.0) {
+        dst.coef2 = height * -4.0;
+        dst.coef1 = height * 4.0;
     } else {
-        dst.coef2 = -a;
-        dst.coef1 = a - b;
+        dst.coef2 = -height;
+        dst.coef1 = height + b;
     }
 }
 
-class ParabolicPath {
+export class ParabolicPath {
     private startPos = vec3.create();
     private axisY = vec3.create();
-    private axisZ = vec3.create();
-    private axisZLength: number;
+    private axisX = vec3.create();
+    private distanceX: number;
 
     public coef2: number = 0;
     public coef1: number = 0;
 
     public calcPosition(dst: vec3, t: number): void {
-        vec3.scaleAndAdd(dst, this.startPos, this.axisZ, t * this.axisZLength);
+        vec3.scaleAndAdd(dst, this.startPos, this.axisX, t * this.distanceX);
         vec3.scaleAndAdd(dst, dst, this.axisY, (this.coef2 * t**2) + this.coef1*t);
+    }
+
+    public calcDirection(dst: vec3, t: number, eps: number = 0.01): void {
+        let t0: number, t1: number;
+
+        if (t < eps) {
+            t0 = 0;
+            t1 = eps;
+        } else if (t > 1.0 - eps) {
+            t0 = 1.0 - eps;
+            t1 = 1.0;
+        } else {
+            t0 = t;
+            t1 = t + eps;
+        }
+
+        this.calcPosition(scratchVec3a, t0);
+        this.calcPosition(scratchVec3b, t1);
+        vec3.sub(dst, scratchVec3b, scratchVec3a);
+        vec3.normalize(dst, dst);
     }
 
     public initFromMaxHeight(startPos: ReadonlyVec3, railEndPos: ReadonlyVec3, railStartPos: ReadonlyVec3): void {
@@ -2470,14 +2498,60 @@ class ParabolicPath {
         this.initFromUpVector(startPos, railEndPos, scratchVec3a, dot);
     }
 
-    private initFromUpVector(startPos: ReadonlyVec3, railEndPos: ReadonlyVec3, up: ReadonlyVec3, dot: number): void {
+    private initFromUpVector(p0: ReadonlyVec3, p1: ReadonlyVec3, up: ReadonlyVec3, height: number): void {
         vec3.copy(this.axisY, up);
-        vec3.sub(scratchVec3a, railEndPos, startPos);
-        const dot2 = vecKillElement(this.axisZ, scratchVec3a, this.axisY);
-        this.axisZLength = vec3.length(this.axisZ);
-        vec3.normalize(this.axisZ, this.axisZ);
-        // calcParabolicFunctionParam(this, dot, dot2);
-        vec3.copy(this.startPos, startPos);
+        vec3.sub(scratchVec3a, p1, p0);
+        const dot2 = vecKillElement(this.axisX, scratchVec3a, this.axisY);
+        this.distanceX = vec3.length(this.axisX);
+        vec3.normalize(this.axisX, this.axisX);
+        calcParabolicFunctionParam(this, height, dot2);
+        vec3.copy(this.startPos, p0);
+    }
+
+    public initFromUpVectorAddHeight(p0: ReadonlyVec3, p1: ReadonlyVec3, up: ReadonlyVec3, height: number): void {
+        vec3.sub(scratchVec3a, p1, p0);
+        height += Math.max(0, vec3.dot(scratchVec3a, up));
+        this.initFromUpVector(p0, p1, up, height);
+    }
+
+    private eval(v: number): number {
+        return v * (this.coef1 + v * this.coef2);
+    }
+
+    private getLength(start: number, end: number, segs: number): number {
+        const segLen = (end - start) / segs;
+        const len = this.distanceX * segLen;
+        let res = 0.0;
+
+        segs = Math.max(1, segs);
+        let lastEval = this.eval(start);
+        for (let i = 0; i < segs; i++) {
+            const segT = start + segLen * (i + 1);
+            const segEval = this.eval(segT);
+
+            let segAmt = len**2 + (segEval - lastEval)**2;
+            if (segAmt > 0.0) {
+                const rcp = 1.0 / Math.sqrt(segAmt);
+                segAmt = -(rcp * rcp * segAmt - 3.0) * rcp * segAmt * 0.5;
+            }
+            res += segAmt;
+
+            lastEval = segEval;
+        }
+
+        return res;
+    }
+
+    public calcPathSpeedFromAverageSpeed(averageSpeed: number): number {
+        return averageSpeed / this.getLength(0.0, 1.0, 10);
+    }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder, nPoints = 50): void {
+        for (let i = 1/nPoints; i < 1.0; i += 1/nPoints) {
+            this.calcPosition(scratchVec3b, i - 1/nPoints);
+            this.calcPosition(scratchVec3c, i);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, scratchVec3b, scratchVec3c);
+        }
     }
 }
 
@@ -2535,11 +2609,11 @@ class SpinDriverShootPath {
     }
 
     public debugDraw(sceneObjHolder: SceneObjHolder): void {
-        // this.railRider.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
         /*
+        this.railRider.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
         if (this.parabolicPath !== null) {
             drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisY, 100, Green);
-            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisZ, 100, Blue);
+            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisX, 100, Blue);
         }
         */
     }
@@ -2606,6 +2680,10 @@ class SpinDriverPathDrawer extends LiveActor {
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        /*const p = new ParabolicPath();
+        p.initFromUpVectorAddHeight(vec3.fromValues(100, 25, 0), vec3.fromValues(180, 50, 500), Vec3UnitX, 100);
+        p.debugDraw(sceneObjHolder);*/
 
         if (!isValidDraw(this) || !this.shootPath.shouldDraw())
             return;
@@ -8633,6 +8711,9 @@ export class WhirlPoolAccelerator extends LiveActor {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!isValidDraw(this))
+            return;
+
         const device = sceneObjHolder.modelCache.device;
 
         this.ddraw.beginDraw();
