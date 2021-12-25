@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
+import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 
 export interface NameObjFactory {
@@ -136,6 +136,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("ExterminationSkeletalFishBaby",  ExterminationChecker),
     _("Pukupuku",                       Pukupuku),
     _("Jellyfish",                      Jellyfish),
+    _("Meramera",                       Meramera),
+    _("IceMeramera",                    Meramera),
 
     // TODO(jstpierre): Figure out what to do with this
     N("Petari"),

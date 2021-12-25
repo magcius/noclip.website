@@ -12,13 +12,13 @@ import { initFur } from '../Fur';
 import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, HitSensorInfo, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, resetPosition, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { MapPartsRailMover, MapPartsRailPointPassChecker } from '../MapParts';
 import { getWaterAreaInfo, isCameraInWater, isInWater, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType } from '../NameObj';
 import { getRailArg, isConnectedWithRail } from '../RailRider';
-import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength, initShadowVolumeFlatModel, initShadowController, addShadowVolumeFlatModel, addShadowVolumeBox, setShadowDropPosition, setShadowVolumeBoxSize, onCalcShadowDropPrivateGravity, setShadowDropPositionPtr } from '../Shadow';
+import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength, initShadowVolumeFlatModel, initShadowController, addShadowVolumeFlatModel, addShadowVolumeBox, setShadowDropPosition, setShadowVolumeBoxSize, onCalcShadowDropPrivateGravity, setShadowDropPositionPtr, addShadowSurfaceCircle, setShadowDropStartOffset, addShadowVolumeSphere } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { appearCoinPop, appearCoinPopToDirection, declareCoin, isEqualStageName, ParabolicPath } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
@@ -3779,7 +3779,7 @@ function normalizeAbs(v: number, min: number, max: number): number {
 }
 
 function addVelocityKeepHeightUseShadow(actor: LiveActor, height: number, speedUpMult: number, speedDownMult: number, speedMax: number, shadowName: string | null = null): void {
-    const shadowLength = shadowName !== null ? getShadowNearProjectionLength(actor) : getShadowProjectionLength(actor, shadowName);
+    const shadowLength = shadowName !== null ? getShadowProjectionLength(actor, shadowName) : getShadowNearProjectionLength(actor);
     if (shadowLength === null)
         return;
 
@@ -7573,5 +7573,276 @@ export class Jellyfish extends LiveActor<JellyfishNrv> {
             if (!this.isNerve(JellyfishNrv.Threat))
                 this.setNerve(JellyfishNrv.Threat);
         }
+    }
+}
+
+const enum MerameraEffectHead { None, Wait, Chase, Escape }
+const enum MerameraEffectBody { None, Heat, CoolDown, Cold }
+const enum MerameraElementType { Fire, Ice, }
+const enum MerameraNrv { Wait, Walk, WalkEnd, Float, Runaway, StartDiving, Diving, }
+export class Meramera extends LiveActor<MerameraNrv> {
+    private elementType: MerameraElementType;
+    private effectExtinguishSideMtx = mat4.create();
+    private effectMtx = mat4.create();
+    private effectFallMtx = mat4.create();
+    private effectHead = MerameraEffectHead.None;
+    private effectBody = MerameraEffectBody.None;
+    private origTranslation = vec3.create();
+    private appearType: number;
+    private axisZ = vec3.create();
+    private poseQuat = quat.create();
+    private targetWalkPos = vec3.create();
+    private effectUp = vec3.create();
+    private distanceToGoal = -1;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+
+        if (this.name === 'Meramera' || this.name === 'ChildMeramera')
+            this.elementType = MerameraElementType.Fire;
+        else if (this.name === 'IceMeramera' || this.name === 'ChildIceMeramera')
+            this.elementType = MerameraElementType.Ice;
+
+        const arcName = ['Meramera', 'IceMeramera'];
+        this.initModelManagerWithAnm(sceneObjHolder, arcName[this.elementType]);
+        connectToSceneEnemy(sceneObjHolder, this);
+
+        // initSensor()
+        this.initHitSensor();
+        addHitSensorEnemy(sceneObjHolder, this, 'body', 8, this.scale[0] * 55.0, Vec3Zero);
+        addHitSensorEnemy(sceneObjHolder, this, 'break', 8, this.scale[0] * 10.0, Vec3Zero);
+        vec3.set(scratchVec3a, 50.0, 0.0, 0.0);
+        addHitSensorAtJointEnemy(sceneObjHolder, this, 'attack', "JointRoot", 8, this.scale[0] * 70.0, scratchVec3a);
+        invalidateHitSensor(this, 'break');
+
+        // initBind()
+        this.initBinder(this.scale[0] * 45.0, 0.0, 0);
+        this.calcGravityFlag = true;
+
+        // initEffect()
+        this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostMtx(this, 'ExtinguishSide', this.effectExtinguishSideMtx);
+        setEffectHostMtx(this, 'ExtinguishSideLight', this.effectExtinguishSideMtx);
+        setEffectHostMtx(this, 'Wait', this.effectMtx);
+        setEffectHostMtx(this, 'Escape', this.effectMtx);
+        setEffectHostMtx(this, 'ExtinguishSmoke', this.effectMtx);
+        setEffectHostMtx(this, 'ChaseStart', this.effectMtx);
+        setEffectHostMtx(this, 'Chase', this.effectMtx);
+        setEffectHostMtx(this, 'Attack', this.effectMtx);
+        setEffectHostMtx(this, 'Fall', this.effectFallMtx);
+
+        // initShadow()
+        initShadowController(this);
+        addShadowSurfaceCircle(sceneObjHolder, this, "WaterSurface", this.scale[0] * 50.0);
+        setShadowDropStartOffset(this, "WaterSurface", 150.0);
+        addShadowVolumeSphere(sceneObjHolder, this, "Ground", this.scale[0] * 50.0);
+
+        calcGravity(sceneObjHolder, this);
+        vec3.copy(this.origTranslation, this.translation);
+        this.initNerve(MerameraNrv.Wait);
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+
+        declareCoin(sceneObjHolder, this, 1);
+
+        // initAppearState()
+        this.appearType = fallback(getJMapInfoArg0(infoIter), -1);
+        this.resetAppear(sceneObjHolder);
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        this.updatePose();
+        vec3.negate(scratchVec3a, this.gravityVector);
+        turnVecToVecRadian(this.effectUp, this.effectUp, scratchVec3a, 1.0, this.axisZ);
+        const sinMtx = getJointMtxByName(this, 'Sin')!;
+        getMatrixTranslation(scratchVec3a, sinMtx);
+        makeMtxUpNoSupportPos(this.effectMtx, this.effectUp, scratchVec3a);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MerameraNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === MerameraNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Wait');
+                this.emitEffectHead(sceneObjHolder, MerameraEffectHead.Wait);
+                this.emitEffectHeatBody(sceneObjHolder);
+            }
+
+            addVelocityKeepHeightUseShadow(this, 130.0, 0.5 * deltaTimeFrames, 0.1 * deltaTimeFrames, 15.0 * deltaTimeFrames);
+            attenuateVelocity(this, 0.98 ** deltaTimeFrames);
+            reboundVelocityFromCollision(this, 0.0, 0.0, 1.0);
+    
+            if (this.tryChase(sceneObjHolder))
+                return;
+    
+            if (this.tryWalk(sceneObjHolder))
+                return;
+        } else if (currentNerve === MerameraNrv.Walk) {
+            if (isFirstStep(this)) {
+                this.emitEffectHead(sceneObjHolder, MerameraEffectHead.Wait);
+                this.emitEffectHeatBody(sceneObjHolder);
+            }
+
+            addVelocityKeepHeightUseShadow(this, 130.0, 0.5 * deltaTimeFrames, 0.1 * deltaTimeFrames, 15.0 * deltaTimeFrames);
+            this.addToTargetMovingAccel(this.targetWalkPos, 0.05 * deltaTimeFrames, 0.995 * deltaTimeFrames);
+            attenuateVelocity(this, 0.98 ** deltaTimeFrames);
+            reboundVelocityFromCollision(this, 0.0, 0.0, 1.0);
+
+            if (this.tryChase(sceneObjHolder))
+                return;
+    
+            if (this.tryWalkEnd(sceneObjHolder))
+                return;
+        }
+    }
+
+    private updatePose(): void {
+        const rollBall = this.isNerve(MerameraNrv.Runaway) || this.isNerve(MerameraNrv.StartDiving) || this.isNerve(MerameraNrv.Diving);
+
+        vec3.negate(scratchVec3a, this.gravityVector);
+        if (rollBall) {
+            rotateQuatRollBall(this.poseQuat, this.velocity, scratchVec3a, 50.0);
+        } else {
+            blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.25, 0.25);
+        }
+    }
+
+    private addMovingAccel(delta: ReadonlyVec3, speed: number, turnSpeed: number): void {
+        vecKillElement(scratchVec3a, delta, this.gravityVector);
+        this.distanceToGoal = vec3.length(scratchVec3a);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        if (!isNearZeroVec3(scratchVec3a, 0.001)) {
+            if (turnSpeed <= -1.0 || turnSpeed >= 1.0)
+                vec3.copy(this.axisZ, scratchVec3a);
+            else
+                turnVecToVecCos(this.axisZ, this.axisZ, scratchVec3a, turnSpeed, this.gravityVector, 0.02);
+        }
+
+        vec3.scaleAndAdd(this.velocity, this.velocity, this.axisZ, speed);
+    }
+
+    private addToTargetMovingAccel(target: ReadonlyVec3, speed: number, turnSpeed: number): void {
+        vec3.sub(scratchVec3a, target, this.translation);
+        this.addMovingAccel(scratchVec3a, speed, turnSpeed);
+    }
+
+    private resetAppear(sceneObjHolder: SceneObjHolder): void {
+        vec3.copy(this.translation, this.origTranslation);
+        vec3.zero(this.velocity);
+        calcGravity(sceneObjHolder, this);
+        if (this.appearType === 1) {
+            startBck(this, 'Wait');
+            hideModel(this);
+            this.calcBinderFlag = false;
+            vec3.negate(scratchVec3a, this.gravityVector);
+            makeMtxUpNoSupportPos(this.effectFallMtx, scratchVec3a, this.translation);
+            this.deleteEffectHead(sceneObjHolder, false);
+            this.emitEffectColdBody(sceneObjHolder);
+            //
+            this.setNerve(MerameraNrv.Float);
+        } else if (this.appearType === 0) {
+            this.setNerve(MerameraNrv.Runaway);
+        } else {
+            this.setNerve(MerameraNrv.Wait);
+        }
+
+        resetPosition(sceneObjHolder, this);
+    }
+
+    private static getEffectHeadStr(v: MerameraEffectHead): string {
+        if (v === MerameraEffectHead.Wait)
+            return 'Wait';
+        else if (v === MerameraEffectHead.Chase)
+            return 'Chase';
+        else if (v === MerameraEffectHead.Escape)
+            return 'Escape';
+        else
+            throw "whoops";
+    }
+
+    private emitEffectHead(sceneObjHolder: SceneObjHolder, effect: MerameraEffectHead): void {
+        if (this.effectHead !== effect) {
+            this.deleteEffectHead(sceneObjHolder, false);
+            this.effectHead = effect;
+
+            const name = Meramera.getEffectHeadStr(this.effectHead);
+            emitEffect(sceneObjHolder, this, name);
+        }
+    }
+
+    private deleteEffectHead(sceneObjHolder: SceneObjHolder, force: boolean): void {
+        if (this.effectHead !== MerameraEffectHead.None) {
+            const name = Meramera.getEffectHeadStr(this.effectHead);
+            if (force)
+                forceDeleteEffect(sceneObjHolder, this, name);
+            else
+                deleteEffect(sceneObjHolder, this, name);
+            this.effectHead = MerameraEffectHead.None;
+        }
+    }
+
+    private emitEffectHeatBody(sceneObjHolder: SceneObjHolder): void {
+        if (this.effectBody !== MerameraEffectBody.Heat) {
+            this.effectBody = MerameraEffectBody.Heat;
+            startBtp(this, 'OnFire');
+            startBrk(this, 'OnFire');
+        }
+    }
+
+    private emitEffectCoolDownBody(sceneObjHolder: SceneObjHolder): void {
+        if (this.effectBody !== MerameraEffectBody.CoolDown) {
+            this.effectBody = MerameraEffectBody.CoolDown;
+            startBtp(this, 'RedToBlack');
+            startBrk(this, 'RedToBlack');
+        }
+    }
+
+    private emitEffectColdBody(sceneObjHolder: SceneObjHolder): void {
+        if (this.effectBody !== MerameraEffectBody.Cold) {
+            this.effectBody = MerameraEffectBody.Cold;
+            startBtp(this, 'OffFire');
+            startBrk(this, 'OffFire');
+        }
+    }
+
+    private tryChase(sceneObjHolder: SceneObjHolder): boolean {
+        return false;
+    }
+
+    private tryWalk(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterEqualStep(this, 120)) {
+            getRandomVector(scratchVec3a, 1.0);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+
+            vecKillElement(scratchVec3a, scratchVec3a, this.gravityVector);
+            vec3.scaleAndAdd(this.targetWalkPos, this.origTranslation, scratchVec3a, 200.0);
+            this.setNerve(MerameraNrv.Walk);
+            return true;
+        }
+
+        return false;
+    }
+
+    private tryWalkEnd(sceneObjHolder: SceneObjHolder): boolean {
+        if (isGreaterEqualStep(this, 300) || (this.distanceToGoal >= 0.0 && this.distanceToGoal <= 100.0)) {
+            this.setNerve(MerameraNrv.Wait);
+            return true;
+        }
+
+        return false;
     }
 }

@@ -1473,6 +1473,10 @@ export function setShadowDropPositionAtJoint(actor: LiveActor, name: string | nu
     actor.shadowControllerList!.getController(name)!.setDropPosMtxPtr(jointMtx, offset);
 }
 
+export function setShadowDropStartOffset(actor: LiveActor, name: string | null, v: number): void {
+    actor.shadowControllerList!.getController(name)!.setDropStartOffset(v);
+}
+
 export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
 }
