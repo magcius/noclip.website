@@ -166,6 +166,7 @@ interface ObjectData {
     ModelID: number;
     Translation: [number, number, number];
     Rotation: [number, number, number];
+    Scale: [number, number, number];
 }
 
 interface StageData {
@@ -298,6 +299,7 @@ class JetSetRadioSceneDesc implements SceneDesc {
             mat4.rotateZ(modelMatrix, modelMatrix, object.Rotation[2]);
             mat4.rotateY(modelMatrix, modelMatrix, object.Rotation[1]);
             mat4.rotateX(modelMatrix, modelMatrix, object.Rotation[0]);
+            mat4.scale(modelMatrix, modelMatrix, object.Scale);
             actionInstance.update(modelMatrix, 0);
             renderer.actions.push(actionInstance);
         }

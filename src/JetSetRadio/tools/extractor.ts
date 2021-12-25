@@ -357,12 +357,18 @@ function extractObjectInstance_02(stageBuffer: ArrayBufferSlice, instanceAddr: n
     const rotationX = rotToRadians * stageView.getInt16(instanceOffs + 0x10, true);
     const rotationY = rotToRadians * stageView.getInt16(instanceOffs + 0x14, true);
     const rotationZ = rotToRadians * stageView.getInt16(instanceOffs + 0x18, true);
-    const scaleX = stageView.getFloat32(instanceOffs + 0x1C, true); // xayrga: todo, figure out why these are 0 on a lot of objects.
-    const scaleY = stageView.getFloat32(instanceOffs + 0x20, true);
-    const scaleZ = stageView.getFloat32(instanceOffs + 0x24, true);
+    let scaleX = stageView.getFloat32(instanceOffs + 0x1C, true); // xayrga: todo, figure out why these are 0 on a lot of objects.
+    let scaleY = stageView.getFloat32(instanceOffs + 0x20, true);
+    let scaleZ = stageView.getFloat32(instanceOffs + 0x24, true);
     let flags = 0;
     if (dataSize >= 0x28)
         flags = stageView.getFloat32(instanceOffs + 0x28, true);
+
+    if ((scaleX + scaleY + scaleZ) === 0) { // some objects have an extended size but no scaling specification. Have to account for these.
+        scaleX = 1;
+        scaleY = 1;
+        scaleZ = 1;
+    }
 
     return {
         ModelID: modelID,
@@ -680,11 +686,26 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
+    function extractSlice4() {
+        const ASSET_TABLE_ADDRESS = 0x8c1bc4cc;
+        const TEXTURE_TABLE_ADDRESS = 0x8c1bc54c;
+        const OBJECT_TABLE_ADDRESS = 0x8c1ba9d0;
+        const ASSET_COUNT = 32;
+        const OBJECT_COUNT = 46;
+        const OBJECTDATA_SIZE = 0x34;
+    
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
+        return { Models, Objects };
+    }
+
+
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
+    const slice4 = extractSlice4();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4]);
     saveStageData(dstFilename, crg1);
 }
 
@@ -761,10 +782,10 @@ function extractStage4(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
-    extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-    extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+    //extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
+    //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
     extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
-    extractStage4(`${pathBaseOut}/Stage5.crg1`, exec);
+   // extractStage4(`${pathBaseOut}/Stage5.crg1`, exec);
 }
 
 main();
