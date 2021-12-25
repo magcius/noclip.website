@@ -2,22 +2,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec2, vec3, vec4 } from "gl-matrix";
 import { Color, colorNewFromRGBA, TransparentBlack, White } from "../Color";
-import { hexzero0x } from "../util";
-
-function colorNewFromARGB8(n: number): Color {
-    const a = ((n >>> 24) & 0xFF) / 0xFF;
-    const r = ((n >>> 16) & 0xFF) / 0xFF;
-    const g = ((n >>>  8) & 0xFF) / 0xFF;
-    const b = ((n >>>  0) & 0xFF) / 0xFF;
-    return colorNewFromRGBA(r, g, b, a);
-}
-
-function consume<T>(a: T[], b: T[]): T[] {
-    while (b.length) {
-        a.push(b.pop()!);
-    }
-    return a;
-}
 
 const enum ROTATION_TYPE {
     INVALID = -1,
@@ -119,7 +103,7 @@ export const enum NJS_ATTRIBUTE_FLAGS {
     ENV_MAPPING     = (1 << 6),
 }
 
-interface NJS_STRIP {
+interface Strip {
     flags:   number;
     flip:    boolean;
 
@@ -129,26 +113,24 @@ interface NJS_STRIP {
 	diffuse: Color[];
 }
 
+interface MeshSet {
+    material: NJS_MATERIAL;
+    type:     number;
+    flags:    number;
+    strips:   Strip[];
+}
+
 export interface NJS_MESH {
     material: NJS_MATERIAL;
     type:     number;
     flags:    number;
-    vertices: NJS_VERTS;
-    indices:  number[];
-}
-
-interface NJS_MESHSET {
-    material: NJS_MATERIAL;
-    type:     number;
-    flags:    number;
-    strips:   NJS_STRIP[];
+    vertexData: NJS_VERTS;
+    indexData:  number[];
 }
 
 export interface NJS_MODEL {
 	vertices: NJS_VERTS;
-	polygons: NJS_MESHSET[];
 	meshes:   NJS_MESH[];
-
     bounds:   vec4;
 }
 
@@ -198,52 +180,42 @@ export interface NJS_ACTION {
 	motions: NJS_MOTION[];
 }
 
-function readVec2(data: DataView, byteOffset: number = 0, littleEndian?: boolean): vec2 {
-    return vec2.fromValues(
-        data.getFloat32(byteOffset + 0x00, littleEndian),
-        data.getFloat32(byteOffset + 0x04, littleEndian)
-        );
-}
-
-function readVec3(data: DataView, byteOffset: number = 0, littleEndian?: boolean): vec3 {
+function readVec3(data: DataView, byteOffset: number = 0, littleEndian: boolean): vec3 {
     return vec3.fromValues(
         data.getFloat32(byteOffset + 0x00, littleEndian),
         data.getFloat32(byteOffset + 0x04, littleEndian),
-        data.getFloat32(byteOffset + 0x08, littleEndian)
-        );
+        data.getFloat32(byteOffset + 0x08, littleEndian),
+    );
 }
 
-function readVec4(data: DataView, byteOffset: number = 0, littleEndian?: boolean): vec4 {
+function readVec4(data: DataView, byteOffset: number = 0, littleEndian: boolean): vec4 {
     return vec4.fromValues(
         data.getFloat32(byteOffset + 0x00, littleEndian),
         data.getFloat32(byteOffset + 0x04, littleEndian),
         data.getFloat32(byteOffset + 0x08, littleEndian),
         data.getFloat32(byteOffset + 0x0C, littleEndian),
-        );
+    );
 }
 
-function readRot32(data: DataView, byteOffset: number = 0, littleEndian?: boolean): vec3 {
-    let rotation = vec3.fromValues(
+function readRot32(data: DataView, byteOffset: number = 0, littleEndian: boolean): vec3 {
+    const rotation = vec3.fromValues(
         data.getInt16(byteOffset + 0x00, littleEndian),
         data.getInt16(byteOffset + 0x04, littleEndian),
-        data.getInt16(byteOffset + 0x08, littleEndian)
+        data.getInt16(byteOffset + 0x08, littleEndian),
     );
     vec3.scale(rotation, rotation, Math.PI / 32768.0);
-
     return rotation;
 }
 
-function readRot16(data: DataView, byteOffset: number = 0, littleEndian?: boolean): vec3 {
-    let rotation = vec3.fromValues(
+function readRot16(data: DataView, byteOffset: number = 0, littleEndian: boolean): vec3 {
+    const rotation = vec3.fromValues(
         data.getInt16(byteOffset + 0x00, littleEndian),
         data.getInt16(byteOffset + 0x02, littleEndian),
-        data.getInt16(byteOffset + 0x04, littleEndian)
+        data.getInt16(byteOffset + 0x04, littleEndian),
     );
     vec3.scale(rotation, rotation, Math.PI / 32768.0);
-
     return rotation;
 }
-
 
 function expand4to8(n: number) {
     return (n << 4) | n;
@@ -274,19 +246,6 @@ function colorNewFromRGB565(n: number): Color {
     return dst;
 }
 
-function colorFromARGB1555(dst: Color, n: number): void {
-    dst.a = (n & 0x8000) ? 1.0 : 0.0;
-    dst.r = expand5to8((n & 0x7C00) >>> 10) / 0xFF;
-    dst.g = expand5to8((n & 0x03E0) >>>  5) / 0xFF;
-    dst.b = expand5to8((n & 0x001F) >>>  0) / 0xFF;
-}
-
-function colorNewFromARGB1555(n: number): Color {
-    const dst = colorNewFromRGBA(0, 0, 0, 0);
-    colorFromARGB1555(dst, n);
-    return dst;
-}
-
 function colorFromARGB4444(dst: Color, n: number): void {
     dst.a = expand4to8((n & 0xF000) >>> 12) / 0xFF;
     dst.r = expand4to8((n & 0x0F00) >>>  8) / 0xFF;
@@ -300,17 +259,12 @@ function colorNewFromARGB4444(n: number): Color {
     return dst;
 }
 
-function colorFromA2RGB10(dst: Color, n: number): void {
-    dst.a = expand4to8((n & 0xC0000000) >>> 30) / 0x003;
-    dst.r = expand4to8((n & 0x3FF00000) >>> 20) / 0x3FF;
-    dst.g = expand4to8((n & 0x000FFC00) >>> 10) / 0x3FF;
-    dst.b = expand4to8((n & 0x000003FF) >>>  0) / 0x3FF;
-}
-
-function colorNewFromA2RGB10(n: number): Color {
-    const dst = colorNewFromRGBA(0, 0, 0, 0);
-    colorFromA2RGB10(dst, n);
-    return dst;
+function colorNewFromARGB8(n: number): Color {
+    const a = ((n >>> 24) & 0xFF) / 0xFF;
+    const r = ((n >>> 16) & 0xFF) / 0xFF;
+    const g = ((n >>>  8) & 0xFF) / 0xFF;
+    const b = ((n >>>  0) & 0xFF) / 0xFF;
+    return colorNewFromRGBA(r, g, b, a);
 }
 
 function vec3FromA2RGB10(dst: vec3, n: number): void {
@@ -367,12 +321,9 @@ function parseChunkList(buffer: ArrayBufferSlice, offs: number, callback: (type:
             const size = extra = view.getUint16(offs, true);
             offs += 0x02;
 
-            let isVert = false;
-
             if (header < 32) {
                 type = CNK_TYPE.CNK_MAT;
             } else if (header < 56) {
-                isVert = true;
                 type = CNK_TYPE.CNK_VERT;
             } else if (header < 64) {
                 type = CNK_TYPE.CNK_VOL;
@@ -392,19 +343,6 @@ function parseChunkList(buffer: ArrayBufferSlice, offs: number, callback: (type:
     }
 }
 
-enum CNK_FMT {
-    FMT_NONE,
-    FMT_V3,
-    FMT_V4,
-    FMT_VNX,
-    FMT_D8,
-    FMT_S5,
-    FMT_S4,
-    FMT_IN,
-    FMT_UF,
-    FMT_NF,
-};
-
 function parseNjsVlist(buffer: ArrayBufferSlice, offset: number): NJS_VERTS {
     const positions: vec3[] = [];
     const normals:   vec3[] = [];
@@ -420,37 +358,22 @@ function parseNjsVlist(buffer: ArrayBufferSlice, offset: number): NJS_VERTS {
         const indexOffset = view.getUint16(0x00, true);
         const vertexCount = view.getUint16(0x02, true);
 
-        let vertexStride = 0; // Used as an offset currently
-        let dataOffset = 0x04;
+        let dataOffs = 0x04;
 
         let vertFormat = header - CNK_TYPE.CNK_VERT;
-        let positionFormat   = CNK_FMT.FMT_V3;
-        let normalFormat     = CNK_FMT.FMT_NONE;
-        let diffuseFormat    = CNK_FMT.FMT_NONE;
-        let specularFormat   = CNK_FMT.FMT_NONE;
-        let userFlagsFormat  = CNK_FMT.FMT_NONE;
-        let ninjaFlagsFormat = CNK_FMT.FMT_NONE;
-
         for (let i = 0; i < vertexCount; ++i) {
-            vertexStride = 0x00;
-
             if (vertFormat < 2) {
-                positions.push(readVec3(view, dataOffset + vertexStride, true));
+                positions.push(readVec3(view, dataOffs, true));
+                dataOffs += 0x10;
 
-                positionFormat = CNK_FMT.FMT_V4;
-                vertexStride += 0x10;
-
-                if (vertFormat == 1) {
-                    normals.push(readVec3(view, dataOffset + vertexStride, true));
-
-                    normalFormat = CNK_FMT.FMT_V4;
-                    vertexStride += 0x10;
+                if (vertFormat === 1) {
+                    normals.push(readVec3(view, dataOffs, true));
+                    dataOffs += 0x10;
                 }
             } else {
-                positions.push(readVec3(view, dataOffset + vertexStride, true));
+                positions.push(readVec3(view, dataOffs, true));
 
-                positionFormat = CNK_FMT.FMT_V3;
-                vertexStride += 0x0C;
+                dataOffs += 0x0C;
 
                 let format = vertFormat;
                 if (format < 9) {
@@ -458,73 +381,55 @@ function parseNjsVlist(buffer: ArrayBufferSlice, offset: number): NJS_VERTS {
                 } else if (format < 16) {
                     format -= 9;
 
-                    normals.push(readVec3(view, dataOffset + vertexStride, true));
-
-                    normalFormat = CNK_FMT.FMT_V3;
-                    vertexStride += 0x0C;
+                    normals.push(readVec3(view, dataOffs, true));
+                    dataOffs += 0x0C;
                 } else {
                     format -= 15;
 
-                    const normalValue = vec3NewFromA2RGB10(view.getUint32(dataOffset + vertexStride, true));
+                    const normalValue = vec3NewFromA2RGB10(view.getUint32(dataOffs, true));
                     vec3.normalize(normalValue, normalValue);
                     normals.push(normalValue);
 
-                    normalFormat = CNK_FMT.FMT_VNX;
-                    vertexStride += 0x04;
+                    dataOffs += 0x04;
                 }
 
                 if (format === 1) {
-                    diffuse.push(colorNewFromARGB8(view.getUint32(dataOffset + vertexStride, true)));
-                    diffuseFormat = CNK_FMT.FMT_D8;
-                    vertexStride += 4;
+                    diffuse.push(colorNewFromARGB8(view.getUint32(dataOffs, true)));
+                    dataOffs += 0x04;
                 } else if (format === 2) {
-                    const userFlags = view.getUint32(dataOffset + vertexStride, true);
-                    userFlagsFormat = CNK_FMT.FMT_UF;
-                    vertexStride += 4;
+                    const userFlags = view.getUint32(dataOffs, true);
+                    dataOffs += 0x04;
                 } else if (format === 3) {
-                    const ninjaFlags = view.getUint32(dataOffset + vertexStride, true);
-                    ninjaFlagsFormat = CNK_FMT.FMT_NF;
-                    vertexStride += 4;
+                    const ninjaFlags = view.getUint32(dataOffs, true);
+                    dataOffs += 0x04;
                 } else if (format === 4) {
-                    diffuse.push(colorNewFromRGB565(view.getUint16(dataOffset + vertexStride + 0x00, true)));
-                    specular.push(colorNewFromRGB565(view.getUint16(dataOffset + vertexStride + 0x02, true)));
-                    diffuseFormat = CNK_FMT.FMT_S5;
-                    specularFormat = CNK_FMT.FMT_S5;
-                    vertexStride += 4;
+                    diffuse.push(colorNewFromRGB565(view.getUint16(dataOffs + 0x00, true)));
+                    specular.push(colorNewFromRGB565(view.getUint16(dataOffs + 0x02, true)));
+                    dataOffs += 0x04;
                 } else if (format === 5) {
-                    diffuse.push(colorNewFromARGB4444(view.getUint16(dataOffset + vertexStride + 0x00, true)));
-                    specular.push(colorNewFromRGB565(view.getUint16(dataOffset + vertexStride + 0x02, true)));
-                    diffuseFormat = CNK_FMT.FMT_S4;
-                    specularFormat = CNK_FMT.FMT_S5;
-                    vertexStride += 4;
+                    diffuse.push(colorNewFromARGB4444(view.getUint16(dataOffs + 0x00, true)));
+                    specular.push(colorNewFromRGB565(view.getUint16(dataOffs + 0x02, true)));
+                    dataOffs += 0x04;
                 } else if (format === 6) {
-                    const diffuseIntensity = view.getUint16(dataOffset + vertexStride + 0x00, true);
-                    const specularIntensity = view.getUint16(dataOffset + vertexStride + 0x02, true);
-                    diffuseFormat = CNK_FMT.FMT_IN;
-                    specularFormat = CNK_FMT.FMT_IN;
-                    vertexStride += 4;
+                    const diffuseIntensity = view.getUint16(dataOffs + 0x00, true);
+                    const specularIntensity = view.getUint16(dataOffs + 0x02, true);
+                    diffuse.push(colorNewFromRGBA(diffuseIntensity / 0xFFFF, diffuseIntensity / 0xFFFF, diffuseIntensity / 0xFFFF));
+                    specular.push(colorNewFromRGBA(specularIntensity / 0xFFFF, specularIntensity / 0xFFFF, specularIntensity / 0xFFFF));
+                    dataOffs += 0x04;
                 }
             }
-
-            dataOffset += vertexStride;
         }
     }
 
     parseChunkList(buffer, offset, processVlistChunks);
 
-    let stride = 0;
-    if (positions.length > 0) stride += 3;
-    if (normals.length > 0)   stride += 3;
-    if (diffuse.length > 0)   stride += 4;
-    if (specular.length > 0)  stride += 4;
-
-    return {positions, normals, uvs: [], diffuse, specular};
+    return { positions, normals, uvs: [], diffuse, specular };
 }
 
-function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_VERTS): [NJS_MESHSET[], NJS_MESH[]] {
+function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_VERTS): NJS_MESH[] {
     const texture: NJS_TEXTURE = {texture: -1, flipU: 0, flipV: 0, clampU: 0, clampV: 0, superSample: 0, mipMapAdjust: 0, filterMode: 0};
     const material: NJS_MATERIAL = {diffuse: White, ambient: TransparentBlack, specular: TransparentBlack, srcAlpha: 0, dstAlpha: 0};
-    const meshsets: NJS_MESHSET[] = [];
+    const meshsets: MeshSet[] = [];
 
     const processPlistChunks = (type: CNK_TYPE, header: number, flags: number, extra: number | undefined, data: ArrayBufferSlice | undefined): void => {
         switch(type) {
@@ -598,8 +503,8 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
                             {
                                 const stripType = header - type;
                                 const stripFlags = flags;
-                                const stripFormat = Math.trunc(stripType / 3);
-                                const uvFormat = Math.trunc(stripType % 3);
+                                const stripFormat = (stripType / 3) | 0;
+                                const uvFormat = (stripType % 3);
                                 const stripInfo = view.getUint16(dataOffset, true);
                                 const stripCount = stripInfo & 0x3FFF;
                                 const userOffset = (stripInfo >>> 14) << 4;
@@ -610,15 +515,15 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
                                 const mat = {...material};
                                 mat.texture = tex;
 
-                                const ignoreAmbient = (stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_AMBIENT) != 0;
-                                const ignoreSpecular = (stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_SPECULAR) != 0;
+                                const ignoreAmbient = !!(stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_AMBIENT);
+                                const ignoreSpecular = !!(stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_SPECULAR);
                                 if (ignoreAmbient) mat.ambient = TransparentBlack;
                                 if (ignoreSpecular) mat.specular = TransparentBlack;
 
-                                const meshset: NJS_MESHSET = {material: mat, type: stripType, flags: stripFlags, strips: []};
+                                const meshset: MeshSet = { material: mat, type: stripType, flags: stripFlags, strips: [] };
                                 meshsets.push(meshset);
 
-                                const strips: NJS_STRIP[] = meshset.strips;
+                                const strips: Strip[] = meshset.strips;
 
                                 for (let i = 0; i < stripCount; ++i) {
                                     const stripHeader = view.getInt16(dataOffset, true);
@@ -626,7 +531,7 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
                                     const indexCount = Math.abs(stripHeader);
                                     dataOffset += 0x02;
 
-                                    const strip: NJS_STRIP = {flags: stripFlags, flip: flip, indices: [], normals: [], uvs: [], diffuse: []};
+                                    const strip: Strip = { flags: stripFlags, flip, indices: [], normals: [], uvs: [], diffuse: [] };
                                     strips.push(strip);
 
                                     for (let j = 0; j < indexCount; ++j) {
@@ -686,70 +591,55 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
 
     const meshes: NJS_MESH[] = [];
 
-    const processMeshSet = (vlistVertices: NJS_VERTS, meshset: NJS_MESHSET): NJS_MESH => {
+    const processMeshSet = (vlistVertices: NJS_VERTS, meshset: MeshSet): NJS_MESH => {
         const stripType = meshset.type;
-        const stripFlags = meshset.flags;
-        const stripFormat = Math.trunc(stripType / 3);
-        const uvFormat = Math.trunc(stripType % 3);
-        const isSimple = stripFormat == 0 && uvFormat == 0;
-        const vertices: NJS_VERTS = isSimple ? vlistVertices : {positions: [], normals: [], uvs: [], diffuse: [], specular: []};
-        const indices: number[] = [];
+        const stripFormat = (stripType / 3) | 0;
+        const uvFormat = stripType % 3;
+        const isSimple = stripFormat === 0 && uvFormat === 0;
+        const vertexData: NJS_VERTS = isSimple ? vlistVertices : {positions: [], normals: [], uvs: [], diffuse: [], specular: []};
+        const indexData: number[] = [];
 
-        const strips = meshset.strips;
-
-        for (let strip of strips) {
+        for (const strip of meshset.strips) {
             let flip = strip.flip;
-            const index: number[] = [strip.indices[0], strip.indices[1], -1];
             for (let i = 2; i < strip.indices.length; ++i) {
-                index[2] = strip.indices[i];
+                const si0 = i - 2, si1 = flip ? i - 0 : i - 1, si2 = flip ? i - 1 : i - 0;
+                const vi0 = strip.indices[si0], vi1 = strip.indices[si1], vi2 = strip.indices[si2];
 
                 if (isSimple) {
-                    if (flip) {
-                        consume(indices, [index[0], index[2], index[1]]);
-                    } else {
-                        consume(indices, [index[0], index[1], index[2]]);
-                    }
-
-                    const f0 = indices[indices.length - 3] + 1;
-                    const f1 = indices[indices.length - 2] + 1;
-                    const f2 = indices[indices.length - 1] + 1;
+                    indexData.push(vi0, vi1, vi2);
                 } else {
-                    const length = indices.length;
-                    consume(indices, [length + 0, length + 1, length + 2]);
-
-                    const vertexIndices = flip ? [index[0], index[2], index[1]] : [index[0], index[1], index[2]];
-                    const stripIndices = flip ? [i - 2, i - 0, i - 1] : [i - 2, i - 1, i - 0];
+                    const length = indexData.length;
+                    indexData.push(length + 0, length + 1, length + 2);
 
                     // Positions
-                    consume(vertices.positions, [vlistVertices.positions[vertexIndices[0]], vlistVertices.positions[vertexIndices[1]], vlistVertices.positions[vertexIndices[2]]]);
+                    vertexData.positions.push(vlistVertices.positions[vi0], vlistVertices.positions[vi1], vlistVertices.positions[vi2]);
+
                     // Normals
-                    if (strip.normals.length > 0) {
-                        consume(vertices.normals, [strip.normals[stripIndices[0]], strip.normals[stripIndices[1]], strip.normals[stripIndices[2]]]);
-                    } else if (vlistVertices.normals.length > 0) {
-                        consume(vertices.normals, [vlistVertices.normals[vertexIndices[0]], vlistVertices.normals[vertexIndices[1]], vlistVertices.normals[vertexIndices[2]]]);
-                    }
+                    if (strip.normals.length > 0)
+                        vertexData.normals.push(strip.normals[si0], strip.normals[si1], strip.normals[si2]);
+                    else if (vlistVertices.normals.length > 0)
+                        vertexData.normals.push(vlistVertices.normals[vi0], vlistVertices.normals[vi1], vlistVertices.normals[vi2]);
+
                     // UVs
-                    if (strip.uvs.length > 0) {
-                        consume(vertices.uvs, [strip.uvs[stripIndices[0]], strip.uvs[stripIndices[1]], strip.uvs[stripIndices[2]]]);
-                    }
+                    if (strip.uvs.length > 0)
+                        vertexData.uvs.push(strip.uvs[si0], strip.uvs[si1], strip.uvs[si2]);
+
                     // Diffuse
-                    if (strip.diffuse.length > 0) {
-                        consume(vertices.diffuse, [strip.diffuse[stripIndices[0]], strip.diffuse[stripIndices[1]], strip.diffuse[stripIndices[2]]]);
-                    } else if (vlistVertices.diffuse.length > 0) {
-                        consume(vertices.diffuse, [vlistVertices.diffuse[vertexIndices[0]], vlistVertices.diffuse[vertexIndices[1]], vlistVertices.diffuse[vertexIndices[2]]]);
-                    }
+                    if (strip.diffuse.length > 0)
+                        vertexData.diffuse.push(strip.diffuse[si0], strip.diffuse[si1], strip.diffuse[si2]);
+                    else if (vlistVertices.diffuse.length > 0)
+                        vertexData.diffuse.push(vlistVertices.diffuse[vi0], vlistVertices.diffuse[vi1], vlistVertices.diffuse[vi2]);
+
                     // Specular
-                    if (vlistVertices.specular.length > 0) {
-                        consume(vertices.specular, [vlistVertices.specular[vertexIndices[0]], vlistVertices.specular[vertexIndices[1]], vlistVertices.specular[vertexIndices[2]]]);
-                    }
+                    if (vlistVertices.specular.length > 0)
+                        vertexData.specular.push(vlistVertices.specular[vi0], vlistVertices.specular[vi1], vlistVertices.specular[vi2]);
                 }
 
-                [index[0], index[1]] = [index[1], index[2]];
                 flip = !flip;
             }
         }
 
-        return {material: meshset.material, type: meshset.type, flags: meshset.flags, vertices, indices};
+        return { material: meshset.material, type: meshset.type, flags: meshset.flags, vertexData, indexData };
     }
 
     for (const meshset of meshsets) {
@@ -757,7 +647,7 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
         meshes.push(mesh);
     }
 
-    return [meshsets, meshes];
+    return meshes;
 }
 
 function parseNjsModel(buffer: ArrayBufferSlice, baseOffset: number, offset: number): NJS_MODEL {
@@ -768,9 +658,9 @@ function parseNjsModel(buffer: ArrayBufferSlice, baseOffset: number, offset: num
     const bounds = readVec4(view, offset + 0x08, true);
 
     const vertices: NJS_VERTS = parseNjsVlist(buffer, vlistOffset);
-    const [polygons, meshes]: [NJS_MESHSET[], NJS_MESH[]] = parseNjsPlist(buffer, plistOffset, vertices);
+    const meshes: NJS_MESH[] = parseNjsPlist(buffer, plistOffset, vertices);
 
-    return { vertices, polygons, meshes, bounds };
+    return { vertices, meshes, bounds };
 }
 
 function parseNjsObject(buffer: ArrayBufferSlice, baseOffset: number, offset: number, index: number, parent: number): NJS_OBJECT | undefined {
@@ -899,6 +789,7 @@ function parseNjsMotion(buffer: ArrayBufferSlice, baseOffset: number, offset: nu
 function parseNjsMotions(buffer: ArrayBufferSlice, baseOffset: number, offset: number, objectCount: number): [number, NJS_MOTION[]] {
     const view = buffer.createDataView();
 
+    // TODO(jstpierre): this doesn't seem quite right to me?
     const motionType = view.getUint16(offset + 0x00, true);
     const rotationType = rotationTypes[motionType];
     const frames = view.getUint16(offset + 0x02, true);

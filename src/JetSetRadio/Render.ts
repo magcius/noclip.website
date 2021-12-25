@@ -10,7 +10,7 @@ import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { lerpAngle } from "../MathHelpers";
+import { lerp, lerpAngle, Vec3One, Vec3Zero } from "../MathHelpers";
 import { PVRTextureHolder } from "./Scenes";
 import { assert, nArray } from "../util";
 
@@ -85,6 +85,8 @@ void main() {
 #ifdef TEXTURE
     t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
+    if (t_Color.a == 0.0)
+        discard;
     gl_FragColor = t_Color;
 }
 `;
@@ -104,93 +106,84 @@ export class NjsMeshData {
     public indexCount: number;
 
     constructor (device: GfxDevice, cache: GfxRenderCache, public mesh: Ninja.NJS_MESH) {
-        //const positions: vec3[] = [[-10000,-100,-10000], [-10000,-100,+10000], [+10000,-100,-10000], [+10000,-100,+10000]];
-        const vertices: Ninja.NJS_VERTS = this.mesh.vertices; //{positions, normals: [], uvs: [], diffuse: [], specular: []};
-        const indices: number[] = this.mesh.indices; //[0, 1, 2, 2, 1, 3];
+        const vertexData = this.mesh.vertexData;
+        const indexData = this.mesh.indexData;
 
-        let vertexOffset = 0;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = []
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+        const buffers: GfxVertexBufferDescriptor[] = []
 
-        if (vertices.positions.length > 0) {
-            const values = vertices.positions.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
+        if (vertexData.positions.length > 0) {
+            const values = vertexData.positions.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
             const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Position, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGB });
-            inputLayoutBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
-            vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
-
-            vertexOffset += 0x0C;
+            vertexBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
+            buffers.push({ buffer, byteOffset: 0, });
         }
-        if (vertices.normals.length > 0) {
-            const values = vertices.normals.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
+
+        if (vertexData.normals.length > 0) {
+            const values = vertexData.normals.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
             const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Normal, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGB });
-            inputLayoutBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
-            vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
-
-            vertexOffset += 0x0C;
+            vertexBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
+            buffers.push({ buffer, byteOffset: 0, });
         }
-        if (vertices.uvs.length > 0) {
-            const values = vertices.uvs.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
+
+        if (vertexData.uvs.length > 0) {
+            const values = vertexData.uvs.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
             const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_TexCoord, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RG });
-            inputLayoutBufferDescriptors.push({ byteStride: 0x08, frequency: GfxVertexBufferFrequency.PerVertex, });
-            vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
-
-            vertexOffset += 0x08;
+            vertexBufferDescriptors.push({ byteStride: 0x08, frequency: GfxVertexBufferFrequency.PerVertex, });
+            buffers.push({ buffer, byteOffset: 0, });
         }
-        if (vertices.diffuse.length > 0) {
-            const values = vertices.diffuse.reduce((accumulator, currentValue) => accumulator.concat(currentValue.r, currentValue.g, currentValue.b, currentValue.a), [] as number[]);
+
+        if (vertexData.diffuse.length > 0) {
+            const values = vertexData.diffuse.reduce((accumulator, currentValue) => accumulator.concat(currentValue.r, currentValue.g, currentValue.b, currentValue.a), [] as number[]);
             const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Diffuse, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGBA });
-            inputLayoutBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
-            vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
-
-            vertexOffset += 0x10;
+            vertexBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
+            buffers.push({ buffer, byteOffset: 0, });
         }
-        if (vertices.specular.length > 0) {
-            const values = vertices.specular.reduce((accumulator, currentValue) => accumulator.concat(currentValue.r, currentValue.g, currentValue.b, currentValue.a), [] as number[]);
+
+        if (vertexData.specular.length > 0) {
+            const values = vertexData.specular.reduce((accumulator, currentValue) => accumulator.concat(currentValue.r, currentValue.g, currentValue.b, currentValue.a), [] as number[]);
             const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Specular, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGBA });
-            inputLayoutBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
-            vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
-
-            vertexOffset += 0x10;
+            vertexBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
+            buffers.push({ buffer, byteOffset: 0, });
         }
 
-        const indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indices).buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0, };
+        const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
-        this.indexCount = indices.length;
+        this.indexCount = indexData.length;
 
-        this.inputLayout = cache.createInputLayout( { vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
-
-        this.inputState = device.createInputState(this.inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDescriptor);
     }
 
     public destroy(device: GfxDevice): void {
-        for (let vertexBuffer of this.vertexBuffers) {
-            device.destroyBuffer(vertexBuffer);
-        }
-        if (this.indexBuffer) device.destroyBuffer(this.indexBuffer);
-        if (this.inputLayout) device.destroyInputState(this.inputState);
+        for (let i = 0; i < this.vertexBuffers.length; i++)
+            device.destroyBuffer(this.vertexBuffers[i]);
+
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
     }
 }
 
@@ -406,36 +399,25 @@ export class NjsModelInstance {
 }
 
 export class NjsObjectInstance {
+    public modelMatrix = mat4.create();
     public position = vec3.create();
     public rotation = vec3.create();
-    public scale = vec3.fromValues(1, 1, 1);
-    public modelMatrix = mat4.create();
+    public scale = vec3.create();
     public model: NjsModelInstance;
 
     constructor(cache: GfxRenderCache, public data: NjsObjectData, texlist: (number | null)[] | null, textureHolder: PVRTextureHolder) {
-        const usePosition = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_POS);
-        this.position = usePosition ? this.data.object.position : vec3.create();
-        const useRotation = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_ROT);
-        this.rotation = useRotation ? this.data.object.rotation : vec3.create();
-        const useScale = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_SCL);
-        this.scale = useScale ? this.data.object.scale : vec3.fromValues(1, 1, 1);
-
-        this.update(mat4.create());
-
-        if (this.data.model) {
+        if (this.data.model)
             this.model = new NjsModelInstance(cache, this.data.model, texlist, textureHolder);
-        }
+
+        const object = this.data.object;
+        vec3.copy(this.position, object.position);
+        vec3.copy(this.rotation, object.rotation);
+        vec3.copy(this.scale, object.scale);
     }
 
-    public update(modelMatrix: ReadonlyMat4): void {
-        const evalZXY = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_ZXY_ANG);
-        const skip = (this.data.object.flags & 0x07) === 0x07;
-
-        if (evalZXY) {
-            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, EulerOrder.ZXY);
-        } else {
-            computeMatrix(this.modelMatrix, modelMatrix, this.scale, this.rotation, this.position, EulerOrder.XYZ);
-        }
+    public update(parentMatrix: ReadonlyMat4): void {
+        const eulerOrder = !!(this.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_ZXY_ANG) ? EulerOrder.ZYX : EulerOrder.XYZ;
+        computeMatrix(this.modelMatrix, parentMatrix, this.scale, this.rotation, this.position, eulerOrder);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -443,6 +425,12 @@ export class NjsObjectInstance {
             this.model.prepareToRender(renderInstManager, viewerInput, this.modelMatrix);
         }
     }
+}
+
+function lerpRot(dst: vec3, a: ReadonlyVec3, b: ReadonlyVec3, t: number): void {
+    dst[0] = lerpAngle(a[0], b[0], t);
+    dst[1] = lerpAngle(a[1], b[1], t);
+    dst[2] = lerpAngle(a[2], b[2], t);
 }
 
 export class NjsMotionInstance {
@@ -453,45 +441,19 @@ export class NjsMotionInstance {
         const duration = this.data.frames;
         let keyA = Math.floor(frame);
         let keyB = Math.ceil(frame);
-        const alpha = frame - keyA;
+        const t = frame - keyA;
 
-        if (keyB >= duration) {
+        if (keyB >= duration)
             keyB = 0;
-        }
 
-        if (this.data.positions.length > 0) {
-            const position: vec3 = vec3.create();
-            vec3.lerp(position, this.data.positions[keyA], this.data.positions[keyB], alpha);
-            this.object.position = position;
-        } else {
-            const usePosition = (this.object.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_POS) == 0;
-            this.object.position = usePosition ? this.object.data.object.position : vec3.create();
-        }
+        if (this.data.positions.length > 0)
+            vec3.lerp(this.object.position, this.data.positions[keyA], this.data.positions[keyB], t);
 
-        if (this.data.rotations.length > 0) {
-            const rotationA = this.data.rotations[keyA];
-            const rotationB = this.data.rotations[keyB];
-            const rotation: vec3 = vec3.create();
-            //vec3.lerp(rotation, rotationA, rotationB, alpha);
-            rotation[0] = lerpAngle(rotationA[0], rotationB[0], alpha);
-            rotation[1] = lerpAngle(rotationA[1], rotationB[1], alpha);
-            rotation[2] = lerpAngle(rotationA[2], rotationB[2], alpha);
+        if (this.data.rotations.length > 0)
+            lerpRot(this.object.rotation, this.data.rotations[keyA], this.data.rotations[keyB], t);
 
-            const useRotation = (this.data.flags & 0x10) != 0;
-            this.object.rotation = rotation;
-        } else {
-            const useRotation = (this.object.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_ROT) == 0;
-            this.object.rotation = useRotation ? this.object.data.object.rotation : vec3.create();
-        }
-
-        if (this.data.scales.length > 0) {
-            const scale: vec3 = vec3.create();
-            vec3.lerp(scale, this.data.scales[keyA], this.data.scales[keyB], alpha);
-            this.object.scale = scale;
-        } else {
-            const useScale = (this.object.data.object.flags & Ninja.NJS_EVALFLAGS.EVAL_UNIT_SCL) == 0;
-            this.object.scale = useScale ? this.object.data.object.scale : vec3.fromValues(1, 1, 1);
-        }
+        if (this.data.scales.length > 0)
+            vec3.lerp(this.object.scale, this.data.scales[keyA], this.data.scales[keyB], t);
     }
 }
 
@@ -517,45 +479,30 @@ export class NjsActionInstance {
         } else {
             this.frame += frameDelta;
         }
+
         const duration = this.data.action.frames;
-        switch (this.data.wrapMode) {
-            case 0:
-                {
-                    if (this.frame < 0) {
-                        this.frame += duration;
-                    } else if (this.frame >= duration) {
-                        this.frame -= duration;
-                    }
-                    if (this.frame < 0) {
-                        this.frame = duration - 1;
-                    } else if (this.frame > duration - 1) {
-                        this.frame = 0;
-                    }
-                    break;
-                }
-            case 1:
-                {
-                    if (this.frame < 0) {
-                        //this.frame = 0;
-                        this.frame = duration - 1;
-                    } else if (this.frame > duration - 1) {
-                        //this.frame = duration - 1;
-                        this.frame = 0;
-                    }
-                    break;
-                }
-            default:
-                {
-                    // Should not happen.
-                    this.frame = 0;
-                    break;
-                }
-        }
-        for (let i = 0; i < this.data.motions.length; ++i) {
-            this.motions[i].update(this.frame);
+        if (this.data.wrapMode === 0) {
+            if (this.frame < 0)
+                this.frame += duration;
+            else if (this.frame >= duration)
+                this.frame -= duration;
+            if (this.frame < 0)
+                this.frame = duration - 1;
+            else if (this.frame > duration - 1)
+                this.frame = 0;
+        } else if (this.data.wrapMode === 1) {
+            if (this.frame < 0)
+                this.frame = duration - 1;
+            else if (this.frame > duration - 1)
+                this.frame = 0;
+        } else {
+            throw "whoops";
         }
 
-        for (let i = 0; i < this.data.objects.length; ++i) {
+        for (let i = 0; i < this.motions.length; ++i)
+            this.motions[i].update(this.frame);
+
+        for (let i = 0; i < this.objects.length; ++i) {
             const parent = this.objects[i].data.object.parent;
             const parentTransform = parent < 0 ? modelMatrix : this.objects[parent].modelMatrix;
 

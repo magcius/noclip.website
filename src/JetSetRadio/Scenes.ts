@@ -312,8 +312,8 @@ export const id = 'JetSetRadio';
 export const name = "Jet Set Radio";
 export const sceneDescs = [
     new JetSetRadioSceneDesc('Stage1', 'Shibuya-cho'),
-	new JetSetRadioSceneDesc('Stage2', 'Kogane-cho'),
-	new JetSetRadioSceneDesc('Stage3', 'Benten-cho'),
+    new JetSetRadioSceneDesc('Stage2', 'Kogane-cho'),
+    new JetSetRadioSceneDesc('Stage3', 'Benten-cho'),
     new JetSetRadioSceneDesc('Stage5', 'Bantam Street'),
 ];
 
