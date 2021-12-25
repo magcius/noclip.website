@@ -309,9 +309,10 @@ class JetSetRadioSceneDesc implements SceneDesc {
 export const id = 'JetSetRadio';
 export const name = "Jet Set Radio";
 export const sceneDescs = [
-    new JetSetRadioSceneDesc('Stage1'),
-	new JetSetRadioSceneDesc('Stage2'),
-	new JetSetRadioSceneDesc('Stage3'),
+    new JetSetRadioSceneDesc('Stage1', 'Shibuya-cho'),
+	new JetSetRadioSceneDesc('Stage2', 'Kogane-cho'),
+	new JetSetRadioSceneDesc('Stage3', 'Benten-cho'),
+    new JetSetRadioSceneDesc('Stage5', 'Bantam Street'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
