@@ -357,7 +357,7 @@ function extractObjectInstance_02(stageBuffer: ArrayBufferSlice, instanceAddr: n
     const rotationX = rotToRadians * stageView.getInt16(instanceOffs + 0x10, true);
     const rotationY = rotToRadians * stageView.getInt16(instanceOffs + 0x14, true);
     const rotationZ = rotToRadians * stageView.getInt16(instanceOffs + 0x18, true);
-    let scaleX = stageView.getFloat32(instanceOffs + 0x1C, true); // xayrga: todo, figure out why these are 0 on a lot of objects.
+    let scaleX = stageView.getFloat32(instanceOffs + 0x1C, true); 
     let scaleY = stageView.getFloat32(instanceOffs + 0x20, true);
     let scaleZ = stageView.getFloat32(instanceOffs + 0x24, true);
     let flags = 0;
@@ -374,7 +374,7 @@ function extractObjectInstance_02(stageBuffer: ArrayBufferSlice, instanceAddr: n
         ModelID: modelID,
         Translation: [translationX, translationY, translationZ],
         Rotation: [rotationX, rotationY, rotationZ],
-        Scale: [scaleX,scaleY,scaleZ], //xayrga: todo, confirm if this is actually scaling in the data
+        Scale: [scaleX,scaleY,scaleZ], 
         Flags: flags // xayrga: todo, confirm if this actually functions as a flag.
     };
 }
@@ -414,13 +414,10 @@ function extractObjectTableSingles(execBuffer: ArrayBufferSlice, afsFile: AFSRef
             continue;
         for (;; instanceAddr += 0x28) {
             const object = extractObjectInstance_01(afsFile.buffer, instanceAddr);
-            if (object.ModelID === 0xFFFFFFFE)
-                break;
-            if (object.ModelID === 0xFFFFFFFF) {
+            if (object.ModelID === 0xFFFFFFFF) 
                 continue;
-            } else if (object.ModelID === 0xFFFFFFFE) {
-                break;
-            }
+            if (object.ModelID === 0xFFFFFFFE) 
+                break;            
             objects.push(object);
         }
     }
@@ -439,13 +436,10 @@ function extractObjectTableSinglesSize(execBuffer: ArrayBufferSlice, afsFile: AF
             continue;
         for (;; instanceAddr += significantDataSize) {
             const object = extractObjectInstance_02(afsFile.buffer, instanceAddr, significantDataSize);
-            if (object.ModelID === 0xFFFFFFFE)
+            if (object.ModelID === 0xFFFFFFFF) 
+                continue;            
+            if (object.ModelID === 0xFFFFFFFE) 
                 break;
-            if (object.ModelID === 0xFFFFFFFF) {
-                continue;
-            } else if (object.ModelID === 0xFFFFFFFE) {
-                break;
-            }
             objects.push(object);
         }
     }
@@ -487,6 +481,7 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
     const SCENE_FILE = afsLoad('STAGE1.AFS', 0);
     const OBJECT_COUNT = 61;
+    const INTERACTABLE_COUNT = 61;
 
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c1063b4;
@@ -538,11 +533,11 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     function extractInteractables() {
         const ASSET_TABLE_ADDRESS = 0x8c107564;
         const TEXTURE_TABLE_ADDRESS = 0x8c1075d4;
-        const OBJECT_TABLE_ADDRESS = 0x8c10618c
+        const OBJECT_TABLE_ADDRESS = 0x8c10618c;
         const ASSET_COUNT = 28;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, INTERACTABLE_COUNT);
         return { Models, Objects };
     }
 
@@ -567,6 +562,7 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
     const SCENE_FILE = afsLoad('STAGE2.AFS', 0);
     const OBJECT_COUNT = 114;
+    const INTERACTABLE_COUNT = 21;
 
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c1086a0;
@@ -614,7 +610,7 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const OBJECTDATA_SIZE = 0x34;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT,OBJECTDATA_SIZE);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, INTERACTABLE_COUNT,OBJECTDATA_SIZE);
         return { Models, Objects };
     }
 
@@ -638,6 +634,7 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
     const SCENE_FILE = afsLoad('STAGE3.AFS', 0);
     const OBJECT_COUNT = 46;
+    const INTERACTABLE_COUNT = 10;
 
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c1bab40;
@@ -686,12 +683,28 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
         return { Models, Objects };
     }
+    
+    // xayrga: parser is having a hard time with one of the models here, too
+    /*
+    function extractInteractables() {
+        const ASSET_TABLE_ADDRESS = 0x8c1bc3b0;
+        const TEXTURE_TABLE_ADDRESS = 0x8c1bc17c;
+        const OBJECT_TABLE_ADDRESS = 0x8c1ba918;
+        const ASSET_COUNT = 71;
+        const OBJECTDATA_SIZE = 0x34;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, INTERACTABLE_COUNT);
+        return { Models, Objects };
+    }
+    */
 
 
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
     const slice4 = extractSlice4();
+    //const interactables = extractInteractables();
 
     const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4]);
     saveStageData(dstFilename, crg1);
