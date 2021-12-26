@@ -17,7 +17,7 @@ import { Yellow, colorNewCopy, Magenta } from "../Color";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;
-    public prismIdx: number | null = null;
+    public prism: KC_PrismData | null = null;
     public hitSensor: HitSensor | null = null;
     public pos0 = vec3.create();
     public pos1 = vec3.create();
@@ -29,15 +29,15 @@ export class Triangle {
     }
 
     public getAttributes(): JMapInfoIter | null {
-        if (this.prismIdx !== null)
-            return this.collisionParts!.collisionServer.getAttributes(this.prismIdx);
+        if (this.prism !== null)
+            return this.collisionParts!.collisionServer.getAttributes(this.prism);
         else
             return null;
     }
 
     public copy(other: Triangle): void {
         this.collisionParts = other.collisionParts;
-        this.prismIdx = other.prismIdx;
+        this.prism = other.prism;
         this.hitSensor = other.hitSensor;
         vec3.copy(this.pos0, other.pos0);
         vec3.copy(this.pos1, other.pos1);
@@ -45,21 +45,20 @@ export class Triangle {
         vec3.copy(this.faceNormal, other.faceNormal);
     }
 
-    public fillData(collisionParts: CollisionParts, prismIdx: number, hitSensor: HitSensor): void {
+    public fillData(collisionParts: CollisionParts, prism: KC_PrismData, hitSensor: HitSensor): void {
         this.collisionParts = collisionParts;
-        this.prismIdx = prismIdx;
+        this.prism = prism;
         this.hitSensor = hitSensor;
 
         const server = collisionParts.collisionServer;
-        const prismData = server.getPrismData(prismIdx);
 
-        server.getPos(this.pos0, prismData, 0);
+        server.getPos(this.pos0, prism, 0);
         transformVec3Mat4w1(this.pos0, collisionParts.worldMtx, this.pos0);
-        server.getPos(this.pos1, prismData, 1);
+        server.getPos(this.pos1, prism, 1);
         transformVec3Mat4w1(this.pos1, collisionParts.worldMtx, this.pos1);
-        server.getPos(this.pos2, prismData, 2);
+        server.getPos(this.pos2, prism, 2);
         transformVec3Mat4w1(this.pos2, collisionParts.worldMtx, this.pos2);
-        server.getFaceNormal(this.faceNormal, prismData);
+        server.getFaceNormal(this.faceNormal, prism);
         transformVec3Mat4w0(this.faceNormal, collisionParts.worldMtx, this.faceNormal);
     }
 }
@@ -279,8 +278,7 @@ export class CollisionParts {
 
             const dstHitInfo = hitInfo[dstIdx];
 
-            const prismIdx = this.collisionServer.toIndex(prism);
-            dstHitInfo.fillData(this, prismIdx, this.hitSensor);
+            dstHitInfo.fillData(this, prism, this.hitSensor);
             if (triFilter !== null && triFilter(sceneObjHolder, dstHitInfo))
                 continue;
 
@@ -360,8 +358,7 @@ export class CollisionParts {
             dstHitInfo.classification = this.checkCollisionResult.classifications[i];
             transformVec3Mat4w1(dstHitInfo.strikeLoc, this.worldMtx, dstHitInfo.strikeLoc);
 
-            const prismIdx = this.collisionServer.toIndex(prism);
-            dstHitInfo.fillData(this, prismIdx, this.hitSensor);
+            dstHitInfo.fillData(this, prism, this.hitSensor);
             if (triFilter !== null && triFilter(sceneObjHolder, dstHitInfo))
                 continue;
             if (normalFilter !== null && vec3.dot(normalFilter, dstHitInfo.faceNormal) > 0.0)

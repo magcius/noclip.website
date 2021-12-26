@@ -156,21 +156,13 @@ export class KCollisionServer {
         this.farthestVertexDistance = Math.sqrt(bestDistSqr);
     }
 
-    public getAttributes(idx: number): JMapInfoIter | null {
+    public getAttributes(prismData: KC_PrismData): JMapInfoIter | null {
         if (this.params !== null) {
-            this.params.setRecord(this.prisms[idx].attrib);
+            this.params.setRecord(prismData.attrib);
             return this.params;
         } else {
             return null;
         }
-    }
-
-    public toIndex(prism: KC_PrismData): number {
-        return this.prisms.indexOf(prism);
-    }
-
-    public getPrismData(idx: number): KC_PrismData {
-        return this.prisms[idx];
     }
 
     public getFaceNormal(dst: vec3, prism: KC_PrismData): void {
