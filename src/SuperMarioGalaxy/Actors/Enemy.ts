@@ -899,12 +899,12 @@ export class Unizo extends LiveActor<UnizoNrv> {
         getMatrixAxisY(scratchVec3a, this.baseMtx);
         vec3.scaleAndAdd(scratchVec3b, scratchVec3b, scratchVec3a, 126.36 * this.size /* * this.animScaleController.scale[1] */);
 
-        const wobbleY = this.size * Math.sin(this.chaseSinTimer) / 60 * this.wobbleY;
+        const wobbleY = this.size * Math.sin(this.chaseSinTimer / 60) * this.wobbleY;
 
         vecKillElement(scratchVec3a, this.velocity, this.gravityVector);
-        const gravityWobbleY = Math.min(vec3.length(scratchVec3b) * 0.25, 1.0);
+        const velWobbleY = Math.min(vec3.length(scratchVec3a) * 0.25, 1.0);
 
-        vec3.scaleAndAdd(scratchVec3b, scratchVec3b, this.gravityVector, gravityWobbleY * wobbleY);
+        vec3.scaleAndAdd(scratchVec3b, scratchVec3b, this.gravityVector, velWobbleY * wobbleY);
         setMatrixTranslation(scratchMatrix, scratchVec3b);
         mat4.copy(this.modelInstance!.modelMatrix, scratchMatrix);
     }
