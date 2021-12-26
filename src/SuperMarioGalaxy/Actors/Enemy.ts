@@ -825,7 +825,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
     private effectHostMtx = mat4.create();
     private rollRotation = quat.create();
     private blinkTime = 0;
-    private isInAir = false;
+    private isJumping = false;
     private chaseSinTimer = 0;
     private waterInfo = new WaterInfo();
 
@@ -927,7 +927,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         quat.normalize(this.rollRotation, this.rollRotation);
         vec3.zero(this.rotation);
 
-        this.isInAir = true;
+        this.isJumping = true;
     }
 
     public makeActorDead(sceneObjHolder: SceneObjHolder): void {
@@ -960,7 +960,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
             this.updateBlink();
             this.updateInfluence(sceneObjHolder);
 
-            if (!this.isInAir && isBindedGround(this) && isNearPlayer(sceneObjHolder, this, 1500.0) /* && isPlayerDamaging() */) {
+            if (!this.isJumping && isBindedGround(this) && isNearPlayer(sceneObjHolder, this, 1500.0) /* && isPlayerDamaging() */) {
                 this.doJump();
                 this.setNerve(UnizoNrv.Jump);
             }
@@ -1053,7 +1053,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
     }
 
     private doJump(): void {
-        this.isInAir = true;
+        this.isJumping = true;
 
         const jumpHeight = Math.sqrt(2.0 * this.size * (70.0 * this.jumpHeight * vec3.length(this.gravityVector)));
         vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -jumpHeight);
@@ -1125,23 +1125,19 @@ export class Unizo extends LiveActor<UnizoNrv> {
         vecKillElement(scratchVec3b, scratchVec3b, this.gravityVector);
         vec3.normalize(scratchVec3b, scratchVec3b);
 
-        vec3.normalize(scratchVec3a, this.gravityVector);
-        const chaseSin = Math.sin(this.chaseSinTimer / 20.0);
-        const chaseSpeed = 0.25 * MathConstants.TAU * chaseSin * Math.min(vec3.length(this.velocity) * 0.25, 1.0);
-        mat4.fromRotation(scratchMatrix, chaseSpeed, scratchVec3a);
-
+        const chaseAngle = (MathConstants.TAU / 4) * Math.sin(this.chaseSinTimer / 20.0) * (vec3.length(this.velocity) * 0.25);
+        mat4.fromRotation(scratchMatrix, chaseAngle, this.gravityVector);
         transformVec3Mat4w0(scratchVec3b, scratchMatrix, scratchVec3b);
-        if (vec3.dot(scratchVec3b, this.velocity) <= 0.0) {
+        setMatrixTranslation(scratchMatrix, this.translation);
+        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation, isBindedGround(this) ? Green : Red);
+
+        if (vec3.dot(scratchVec3b, this.velocity) <= 0.0 || vec3.squaredLength(this.velocity) < 4.0**2)
             addVelocityMoveToDirection(this, scratchVec3b, 0.1);
-        } else if (vec3.squaredLength(this.velocity) < 4.0**2) {
-            addVelocityMoveToDirection(this, scratchVec3b, 0.1);
-        }
     }
 
     private updateInfluence(sceneObjHolder: SceneObjHolder): void {
-        let didRebound = false;
-        if (!this.isInAir) {
-            didRebound = reboundVelocityFromCollision(this, 0.0, 0.0, 1.0);
+        if (!this.isJumping) {
+            reboundVelocityFromCollision(this, 0.0, 0.0, 1.0);
 
             if (isBindedGround(this))
                 addVelocityToGravity(this, 0.2);
@@ -1149,7 +1145,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
                 addVelocityToGravity(this, 0.8);
         } else {
             addVelocityToGravity(this, this.jumpHeight);
-            didRebound = reboundVelocityFromCollision(this, 0.6, 0.0, 1.0);
+            reboundVelocityFromCollision(this, 0.6, 0.0, 1.0);
         }
 
         restrictVelocity(this, 12.0);
@@ -1169,7 +1165,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
                         vec3.zero(this.velocity);
                 }
 
-                this.isInAir = false;
+                this.isJumping = false;
             }
         }
     }
