@@ -315,6 +315,7 @@ export const sceneDescs = [
     new JetSetRadioSceneDesc('Stage2', 'Kogane-cho'),
     new JetSetRadioSceneDesc('Stage3', 'Benten-cho'),
     new JetSetRadioSceneDesc('Stage5', 'Bantam Street'),
+    new JetSetRadioSceneDesc('Stage6', 'Stage 6'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };

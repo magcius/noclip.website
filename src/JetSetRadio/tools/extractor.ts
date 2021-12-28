@@ -716,13 +716,14 @@ function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     extractTexLoadTable(texChunk, execBuffer, 0x8c185ff0, 0x8c800000, 2, 5);
 
     const SCENE_FILE = afsLoad('STAGE5.AFS', 0);
-
+    const OBJECT_COUNT = 71;
+    const INTERACTABLE_COUNT = 71;
+    
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c2033b4;
         const TEXTURE_TABLE_ADDRESS = 0x8c203498;
         const OBJECT_TABLE_ADDRESS = 0x8c202e28;
         const ASSET_COUNT = 56;
-        const OBJECT_COUNT = 71;
         const OBJECTDATA_SIZE = 0x28;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
@@ -735,7 +736,6 @@ function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const TEXTURE_TABLE_ADDRESS = 0x8c203890;
         const OBJECT_TABLE_ADDRESS = 0x8c202f44;
         const ASSET_COUNT = 82;
-        const OBJECT_COUNT = 71;
         const OBJECTDATA_SIZE = 0x28;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
@@ -748,7 +748,75 @@ function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const TEXTURE_TABLE_ADDRESS = 0x8c203d04;
         const OBJECT_TABLE_ADDRESS = 0x8c203060;
         const ASSET_COUNT = 35;
+        const OBJECTDATA_SIZE = 0x34;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
+        return { Models, Objects };
+    }
+
+    function extractInteractables() {
+        const ASSET_TABLE_ADDRESS = 0x8c204084;
+        const TEXTURE_TABLE_ADDRESS = 0x8c204034;
+        const OBJECT_TABLE_ADDRESS = 0x8c203298;
+        const ASSET_COUNT = 20;
         const OBJECT_COUNT = 71;
+        const OBJECTDATA_SIZE = 0x34;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, INTERACTABLE_COUNT,OBJECTDATA_SIZE);
+        return { Models, Objects };
+    }
+
+    const slice1 = extractSlice1();
+    const slice2 = extractSlice2();
+    const slice3 = extractSlice3();
+    //xayrga: An interactable has a vlist that the parser can't understand.
+    //we need to fix that before we can have interactables on this map.
+    //const interactables = extractInteractables();
+
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
+    saveStageData(dstFilename, crg1);
+}
+
+function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void {
+    const texChunk = new TexChunk();
+
+    extractTexLoadTable(texChunk, execBuffer, 0x8c186ad0);
+
+    const SCENE_FILE = afsLoad('STAGE6.AFS', 0);
+    const OBJECT_COUNT = 82;
+    const INTERACTABLE_COUNT = 0;
+
+    function extractSlice1() {
+        const ASSET_TABLE_ADDRESS = 0x8c20af4c;
+        const TEXTURE_TABLE_ADDRESS = 0x8c20b030;
+        const OBJECT_TABLE_ADDRESS = 0x8c20aa3c;
+        const ASSET_COUNT = 57;
+        const OBJECTDATA_SIZE = 0x28;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
+        return { Models, Objects };
+    }
+
+    function extractSlice2() {
+        const ASSET_TABLE_ADDRESS = 0x8c20b2dc;
+        const TEXTURE_TABLE_ADDRESS = 0x8c20b2e4;
+        const OBJECT_TABLE_ADDRESS = 0x8c20aa3c;
+        const ASSET_COUNT = 1; 
+        const OBJECTDATA_SIZE = 0x28;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
+        return { Models, Objects };
+    }
+
+    function extractSlice3() {
+        const ASSET_TABLE_ADDRESS = 0x8c20b2ec;
+        const TEXTURE_TABLE_ADDRESS = 0x8c20b310;
+        const OBJECT_TABLE_ADDRESS = 0x8c20ab80;
+        const ASSET_COUNT = 9;
         const OBJECTDATA_SIZE = 0x34;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
@@ -772,8 +840,6 @@ function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
-    //xayrga: An interactable has a vlist that the parser can't understand.
-    //we need to fix that before we can have interactables on this map.
     //const interactables = extractInteractables();
 
     const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
@@ -787,6 +853,7 @@ function main() {
     extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
     extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
     extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
+    extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); // xayrga: This can't be right... 2MB stagebin and the map is mostly empty? What gives?
 }
 
 main();
