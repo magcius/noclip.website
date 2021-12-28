@@ -881,10 +881,10 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
     extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-    //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
-    //extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
-    //extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
-    //extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); // xayrga: This can't be right... 2MB stagebin and the map is mostly empty? What gives?
+    extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+    extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
+    extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
+    extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); // xayrga: This can't be right... 2MB stagebin and the map is mostly empty? What gives?
 }
 
 main();
