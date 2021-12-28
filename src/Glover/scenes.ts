@@ -55,10 +55,13 @@ class PlatformPathPoint {
     }
 }
 
-export class GloverPlatform {
+export class GloverPlatform implements Shadows.ShadowCaster {
 
     private scratchMatrix = mat4.create();
     private scratchVec3 = vec3.create();
+
+    public shadow: Shadows.Shadow | null = null;
+    public shadowSize: number | Shadows.ConstantShadowSize = 0;
 
     // Spin
 
@@ -85,7 +88,6 @@ export class GloverPlatform {
     public pathAccel : number = 0;
     public pathMaxVel : number = NaN;
 
-
     // Implementation
 
     constructor(
@@ -108,6 +110,10 @@ export class GloverPlatform {
         this.position[2] = z;
     }
 
+    public getPosition(): vec3 {
+        return this.position;
+    }
+
     public setScale(x: number, y: number, z: number) {
         this.scale[0] = x;
         this.scale[1] = y;
@@ -119,7 +125,7 @@ export class GloverPlatform {
         this.spinSpeed[axis] = -speed;
     }
 
-    private updateActorModelMatrix() {
+    public updateActorModelMatrix() {
         quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
         let finalPosition = this.position;
         if (this.parent !== undefined) {
@@ -826,6 +832,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     sceneRenderer.platformByTag.set(cmd.params.tag, currentPlatform);
                     break;
                 }
+                case 'PlatCheckpoint': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.shadowSize = new Shadows.ConstantShadowSize(20); // From engine
+                    shadowCasters.push(currentPlatform);
+                    break;
+                }
                 case 'PlatVentAdvanceFrames': {
                     // TODO: support vent objects, too
                     if (currentPlatform === null) {
@@ -874,6 +888,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
             }
+        }
+
+        for (let platform of sceneRenderer.platforms) {
+            platform.updateActorModelMatrix();
         }
 
         const shadowTerrain = sceneRenderer.opaqueActors; // TODO: figure out actual list

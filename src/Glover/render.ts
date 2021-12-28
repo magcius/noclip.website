@@ -774,6 +774,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     private positionScratch: vec3 = vec3.create();
 
     public shadow: Shadows.Shadow | null = null;
+    public shadowSize: number = 1;
 
     constructor(
         private device: GfxDevice,
@@ -1438,6 +1439,8 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
     public isGarib: boolean = false;
 
     public shadow: Shadows.Shadow | null = null;
+    public shadowSize: number = 8;
+
     private positionScratch: vec3 = vec3.create();
 
     protected isBillboard: boolean = true;
@@ -1548,7 +1551,6 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
 
         drawCall.renderData = new DrawCallRenderData(this.device, this.cache, rspState.textureCache, rspState.segmentBuffers, drawCall);
         this.rspOutput = new GloverRSPOutput([drawCall], rspState.textureCache);
-
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1633,10 +1635,10 @@ export class GloverShadowRenderer extends GloverFlipbookRenderer {
             frameset: [0x147b7297],
             frameDelay: 0,
             type: 1,
-            field_0x6: 0x96,
-            field_0x7: 0x96,
-            width: 0x40,
-            height: 0x40
+            field_0x6: 0,
+            field_0x7: 0,
+            width: 1,
+            height: 1
         }, 0);
     }
 

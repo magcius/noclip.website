@@ -9,8 +9,13 @@ import { GloverShadowRenderer } from './render';
 import * as Textures from './textures';
 
 
+export class ConstantShadowSize {
+    constructor(public size: number) {}
+}
+
 export interface ShadowCaster {
     getPosition: () => vec3;
+    shadowSize: number | ConstantShadowSize;
     shadow: Shadow | null;
 }
 
@@ -73,10 +78,18 @@ export class Shadow {
         if (Shadow.renderer === undefined || this.position === null) {
             return;
         }        
-        // TODO: shadowSize = garib->shadow_0x10 * garib->billboard.tex->width * 0.25)
-        const shadowSize = 1;
-        const shadow_0x50 = vec3.dist(this.position, this.source.getPosition()); // TODO: cache value
-        const scaleVal = (Math.min(shadowSize, shadowSize * Math.sqrt(shadowSize/shadow_0x50)) * 7 + shadowSize) / 8;
+
+        let scaleVal = 1;
+        if (this.source.shadowSize instanceof ConstantShadowSize) {
+            // NB: engine expects sprite size to be 10x10 when using a constant
+            //     size factor, so we have to scale here
+            scaleVal = this.source.shadowSize.size * 10;
+        } else {
+            // NB: engine expects shadows sized this way to have a sprite sized 1x1
+            const castDist = vec3.dist(this.position, this.source.getPosition()); // TODO: cache value
+            const shadowScalar = Math.min(this.source.shadowSize, this.source.shadowSize * Math.sqrt(this.source.shadowSize / castDist));
+            scaleVal = (shadowScalar * 7.0 + this.source.shadowSize);
+        }
         quat.rotationTo(Shadow.scratchQuat, this.normal, [0,0,-1]);
         quat.conjugate(Shadow.scratchQuat, Shadow.scratchQuat);
         mat4.fromRotationTranslationScale(Shadow.renderer.drawMatrix,
