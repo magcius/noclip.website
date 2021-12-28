@@ -36,6 +36,11 @@ interface ModelData extends AFSRefData {
     TexlistIndex: number;
 }
 
+interface SkyboxData {
+    Outer : ModelData;
+    Inner : ModelData;
+}
+
 interface ObjectData {
     ModelID: number;
     Translation: [number, number, number];
@@ -51,6 +56,7 @@ interface StageSliceData {
 
 interface StageData extends StageSliceData {
     TexlistData: TexlistData;
+    Skybox: SkyboxData;
 }
 
 class AFSReference {
@@ -448,7 +454,7 @@ function extractObjectTableSinglesSize(execBuffer: ArrayBufferSlice, afsFile: AF
 
 
 
-function packStageData(texChunk: TexChunk, slices: StageSliceData[]): StageData {
+function packStageData(texChunk: TexChunk, slices: StageSliceData[], Skybox: SkyboxData | any = null): StageData {
     const TexlistData = packTexListData(texChunk);
 
     const Models: ModelData[] = [];
@@ -463,12 +469,28 @@ function packStageData(texChunk: TexChunk, slices: StageSliceData[]): StageData 
         }));
     }
 
-    return { TexlistData, Models, Objects };
+    return { TexlistData, Models, Objects, Skybox };
 }
 
 function saveStageData(dstFilename: string, crg1: StageData): void {
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(dstFilename, Buffer.from(data));
+}
+
+function loadSkyBoxData(execBuffer: ArrayBufferSlice, texlist: Texlist[], afsFile: AFSReference, innerOfs: number, outerOfs: number, innerTexlistOfs: number) : SkyboxData | any {
+    
+    const texlistIndex = findTexlistIndex(texlist, innerTexlistOfs);    
+
+    if (texlistIndex < 0)
+        console.warn(`SKYBOX: ${hexzero0x(innerOfs)} / ${hexzero0x(outerOfs)} could not find texlist with addr: ${hexzero0x(innerTexlistOfs)}`);
+  
+    const In = { ... afsFile.getRefData(), Offset: innerOfs - STAGE_ALLOCATION_ADDRESS, TexlistIndex: texlistIndex };
+    const Out = { ... afsFile.getRefData(), Offset: outerOfs - STAGE_ALLOCATION_ADDRESS, TexlistIndex: -1 };
+
+    return {
+        Outer: Out,
+        Inner: In,
+    }
 }
 
 function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void {
@@ -482,7 +504,7 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const SCENE_FILE = afsLoad('STAGE1.AFS', 0);
     const OBJECT_COUNT = 61;
     const INTERACTABLE_COUNT = 61;
-
+    // 8c105e48
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c1063b4;
         const TEXTURE_TABLE_ADDRESS = 0x8c106648;
@@ -541,14 +563,23 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
+    function extractSkybox() {
+        const SKYBOX_MESH_ADDRESS_INNER = 0x8cce2ebc;
+        const SKYBOX_MESH_ADDRESS_OUTER = 0x8cce33c0;
+        const SKYBOX_TEXLIST_ADDRESS_IN = 0x8c19de5c;
+
+        return loadSkyBoxData(execBuffer, texChunk.texlists ,SCENE_FILE,SKYBOX_MESH_ADDRESS_INNER, SKYBOX_MESH_ADDRESS_OUTER, SKYBOX_TEXLIST_ADDRESS_IN);
+    }
+
 
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
     // const slice4 = extractSlice4();
-    const interactables = extractInteractables();
+    const interactables = extractInteractables();    
+    const skybox = extractSkybox();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables], skybox);
     saveStageData(dstFilename, crg1);
 }
 
@@ -850,10 +881,10 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
     extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-    extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
-    extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
-    extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
-    extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); // xayrga: This can't be right... 2MB stagebin and the map is mostly empty? What gives?
+    //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+    //extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
+    //extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
+    //extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); // xayrga: This can't be right... 2MB stagebin and the map is mostly empty? What gives?
 }
 
 main();

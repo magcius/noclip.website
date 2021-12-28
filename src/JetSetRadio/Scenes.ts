@@ -169,10 +169,16 @@ interface ObjectData {
     Scale: [number, number, number];
 }
 
+interface SkyboxData {
+    Outer : ModelData;
+    Inner : ModelData;
+}
+
 interface StageData {
     TexlistData: TexlistData;
     Models: ModelData[];
     Objects: ObjectData[];
+    Skybox: SkyboxData;
 }
 
 class ModelCache {
