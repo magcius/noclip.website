@@ -3,6 +3,7 @@ import * as Textures from './textures';
 import * as RDP from '../Common/N64/RDP';
 import * as RSP from '../Common/N64/RSP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
+import * as Shadows from './shadows';
 
 import * as RDPRenderModes from './rdp_render_modes';
 
@@ -756,7 +757,7 @@ class ActorMeshNode {
 
 }
 
-export class GloverActorRenderer {
+export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCaster {
 
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
@@ -769,6 +770,10 @@ export class GloverActorRenderer {
     public sortKey: number;
 
     private showDebugInfo: boolean = false;
+
+    private positionScratch: vec3 = vec3.create();
+
+    public shadow: Shadows.Shadow | null = null;
 
     constructor(
         private device: GfxDevice,
@@ -799,6 +804,11 @@ export class GloverActorRenderer {
         this.sortKey = makeSortKey(layer);
     }
 
+    public getPosition(): vec3 {
+        mat4.getTranslation(this.positionScratch, this.modelMatrix);
+        return this.positionScratch;
+    }
+
     public getRenderMode() {
         return this.actorObject.mesh.renderMode;
     }
@@ -814,6 +824,56 @@ export class GloverActorRenderer {
 
     public setDebugInfoVisible(enabled: boolean): void {
         this.showDebugInfo = enabled; 
+    }
+
+    public collides(rayOrigin: vec3, rayVector: vec3): Shadows.Collision | null {
+        let closestIntersection = null;
+        let closestFace = null;
+        let closestIntersectionDist = Infinity;
+
+        // TODO: iterate over child node meshes
+        const geo = this.rootMesh.renderer.meshData.geometry;
+        if (geo === undefined || geo.numFaces === 0) {
+            return null;
+        }
+        for (let faceIdx = 0; faceIdx < geo.faces.length; faceIdx++) {
+            const face = geo.faces[faceIdx];
+            // TODO: don't reallocate every tri
+            const v0 = geo.vertices[face.v0];
+            const v1 = geo.vertices[face.v1];
+            const v2 = geo.vertices[face.v2];
+            const triangle = [
+                vec3.fromValues(v0.x, v0.y, v0.z),
+                vec3.fromValues(v1.x, v1.y, v1.z),
+                vec3.fromValues(v2.x, v2.y, v2.z)
+            ]
+            vec3.transformMat4(triangle[0], triangle[0], this.modelMatrix);
+            vec3.transformMat4(triangle[1], triangle[1], this.modelMatrix);
+            vec3.transformMat4(triangle[2], triangle[2], this.modelMatrix);
+            const intersection = Shadows.rayTriangleIntersection(rayOrigin, rayVector, triangle);
+            if (intersection === null) {
+                continue;
+            } else {
+                const dist = vec3.dist(intersection, rayOrigin);
+                if (dist < closestIntersectionDist) {
+                    closestIntersection = intersection;
+                    closestIntersectionDist = dist;
+                    closestFace = triangle;
+                }
+            }
+        }
+ 
+        if (closestIntersection !== null && closestFace !== null) {
+            const v1 = vec3.sub(closestFace[1], closestFace[1], closestFace[0]);
+            const v2 = vec3.sub(closestFace[2], closestFace[2], closestFace[0]);
+            vec3.cross(closestFace[0], v1, v2);
+            vec3.normalize(closestFace[0], closestFace[0]);
+            return {
+                position: closestIntersection
+                normal: closestFace[0]
+            };
+        }
+        return null;
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1355,7 +1415,7 @@ export class GloverBackdropRenderer {
     }
 }
 
-export class GloverFlipbookRenderer {
+export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
     private rspOutput: GloverRSPOutput | null;
 
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -1377,8 +1437,10 @@ export class GloverFlipbookRenderer {
     
     public isGarib: boolean = false;
 
-    public shadowPosition: vec3 | null = null;
-    public shadowNormal: vec3 | null = null;
+    public shadow: Shadows.Shadow | null = null;
+    private positionScratch: vec3 = vec3.create();
+
+    protected isBillboard: boolean = true;
 
     constructor(
         private device: GfxDevice,
@@ -1403,14 +1465,23 @@ export class GloverFlipbookRenderer {
         this.reloadFrameset(flipbookMetadata)
     }
 
+    public getPosition(): vec3 {
+        mat4.getTranslation(this.positionScratch, this.drawMatrix);
+        return this.positionScratch;
+    }
+
+    protected initializePipeline(rspState: GloverRSPState) {
+        initializeRenderState(rspState);
+        setRenderMode(rspState, true, false, true, 1.0);
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+    }
+
     public reloadFrameset(flipbookMetadata: Flipbook): void {
         /* Object bank in first segment, then one
            texture bank for each subsequent */
         const segments = this.textures.textureSegments();
 
         // TODO: dispose of old render data, if it exists
-
-        // TODO: implement flipbook frame delays
 
         this.curFrame = this.curFrame % flipbookMetadata.frameset.length;
         this.frameDelay = flipbookMetadata.frameDelay;
@@ -1426,9 +1497,7 @@ export class GloverFlipbookRenderer {
 
         const rspState = new GloverRSPState(segments, this.textures);
 
-        initializeRenderState(rspState);
-        setRenderMode(rspState, true, false, true, 1.0);
-        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+        this.initializePipeline(rspState);
 
         let drawCall = rspState._newDrawCall();
 
@@ -1442,16 +1511,15 @@ export class GloverFlipbookRenderer {
 
         drawCall.textureIndices.push(this.frames[this.curFrame]);
 
-        // TODO: scale properly, based on values from engine
-        let sW = frame_textures[0].width;
-        let sH = frame_textures[0].height;
+        let sW = flipbookMetadata.width / 3;
+        let sH = flipbookMetadata.height / 3;
         let sX = -sW/2;
         let sY = -sH/2;
 
         let ulS = 0;
         let ulT = 0;
-        let lrS = sW * 32;
-        let lrT = sH * 32;
+        let lrS = frame_textures[0].width * 32;
+        let lrT = frame_textures[0].height * 32;
 
         const spriteCoords = [
             [sX, sY, ulS, lrT],
@@ -1505,17 +1573,19 @@ export class GloverFlipbookRenderer {
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
 
-        this.lastFrameAdvance += viewerInput.deltaTime;
-        if (this.lastFrameAdvance > 50) {
-            this.lastFrameAdvance = 0;
+        if (this.frames.length > 1) {
+            this.lastFrameAdvance += viewerInput.deltaTime;
+            if (this.lastFrameAdvance > 50) {
+                this.lastFrameAdvance = 0;
 
-            if (this.frameCounter > 0) {
-                this.frameCounter -= 0x20;
-            } else {
-                this.frameCounter = this.frameDelay;
-                this.curFrame += 1;
-                if (this.curFrame >= this.frames.length) {
-                    this.curFrame = 0;
+                if (this.frameCounter > 0) {
+                    this.frameCounter -= 0x20;
+                } else {
+                    this.frameCounter = this.frameDelay;
+                    this.curFrame += 1;
+                    if (this.curFrame >= this.frames.length) {
+                        this.curFrame = 0;
+                    }
                 }
             }
         }
@@ -1525,13 +1595,8 @@ export class GloverFlipbookRenderer {
 
             for (let drawCall of this.rspOutput.drawCalls) {
                 const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
-                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, true);
+                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, this.isBillboard);
             }
-        }
-
-        if (this.shadowPosition !== null) {
-            // TODO: draw an actual shadow
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.shadowPosition, "o", 0, White, { outline: 6 });
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -1544,4 +1609,35 @@ export class GloverFlipbookRenderer {
             }
         }
     }
+}
+
+
+export class GloverShadowRenderer extends GloverFlipbookRenderer {
+    protected isBillboard: boolean = false;
+
+    protected initializePipeline(rspState: GloverRSPState) {
+        initializeRenderState(rspState);
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001        
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+        rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+        rspState.gDPSetPrimColor(0, 0, 0, 0, 0, 0xFF); // TODO: paramaterize this
+    }
+    
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        textures: Textures.GloverTextureHolder)
+    {
+        super(device, cache, textures, {
+            frameset: [0x147b7297],
+            frameDelay: 0,
+            type: 1,
+            field_0x6: 0x96,
+            field_0x7: 0x96,
+            width: 0x40,
+            height: 0x40
+        }, 0);
+    }
+
 }

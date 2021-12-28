@@ -6,6 +6,7 @@ import * as BYML from '../byml';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 
 
+import * as Shadows from './shadows';
 import { GloverTextureHolder } from './textures';
 
 
@@ -34,7 +35,6 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
 import { framesets, collectibleFlipbooks } from './framesets';
-import { rayTriangleIntersection } from './shadow';
 
 
 import { KaitaiStream } from 'kaitai-struct';
@@ -98,6 +98,7 @@ export class GloverPlatform {
             this.setPosition(point.pos[0], point.pos[1], point.pos[2]);
             this.pathTimeLeft = point.duration;
             this.pathPaused = point.duration < 0;
+            this.updateActorModelMatrix();
         }
     }
 
@@ -116,6 +117,16 @@ export class GloverPlatform {
     public setNeutralSpin(axis: number, initial_theta: number, speed: number) {
         this.eulers[axis] = initial_theta * 180 / Math.PI;
         this.spinSpeed[axis] = -speed;
+    }
+
+    private updateActorModelMatrix() {
+        quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
+        let finalPosition = this.position;
+        if (this.parent !== undefined) {
+            finalPosition = this.scratchVec3
+            vec3.add(finalPosition, this.position, this.parent.position);
+        }
+        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.rotation, finalPosition, this.scale);
     }
 
     public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
@@ -185,18 +196,8 @@ export class GloverPlatform {
         this.eulers[0] = this.eulers[0] % 360;
         this.eulers[1] = this.eulers[1] % 360;
         this.eulers[2] = this.eulers[2] % 360;
-        quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
 
-
-        let finalPosition = this.position;
-        if (this.parent !== undefined) {
-            finalPosition = this.scratchVec3
-            vec3.add(finalPosition, this.position, this.parent.position);
-        }
-
-        // TODO: remove
-        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, 'Euler: ' + this.eulers, 0, White, { outline: 6 });
-        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.rotation, finalPosition, this.scale);
+        this.updateActorModelMatrix()
     }
 }
 
@@ -206,6 +207,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     public backdrops: GloverBackdropRenderer[] = [];
     public flipbooks: GloverFlipbookRenderer[] = [];
 
+    public shadows: Shadows.Shadow[] = [];
     public platforms: GloverPlatform[] = [];
     public platformByTag = new Map<number, GloverPlatform>();
 
@@ -301,6 +303,9 @@ class GloverRenderer implements Viewer.SceneGfx {
             //     renderer.modelMatrix[14],
             // );
             // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, pos, renderer.actorObject.objId.toString(16), 0, White, { outline: 6 });
+        }
+        for (let renderer of this.shadows) {
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
         for (let renderer of this.flipbooks) {
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -676,6 +681,7 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
+        Shadows.Shadow.initializeRenderer(device, cache, textureHolder);
 
         let scratchMatrix = mat4.create();
         let currentActor: GloverActorRenderer | null = null; 
@@ -697,6 +703,8 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         let skyboxClearColor = [0,0,0];
+
+        let shadowCasters: Shadows.ShadowCaster[] = [];
 
         for (let cmd of landscape.body) {
             if (cmd.params === undefined) {
@@ -841,6 +849,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     flipbook.isGarib = cmd.params.type == 0;
                     mat4.fromTranslation(flipbook.drawMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     sceneRenderer.flipbooks.push(flipbook);
+                    shadowCasters.push(flipbook);
                     break;
                 }
 
@@ -867,60 +876,10 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        // TODO: decompose and calculate for shadow-flagged actors, as well
-        for (let flipbookRenderer of sceneRenderer.flipbooks) {
-            // TODO: only do this on the bounding box which is both
-            //       overlapping in x+z, and also has the smallest
-            //       positive y distance between the bottom of the
-            //       shadow-caster bbox and top of the shadow-surface
-            //       bbox
-            let closestIntersection = null;
-            let closestFace = null;
-            let closestIntersectionDist = Infinity;
-            const casterOrigin = vec3.create();
-            mat4.getTranslation(casterOrigin, flipbookRenderer.drawMatrix);
-            // const ray = vec3.fromValues(casterOrigin[0], casterOrigin[1]-1, casterOrigin[2]);
-            const ray = vec3.fromValues(0, -1, 0);
-            for (let actorRenderer of sceneRenderer.opaqueActors) {
-                const geo = actorRenderer.rootMesh.renderer.meshData.geometry;
-                if (geo === undefined || geo.numFaces === 0) {
-                    continue;
-                }
-                for (let faceIdx = 0; faceIdx < geo.faces.length; faceIdx++) {
-                    const surfaceOrigin = vec3.create();
-                    mat4.getTranslation(surfaceOrigin, actorRenderer.modelMatrix);
-                    const face = geo.faces[faceIdx];
-                    const v0 = geo.vertices[face.v0];
-                    const v1 = geo.vertices[face.v1];
-                    const v2 = geo.vertices[face.v2];
-                    // TODO: don't reallocate every tri
-                    const triangle = [
-                        vec3.fromValues(v0.x + surfaceOrigin[0], v0.y + surfaceOrigin[1], v0.z + surfaceOrigin[2]),
-                        vec3.fromValues(v1.x + surfaceOrigin[0], v1.y + surfaceOrigin[1], v1.z + surfaceOrigin[2]),
-                        vec3.fromValues(v2.x + surfaceOrigin[0], v2.y + surfaceOrigin[1], v2.z + surfaceOrigin[2])
-                    ]
-                    const intersection = rayTriangleIntersection(casterOrigin, ray, triangle);
-                    if (intersection === null) {
-                        continue;
-                    } else {
-                        const dist = vec3.dist(intersection, casterOrigin);
-                        if (dist < closestIntersectionDist) {
-                            closestIntersection = intersection;
-                            closestIntersectionDist = dist;
-                            closestFace = triangle;
-                        }
-                    }
-                }
-            } 
-            if (closestIntersection !== null && closestFace !== null) {
-                flipbookRenderer.shadowPosition = closestIntersection;
-                const v1 = vec3.sub(closestFace[1], closestFace[1], closestFace[0]);
-                const v2 = vec3.sub(closestFace[1], closestFace[2], closestFace[0]);
-                vec3.cross(closestFace[0], v1, v2)
-                flipbookRenderer.shadowNormal = closestFace[0];
-            }
+        const shadowTerrain = sceneRenderer.opaqueActors; // TODO: figure out actual list
+        for (let shadowCaster of shadowCasters) {
+            sceneRenderer.shadows.push(new Shadows.Shadow(shadowCaster, shadowTerrain));
         }
-
 
         sceneRenderer.renderPassDescriptor = makeAttachmentClearDescriptor(
             colorNewFromRGBA(skyboxClearColor[0], skyboxClearColor[1], skyboxClearColor[2]));
