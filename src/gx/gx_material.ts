@@ -999,7 +999,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (clamp)
             return `saturate(${expr})`;
         else
-            return expr;
+            return `clamp(${expr}, -4.0, 4.0)`;
     }
 
     private generateColorOp(stage: TevStage) {

@@ -761,8 +761,7 @@ fn fs() -> FragmentOutput {
 }
 `;
 
-    constructor(device: GPUDevice) {
-        const format: GPUTextureFormat = 'bgra8unorm';
+    constructor(device: GPUDevice, format: GPUTextureFormat) {
         this.shaderModule = device.createShaderModule({ code: this.shaderText });
         this.pipeline = device.createRenderPipeline({
             vertex: { module: this.shaderModule, entryPoint: 'vs', },
@@ -788,6 +787,7 @@ fn fs() -> FragmentOutput {
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
+    private _swapChainFormat: GPUTextureFormat;
     private readonly _swapChainTextureUsage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
     private _resourceUniqueId: number = 0;
 
@@ -844,7 +844,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             debugger;
         };
 
-        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device);
+        this._swapChainFormat = this.canvasContext.getPreferredFormat(this.adapter);
+        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device, this._swapChainFormat);
     }
 
     private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): GfxTextureP_WebGPU {
@@ -863,7 +864,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._swapChainWidth = width;
         this._swapChainHeight = height;
         const size = { width, height };
-        this.canvasContext.configure({ device: this.device, format: 'bgra8unorm', usage: this._swapChainTextureUsage, size });
+        this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, size });
     }
 
     public getOnscreenTexture(): GfxTexture {
