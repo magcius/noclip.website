@@ -2181,7 +2181,7 @@ var GloverLevel = (function() {
         this.params = new PlatOrbit0x75(this._io, this, this._root);
         break;
       case 152:
-        this.params = new Unknown0x98(this._io, this, this._root);
+        this.params = new AmbientLight(this._io, this, this._root);
         break;
       case 109:
         this.params = new PlatPathAcceleration(this._io, this, this._root);
@@ -2863,6 +2863,31 @@ var GloverLevel = (function() {
     return PlatDestructibleSound;
   })();
 
+  var AmbientLight = GloverLevel.AmbientLight = (function() {
+    function AmbientLight(_io, _parent, _root) {
+      this.__type = 'AmbientLight';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    AmbientLight.prototype._read = function() {
+      this._debug.r = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.r = this._io.readU2be();
+      this._debug.r.end = this._io.pos;
+      this._debug.g = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.g = this._io.readU2be();
+      this._debug.g.end = this._io.pos;
+      this._debug.b = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.b = this._io.readU2be();
+      this._debug.b.end = this._io.pos;
+    }
+
+    return AmbientLight;
+  })();
+
   var Enemy = GloverLevel.Enemy = (function() {
     function Enemy(_io, _parent, _root) {
       this.__type = 'Enemy';
@@ -3452,31 +3477,6 @@ var GloverLevel = (function() {
     }
 
     return Plat0x7e;
-  })();
-
-  var Unknown0x98 = GloverLevel.Unknown0x98 = (function() {
-    function Unknown0x98(_io, _parent, _root) {
-      this.__type = 'Unknown0x98';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    Unknown0x98.prototype._read = function() {
-      this._debug.h0x00 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h0x00 = this._io.readU2be();
-      this._debug.h0x00.end = this._io.pos;
-      this._debug.h0x02 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h0x02 = this._io.readU2be();
-      this._debug.h0x02.end = this._io.pos;
-      this._debug.h0x04 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.h0x04 = this._io.readU2be();
-      this._debug.h0x04.end = this._io.pos;
-    }
-
-    return Unknown0x98;
   })();
 
   var CameoInst1 = GloverLevel.CameoInst1 = (function() {

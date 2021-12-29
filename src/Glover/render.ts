@@ -1072,6 +1072,13 @@ class GloverMeshRenderer {
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         setRenderMode(rspState, texturing, xlu, true, 1.0);
 
+        if ((this.meshData.renderMode & 0x8) == 0) {
+            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
+        } else {
+            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
+        }
+
+
         try {
             if (meshData.displayListPtr != 0) {
                 // TODO: incorporate mesh alpha here

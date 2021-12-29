@@ -762,6 +762,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
                     break;
                 }
+                case 'AmbientLight': {
+                    // TODO
+                    break;
+                }
+                case 'DiffuseLight': {
+                    // TODO
+                    break;
+                }
                 case 'Platform': {
                     // TODO: special case exitpost.ndo
                     currentPlatform = new GloverPlatform(loadActor(cmd.params.objectId));
