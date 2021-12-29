@@ -593,7 +593,7 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
     const SCENE_FILE = afsLoad('STAGE2.AFS', 0);
     const OBJECT_COUNT = 114;
-    const INTERACTABLE_COUNT = 21;
+    const INTERACTABLE_COUNT = OBJECT_COUNT;
 
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c1086a0;
@@ -631,14 +631,12 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
-
-
     function extractInteractables() {
         const ASSET_TABLE_ADDRESS = 0x8c10a004;
         const TEXTURE_TABLE_ADDRESS = 0x8c10a170;
-        const OBJECT_TABLE_ADDRESS = 0x8c1080c0;
+        const OBJECT_TABLE_ADDRESS = 0x8c108288;
         const ASSET_COUNT = 91;
-        const OBJECTDATA_SIZE = 0x34;
+        const OBJECTDATA_SIZE = 0x28;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
         const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, INTERACTABLE_COUNT,OBJECTDATA_SIZE);
@@ -715,8 +713,7 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
     
-    // xayrga: parser is having a hard time with one of the models here, too
-    /*
+    
     function extractInteractables() {
         const ASSET_TABLE_ADDRESS = 0x8c1bc3b0;
         const TEXTURE_TABLE_ADDRESS = 0x8c1bc17c;
@@ -728,14 +725,14 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, INTERACTABLE_COUNT);
         return { Models, Objects };
     }
-    */
+    
 
 
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
     const slice4 = extractSlice4();
-    //const interactables = extractInteractables();
+    //const interactables = extractInteractables(); //xayrga: parser is having a hard time with one of the models here, too
 
     const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4]);
     saveStageData(dstFilename, crg1);
@@ -817,12 +814,12 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
     const SCENE_FILE = afsLoad('STAGE6.AFS', 0);
     const OBJECT_COUNT = 82;
-    const INTERACTABLE_COUNT = 0;
+    const INTERACTABLE_COUNT = OBJECT_COUNT;
 
     function extractSlice1() {
         const ASSET_TABLE_ADDRESS = 0x8c20af4c;
         const TEXTURE_TABLE_ADDRESS = 0x8c20b030;
-        const OBJECT_TABLE_ADDRESS = 0x8c20aa3c;
+        const OBJECT_TABLE_ADDRESS = 0x8c20a8f8;
         const ASSET_COUNT = 57;
         const OBJECTDATA_SIZE = 0x28;
 
@@ -856,10 +853,10 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     }
 
     function extractInteractables() {
-        const ASSET_TABLE_ADDRESS = 0x8c204084;
-        const TEXTURE_TABLE_ADDRESS = 0x8c204034;
-        const OBJECT_TABLE_ADDRESS = 0x8c203298;
-        const ASSET_COUNT = 20;
+        const ASSET_TABLE_ADDRESS = 0x8c20b49c;
+        const TEXTURE_TABLE_ADDRESS = 0x8c20b52c;
+        const OBJECT_TABLE_ADDRESS = 0x8c20ae08;
+        const ASSET_COUNT = 36;
         const OBJECT_COUNT = 71;
         const OBJECTDATA_SIZE = 0x34;
 
@@ -871,7 +868,7 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
-    //const interactables = extractInteractables();
+    // const interactables = extractInteractables(); xayrga: One of the textures in this breaks the PVR decoder.
 
     const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
     saveStageData(dstFilename, crg1);
@@ -884,7 +881,7 @@ function main() {
     extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
     extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
     extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
-    extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); // xayrga: This can't be right... 2MB stagebin and the map is mostly empty? What gives?
+    extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
 }
 
 main();
