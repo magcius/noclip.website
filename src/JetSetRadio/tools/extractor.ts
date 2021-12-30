@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero0x, readString } from "../../util";
+import { assert, assertExists, hexzero0x, readString } from "../../util";
 import * as AFS from '../AFS';
 import * as BYML from "../../byml";
 import { Console } from "console";
@@ -56,7 +56,7 @@ interface StageSliceData {
 
 interface StageData extends StageSliceData {
     TexlistData: TexlistData;
-    Skybox: SkyboxData;
+    Skybox: SkyboxData | null;
 }
 
 class AFSReference {
@@ -117,8 +117,22 @@ class TexChunk {
 }
 
 function packTexListData(texChunk: TexChunk): TexlistData {
-    const Textures = texChunk.textures;
-    const Texlists = texChunk.texlists.map((v) => v.entries);
+    // Exclude textures that don't have any uses.
+    const usedTextureMap = new Map<number, number>();
+    const usedTextures: number[] = [];
+    const Texlists = texChunk.texlists.map((v) => v.entries.map((origIndex) => {
+        if (!usedTextureMap.has(origIndex)) {
+            usedTextures.push(origIndex);
+            usedTextureMap.set(origIndex, usedTextures.length - 1);
+        }
+
+        return usedTextureMap.get(origIndex)!;
+    }));
+
+    const Textures = usedTextures.map((index) => {
+        return texChunk.textures[index];
+    });
+
     return { Textures, Texlists };
 }
 
@@ -454,7 +468,34 @@ function extractObjectTableSinglesSize(execBuffer: ArrayBufferSlice, afsFile: AF
 
 
 
-function packStageData(texChunk: TexChunk, slices: StageSliceData[], Skybox: SkyboxData | any = null): StageData {
+function packStageData(texChunk: TexChunk, slices: StageSliceData[], Skybox: SkyboxData | null = null): StageData {
+    const usedTexlists: number[] = [];
+    const usedTexlistMap = new Map<number, number>();
+
+    const processModel = (model: ModelData): void => {
+        if (model.TexlistIndex === -1)
+            return;
+
+        if (!usedTexlistMap.has(model.TexlistIndex)) {
+            usedTexlists.push(model.TexlistIndex);
+            usedTexlistMap.set(model.TexlistIndex, usedTexlists.length - 1);
+        }
+
+        model.TexlistIndex = usedTexlistMap.get(model.TexlistIndex)!;
+    };
+
+    for (const slice of slices)
+        for (const model of slice.Models)
+            processModel(model);
+    if (Skybox !== null) {
+        processModel(Skybox.Inner);
+        processModel(Skybox.Outer);
+    }
+
+    texChunk.texlists = usedTexlists.map((index) => {
+        return assertExists(texChunk.texlists[index]);
+    });
+
     const TexlistData = packTexListData(texChunk);
 
     const Models: ModelData[] = [];
@@ -478,12 +519,11 @@ function saveStageData(dstFilename: string, crg1: StageData): void {
 }
 
 function loadSkyBoxData(execBuffer: ArrayBufferSlice, texlist: Texlist[], afsFile: AFSReference, innerOfs: number, outerOfs: number, innerTexlistOfs: number) : SkyboxData | any {
-    
     const texlistIndex = findTexlistIndex(texlist, innerTexlistOfs);    
 
     if (texlistIndex < 0)
         console.warn(`SKYBOX: ${hexzero0x(innerOfs)} / ${hexzero0x(outerOfs)} could not find texlist with addr: ${hexzero0x(innerTexlistOfs)}`);
-  
+
     const In = { ... afsFile.getRefData(), Offset: innerOfs - STAGE_ALLOCATION_ADDRESS, TexlistIndex: texlistIndex };
     const Out = { ... afsFile.getRefData(), Offset: outerOfs - STAGE_ALLOCATION_ADDRESS, TexlistIndex: -1 };
 

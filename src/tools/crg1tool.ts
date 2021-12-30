@@ -12,7 +12,7 @@ function fetchDataSync(path: string): ArrayBufferSlice {
 function main(inFilename: string): void {
     const data = fetchDataSync(inFilename);
     const byml = BYML.parse(data, BYML.FileType.CRG1);
-    console.log(byml);
+    console.log(JSON.stringify(byml, null, 2));
 }
 
 main(process.argv[2]);

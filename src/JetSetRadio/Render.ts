@@ -10,7 +10,7 @@ import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { lerp, lerpAngle, Vec3One, Vec3Zero } from "../MathHelpers";
+import { lerpAngle } from "../MathHelpers";
 import { PVRTextureHolder } from "./Scenes";
 import { assert, nArray } from "../util";
 
