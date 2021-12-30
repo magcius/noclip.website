@@ -211,15 +211,15 @@ declare namespace GloverLevel {
     r: number;
     g: number;
     b: number;
-    theta1: number;
-    theta2: number;
+    thetaX: number;
+    thetaY: number;
 
     _debug: {
       r: DebugPosition;
       g: DebugPosition;
       b: DebugPosition;
-      theta1: DebugPosition;
-      theta2: DebugPosition;
+      thetaX: DebugPosition;
+      thetaY: DebugPosition;
     };
   }
 }

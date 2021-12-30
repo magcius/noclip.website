@@ -313,12 +313,12 @@ var GloverLevel = (function() {
       this._debug.b = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.b = this._io.readU2be();
       this._debug.b.end = this._io.pos;
-      this._debug.theta1 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.theta1 = this._io.readF4be();
-      this._debug.theta1.end = this._io.pos;
-      this._debug.theta2 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.theta2 = this._io.readF4be();
-      this._debug.theta2.end = this._io.pos;
+      this._debug.thetaX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.thetaX = this._io.readF4be();
+      this._debug.thetaX.end = this._io.pos;
+      this._debug.thetaY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.thetaY = this._io.readF4be();
+      this._debug.thetaY.end = this._io.pos;
     }
 
     return DiffuseLight;

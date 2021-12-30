@@ -39,8 +39,14 @@ layout(std140) uniform ub_SceneParams {
     #ifdef TEXTURE_GEN
         vec4 u_LookAtVectors[2];
     #endif
+    #ifdef PARAMETERIZED_LIGHTING
+        vec4 u_DiffuseColor[N_LIGHTS];
+        vec4 u_DiffuseDirection[N_LIGHTS];
+        vec4 u_AmbientColor;
+    #endif
 #endif
 };
+
 
 layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
@@ -109,8 +115,12 @@ void main() {
     vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
 
-    // TODO: find and pass in lighting data
+#ifdef PARAMETERIZED_LIGHTING
+    v_Color = ${this.generateLightingExpression()};
+#else
+    // Define PARAMETERIZED_LIGHTING for full control over lighting parameters
     v_Color = vec4(vec3(.6 + .4*t_Normal.y), a_Color.a);
+#endif
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
@@ -135,6 +145,18 @@ void main() {
         if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
+    }
+
+    private generateLightingExpression(): string {
+        const N_LIGHTS = Number(this.defines.get("N_LIGHTS"));
+        if (this.defines.get("PARAMETERIZED_LIGHTING") === undefined || isNaN(N_LIGHTS))
+            return "vec4(vec3(.6 + .4*t_Normal.y), a_Color.a)";
+        let out = "vec4(";
+        for (let i = 0; i < N_LIGHTS; i++) {
+            out += `max(dot(t_Normal[${i}].xyz, u_DiffuseDirection[${i}].xyz), 0.0) * u_DiffuseColor[${i}].rgb + `;
+        }
+        out += "u_AmbientColor.rgb, a_Color.a)"
+        return out;
     }
 
     private generateClamp(): string {

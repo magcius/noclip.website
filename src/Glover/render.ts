@@ -10,7 +10,7 @@ import * as RDPRenderModes from './rdp_render_modes';
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -41,6 +41,12 @@ const G_TX_MIRROR = 1
 const G_TX_CLAMP = 2
 const G_TX_NOMASK = 0
 const G_TX_NOLOD = 0
+
+export class SceneLighting {
+    public diffuseColor: vec3[] = [];
+    public diffuseDirection: vec3[] = [];
+    public ambientColor: vec3 = vec3.fromValues(.5, .5, .5);
+};
 
 function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, zbuffer: boolean, alpha: number): void {    
     // This isn't exactly right but whatever, good enough
@@ -550,7 +556,7 @@ export class DrawCallInstance {
     public envAlpha = 1;
     public visible = true;
 
-    constructor(private drawCall: DrawCall, private drawMatrix: mat4, textureCache: RDP.TextureCache) {
+    constructor(private drawCall: DrawCall, private drawMatrix: mat4, textureCache: RDP.TextureCache, private sceneLights: SceneLighting | null = null) {
         assert(drawCall.renderData !== null);
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
@@ -577,8 +583,13 @@ export class DrawCallInstance {
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
-        if (this.drawCall.SP_GeometryMode & F3DEX.RSP_Geometry.G_LIGHTING)
+        if (this.drawCall.SP_GeometryMode & F3DEX.RSP_Geometry.G_LIGHTING) {
             program.defines.set('LIGHTING', '1');
+            if (this.sceneLights !== null) {
+                program.defines.set('PARAMETERIZED_LIGHTING', '1');
+                program.defines.set('N_LIGHTS', String(this.sceneLights.diffuseColor.length));
+            }
+        }
 
         if (this.drawCall.SP_GeometryMode & F3DEX.RSP_Geometry.G_TEXTURE_GEN)
             program.defines.set('TEXTURE_GEN', '1');
@@ -695,10 +706,11 @@ class ActorMeshNode {
         cache: GfxRenderCache,
         segments: ArrayBufferSlice[],
         textures: Textures.GloverTextureHolder,
+        sceneLights: SceneLighting,
         public mesh: GloverObjbank.Mesh) 
     {
         if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
-            this.renderer = new GloverMeshRenderer(device, cache, segments, textures, mesh);
+            this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, mesh);
             ActorMeshNode.rendererCache.set(mesh.id, this.renderer);
         } else {
             this.renderer = ActorMeshNode.rendererCache.get(mesh.id)!;
@@ -706,7 +718,7 @@ class ActorMeshNode {
 
         let current_child = mesh.child;
         while (current_child !== undefined) {
-            this.children.push(new ActorMeshNode(device, cache, segments, textures, current_child));
+            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, current_child));
             current_child = current_child.sibling;
         }
     }
@@ -776,12 +788,14 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 1;
 
+    public modelMatrix: mat4 = mat4.create();
+
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
         public actorObject: GloverObjbank.ObjectRoot,
-        public modelMatrix: mat4)
+        public sceneLights: SceneLighting)
     {
         /* Object bank in first segment, then one
            texture bank for each subsequent */
@@ -796,7 +810,9 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, actorObject.mesh)
+        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, actorObject.mesh)
+
+        // TODO: get scene lights out of level data
 
         // TODO: use render mode and actor type to identify other layers
 
@@ -900,11 +916,26 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, lookatScratch, this.actorObject.mesh.name, 0, White, { outline: 6 });
         }
 
-        const sceneParamsSize = 16;
 
-        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
-        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        if ((this.actorObject.mesh.renderMode & 0x8) == 0) {
+            // TODO: make sure lighting is enabled for all children if this runs
+            const n_lights = this.sceneLights.diffuseColor.length;
+            const sceneParamsSize = 16 + n_lights * 8 + 4;
+            let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+            const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+            offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+
+            for (let i = 0; i < n_lights; i++) {
+                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseColor[i]);
+                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseDirection[i]); // TODO: transform from view space
+            }
+            offs += fillVec3v(mappedF32, offs, this.sceneLights.ambientColor);
+        } else {
+            const sceneParamsSize = 16;
+            let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+            const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+            offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);            
+        }
 
         this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
 
@@ -1058,6 +1089,7 @@ class GloverMeshRenderer {
         private cache: GfxRenderCache,
         private segments: ArrayBufferSlice[],
         private textures: Textures.GloverTextureHolder,
+        private sceneLights: SceneLighting,
         public meshData: GloverObjbank.Mesh)
     {
         const buffer = meshData._io.buffer;
@@ -1075,7 +1107,7 @@ class GloverMeshRenderer {
         if ((this.meshData.renderMode & 0x8) == 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
         } else {
-            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
+            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
         }
 
 
@@ -1249,7 +1281,7 @@ class GloverMeshRenderer {
                 // if (this.meshData.id ==  0x52DFE077) {
                 //     console.log(drawCall.vertices);
                 // },
-                const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache);
+                const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache, this.sceneLights);
                 if (!this.vertexColorsEnabled) {
                     drawCallInstance.setVertexColorsEnabled(false);
                 }

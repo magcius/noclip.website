@@ -10,7 +10,7 @@ import * as Shadows from './shadows';
 import { GloverTextureHolder } from './textures';
 
 
-import { GloverActorRenderer, GloverBackdropRenderer, GloverFlipbookRenderer } from './render';
+import { SceneLighting, GloverActorRenderer, GloverBackdropRenderer, GloverFlipbookRenderer } from './render';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -217,6 +217,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     public platforms: GloverPlatform[] = [];
     public platformByTag = new Map<number, GloverPlatform>();
 
+    public sceneLights: SceneLighting = new SceneLighting();
 
     public renderHelper: GfxRenderHelper;
 
@@ -699,7 +700,7 @@ class SceneDesc implements Viewer.SceneDesc {
             if (objRoot === undefined) {
                 throw `Object 0x${id.toString(16)} is not loaded!`;
             }
-            let new_actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, mat4.create());
+            let new_actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, sceneRenderer.sceneLights);
             if ((objRoot.mesh.renderMode & 0x2) == 0) {
                 sceneRenderer.opaqueActors.push(new_actor)
             } else {
@@ -763,11 +764,27 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'AmbientLight': {
-                    // TODO
+                    sceneRenderer.sceneLights.ambientColor[0] = cmd.params.r/255;
+                    sceneRenderer.sceneLights.ambientColor[1] = cmd.params.g/255;
+                    sceneRenderer.sceneLights.ambientColor[2] = cmd.params.b/255;
                     break;
                 }
                 case 'DiffuseLight': {
                     // TODO
+                    // From Jasper:
+                    // "Note that lighting gets calculated in view-space, so you'll need to convert all the relevant light vectors and such in any F3DLight structs you add to view-space on the CPU"
+                    // "I'm sure you've read Chapter 11.7 of the N64 Programming Manual for the details on how the lights work"
+                    // http://ultra64.ca/files/documentation/online-manuals/man/pro-man/pro11/index11.7.html
+                    console.log("TODO: TRANSFORM LIGHT DIRECTION VECTORS PROPERLY!");
+                    sceneRenderer.sceneLights.diffuseColor.push([
+                        cmd.params.r/255,
+                        cmd.params.g/255,
+                        cmd.params.b/255
+                    ]);
+                    const direction = vec3.fromValues(0, 0, 127);
+                    vec3.rotateX(direction, direction, [0,0,0], cmd.params.thetaX);
+                    vec3.rotateY(direction, direction, [0,0,0], cmd.params.thetaY);
+                    sceneRenderer.sceneLights.diffuseDirection.push(direction);
                     break;
                 }
                 case 'Platform': {
