@@ -170,8 +170,7 @@ interface ObjectData {
 }
 
 interface SkyboxData {
-    Outer : ModelData;
-    Inner : ModelData;
+    Meshes : ModelData[];    
 }
 
 interface StageData {
@@ -272,6 +271,17 @@ class ModelCache {
         return actionData;
     }
 
+    public loadFromModelData(dat: ModelData) {
+        const model = dat;
+        const binData = this.getAFSRef(model);
+        const stageLoadAddr = 0x8CB00000;
+        const objects = Ninja.parseNjsObjects(binData, stageLoadAddr, model.Offset);
+        const action: Ninja.NJS_ACTION = { frames: 0, objects, motions: [] };
+        const actionData = new NjsActionData(this.device, this.cache, action, 0);
+        actionData.texlist = this.loadTexlistIndex(model.TexlistIndex);
+        return actionData;
+    }
+
     public destroy(device: GfxDevice): void {
         this.cache.destroy();
         this.textureHolder.destroy(device);
@@ -309,6 +319,14 @@ class JetSetRadioSceneDesc implements SceneDesc {
             actionInstance.update(modelMatrix, 0);
             renderer.actions.push(actionInstance);
         }
+        
+        if (stageData.Skybox!==null) 
+            for (const mesh of stageData.Skybox.Meshes) {
+                const modelDataOuter = modelCache.loadFromModelData(mesh);
+                const actionInstanceOuter = new NjsActionInstance(modelCache.cache, modelDataOuter, modelDataOuter.texlist, modelCache.textureHolder);
+                renderer.actions.push(actionInstanceOuter);
+            }
+        
 
         return renderer;
     }

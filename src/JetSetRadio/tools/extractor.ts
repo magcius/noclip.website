@@ -37,8 +37,7 @@ interface ModelData extends AFSRefData {
 }
 
 interface SkyboxData {
-    Outer : ModelData;
-    Inner : ModelData;
+    Meshes : ModelData[];    
 }
 
 interface ObjectData {
@@ -487,10 +486,11 @@ function packStageData(texChunk: TexChunk, slices: StageSliceData[], Skybox: Sky
     for (const slice of slices)
         for (const model of slice.Models)
             processModel(model);
-    if (Skybox !== null) {
-        processModel(Skybox.Inner);
-        processModel(Skybox.Outer);
-    }
+
+    if (Skybox !== null) 
+       for (const skybox of Skybox.Meshes) 
+            processModel(skybox);
+    
 
     texChunk.texlists = usedTexlists.map((index) => {
         return assertExists(texChunk.texlists[index]);
@@ -518,23 +518,19 @@ function saveStageData(dstFilename: string, crg1: StageData): void {
     writeFileSync(dstFilename, Buffer.from(data));
 }
 
-function loadSkyBoxData(execBuffer: ArrayBufferSlice, texlist: Texlist[], afsFile: AFSReference, innerOfs: number, outerOfs: number, innerTexlistOfs: number) : SkyboxData | any {
-    const texlistIndex = findTexlistIndex(texlist, innerTexlistOfs);    
-
-    if (texlistIndex < 0)
-        console.warn(`SKYBOX: ${hexzero0x(innerOfs)} / ${hexzero0x(outerOfs)} could not find texlist with addr: ${hexzero0x(innerTexlistOfs)}`);
-
+function loadSkyboxMesh(execBuffer: ArrayBufferSlice, texlist: Texlist[], afsFile: AFSReference, innerOfs: number, innerTexlistOfs: number) : ModelData {
+    let texlistIndex = findTexlistIndex(texlist, innerTexlistOfs);    
+    if (innerTexlistOfs === 0)
+        texlistIndex = -1;
+    else if (texlistIndex < 0)
+        console.warn(`SKYBOX: ${hexzero0x(innerOfs)} could not find texlist with addr: ${hexzero0x(innerTexlistOfs)}`);
     const In = { ... afsFile.getRefData(), Offset: innerOfs - STAGE_ALLOCATION_ADDRESS, TexlistIndex: texlistIndex };
-    const Out = { ... afsFile.getRefData(), Offset: outerOfs - STAGE_ALLOCATION_ADDRESS, TexlistIndex: -1 };
-
-    return {
-        Outer: Out,
-        Inner: In,
-    }
+    return In;
 }
 
 function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
+    const SkyboxMeshes = [] as ModelData[];
 
     extractTexLoadTable(texChunk, execBuffer, 0x8c185b30);
     extractTexLoadTable(texChunk, execBuffer, 0x8c1a49c8, 0x8cda0000 );
@@ -604,11 +600,9 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     }
 
     function extractSkybox() {
-        const SKYBOX_MESH_ADDRESS_INNER = 0x8cce2ebc;
-        const SKYBOX_MESH_ADDRESS_OUTER = 0x8cce33c0;
-        const SKYBOX_TEXLIST_ADDRESS_IN = 0x8c19de5c;
-
-        return loadSkyBoxData(execBuffer, texChunk.texlists ,SCENE_FILE,SKYBOX_MESH_ADDRESS_INNER, SKYBOX_MESH_ADDRESS_OUTER, SKYBOX_TEXLIST_ADDRESS_IN);
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE ,0x8cce2ebc, 0x8c19de5c));
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE, 0x8cce33c0, 0));
+        return  { Meshes : SkyboxMeshes }
     }
 
 
@@ -625,6 +619,7 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
 function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
+    const SkyboxMeshes = [] as ModelData[];
 
     extractTexLoadTable(texChunk, execBuffer, 0x8c1b3f28, 0x8cDA0000, 1, 2);
     extractTexLoadTable(texChunk, execBuffer, 0x8c1b3f88, 0x8CDA0000, 1, 2);
@@ -683,18 +678,30 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
+    
+    function extractSkybox() {
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE ,0x8cc93a10, 0));
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE, 0x8cc93634, 0x8c1ad95c));
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE, 0x8cc93454, 0x8c1ad944 ));
+        return  { Meshes : SkyboxMeshes }
+    }
+
+
+
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
     const interactables = extractInteractables();
+    const skybox = extractSkybox();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables], skybox);
     saveStageData(dstFilename, crg1);
 }
 
 
 function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
+    const SkyboxMeshes = [] as ModelData[];
 
     extractTexLoadTable(texChunk, execBuffer, 0x8c1c7350,0x8cf00000, 1, 4);
     extractTexLoadTable(texChunk, execBuffer, 0x8c185db0);
@@ -766,6 +773,11 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
     
+    function extractSkybox() {
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE ,0x8ccc5af4, 0x8c1c2c54));
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE, 0x8ccc7b98, 0x8c1c2c54));
+        return  { Meshes : SkyboxMeshes }
+    }
 
 
     const slice1 = extractSlice1();
@@ -773,14 +785,20 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const slice3 = extractSlice3();
     const slice4 = extractSlice4();
     //const interactables = extractInteractables(); //xayrga: parser is having a hard time with one of the models here, too
+    const skybox = extractSkybox();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4], skybox);
     saveStageData(dstFilename, crg1);
 }
 
 function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
+    const SkyboxMeshes = [] as ModelData[];
 
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1c7350,0x8cf00000, 1, 4);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c185db0);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1c6430, 0x8Cf00000,1,5);
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1c7290, 0x8Cf00000,1);
     extractTexLoadTable(texChunk, execBuffer, 0x8c185ff0, 0x8c800000, 2, 5);
 
     const SCENE_FILE = afsLoad('STAGE5.AFS', 0);
@@ -836,14 +854,21 @@ function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
+    function extractSkybox() {
+        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE ,0x8cc079a4, 0));
+
+        return  { Meshes : SkyboxMeshes }
+    }
+
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
+    const skybox = extractSkybox();
     //xayrga: An interactable has a vlist that the parser can't understand.
     //we need to fix that before we can have interactables on this map.
     //const interactables = extractInteractables();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3], skybox);
     saveStageData(dstFilename, crg1);
 }
 
