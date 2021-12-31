@@ -572,7 +572,8 @@ export class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
+        const nLights = (this.sceneLights !== null) ? this.sceneLights.diffuseColor.length : 0;
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine, .5, [], nLights);
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length) {
@@ -587,7 +588,6 @@ export class DrawCallInstance {
             program.defines.set('LIGHTING', '1');
             if (this.sceneLights !== null) {
                 program.defines.set('PARAMETERIZED_LIGHTING', '1');
-                program.defines.set('N_LIGHTS', String(this.sceneLights.diffuseColor.length));
             }
         }
 
@@ -783,12 +783,13 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
     private showDebugInfo: boolean = false;
 
-    private positionScratch: vec3 = vec3.create();
+    private vec3Scratch: vec3 = vec3.create();
 
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 1;
 
     public modelMatrix: mat4 = mat4.create();
+
 
     constructor(
         private device: GfxDevice,
@@ -822,8 +823,8 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     }
 
     public getPosition(): vec3 {
-        mat4.getTranslation(this.positionScratch, this.modelMatrix);
-        return this.positionScratch;
+        mat4.getTranslation(this.vec3Scratch, this.modelMatrix);
+        return this.vec3Scratch;
     }
 
     public getRenderMode() {
@@ -927,7 +928,9 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
             for (let i = 0; i < n_lights; i++) {
                 offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseColor[i]);
-                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseDirection[i]); // TODO: transform from view space
+            }
+            for (let i = 0; i < n_lights; i++) {
+                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseDirection[i]);
             }
             offs += fillVec3v(mappedF32, offs, this.sceneLights.ambientColor);
         } else {
@@ -1480,7 +1483,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 8;
 
-    private positionScratch: vec3 = vec3.create();
+    private vec3Scratch: vec3 = vec3.create();
 
     protected isBillboard: boolean = true;
 
@@ -1508,8 +1511,8 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
     }
 
     public getPosition(): vec3 {
-        mat4.getTranslation(this.positionScratch, this.drawMatrix);
-        return this.positionScratch;
+        mat4.getTranslation(this.vec3Scratch, this.drawMatrix);
+        return this.vec3Scratch;
     }
 
     protected initializePipeline(rspState: GloverRSPState) {

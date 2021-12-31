@@ -40,8 +40,8 @@ layout(std140) uniform ub_SceneParams {
         vec4 u_LookAtVectors[2];
     #endif
     #ifdef PARAMETERIZED_LIGHTING
-        vec4 u_DiffuseColor[N_LIGHTS];
-        vec4 u_DiffuseDirection[N_LIGHTS];
+        vec4 u_DiffuseColor[${this.G_MW_NUMLIGHT}];
+        vec4 u_DiffuseDirection[${this.G_MW_NUMLIGHT}];
         vec4 u_AmbientColor;
     #endif
 #endif
@@ -140,7 +140,7 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = [], private G_MW_NUMLIGHT: number = 0) {
         super();
         if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
@@ -148,12 +148,9 @@ void main() {
     }
 
     private generateLightingExpression(): string {
-        const N_LIGHTS = Number(this.defines.get("N_LIGHTS"));
-        if (this.defines.get("PARAMETERIZED_LIGHTING") === undefined || isNaN(N_LIGHTS))
-            return "vec4(vec3(.6 + .4*t_Normal.y), a_Color.a)";
         let out = "vec4(";
-        for (let i = 0; i < N_LIGHTS; i++) {
-            out += `max(dot(t_Normal[${i}].xyz, u_DiffuseDirection[${i}].xyz), 0.0) * u_DiffuseColor[${i}].rgb + `;
+        for (let i = 0; i < this.G_MW_NUMLIGHT; i++) {
+            out += `max(dot(t_Normal.xyz, u_DiffuseDirection[${i}].xyz), 0.0) * u_DiffuseColor[${i}].rgb + `;
         }
         out += "u_AmbientColor.rgb, a_Color.a)"
         return out;

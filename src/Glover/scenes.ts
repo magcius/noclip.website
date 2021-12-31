@@ -755,11 +755,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'FogConfiguration': {
-                    // TODO: this isn't actually the right
-                    //       skybox background color (that comes from
-                    //       generic world data), but it'll do for now.
-                    //       later, rip out the skybox values from ROM
-                    //       and use them instead
                     skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
                     break;
                 }
@@ -770,12 +765,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'DiffuseLight': {
-                    // TODO
-                    // From Jasper:
-                    // "Note that lighting gets calculated in view-space, so you'll need to convert all the relevant light vectors and such in any F3DLight structs you add to view-space on the CPU"
-                    // "I'm sure you've read Chapter 11.7 of the N64 Programming Manual for the details on how the lights work"
-                    // http://ultra64.ca/files/documentation/online-manuals/man/pro-man/pro11/index11.7.html
-                    console.log("TODO: TRANSFORM LIGHT DIRECTION VECTORS PROPERLY!");
+                    // TODO: figure out wtf the engine does with those angles
                     sceneRenderer.sceneLights.diffuseColor.push([
                         cmd.params.r/255,
                         cmd.params.g/255,
@@ -784,6 +774,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     const direction = vec3.fromValues(0, 0, 127);
                     vec3.rotateX(direction, direction, [0,0,0], cmd.params.thetaX);
                     vec3.rotateY(direction, direction, [0,0,0], cmd.params.thetaY);
+                    vec3.normalize(direction, direction);
                     sceneRenderer.sceneLights.diffuseDirection.push(direction);
                     break;
                 }
