@@ -545,10 +545,13 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const ASSET_TABLE_ADDRESS = 0x8c1063b4;
         const TEXTURE_TABLE_ADDRESS = 0x8c106648;
         const OBJECT_TABLE_ADDRESS = 0x8c105e98;
-        const ASSET_COUNT = 165;
-
+        const ENVIRONMENT_TABLE_ADDRESS = 0x8c105e54;
+        const ASSET_COUNT = 165;        
+       
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        const MapObjects = extractObjectTableGrouped(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT);
+        const EnvironmentObjects = extractObjectTableGrouped(execBuffer, SCENE_FILE, ENVIRONMENT_TABLE_ADDRESS, 1);
+        const Objects = MapObjects.concat(EnvironmentObjects);
         return { Models, Objects };
     }
 
@@ -638,7 +641,9 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const OBJECTDATA_SIZE = 0x34;
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
-        const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
+        const MapObjects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
+        const EnvironmentObjects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, 0x8c107ce8, 1, OBJECTDATA_SIZE);
+        const Objects = MapObjects.concat(EnvironmentObjects) ;
         return { Models, Objects };
     }
 
@@ -648,6 +653,7 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         const OBJECT_TABLE_ADDRESS = 0x8c107ef4;
         const ASSET_COUNT = 327;
         const OBJECTDATA_SIZE = 0x28;
+    
 
         const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
         const Objects = extractObjectTableSinglesSize(execBuffer, SCENE_FILE, OBJECT_TABLE_ADDRESS, OBJECT_COUNT, OBJECTDATA_SIZE);
@@ -678,9 +684,8 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return { Models, Objects };
     }
 
-    
     function extractSkybox() {
-        SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE ,0x8cc93a10, 0));
+       // SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE ,0x8cc93a10, 0));
         SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE, 0x8cc93634, 0x8c1ad95c));
         SkyboxMeshes.push(loadSkyboxMesh(execBuffer, texChunk.texlists ,SCENE_FILE, 0x8cc93454, 0x8c1ad944 ));
         return  { Meshes : SkyboxMeshes }
