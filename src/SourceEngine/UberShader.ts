@@ -6,7 +6,7 @@
 // and support for a wider variety of variants.
 
 import CodeEditor from "../CodeEditor";
-import { GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
@@ -77,6 +77,9 @@ export abstract class UberShaderTemplate<T> {
         }
         return program;
     }
+
+    public destroy(device: GfxDevice): void {
+    }
 }
 
 type DefinesMap = Map<string, string>;
@@ -129,6 +132,11 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         // We do our own caching here; no need to use the render cache for this.
         const programString = this.generateProgramString(variantSettings);
         return cache.device.createProgramSimple(getGfxProgramDescriptorBasic(cache, programString, variantSettings));
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.cache.values())
+            device.destroyProgram(v);
     }
 }
 

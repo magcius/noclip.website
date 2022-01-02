@@ -3552,6 +3552,14 @@ class ShaderTemplates {
     public UnlitTwoTexture = new ShaderTemplate_UnlitTwoTexture();
     public Water = new ShaderTemplate_Water();
     public Refract = new ShaderTemplate_Refract();
+
+    public destroy(device: GfxDevice): void {
+        this.Generic.destroy(device);
+        this.Modulate.destroy(device);
+        this.UnlitTwoTexture.destroy(device);
+        this.Water.destroy(device);
+        this.Refract.destroy(device);
+    }
 }
 
 export class MaterialCache {
@@ -3668,6 +3676,7 @@ export class MaterialCache {
 
     public destroy(device: GfxDevice): void {
         this.staticResources.destroy(device);
+        this.shaderTemplates.destroy(device);
         for (const vtf of this.textureCache.values())
             vtf.destroy(device);
     }

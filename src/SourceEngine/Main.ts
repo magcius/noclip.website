@@ -1886,6 +1886,7 @@ export class SourceRenderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
         this.renderContext.destroy(device);
+        this.luminanceHistogram.destroy(device);
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.destroy(device);
         for (let i = 0; i < this.bspRenderers.length; i++)
