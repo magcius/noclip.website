@@ -27,7 +27,7 @@ import { Color, colorNewFromRGBA, colorNewCopy, White } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 import { GloverObjbank, GloverTexbank } from './parsers';
-import { Flipbook } from './framesets';
+import { Flipbook, FlipbookType } from './framesets';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -59,7 +59,8 @@ function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean
             rspState.gDPSetCombine(0xFC127E24, 0xFF33F9FF);
         } else {
             // rspState.gDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2);
-            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238);
+            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); 
+
         }
     } else {
         // rspState.gDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE);// 0xFC127E24 0xFFFFF7FB;
@@ -73,7 +74,8 @@ function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean
         if (zbuffer) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
             rspState.gDPSetRenderMode( // 0xB900031D 0x005049D8
-                RDPRenderModes.G_RM_AA_ZB_XLU_SURF, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
+                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_ZB_XLU_SURF,
+                RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
         } else {
             rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
             rspState.gDPSetRenderMode( // 0xB900031D 0x0C1841C8/0x005041C8
@@ -1470,7 +1472,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
     private frameDelay: number;
     private lastFrameAdvance: number = 0;
     private frameCounter: number = 0;
-    private curFrame: number;
+    public curFrame: number;
 
     private frames: number[] = [];
 
@@ -1480,8 +1482,12 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
     
     public isGarib: boolean = false;
 
+    public loop: boolean = true;
+
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 8;
+
+    public playing: boolean = true;
 
     private vec3Scratch: vec3 = vec3.create();
 
@@ -1492,11 +1498,13 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
         flipbookMetadata: Flipbook,
-        startFrame: number = 0)
+        startFrame: number = 0,
+        private primColor: vec4 = [0, 0, 0, 255])
     {
+        // TODO: move startFrame randomization into here
         this.curFrame = startFrame;
 
-        const layer = GfxRendererLayer.OPAQUE + 1; // TODO
+        const layer = GfxRendererLayer.TRANSLUCENT + 1; // TODO: this isn't right
         this.sortKey = makeSortKey(layer);
 
         this.megaStateFlags = {};
@@ -1517,7 +1525,16 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, false, true, 1.0);
+        setRenderMode(rspState, true, true, true, this.primColor[3]/255);
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+
+        if (this.primColor[3] !== 255) {
+            rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
+        } else {
+            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // G_CC_MODULATEIDECALA, G_CC_PASS2
+        }
+
+        rspState.gDPSetPrimColor(0, 0, this.primColor[0], this.primColor[1], this.primColor[2], this.primColor[3]);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
     }
 
@@ -1528,8 +1545,17 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
 
         // TODO: dispose of old render data, if it exists
 
+        this.playing = true;
+
         this.curFrame = this.curFrame % flipbookMetadata.frameset.length;
         this.frameDelay = flipbookMetadata.frameDelay;
+        this.frameCounter = this.frameDelay;
+
+        if (flipbookMetadata.type == FlipbookType.Oneshot) {
+            this.loop = false;
+        } else {
+            this.loop = true;
+        }
 
         let frame_textures = []
         for (let frame_id of flipbookMetadata.frameset) {
@@ -1556,8 +1582,8 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
 
         drawCall.textureIndices.push(this.frames[this.curFrame]);
 
-        let sW = flipbookMetadata.width / 3;
-        let sH = flipbookMetadata.height / 3;
+        let sW = flipbookMetadata.startSize / 3;
+        let sH = flipbookMetadata.startSize / 3;
         let sX = -sW/2;
         let sY = -sH/2;
 
@@ -1595,8 +1621,13 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
         this.rspOutput = new GloverRSPOutput([drawCall], rspState.textureCache);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public reset() {
+        this.playing = true;
+        this.frameCounter = this.frameDelay;
+        this.curFrame = 0;
+    }
 
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.visible !== true) {
             return;
         }
@@ -1617,7 +1648,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
 
-        if (this.frames.length > 1) {
+        if (this.frames.length > 1 && this.frameDelay >= 0) {
             this.lastFrameAdvance += viewerInput.deltaTime;
             if (this.lastFrameAdvance > 50) {
                 this.lastFrameAdvance = 0;
@@ -1625,10 +1656,16 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
                 if (this.frameCounter > 0) {
                     this.frameCounter -= 0x20;
                 } else {
-                    this.frameCounter = this.frameDelay;
+                    this.frameCounter += this.frameDelay;
                     this.curFrame += 1;
                     if (this.curFrame >= this.frames.length) {
-                        this.curFrame = 0;
+                        if (this.loop) {
+                            this.curFrame = 0;
+                            this.playing = true;
+                        } else {
+                            this.curFrame = this.frames.length - 1;
+                            this.playing = false;
+                        }
                     }
                 }
             }
@@ -1677,10 +1714,11 @@ export class GloverShadowRenderer extends GloverFlipbookRenderer {
             frameset: [0x147b7297],
             frameDelay: 0,
             type: 1,
-            field_0x6: 0,
-            field_0x7: 0,
-            width: 1,
-            height: 1
+            startAlpha: 0xFF,
+            endAlpha: 0xFF,
+            startSize: 1,
+            endSize: 1,
+            flags: 0
         }, 0);
     }
 

@@ -17,7 +17,7 @@ import { TextureHolder } from '../TextureHolder';
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
+import { executeOnPass, makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists } from '../util';
@@ -34,7 +34,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
-import { framesets, collectibleFlipbooks } from './framesets';
+import { framesets, collectibleFlipbooks, particleFlipbooks, particleParameters } from './framesets';
 
 
 import { KaitaiStream } from 'kaitai-struct';
@@ -207,12 +207,197 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 }
 
+class Particle {
+    public active: boolean = true;
+
+    private flipbook: GloverFlipbookRenderer;
+
+    private position: vec3 = vec3.create();
+    private velocity: vec3 = vec3.create();
+
+    private scale: vec3 = vec3.create();
+
+    private framesRemaining: number = 0;
+    private lastFrameAdvance: number = 0;
+
+    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private particleType: number) {
+        // TODO: use one renderer for all particles of
+        //       same time, possibly even with same renderInst template
+        this.flipbook = new GloverFlipbookRenderer(
+            device, cache, textureHolder, particleFlipbooks[particleType]);
+        this.scale = [ // TODO: not sure this is right
+            3/particleParameters[particleType].bboxHeight,
+            3/particleParameters[particleType].bboxHeight,
+            3/particleParameters[particleType].bboxHeight
+        ];
+    } 
+
+    public spawn(origin: vec3 | number[], velocity: vec3 | number[]) {
+        const params = particleParameters[this.particleType];
+        this.position = vec3.fromValues(origin[0], origin[1], origin[2]);
+        this.velocity = vec3.fromValues(velocity[0], velocity[1], velocity[2]);
+        this.active = true;
+        this.flipbook.reset();
+        this.framesRemaining = params.lifetimeMin + Math.floor(Math.random() * params.lifetimeJitter);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
+        mat4.fromRotationTranslationScale(this.flipbook.drawMatrix, identityRotation, this.position, this.scale);
+        this.flipbook.prepareToRender(device, renderInstManager, viewerInput);
+        if (!this.flipbook.playing) {
+            this.active = false;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            this.lastFrameAdvance = 0;
+            this.framesRemaining -= 1;
+            if (this.framesRemaining <= 0) {
+                this.active = false;
+            }
+        }
+        // TODO: flipbook tween animations
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.flipbook.destroy(device);
+    }
+}
+
+export class ParticlePool {
+    private particles: Particle[] = [];
+
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: GloverTextureHolder, private particleType: number) {
+    }
+
+    public spawn(origin: vec3 | number[], velocity: vec3 | number[]): void {
+        let newParticle = null;
+        for (let particle of this.particles) {
+            if (!particle.active) {
+                newParticle = particle;
+                break;
+            }
+        }
+        if (newParticle === null) {
+            newParticle = new Particle(this.device, this.cache, this.textureHolder, this.particleType);
+            this.particles.push(newParticle);
+        }
+        newParticle.spawn(origin, velocity);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let particle of this.particles) {
+            if (particle.active) {
+                particle.prepareToRender(device, renderInstManager, viewerInput);
+            }
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let particle of this.particles) {
+            particle.destroy(device)
+        }
+    }
+}
+
+const identityRotation: quat = quat.create();
+
+export class GloverMrTip implements Shadows.ShadowCaster {
+    public shadow: Shadows.Shadow | null = null;
+    public shadowSize: number | Shadows.ConstantShadowSize = 8;
+
+    private mainBillboard: GloverFlipbookRenderer;
+
+    private lastFrameAdvance: number = 0;
+    private frameCount: number = 0;
+
+    private scale = vec3.fromValues(1,1,1);
+
+    private yOffset = 0;
+
+    private scratchVec3 = vec3.create();
+
+    private particles: ParticlePool;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3) {
+        const flipbookMetadata = {
+            frameset: [0x6D419194, 0x8C641CE9],
+            frameDelay: NaN,
+            type: 0,
+            startAlpha: 0xFF,
+            endAlpha: 0xFF,
+            startSize: 1,
+            endSize: 1,
+            flags: 0
+        }
+        this.mainBillboard = new GloverFlipbookRenderer(device, cache, textureHolder,
+            flipbookMetadata, 0, [0xFF, 0xFF, 0xFF, 0xF0]);
+        this.yOffset = Math.floor(Math.random()*5000);
+        this.particles = new ParticlePool(device, cache, textureHolder, 7);
+        mat4.fromTranslation(this.mainBillboard.drawMatrix, this.position);
+    }
+
+    public getPosition(): vec3 {
+        return this.position;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.mainBillboard.destroy(device);
+        this.particles.destroy(device);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            this.lastFrameAdvance = 0;
+            this.frameCount += 1;
+            const blink = Math.floor(Math.random() * 0x14);
+            if (blink == 1) {
+                this.mainBillboard.curFrame = 1;
+            } else {
+                this.mainBillboard.curFrame = 0;
+            }
+            if ((this.frameCount & 1) != 0) {
+                const particleOrigin = [
+                    this.position[0] + Math.floor(Math.random()*7) - 3,
+                    this.position[1] + 5,
+                    this.position[2] + Math.floor(Math.random()*7) - 3,
+                ]
+                const particleVelocity = [
+                    Math.cos(-this.frameCount) / SRC_FRAME_TO_MS,
+                    -.5 / SRC_FRAME_TO_MS,
+                    Math.sin(-this.frameCount) / SRC_FRAME_TO_MS,
+                ]
+                this.particles.spawn(particleOrigin, particleVelocity);
+            }
+        }
+
+        this.scale[0] = Math.sin(viewerInput.time/250) * 10 + 48;
+        this.scale[1] = 48 - Math.sin(viewerInput.time/250) * 10;
+
+        const finalPosition = this.scratchVec3;
+        vec3.add(finalPosition, this.position, [0,Math.sin((this.yOffset + viewerInput.time)/300)*4+10,0]);
+
+        // TODO: particles
+        // TODO: alpha transparency
+
+        mat4.fromRotationTranslationScale(this.mainBillboard.drawMatrix, identityRotation, finalPosition, this.scale);
+        this.mainBillboard.prepareToRender(device, renderInstManager, viewerInput);
+
+        this.particles.prepareToRender(device, renderInstManager, viewerInput);
+    }
+}
+
+
 class GloverRenderer implements Viewer.SceneGfx {
     public opaqueActors: GloverActorRenderer[] = [];
     public translucentActors: GloverActorRenderer[] = [];
     public backdrops: GloverBackdropRenderer[] = [];
     public flipbooks: GloverFlipbookRenderer[] = [];
 
+    public mrtips: GloverMrTip[] = [];
     public shadows: Shadows.Shadow[] = [];
     public platforms: GloverPlatform[] = [];
     public platformByTag = new Map<number, GloverPlatform>();
@@ -317,6 +502,9 @@ class GloverRenderer implements Viewer.SceneGfx {
         for (let renderer of this.flipbooks) {
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
+        for (let renderer of this.mrtips) {
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
         for (let renderer of this.translucentActors) {
             // TODO: use sort key to order by camera distance
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -376,7 +564,9 @@ class GloverRenderer implements Viewer.SceneGfx {
         for (let renderer of this.flipbooks) {
             renderer.destroy(device);
         }
-
+        for (let renderer of this.mrtips) {
+            renderer.destroy(device);
+        }
         this.textureHolder.destroy(device);
     }
 }
@@ -765,6 +955,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'DiffuseLight': {
+                    // TODO: dbl check this doesn't depend on camera position
                     // TODO: figure out wtf the engine does with those angles
                     sceneRenderer.sceneLights.diffuseColor.push([
                         cmd.params.r/255,
@@ -882,7 +1073,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     shadowCasters.push(flipbook);
                     break;
                 }
-
+                case 'MrTip': {
+                    let tip = new GloverMrTip(
+                        device, cache, textureHolder,
+                        vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z));
+                    sceneRenderer.mrtips.push(tip);
+                    shadowCasters.push(tip);
+                    break;
+                }
                 case 'Backdrop': {
                     assert(cmd.params.decalPosX === 0 && cmd.params.decalPosY === 0);
                     assert(cmd.params.decalParentIdx === 0);

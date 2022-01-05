@@ -39,51 +39,509 @@ export var framesets = {
     "traj": [0x7223342a]
 }
 
+export enum FlipbookType {
+    Looping = 1,
+    Oneshot = 2,
+    RandomStartLooping = 4
+}
+
 export interface Flipbook {
     frameset: number[],
     frameDelay: number,
-    type: number,
-    field_0x6: number,
-    field_0x7: number,
-    width: number,
-    height: number
+    type: FlipbookType,
+    startAlpha: number,
+    endAlpha: number,
+    startSize: number,
+    endSize: number,
+    flags: number
 }
 
 export var collectibleFlipbooks = new Map<number, Flipbook>([
     [0, {
         frameset: framesets["acard00"],
         frameDelay: 0,
-        type: 4,
-        field_0x6: 0x96,
-        field_0x7: 0x96,
-        width: 0x40,
-        height: 0x40
+        type: FlipbookType.RandomStartLooping,
+        startAlpha: 0x96,
+        endAlpha: 0x96,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0
     }],
     [1, {
         frameset: framesets["ohno"],
         frameDelay: 0,
-        type: 4,
-        field_0x6: 0xFF,
-        field_0x7: 0xFF,
-        width: 0x40,
-        height: 0x40
+        type: FlipbookType.RandomStartLooping,
+        startAlpha: 0xFF,
+        endAlpha: 0xFF,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0
     }],
     [2, {
         frameset: framesets["marble"],
         frameDelay: 0,
-        type: 4,
-        field_0x6: 0xFF,
-        field_0x7: 0xFF,
-        width: 0x40,
-        height: 0x40
+        type: FlipbookType.RandomStartLooping,
+        startAlpha: 0xFF,
+        endAlpha: 0xFF,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0
     }],
     [3, {
         frameset: framesets["rgarib"],
         frameDelay: 0x20,
-        type: 4,
-        field_0x6: 0x96,
-        field_0x7: 0x96,
-        width: 0x40,
-        height: 0x40
+        type: FlipbookType.RandomStartLooping,
+        startAlpha: 0x96,
+        endAlpha: 0x96,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0
     }]
 ])
+
+export var particleFlipbooks: Flipbook[] = [
+    {
+        frameset: framesets["smoke"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xa0,
+        endAlpha: 0x10,
+        startSize: 0x20,
+        endSize: 0x40,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["smk"],
+        frameDelay: 0x20,
+        type: 0x2,
+        startAlpha: 0xa0,
+        endAlpha: 0x20,
+        startSize: 0x60,
+        endSize: 0x60,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["plat"],
+        frameDelay: 0x0,
+        type: 0x1,
+        startAlpha: 0x80,
+        endAlpha: 0x80,
+        startSize: 0x20,
+        endSize: 0x20,
+        flags: 0x0,
+    },
+    {
+        frameset: framesets["ai_spl"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xf8,
+        endAlpha: 0x20,
+        startSize: 0x36,
+        endSize: 0x20,
+        flags: 0x10000,
+    },
+    {
+        frameset: [],
+        frameDelay: 0x0,
+        type: 0x0,
+        startAlpha: 0x0,
+        endAlpha: 0x0,
+        startSize: 0x0,
+        endSize: 0x0,
+        flags: 0x0
+    },
+    {
+        frameset: framesets["bstar"],
+        frameDelay: 0x0,
+        type: 0x2,
+        startAlpha: 0xff,
+        endAlpha: 0x32,
+        startSize: 0x60,
+        endSize: 0x60,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["glow"],
+        frameDelay: 0x10,
+        type: 0x1,
+        startAlpha: 0xff,
+        endAlpha: 0x32,
+        startSize: 0x60,
+        endSize: 0x60,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["newisp"],
+        frameDelay: 0x10,
+        type: 0x2,
+        startAlpha: 0xff,
+        endAlpha: 0xff,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["photon"],
+        frameDelay: 0x0,
+        type: 0x4,
+        startAlpha: 0xff,
+        endAlpha: 0x80,
+        startSize: 0x50,
+        endSize: 0x20,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["sfair"],
+        frameDelay: 0x0,
+        type: 0x3,
+        startAlpha: 0xff,
+        endAlpha: 0x1e,
+        startSize: 0x80,
+        endSize: 0x80,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["fardus"],
+        frameDelay: 0x20,
+        type: 0x2,
+        startAlpha: 0xc8,
+        endAlpha: 0x64,
+        startSize: 0x70,
+        endSize: 0x70,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["fardus"],
+        frameDelay: 0x0,
+        type: 0x2,
+        startAlpha: 0xff,
+        endAlpha: 0xff,
+        startSize: 0x60,
+        endSize: 0x60,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["sfair"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x64,
+        startSize: 0x80,
+        endSize: 0x40,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["traj"],
+        frameDelay: 0x0,
+        type: 0x7,
+        startAlpha: 0x80,
+        endAlpha: 0x80,
+        startSize: 0x20,
+        endSize: 0x20,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["popa"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0xff,
+        startSize: 0x40,
+        endSize: 0x64,
+        flags: 0x0,
+    },
+    {
+        frameset: framesets["popb"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x0,
+        startSize: 0x2,
+        endSize: 0xc8,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["p"],
+        frameDelay: 0x0,
+        type: 0x4,
+        startAlpha: 0xff,
+        endAlpha: 0xff,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["splat"],
+        frameDelay: 0x10,
+        type: 0x2,
+        startAlpha: 0xff,
+        endAlpha: 0xff,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0x0,
+    },
+    {
+        frameset: framesets["heart"],
+        frameDelay: 0x10,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x0,
+        startSize: 0x40,
+        endSize: 0x80,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["star"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x0,
+        startSize: 0x40,
+        endSize: 0x10,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["bubble"],
+        frameDelay: 0x0,
+        type: 0x0,
+        startAlpha: 0x9b,
+        endAlpha: 0x9b,
+        startSize: 0x20,
+        endSize: 0x20,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["puff"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x0,
+        startSize: 0x30,
+        endSize: 0x0,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["traj"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x0,
+        startSize: 0x20,
+        endSize: 0x20,
+        flags: 0x10000,
+    },
+    {
+        frameset: framesets["score"],
+        frameDelay: 0x0,
+        type: 0x5,
+        startAlpha: 0xff,
+        endAlpha: 0x0,
+        startSize: 0x40,
+        endSize: 0x40,
+        flags: 0x10000,
+    }
+]
+
+export interface ParticleParams {
+    actorFlags: number;
+    lifetimeMin: number;
+    lifetimeJitter: number;
+    bboxHeight: number;
+    beh0xc: number;
+    unknown: number;
+}
+
+export var particleParameters: ParticleParams[] = [
+    {
+        actorFlags: 0,
+        lifetimeMin: 20,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.70,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 0,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.90,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x1,
+        lifetimeMin: 20,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x1,
+        lifetimeMin: 20,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x1,
+        lifetimeMin: 13,
+        lifetimeJitter: 6,
+        bboxHeight: 5,
+        beh0xc: 0.87,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x800000,
+        lifetimeMin: 0,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.70,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 30,
+        lifetimeJitter: 8,
+        bboxHeight: 5,
+        beh0xc: 0.70,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 18,
+        lifetimeJitter: 8,
+        bboxHeight: 5,
+        beh0xc: 1,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x40000091,
+        lifetimeMin: 30,
+        lifetimeJitter: 10,
+        bboxHeight: 7,
+        beh0xc: 0.80,
+        unknown: 5
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 12,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 0,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 0,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x800000,
+        lifetimeMin: 6,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 1,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x40000010,
+        lifetimeMin: 60,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 1,
+        unknown: 5
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 3,
+        lifetimeJitter: 0,
+        bboxHeight: 0,
+        beh0xc: 1,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 4,
+        lifetimeJitter: 0,
+        bboxHeight: 0,
+        beh0xc: 1,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x1000000,
+        lifetimeMin: 20,
+        lifetimeJitter: 0,
+        bboxHeight: 0,
+        beh0xc: 1,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x800000,
+        lifetimeMin: 0,
+        lifetimeJitter: 0,
+        bboxHeight: 0,
+        beh0xc: 0,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 14,
+        lifetimeJitter: 10,
+        bboxHeight: 0,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0x800000,
+        lifetimeMin: 8,
+        lifetimeJitter: 0,
+        bboxHeight: 0,
+        beh0xc: 0,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 1000,
+        lifetimeJitter: 5,
+        bboxHeight: 0,
+        beh0xc: 1,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 10,
+        lifetimeJitter: 5,
+        bboxHeight: 0,
+        beh0xc: 0.70,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 12,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 0.80,
+        unknown: 24
+    },
+    {
+        actorFlags: 0,
+        lifetimeMin: 40,
+        lifetimeJitter: 0,
+        bboxHeight: 5,
+        beh0xc: 1,
+        unknown: 24
+    }
+]
