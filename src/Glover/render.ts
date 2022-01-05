@@ -1658,6 +1658,35 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
                 } else {
                     this.frameCounter += this.frameDelay;
                     this.curFrame += 1;
+
+                    // TODO: tweens:
+                    // if (startAlpha != endAlpha) {
+                    //   if (tweenLength == 0) {
+                    //     iVar4 = (endAlpha - startAlpha) *
+                    //             (((*frameset)->n_frames - b->flipbookFrame) + -1);
+                    //     uVar7 = (*frameset)->n_frames - 1;
+                    //   }
+                    //   else {
+                    //     iVar4 = (endAlpha - startAlpha) * b->tweenFrame;
+                    //     uVar7 = tweenLength;
+                    //   }
+                    //   (b->color).a = startAlpha + (iVar4 / uVar7);
+                    // }
+                    // if (startSize != endSize) {
+                    //   uVar7 = (uint)b->tweenLength;
+                    //   if (uVar7 == 0) {
+                    //     iVar4 = (uVar3 - uVar2) *
+                    //             (((*frameset)->n_frames - b->flipbookFrame) + -1);
+                    //     uVar7 = (*frameset)->n_frames - 1;
+                    //   }
+                    //   else {
+                    //     iVar4 = (uVar3 - uVar2) * b->tweenFrame;
+                    //   }
+                    //   sVar6 = uVar2 + (iVar4 / uVar7);
+                    //   b->height = sVar6;
+                    //   b->width = sVar6;
+                    // }
+
                     if (this.curFrame >= this.frames.length) {
                         if (this.loop) {
                             this.curFrame = 0;

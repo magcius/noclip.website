@@ -47,6 +47,11 @@ const CONVERT_FRAMERATE = (SRC_FRAMERATE / DST_FRAMERATE);
 
 const pathBase = `glover`;
 
+interface GenericRenderable {
+    destroy: (device: GfxDevice) => void;
+    prepareToRender: (device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void;
+}
+
 class PlatformPathPoint {
     constructor(public pos: vec3, public duration: number) {}
 
@@ -260,6 +265,10 @@ class Particle {
         // TODO: flipbook tween animations
     }
 
+    public setLifetime(frames: number): void {
+        this.framesRemaining = frames;
+    }
+
     public destroy(device: GfxDevice): void {
         this.flipbook.destroy(device);
     }
@@ -271,7 +280,7 @@ export class ParticlePool {
     constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: GloverTextureHolder, private particleType: number) {
     }
 
-    public spawn(origin: vec3 | number[], velocity: vec3 | number[]): void {
+    public spawn(origin: vec3 | number[], velocity: vec3 | number[]): Particle {
         let newParticle = null;
         for (let particle of this.particles) {
             if (!particle.active) {
@@ -284,6 +293,7 @@ export class ParticlePool {
             this.particles.push(newParticle);
         }
         newParticle.spawn(origin, velocity);
+        return newParticle
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -299,6 +309,43 @@ export class ParticlePool {
             particle.destroy(device)
         }
     }
+}
+
+export class GaribSparkle {
+
+    private particles: ParticlePool;
+
+    private lastFrameAdvance: number = 0;
+    private frameCount: number = 0;
+
+    static private velocity = [0,0,0];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3) {
+        this.particles = new ParticlePool(device, cache, textureHolder, 6);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.particles.destroy(device);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            this.lastFrameAdvance = 0;
+            this.frameCount += 1;
+
+            const particleOrigin = [
+                this.position[0] - Math.sin(-this.frameCount/3.0) * 10,
+                this.position[1] + Math.sin(this.frameCount/5.0) * 5,
+                this.position[2] + Math.cos(-this.frameCount/3.0) * 10
+            ]
+            const particle = this.particles.spawn(particleOrigin, GaribSparkle.velocity);
+            particle.setLifetime(10);
+        }
+
+        this.particles.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
 }
 
 const identityRotation: quat = quat.create();
@@ -397,6 +444,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     public backdrops: GloverBackdropRenderer[] = [];
     public flipbooks: GloverFlipbookRenderer[] = [];
 
+    public miscParticleEmitters: GenericRenderable[] = [];
     public mrtips: GloverMrTip[] = [];
     public shadows: Shadows.Shadow[] = [];
     public platforms: GloverPlatform[] = [];
@@ -505,6 +553,9 @@ class GloverRenderer implements Viewer.SceneGfx {
         for (let renderer of this.mrtips) {
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
+        for (let renderer of this.miscParticleEmitters) {
+            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
         for (let renderer of this.translucentActors) {
             // TODO: use sort key to order by camera distance
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -562,6 +613,9 @@ class GloverRenderer implements Viewer.SceneGfx {
             renderer.destroy(device);
         }
         for (let renderer of this.flipbooks) {
+            renderer.destroy(device);
+        }
+        for (let renderer of this.miscParticleEmitters) {
             renderer.destroy(device);
         }
         for (let renderer of this.mrtips) {
@@ -1058,9 +1112,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Garib': {
-                    // TODO: extra lives don't look right,
-                    //       investigate what else they need
-                    //       to render properly
                     const flipbookMetadata = collectibleFlipbooks.get(cmd.params.type);
                     if (flipbookMetadata === undefined) {
                         throw `Unrecognized collectible type!`;
@@ -1068,9 +1119,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     const startFrame = Math.floor(Math.random() * flipbookMetadata.frameset.length);
                     const flipbook = new GloverFlipbookRenderer(device, cache, textureHolder, flipbookMetadata, startFrame)
                     flipbook.isGarib = cmd.params.type == 0;
-                    mat4.fromTranslation(flipbook.drawMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
+                    mat4.fromTranslation(flipbook.drawMatrix, pos);
                     sceneRenderer.flipbooks.push(flipbook);
                     shadowCasters.push(flipbook);
+                    if (cmd.params.type == 2) {
+                        // Extra lives are sparkly
+                        sceneRenderer.miscParticleEmitters.push(new GaribSparkle(device, cache, textureHolder, pos));
+                    }
                     break;
                 }
                 case 'MrTip': {
