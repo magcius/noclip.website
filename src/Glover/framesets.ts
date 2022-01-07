@@ -56,8 +56,8 @@ export interface Flipbook {
     flags: number
 }
 
-export var collectibleFlipbooks = new Map<number, Flipbook>([
-    [0, {
+export var collectibleFlipbooks = [
+    {
         frameset: framesets["acard00"],
         frameDelay: 0,
         type: FlipbookType.RandomStartLooping,
@@ -66,8 +66,8 @@ export var collectibleFlipbooks = new Map<number, Flipbook>([
         startSize: 0x40,
         endSize: 0x40,
         flags: 0
-    }],
-    [1, {
+    },
+    {
         frameset: framesets["ohno"],
         frameDelay: 0,
         type: FlipbookType.RandomStartLooping,
@@ -76,8 +76,8 @@ export var collectibleFlipbooks = new Map<number, Flipbook>([
         startSize: 0x40,
         endSize: 0x40,
         flags: 0
-    }],
-    [2, {
+    },
+    {
         frameset: framesets["marble"],
         frameDelay: 0,
         type: FlipbookType.RandomStartLooping,
@@ -86,8 +86,8 @@ export var collectibleFlipbooks = new Map<number, Flipbook>([
         startSize: 0x40,
         endSize: 0x40,
         flags: 0
-    }],
-    [3, {
+    },
+    {
         frameset: framesets["rgarib"],
         frameDelay: 0x20,
         type: FlipbookType.RandomStartLooping,
@@ -96,8 +96,8 @@ export var collectibleFlipbooks = new Map<number, Flipbook>([
         startSize: 0x40,
         endSize: 0x40,
         flags: 0
-    }]
-])
+    }
+]
 
 export var particleFlipbooks: Flipbook[] = [
     {

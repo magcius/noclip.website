@@ -79,16 +79,16 @@ export class Shadow {
             return;
         }        
 
-        let scaleVal = 1;
+        let scaleVal = 1/3;
         if (this.source.shadowSize instanceof ConstantShadowSize) {
             // NB: engine expects sprite size to be 10x10 when using a constant
             //     size factor, so we have to scale here
-            scaleVal = this.source.shadowSize.size * 10;
+            scaleVal *= this.source.shadowSize.size * 10;
         } else {
             // NB: engine expects shadows sized this way to have a sprite sized 1x1
             const castDist = vec3.dist(this.position, this.source.getPosition()); // TODO: cache value
             const shadowScalar = Math.min(this.source.shadowSize, this.source.shadowSize * Math.sqrt(this.source.shadowSize / castDist));
-            scaleVal = (shadowScalar * 7.0 + this.source.shadowSize);
+            scaleVal *= (shadowScalar * 7.0 + this.source.shadowSize);
         }
         quat.rotationTo(Shadow.scratchQuat, this.normal, [0,0,-1]);
         quat.conjugate(Shadow.scratchQuat, Shadow.scratchQuat);

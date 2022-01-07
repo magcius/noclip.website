@@ -932,7 +932,10 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
                 offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseColor[i]);
             }
             for (let i = 0; i < n_lights; i++) {
-                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseDirection[i]);
+                computeViewMatrixSkybox(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
+                vec3.transformMat4(this.vec3Scratch, this.sceneLights.diffuseDirection[i], DrawCallInstance.viewMatrixScratch);
+                // vec3.normalize(this.vec3Scratch, this.vec3Scratch);
+                offs += fillVec3v(mappedF32, offs, this.vec3Scratch);
             }
             offs += fillVec3v(mappedF32, offs, this.sceneLights.ambientColor);
         } else {
@@ -1460,51 +1463,31 @@ export class GloverBackdropRenderer {
     }
 }
 
-export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
+export class GloverSpriteRenderer {
     private rspOutput: GloverRSPOutput | null;
+
+    private drawCall: DrawCall;
+    private textureCache: RDP.TextureCache;
 
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    private inputState: GfxInputState;
-
-    public drawMatrix: mat4 = mat4.create();
-
-    private frameDelay: number;
-    private lastFrameAdvance: number = 0;
-    private frameCounter: number = 0;
-    public curFrame: number;
-
-    private frames: number[] = [];
+    protected frames: number[] = [];
 
     private sortKey: number;
 
     public visible: boolean = true;
     
-    public isGarib: boolean = false;
-
-    public loop: boolean = true;
-
-    public shadow: Shadows.Shadow | null = null;
-    public shadowSize: number = 8;
-
-    public playing: boolean = true;
-
-    private vec3Scratch: vec3 = vec3.create();
-
     protected isBillboard: boolean = true;
 
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        flipbookMetadata: Flipbook,
-        startFrame: number = 0,
-        private primColor: vec4 = [0, 0, 0, 255])
+        private frameset: number[],
+        private xlu: boolean = false)
     {
-        // TODO: move startFrame randomization into here
-        this.curFrame = startFrame;
-
-        const layer = GfxRendererLayer.TRANSLUCENT + 1; // TODO: this isn't right
+        // TODO: fix water drawing over closer garibs
+        const layer = xlu ? GfxRendererLayer.TRANSLUCENT + 1 : GfxRendererLayer.OPAQUE + 1; // TODO: this isn't right
         this.sortKey = makeSortKey(layer);
 
         this.megaStateFlags = {};
@@ -1515,50 +1498,33 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        this.reloadFrameset(flipbookMetadata)
+        this.loadFrameset(frameset);
     }
 
-    public getPosition(): vec3 {
-        mat4.getTranslation(this.vec3Scratch, this.drawMatrix);
-        return this.vec3Scratch;
+    public cacheKey(): string {
+        return String(this.frameset);
     }
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, true, true, this.primColor[3]/255);
+        setRenderMode(rspState, true, true, true, 1.0);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
 
-        if (this.primColor[3] !== 255) {
+        if (this.xlu) {
             rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
         } else {
             rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // G_CC_MODULATEIDECALA, G_CC_PASS2
         }
 
-        rspState.gDPSetPrimColor(0, 0, this.primColor[0], this.primColor[1], this.primColor[2], this.primColor[3]);
+        rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF); // 0xFA000000, (*0x801ec878) & 0xFF);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
     }
 
-    public reloadFrameset(flipbookMetadata: Flipbook): void {
-        /* Object bank in first segment, then one
-           texture bank for each subsequent */
+    private loadFrameset(frameset: number[]): void {
         const segments = this.textures.textureSegments();
 
-        // TODO: dispose of old render data, if it exists
-
-        this.playing = true;
-
-        this.curFrame = this.curFrame % flipbookMetadata.frameset.length;
-        this.frameDelay = flipbookMetadata.frameDelay;
-        this.frameCounter = this.frameDelay;
-
-        if (flipbookMetadata.type == FlipbookType.Oneshot) {
-            this.loop = false;
-        } else {
-            this.loop = true;
-        }
-
         let frame_textures = []
-        for (let frame_id of flipbookMetadata.frameset) {
+        for (let frame_id of frameset) {
             const texFile = this.textures.idToTexture.get(frame_id);
             if (texFile === undefined) {
                 throw `Texture 0x${frame_id.toString(16)} not loaded`;
@@ -1580,10 +1546,10 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
             ))
         }
 
-        drawCall.textureIndices.push(this.frames[this.curFrame]);
+        drawCall.textureIndices.push(0);
 
-        let sW = flipbookMetadata.startSize / 3;
-        let sH = flipbookMetadata.startSize / 3;
+        let sW = 1.0;
+        let sH = 1.0;
         let sX = -sW/2;
         let sY = -sH/2;
 
@@ -1618,16 +1584,11 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
         }
 
         drawCall.renderData = new DrawCallRenderData(this.device, this.cache, rspState.textureCache, rspState.segmentBuffers, drawCall);
-        this.rspOutput = new GloverRSPOutput([drawCall], rspState.textureCache);
+        this.drawCall = drawCall;
+        this.textureCache = rspState.textureCache;
     }
 
-    public reset() {
-        this.playing = true;
-        this.frameCounter = this.frameDelay;
-        this.curFrame = 0;
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, frame: number, alpha: number = 1.0): void {
         if (this.visible !== true) {
             return;
         }
@@ -1637,7 +1598,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
         template.setMegaStateFlags(this.megaStateFlags);
 
         mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
-        mat4.getTranslation(lookatScratch, this.drawMatrix);
+        mat4.getTranslation(lookatScratch, drawMatrix);
 
         template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
 
@@ -1647,8 +1608,110 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
+        this.drawCall.textureIndices[0] = this.frames[frame];
+        this.drawCall.DP_PrimColor.a = alpha;
 
-        if (this.frames.length > 1 && this.frameDelay >= 0) {
+        const drawCallInstance = new DrawCallInstance(this.drawCall, drawMatrix, this.textureCache);
+        drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, this.isBillboard);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.drawCall.destroy(device);
+    }
+}
+
+export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
+    static private renderCache: Map<string, GloverSpriteRenderer> = new Map<string, GloverSpriteRenderer>();
+ 
+    private spriteRenderer: GloverSpriteRenderer;
+
+    private frameDelay: number;
+    private lastFrameAdvance: number = 0;
+    private frameCounter: number = 0;
+    public curFrame: number;
+    
+    private lifetime: number = -1;
+    private timeRemaining: number = 0;
+
+    public isGarib: boolean = false;
+
+    public loop: boolean = true;
+    public playing: boolean = true;
+
+    public shadow: Shadows.Shadow | null = null;
+    public shadowSize: number = 8;
+
+    public drawMatrix: mat4 = mat4.create();
+
+    private drawMatrixScratch: mat4 = mat4.create();
+
+    private vec3Scratch: vec3 = vec3.create();
+
+    constructor(
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder,
+        private flipbookMetadata: Flipbook)
+    {
+        this.setSprite(flipbookMetadata);
+
+    }
+
+    public setLifetime(time: number) {
+        this.lifetime = time;
+        this.timeRemaining = time;
+    }
+
+    public getPosition(): vec3 {
+        mat4.getTranslation(this.vec3Scratch, this.drawMatrix);
+        return this.vec3Scratch;
+    }
+
+    public setSprite(flipbookMetadata: Flipbook): void {
+        this.flipbookMetadata = flipbookMetadata;
+
+        let key = String(flipbookMetadata.frameset)
+        if (GloverFlipbookRenderer.renderCache.has(key)) {
+            this.spriteRenderer = GloverFlipbookRenderer.renderCache.get(key)!;
+        } else {
+            const xlu = flipbookMetadata.startAlpha != flipbookMetadata.endAlpha;
+            this.spriteRenderer = new GloverSpriteRenderer(this.device, this.cache, this.textures, flipbookMetadata.frameset, xlu);
+            GloverFlipbookRenderer.renderCache.set(key, this.spriteRenderer);
+        }        
+
+        this.playing = true;
+
+        if (flipbookMetadata.type === FlipbookType.RandomStartLooping) {
+            this.curFrame = Math.floor(Math.random() * flipbookMetadata.frameset.length);
+        } else {
+            this.curFrame = 0;
+        }
+        this.frameDelay = flipbookMetadata.frameDelay;
+        this.frameCounter = this.frameDelay;
+
+        if (flipbookMetadata.type === FlipbookType.Oneshot) {
+            this.loop = false;
+        } else {
+            this.loop = true;
+        }
+    }
+
+    public reset() {
+        this.playing = true;
+        this.frameCounter = this.frameDelay;
+        if (this.flipbookMetadata.type === FlipbookType.RandomStartLooping) {
+            this.curFrame = Math.floor(Math.random() * this.flipbookMetadata.frameset.length);
+        } else {
+            this.curFrame = 0;
+        }
+        this.lifetime = -1;
+        this.timeRemaining = 0;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.flipbookMetadata.frameset.length > 1 && this.frameDelay >= 0) {
             this.lastFrameAdvance += viewerInput.deltaTime;
             if (this.lastFrameAdvance > 50) {
                 this.lastFrameAdvance = 0;
@@ -1658,41 +1721,12 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
                 } else {
                     this.frameCounter += this.frameDelay;
                     this.curFrame += 1;
-
-                    // TODO: tweens:
-                    // if (startAlpha != endAlpha) {
-                    //   if (tweenLength == 0) {
-                    //     iVar4 = (endAlpha - startAlpha) *
-                    //             (((*frameset)->n_frames - b->flipbookFrame) + -1);
-                    //     uVar7 = (*frameset)->n_frames - 1;
-                    //   }
-                    //   else {
-                    //     iVar4 = (endAlpha - startAlpha) * b->tweenFrame;
-                    //     uVar7 = tweenLength;
-                    //   }
-                    //   (b->color).a = startAlpha + (iVar4 / uVar7);
-                    // }
-                    // if (startSize != endSize) {
-                    //   uVar7 = (uint)b->tweenLength;
-                    //   if (uVar7 == 0) {
-                    //     iVar4 = (uVar3 - uVar2) *
-                    //             (((*frameset)->n_frames - b->flipbookFrame) + -1);
-                    //     uVar7 = (*frameset)->n_frames - 1;
-                    //   }
-                    //   else {
-                    //     iVar4 = (uVar3 - uVar2) * b->tweenFrame;
-                    //   }
-                    //   sVar6 = uVar2 + (iVar4 / uVar7);
-                    //   b->height = sVar6;
-                    //   b->width = sVar6;
-                    // }
-
-                    if (this.curFrame >= this.frames.length) {
+                    if (this.curFrame >= this.flipbookMetadata.frameset.length) {
                         if (this.loop) {
                             this.curFrame = 0;
                             this.playing = true;
                         } else {
-                            this.curFrame = this.frames.length - 1;
+                            this.curFrame = this.flipbookMetadata.frameset.length - 1;
                             this.playing = false;
                         }
                     }
@@ -1700,30 +1734,56 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster{
             }
         }
 
-        if (this.rspOutput !== null) {
-            this.rspOutput.drawCalls[0].textureIndices[0] = this.frames[this.curFrame];
-
-            for (let drawCall of this.rspOutput.drawCalls) {
-                const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
-                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, this.isBillboard);
+        const startAlpha = this.flipbookMetadata.startAlpha;
+        const endAlpha = this.flipbookMetadata.endAlpha;
+        let alpha = 0xFF;
+        if (startAlpha != endAlpha) {
+            alpha = startAlpha;
+            if (this.lifetime < 0) {
+                const nFrames = this.flipbookMetadata.frameset.length;
+                alpha += (endAlpha - startAlpha) * (nFrames - this.curFrame - 1) / (nFrames - 1);
+            } else {
+                alpha += (endAlpha - startAlpha) * this.timeRemaining / this.lifetime;
             }
         }
 
-        renderInstManager.popTemplateRenderInst();
+        const startSize = this.flipbookMetadata.startSize;
+        const endSize = this.flipbookMetadata.endSize;
+        let size = startSize;
+        if (startSize != endSize) {
+            if (this.lifetime < 0) {
+                const nFrames = this.flipbookMetadata.frameset.length;
+                size += (endSize - startSize) * (nFrames - this.curFrame - 1) / (nFrames - 1);
+            } else {
+                size += (endSize - startSize) * this.timeRemaining / this.lifetime;
+            }
+        }
+        size /= 3;
+
+        if (this.lifetime > 0) {
+            this.timeRemaining -= viewerInput.deltaTime;
+            if (this.timeRemaining <= 0) {
+                this.playing = false;
+            }
+        }
+
+        if (this.playing) {
+            mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size, size, size]);
+            this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, this.curFrame, alpha/255);
+        }
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.rspOutput !== null) {
-            for (let drawCall of this.rspOutput.drawCalls) {
-                drawCall.destroy(device);
-            }
-        }
+        this.spriteRenderer.destroy(device);
+        GloverFlipbookRenderer.renderCache.delete(this.spriteRenderer.cacheKey());
     }
 }
 
 
-export class GloverShadowRenderer extends GloverFlipbookRenderer {
+export class GloverShadowRenderer extends GloverSpriteRenderer {
     protected isBillboard: boolean = false;
+
+    public drawMatrix: mat4 = mat4.create();
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
@@ -1731,7 +1791,7 @@ export class GloverShadowRenderer extends GloverFlipbookRenderer {
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
-        rspState.gDPSetPrimColor(0, 0, 0, 0, 0, 0xFF); // TODO: paramaterize this
+        rspState.gDPSetPrimColor(0, 0, 0, 0, 0, 0xFF);
     }
     
     constructor(
@@ -1739,16 +1799,10 @@ export class GloverShadowRenderer extends GloverFlipbookRenderer {
         cache: GfxRenderCache,
         textures: Textures.GloverTextureHolder)
     {
-        super(device, cache, textures, {
-            frameset: [0x147b7297],
-            frameDelay: 0,
-            type: 1,
-            startAlpha: 0xFF,
-            endAlpha: 0xFF,
-            startSize: 1,
-            endSize: 1,
-            flags: 0
-        }, 0);
+        super(device, cache, textures, [0x147b7297]);
     }
 
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0);
+    }
 }

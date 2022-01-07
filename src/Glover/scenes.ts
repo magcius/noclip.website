@@ -10,7 +10,7 @@ import * as Shadows from './shadows';
 import { GloverTextureHolder } from './textures';
 
 
-import { SceneLighting, GloverActorRenderer, GloverBackdropRenderer, GloverFlipbookRenderer } from './render';
+import { SceneLighting, GloverActorRenderer, GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer } from './render';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -222,9 +222,6 @@ class Particle {
 
     private scale: vec3 = vec3.create();
 
-    private framesRemaining: number = 0;
-    private lastFrameAdvance: number = 0;
-
     constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private particleType: number) {
         // TODO: use one renderer for all particles of
         //       same time, possibly even with same renderInst template
@@ -243,7 +240,7 @@ class Particle {
         this.velocity = vec3.fromValues(velocity[0], velocity[1], velocity[2]);
         this.active = true;
         this.flipbook.reset();
-        this.framesRemaining = params.lifetimeMin + Math.floor(Math.random() * params.lifetimeJitter);
+        this.setLifetime(params.lifetimeMin + Math.floor(Math.random() * params.lifetimeJitter))
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -253,20 +250,10 @@ class Particle {
         if (!this.flipbook.playing) {
             this.active = false;
         }
-
-        this.lastFrameAdvance += viewerInput.deltaTime;
-        if (this.lastFrameAdvance > 50) {
-            this.lastFrameAdvance = 0;
-            this.framesRemaining -= 1;
-            if (this.framesRemaining <= 0) {
-                this.active = false;
-            }
-        }
-        // TODO: flipbook tween animations
     }
 
     public setLifetime(frames: number): void {
-        this.framesRemaining = frames;
+        this.flipbook.setLifetime(frames * SRC_FRAME_TO_MS);
     }
 
     public destroy(device: GfxDevice): void {
@@ -354,10 +341,11 @@ export class GloverMrTip implements Shadows.ShadowCaster {
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number | Shadows.ConstantShadowSize = 8;
 
-    private mainBillboard: GloverFlipbookRenderer;
+    private mainBillboard: GloverSpriteRenderer;
 
     private lastFrameAdvance: number = 0;
     private frameCount: number = 0;
+    private curFrame: number = 0;
 
     private scale = vec3.fromValues(1,1,1);
 
@@ -367,22 +355,14 @@ export class GloverMrTip implements Shadows.ShadowCaster {
 
     private particles: ParticlePool;
 
+    private drawMatrix: mat4 = mat4.create();
+
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3) {
-        const flipbookMetadata = {
-            frameset: [0x6D419194, 0x8C641CE9],
-            frameDelay: NaN,
-            type: 0,
-            startAlpha: 0xFF,
-            endAlpha: 0xFF,
-            startSize: 1,
-            endSize: 1,
-            flags: 0
-        }
-        this.mainBillboard = new GloverFlipbookRenderer(device, cache, textureHolder,
-            flipbookMetadata, 0, [0xFF, 0xFF, 0xFF, 0xF0]);
+        this.mainBillboard = new GloverSpriteRenderer(device, cache, textureHolder,
+            [0x6D419194, 0x8C641CE9], true);
         this.yOffset = Math.floor(Math.random()*5000);
         this.particles = new ParticlePool(device, cache, textureHolder, 7);
-        mat4.fromTranslation(this.mainBillboard.drawMatrix, this.position);
+        mat4.fromTranslation(this.drawMatrix, this.position);
     }
 
     public getPosition(): vec3 {
@@ -402,9 +382,9 @@ export class GloverMrTip implements Shadows.ShadowCaster {
             this.frameCount += 1;
             const blink = Math.floor(Math.random() * 0x14);
             if (blink == 1) {
-                this.mainBillboard.curFrame = 1;
+                this.curFrame = 1;
             } else {
-                this.mainBillboard.curFrame = 0;
+                this.curFrame = 0;
             }
             if ((this.frameCount & 1) != 0) {
                 const particleOrigin = [
@@ -421,17 +401,14 @@ export class GloverMrTip implements Shadows.ShadowCaster {
             }
         }
 
-        this.scale[0] = Math.sin(viewerInput.time/250) * 10 + 48;
-        this.scale[1] = 48 - Math.sin(viewerInput.time/250) * 10;
+        this.scale[0] = (Math.sin(viewerInput.time/250) * 10 + 48) / 3;
+        this.scale[1] = (48 - Math.sin(viewerInput.time/250) * 10) / 3;
 
         const finalPosition = this.scratchVec3;
         vec3.add(finalPosition, this.position, [0,Math.sin((this.yOffset + viewerInput.time)/300)*4+10,0]);
 
-        // TODO: particles
-        // TODO: alpha transparency
-
-        mat4.fromRotationTranslationScale(this.mainBillboard.drawMatrix, identityRotation, finalPosition, this.scale);
-        this.mainBillboard.prepareToRender(device, renderInstManager, viewerInput);
+        mat4.fromRotationTranslationScale(this.drawMatrix, identityRotation, finalPosition, this.scale);
+        this.mainBillboard.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, this.curFrame, 0.94);
 
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
     }
@@ -496,10 +473,10 @@ class GloverRenderer implements Viewer.SceneGfx {
         const madGaribsCheckbox = new UI.Checkbox('Mad garibs', false);
         madGaribsCheckbox.onchanged = () => {
             // C-Down, C-Right, C-Down, C-Up, C-Left, C-Down, C-Left, C-Up
-            const flipbookMetadata = madGaribsCheckbox.checked ? collectibleFlipbooks.get(3) : collectibleFlipbooks.get(0);
+            const flipbookMetadata = madGaribsCheckbox.checked ? collectibleFlipbooks[3] : collectibleFlipbooks[0];
             for (let flipbook of this.flipbooks) {
                 if (flipbook.isGarib) {
-                    flipbook.reloadFrameset(flipbookMetadata!);
+                    flipbook.setSprite(flipbookMetadata!);
                 }
             }
         };
@@ -1112,12 +1089,11 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Garib': {
-                    const flipbookMetadata = collectibleFlipbooks.get(cmd.params.type);
+                    const flipbookMetadata = collectibleFlipbooks[cmd.params.type];
                     if (flipbookMetadata === undefined) {
                         throw `Unrecognized collectible type!`;
                     }
-                    const startFrame = Math.floor(Math.random() * flipbookMetadata.frameset.length);
-                    const flipbook = new GloverFlipbookRenderer(device, cache, textureHolder, flipbookMetadata, startFrame)
+                    const flipbook = new GloverFlipbookRenderer(device, cache, textureHolder, flipbookMetadata)
                     flipbook.isGarib = cmd.params.type == 0;
                     const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
                     mat4.fromTranslation(flipbook.drawMatrix, pos);
