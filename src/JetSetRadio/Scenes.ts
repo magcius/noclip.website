@@ -342,4 +342,4 @@ export const sceneDescs = [
     new JetSetRadioSceneDesc('Stage6', 'Grind Square'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };
