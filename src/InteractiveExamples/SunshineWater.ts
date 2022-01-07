@@ -169,7 +169,7 @@ class SunshineWaterModel {
             // Make it always opaque.
             gxMaterial.tevStages[0].colorInB = GX.CC.TEXA;
             gxMaterial.tevStages[0].colorInC = GX.CC.RASA;
-            gxMaterial.tevStages[0].colorInD = GX.CC.CPREV;
+            gxMaterial.tevStages[0].colorInD = GX.CC.ZERO;
             gxMaterial.tevStages[0].colorScale = GX.TevScale.SCALE_1;
             gxMaterial.tevStages[1].colorInB = GX.CC.TEXA;
             gxMaterial.tevStages[1].colorInC = GX.CC.RASA;
