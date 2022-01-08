@@ -303,7 +303,8 @@ export class NjsMeshInstance {
             } else {
                 const textureId = texlist[texture.texture];
                 if (textureId === undefined || textureId === null) {
-                    texname = '_yellow';
+                    //texname = '_yellow'; // 
+                    texname = '_white'; // xayrga: needs to be white, the game makes use of untextured vertex objects. Plus the extractor tells us if we're missing anything.
                 } else {
                     texname = textureHolder.getTextureName(textureId);
                 }

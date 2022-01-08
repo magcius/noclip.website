@@ -20,7 +20,7 @@ import { mat4 } from "gl-matrix";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { DataFetcher } from "../DataFetcher";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
-import { Cyan, Magenta, Yellow } from "../Color";
+import { Cyan, Magenta, Yellow , White} from "../Color";
 
 const pathBase = `JetSetRadio`;
 
@@ -187,14 +187,17 @@ class ModelCache {
     private archivePromiseCache = new Map<string, Promise<AFS.AFS>>();
     private texOpaqueMagenta: GfxTexture;
     private texOpaqueYellow: GfxTexture;
+    private texOpaqueWhite: GfxTexture;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, private dataFetcher: DataFetcher, private stageData: StageData) {
         this.cache = new GfxRenderCache(device);
 
         this.texOpaqueMagenta = makeSolidColorTexture2D(device, Magenta);
         this.texOpaqueYellow = makeSolidColorTexture2D(device, Yellow);
+        this.texOpaqueWhite = makeSolidColorTexture2D(device, White);
         this.textureHolder.setTextureOverride('_magenta', { gfxTexture: this.texOpaqueMagenta, width: 1, height: 1, flipY: false });
         this.textureHolder.setTextureOverride('_yellow', { gfxTexture: this.texOpaqueYellow, width: 1, height: 1, flipY: false });
+        this.textureHolder.setTextureOverride('_white', { gfxTexture: this.texOpaqueWhite, width: 1, height: 1, flipY: false });
     }
 
     public waitForLoad(): Promise<void> {
@@ -287,6 +290,7 @@ class ModelCache {
         this.textureHolder.destroy(device);
         device.destroyTexture(this.texOpaqueMagenta);
         device.destroyTexture(this.texOpaqueYellow);
+        device.destroyTexture(this.texOpaqueWhite);
         for (const v of this.modelData.values())
             v.destroy(device);
     }
