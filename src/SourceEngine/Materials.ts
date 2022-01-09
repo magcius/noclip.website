@@ -2346,7 +2346,7 @@ class Material_Generic extends BaseMaterial {
             renderContext.lightmapManager.fillTextureMapping(dst[10], lightmapPageIndex);
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
 
-        if (this.wantsProjectedTexture) {
+        if (this.wantsProjectedTexture && renderContext.currentView.viewType !== SourceEngineViewType.ShadowMap) {
             dst[12].gfxTexture = this.projectedLight!.depthTexture.getTextureForSampling();
             dst[12].gfxSampler = renderContext.materialCache.staticResources.shadowSampler;
             this.projectedLight!.texture!.fillTextureMapping(dst[13], this.projectedLight!.textureFrame);

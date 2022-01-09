@@ -461,10 +461,14 @@ export class GfxrTemporalTexture {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.inputTexture !== null)
-            this.inputTexture.destroy(device);
-        if (this.outputTexture !== null && this.outputTexture !== this.inputTexture)
+        if (this.outputTexture !== null && this.outputTexture !== this.inputTexture) {
             this.outputTexture.destroy(device);
+            this.outputTexture = null;
+        }
+        if (this.inputTexture !== null) {
+            this.inputTexture.destroy(device);
+            this.inputTexture = null;
+        }
     }
 }
 

@@ -1858,8 +1858,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const binding = samplerBindings[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
             const samplerEntry = bindingLayoutTable.samplerEntries[i];
+            const gfxTexture = binding !== null ? binding.gfxTexture : null;
+            const gl_texture = gfxTexture !== null ? getPlatformTexture(gfxTexture) : null;
             const gl_sampler = binding !== null && binding.gfxSampler !== null ? getPlatformSampler(binding.gfxSampler) : null;
-            const gl_texture = binding !== null && binding.gfxTexture !== null ? getPlatformTexture(binding.gfxTexture) : null;
 
             if (this._currentSamplers[samplerIndex] !== gl_sampler) {
                 gl.bindSampler(samplerIndex, gl_sampler);
@@ -1868,8 +1869,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             if (this._currentTextures[samplerIndex] !== gl_texture) {
                 this._setActiveTexture(gl.TEXTURE0 + samplerIndex);
-                if (gl_texture !== null) {
-                    const { gl_target, formatKind } = (assertExists(binding).gfxTexture as GfxTextureP_GL);
+                if (gfxTexture !== null) {
+                    const { gl_target, formatKind } = (gfxTexture as GfxTextureP_GL);
+                    // assert(!this._resourceCreationTracker!.deletionStacks.has(gfxTexture));
                     gl.bindTexture(gl_target, gl_texture);
                     this._debugGroupStatisticsTextureBind();
 
