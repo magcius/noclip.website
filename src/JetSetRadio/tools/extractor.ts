@@ -16,6 +16,7 @@ const pathBaseOut = `../../../data/JetSetRadio`;
 
 const EXECUTABLE_ALLOCATION_ADDRESS = 0x8C010000;
 const STAGE_ALLOCATION_ADDRESS = 0x8CB00000;
+const STAGE_COMPACT_ALLOCATION_ADDRESS = 0x8C800000;
 
 interface AFSRefData {
     AFSFileName: string;
@@ -338,6 +339,30 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
     }
     return models;
 }
+
+
+function extractModelTableIndirect(execBuffer: ArrayBufferSlice, texlists: Texlist[], afsFile: AFSReference, modelTableAddr: number, texlistTableAddr: number | null, tableCount: number): ModelData[] {
+    const modelTable = execBuffer.createTypedArray(Uint32Array, modelTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
+    const texlistTable = texlistTableAddr !== null ? execBuffer.createTypedArray(Uint32Array, texlistTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount) : null;
+    const stageview = afsFile.buffer.createDataView();
+
+    const models: ModelData[] = [];
+    for (let i = 0; i < tableCount; i++) {
+        const indirectModelAddr = modelTable[i];
+        const modelAddr = stageview.getUint32(modelTable[i] - STAGE_COMPACT_ALLOCATION_ADDRESS, true);
+        const modelOffs = modelAddr - STAGE_ALLOCATION_ADDRESS;
+        let texlistIndex = -1;
+        if (texlistTable !== null) {
+            const texlistAddr = texlistTable[i];
+            texlistIndex = findTexlistIndex(texlists, texlistAddr);
+            if (texlistIndex < 0 && texlistAddr !== 0)
+                console.warn(`Model ${hexzero0x(modelTableAddr)} / ${hexzero0x(i, 2)} (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlistAddr)}`);
+        }
+        models.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
+    }
+    return models;
+}
+
 
 const rotToRadians = Math.PI / 0x8000;
 
@@ -945,13 +970,53 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 }
 
 
+function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void {
+    const texChunk = new TexChunk();
+
+    extractTexLoadTable(texChunk, execBuffer, 0x8c183d20, 0x8c800000, 2, 18);
+
+    const SCENE_FILE = afsLoad('GARAGE.AFS', 1);
+    const OBJECT_COUNT = 15;
+    const ASSET_COUNT = 15;
+
+    function createDummyObject(modelId: number) : ObjectData {
+        return {
+            ModelID: modelId,
+            Translation: [0,0,0],
+            Rotation: [0,0,0],
+            Scale: [0,0,0], 
+            Flags: 0 
+        };
+    }
+
+
+    function extractObjects() {
+        const ASSET_TABLE_ADDRESS = 0x8c105b68;
+        const TEXTURE_TABLE_ADDRESS = 0x8c105af0;
+
+        const Models = extractModelTableIndirect(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = [] as ObjectData[];
+        for (let i=0; i < ASSET_COUNT; i++)
+            Objects[i] = createDummyObject(i);
+
+        return {Models,Objects}
+    }
+
+    const slice1 = extractObjects();
+    const crg1 = packStageData(texChunk, [slice1]);
+    saveStageData(dstFilename, crg1);
+}
+
+
+
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
-    //extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-    //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
-    extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
-    //extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
-  //  extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
+        extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
+        extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+        extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
+        extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
+        extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
+        //extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
 }
 
 main();

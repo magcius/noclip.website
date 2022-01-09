@@ -330,8 +330,6 @@ class JetSetRadioSceneDesc implements SceneDesc {
                 const actionInstanceOuter = new NjsActionInstance(modelCache.cache, modelDataOuter, modelDataOuter.texlist, modelCache.textureHolder);
                 renderer.actions.push(actionInstanceOuter);
             }
-        
-
         return renderer;
     }
 }
@@ -344,6 +342,7 @@ export const sceneDescs = [
     new JetSetRadioSceneDesc('Stage3', 'Benten-cho'),
     new JetSetRadioSceneDesc('Stage5', 'Bantam Street'),
     new JetSetRadioSceneDesc('Stage6', 'Grind Square'),
+    //new JetSetRadioSceneDesc('Garage', 'GG Hideout'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
