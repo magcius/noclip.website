@@ -1452,9 +1452,9 @@ var GloverLevel = (function() {
       this._read();
     }
     SetExit.prototype._read = function() {
-      this._debug.behaviorU160x40 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.behaviorU160x40 = this._io.readU2be();
-      this._debug.behaviorU160x40.end = this._io.pos;
+      this._debug.type = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.type = this._io.readU2be();
+      this._debug.type.end = this._io.pos;
       this._debug.visible = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.visible = this._io.readU2be();
       this._debug.visible.end = this._io.pos;

@@ -990,11 +990,11 @@ declare namespace GloverLevel {
     __type: 'SetExit';
     _io: any;
 
-    behaviorU160x40: number;
+    type: number;
     visible: number;
 
     _debug: {
-      behaviorU160x40: DebugPosition;
+      type: DebugPosition;
       visible: DebugPosition;
     };
   }

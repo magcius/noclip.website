@@ -28,6 +28,7 @@ import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOv
 
 import { GloverObjbank, GloverTexbank } from './parsers';
 import { Flipbook, FlipbookType } from './framesets';
+import { SRC_FRAME_TO_MS } from './timing';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -41,6 +42,11 @@ const G_TX_MIRROR = 1
 const G_TX_CLAMP = 2
 const G_TX_NOMASK = 0
 const G_TX_NOLOD = 0
+
+export interface GenericRenderable {
+    destroy: (device: GfxDevice) => void;
+    prepareToRender: (device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void;
+}
 
 export class SceneLighting {
     public diffuseColor: vec3[] = [];
@@ -693,6 +699,65 @@ export class DrawCallInstance {
     }
 }
 
+interface ActorKeyframeSet {
+    scale: number;
+    rotation: number;
+    translation: number;
+    time: number;
+}
+
+function keyframeLerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec3 {
+    let duration = (next.t - cur.t) * SRC_FRAME_TO_MS
+    if (duration == 0) {
+        t = 1
+    } else {
+        t = (t - (cur.t * SRC_FRAME_TO_MS)) / duration;
+    }
+    return vec3.fromValues(
+        cur.v1*(1-t) + next.v1*t,
+        cur.v2*(1-t) + next.v2*t,
+        cur.v3*(1-t) + next.v3*t
+    );
+}
+
+function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec4 {
+    let duration = (next.t - cur.t) * SRC_FRAME_TO_MS
+    if (duration == 0) {
+        t = 1
+    } else {
+        t = (t - (cur.t * SRC_FRAME_TO_MS)) / duration;
+    }
+
+    let dot = ((cur.v1 * next.v1) +
+           (cur.v2 * next.v2) + 
+           (cur.v3 * next.v3) +
+           (cur.v4 * next.v4))
+
+    let tmp = vec4.fromValues(next.v1, next.v2, next.v3, next.v4);
+    if (dot < 0.0) {
+        dot = -dot
+        vec4.negate(tmp, tmp);
+    }
+
+    if (dot < 0.95) {
+        let theta = Math.acos(dot);
+        let sin_1minust = Math.sin(theta * (1-t));
+        let sin_t = Math.sin(theta * t);
+        let sin_theta = Math.sin(theta);
+        return vec4.fromValues(
+            (cur.v1 * sin_1minust + tmp[0] * sin_t) / sin_theta,
+            (cur.v2 * sin_1minust + tmp[1] * sin_t) / sin_theta,
+            (cur.v3 * sin_1minust + tmp[2] * sin_t) / sin_theta,
+            (cur.v4 * sin_1minust + tmp[3] * sin_t) / sin_theta);
+    } else {
+        return vec4.fromValues(
+            cur.v1*(1-t) + next.v1*t,
+            cur.v2*(1-t) + next.v2*t,
+            cur.v3*(1-t) + next.v3*t,
+            cur.v4*(1-t) + next.v4*t
+        )
+    }
+}
 
 class ActorMeshNode {
     private static rendererCache: Map<number, GloverMeshRenderer> = new Map<number, GloverMeshRenderer>();
@@ -701,7 +766,7 @@ class ActorMeshNode {
 
     public children: ActorMeshNode[] = [];
 
-    // TODO: store animation data
+    private keyframeState: ActorKeyframeSet = {scale: 0, rotation: 0, translation: 0, time: 0};
 
     constructor(
         device: GfxDevice,
@@ -709,7 +774,8 @@ class ActorMeshNode {
         segments: ArrayBufferSlice[],
         textures: Textures.GloverTextureHolder,
         sceneLights: SceneLighting,
-        public mesh: GloverObjbank.Mesh) 
+        public mesh: GloverObjbank.Mesh,
+        private maxAnimTime: number)
     {
         if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
             this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, mesh);
@@ -720,7 +786,7 @@ class ActorMeshNode {
 
         let current_child = mesh.child;
         while (current_child !== undefined) {
-            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, current_child));
+            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, current_child, this.maxAnimTime));
             current_child = current_child.sibling;
         }
     }
@@ -735,25 +801,69 @@ class ActorMeshNode {
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
         const drawMatrix = mat4.clone(parentMatrix);
 
-        // TODO: animation
-        const rotation = this.mesh.rotation[0];
-        const translation = this.mesh.translation[0];
-        const scale = this.mesh.scale[0];
-        const scaleVector = vec3.fromValues(scale.v1, scale.v2, scale.v3);
+        const curTime = viewerInput.time % this.maxAnimTime;
+        if (this.mesh.numRotation > 1 || this.mesh.numTranslation > 1 || this.mesh.numScale > 1) {
+            
+            if (this.keyframeState.time > curTime) {
+                this.keyframeState.scale = 0;
+                this.keyframeState.rotation = 0;
+                this.keyframeState.translation = 0;
+            }
+            this.keyframeState.time = curTime;
+
+            const nextKeyframes = {
+                scale: Math.min(this.keyframeState.scale + 1, this.mesh.numScale - 1),
+                translation: Math.min(this.keyframeState.translation + 1, this.mesh.numTranslation - 1),
+                rotation: Math.min(this.keyframeState.rotation + 1, this.mesh.numRotation - 1),
+                time: 0
+            };
+            if (curTime >= this.mesh.scale[nextKeyframes.scale].t * SRC_FRAME_TO_MS) {
+                this.keyframeState.scale = nextKeyframes.scale;
+                nextKeyframes.scale = Math.min(nextKeyframes.scale + 1, this.mesh.numScale - 1);
+            }
+            if (curTime >= this.mesh.translation[nextKeyframes.translation].t * SRC_FRAME_TO_MS) {
+                this.keyframeState.translation = nextKeyframes.translation;
+                nextKeyframes.translation = Math.min(nextKeyframes.translation + 1, this.mesh.numTranslation - 1);
+            }
+            if (curTime >= this.mesh.rotation[nextKeyframes.rotation].t * SRC_FRAME_TO_MS) {
+                this.keyframeState.rotation = nextKeyframes.rotation;
+                nextKeyframes.rotation = Math.min(nextKeyframes.rotation + 1, this.mesh.numRotation - 1);
+            }
+
+            var scale = keyframeLerp(
+                this.mesh.scale[this.keyframeState.scale],
+                this.mesh.scale[nextKeyframes.scale],
+                curTime);
+
+            var translation = keyframeLerp(
+                this.mesh.translation[this.keyframeState.translation],
+                this.mesh.translation[nextKeyframes.translation],
+                curTime);
+
+            var rotation = keyframeSlerp(
+                this.mesh.rotation[this.keyframeState.rotation],
+                this.mesh.rotation[nextKeyframes.rotation],
+                curTime);
+
+        } else {
+            var rotation = vec4.fromValues(this.mesh.rotation[0].v1, this.mesh.rotation[0].v2, this.mesh.rotation[0].v3, this.mesh.rotation[0].v4);
+            var translation = vec3.fromValues(this.mesh.translation[0].v1, this.mesh.translation[0].v2, this.mesh.translation[0].v3);
+            var scale = vec3.fromValues(this.mesh.scale[0].v1, this.mesh.scale[0].v2, this.mesh.scale[0].v3);
+        }
 
         const rotXlateMatrix = mat4.create();
-        mat4.fromQuat(rotXlateMatrix, [rotation.v1, rotation.v2, rotation.v3, rotation.v4])
-        rotXlateMatrix[12] = translation.v1 * parentScale[0];
-        rotXlateMatrix[13] = translation.v2 * parentScale[1];
-        rotXlateMatrix[14] = translation.v3 * parentScale[2];
+        mat4.fromQuat(rotXlateMatrix, rotation);
+        rotXlateMatrix[12] = translation[0] * parentScale[0];
+        rotXlateMatrix[13] = translation[1] * parentScale[1];
+        rotXlateMatrix[14] = translation[2] * parentScale[2];
 
-        mat4.mul(drawMatrix, rotXlateMatrix, drawMatrix);
+        mat4.mul(drawMatrix, drawMatrix, rotXlateMatrix);
 
         for (let child of this.children) {
-            child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, scaleVector);
+            child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, scale);
         }
  
-        mat4.scale(drawMatrix, drawMatrix, scaleVector); 
+        mat4.scale(drawMatrix, drawMatrix, scale); 
 
         this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
     }
@@ -794,9 +904,9 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
 
     constructor(
-        private device: GfxDevice,
-        private cache: GfxRenderCache,
-        private textures: Textures.GloverTextureHolder,
+        public device: GfxDevice,
+        public cache: GfxRenderCache,
+        public textures: Textures.GloverTextureHolder,
         public actorObject: GloverObjbank.ObjectRoot,
         public sceneLights: SceneLighting)
     {
@@ -813,7 +923,25 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, actorObject.mesh)
+
+        let maxAnimTime = 0;
+        function findMaxT(node: GloverObjbank.Mesh): void {
+            maxAnimTime = Math.max(
+                maxAnimTime,
+                node.scale[node.numScale - 1].t * SRC_FRAME_TO_MS,
+                node.translation[node.numTranslation - 1].t * SRC_FRAME_TO_MS,
+                node.rotation[node.numRotation - 1].t * SRC_FRAME_TO_MS
+            );
+            if (node.child !== undefined) {
+                findMaxT(node.child);
+            }
+            if (node.sibling !== undefined) {
+                findMaxT(node.sibling);
+            }
+        }
+        findMaxT(this.actorObject.mesh)
+
+        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, actorObject.mesh, maxAnimTime)
 
         // TODO: get scene lights out of level data
 
@@ -934,7 +1062,6 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             for (let i = 0; i < n_lights; i++) {
                 computeViewMatrixSkybox(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
                 vec3.transformMat4(this.vec3Scratch, this.sceneLights.diffuseDirection[i], DrawCallInstance.viewMatrixScratch);
-                // vec3.normalize(this.vec3Scratch, this.vec3Scratch);
                 offs += fillVec3v(mappedF32, offs, this.vec3Scratch);
             }
             offs += fillVec3v(mappedF32, offs, this.sceneLights.ambientColor);
@@ -1102,7 +1229,7 @@ class GloverMeshRenderer {
     {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
-        const xlu = (this.meshData.renderMode & 0x2) != 0;
+        const xlu = meshData.alpha != 255 || (this.meshData.renderMode & 0x2) != 0;
         const texturing = true;
 
         this.id = meshData.id;
@@ -1110,7 +1237,7 @@ class GloverMeshRenderer {
         initializeRenderState(rspState);
 
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        setRenderMode(rspState, texturing, xlu, true, 1.0);
+        setRenderMode(rspState, texturing, xlu, true, meshData.alpha/255);
 
         if ((this.meshData.renderMode & 0x8) == 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
@@ -1588,7 +1715,7 @@ export class GloverSpriteRenderer {
         this.textureCache = rspState.textureCache;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, frame: number, alpha: number = 1.0): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, frame: number, prim_color: Color | null = null): void {
         if (this.visible !== true) {
             return;
         }
@@ -1609,7 +1736,13 @@ export class GloverSpriteRenderer {
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         this.drawCall.textureIndices[0] = this.frames[frame];
-        this.drawCall.DP_PrimColor.a = alpha;
+        if (prim_color !== null) {
+            // TODO: this could accidentally latch prim colors across
+            //       independent objects if one of them renders a sprite
+            //       with prim color and the other does not. be careful
+            //       here.
+            this.drawCall.DP_PrimColor = prim_color;
+        }
 
         const drawCallInstance = new DrawCallInstance(this.drawCall, drawMatrix, this.textureCache);
         drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, this.isBillboard);
@@ -1632,6 +1765,11 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
     private frameCounter: number = 0;
     public curFrame: number;
     
+    public startSize: number;
+    public endSize: number;
+    public startAlpha: number;
+    public endAlpha: number;
+
     private lifetime: number = -1;
     private timeRemaining: number = 0;
 
@@ -1648,6 +1786,8 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
     private drawMatrixScratch: mat4 = mat4.create();
 
     private vec3Scratch: vec3 = vec3.create();
+
+    private primColor: Color = {r: 1, g: 1, b: 1, a: 1};
 
     constructor(
         private device: GfxDevice,
@@ -1669,8 +1809,19 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         return this.vec3Scratch;
     }
 
+    public setPrimColor(r: number, g: number, b: number) {
+        this.primColor.r = r / 255;
+        this.primColor.g = g / 255;
+        this.primColor.b = b / 255;
+    }
+
     public setSprite(flipbookMetadata: Flipbook): void {
         this.flipbookMetadata = flipbookMetadata;
+
+        this.startAlpha = this.flipbookMetadata.startAlpha;
+        this.endAlpha = this.flipbookMetadata.endAlpha;
+        this.startSize = this.flipbookMetadata.startSize;
+        this.endSize = this.flipbookMetadata.endSize;
 
         let key = String(flipbookMetadata.frameset)
         if (GloverFlipbookRenderer.renderCache.has(key)) {
@@ -1734,28 +1885,25 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
             }
         }
 
-        const startAlpha = this.flipbookMetadata.startAlpha;
-        const endAlpha = this.flipbookMetadata.endAlpha;
         let alpha = 0xFF;
-        if (startAlpha != endAlpha) {
-            alpha = startAlpha;
+        if (this.startAlpha != this.endAlpha) {
+            alpha = this.startAlpha;
             if (this.lifetime < 0) {
                 const nFrames = this.flipbookMetadata.frameset.length;
-                alpha += (endAlpha - startAlpha) * (nFrames - this.curFrame - 1) / (nFrames - 1);
+                alpha += (this.endAlpha - this.startAlpha) * (nFrames - this.curFrame - 1) / (nFrames - 1);
             } else {
-                alpha += (endAlpha - startAlpha) * this.timeRemaining / this.lifetime;
+                alpha += (this.endAlpha - this.startAlpha) * this.timeRemaining / this.lifetime;
             }
         }
+        this.primColor.a = alpha / 255;
 
-        const startSize = this.flipbookMetadata.startSize;
-        const endSize = this.flipbookMetadata.endSize;
-        let size = startSize;
-        if (startSize != endSize) {
+        let size = this.startSize;
+        if (this.startSize != this.endSize) {
             if (this.lifetime < 0) {
                 const nFrames = this.flipbookMetadata.frameset.length;
-                size += (endSize - startSize) * (nFrames - this.curFrame - 1) / (nFrames - 1);
+                size += (this.endSize - this.startSize) * (nFrames - this.curFrame - 1) / (nFrames - 1);
             } else {
-                size += (endSize - startSize) * this.timeRemaining / this.lifetime;
+                size += (this.endSize - this.startSize) * this.timeRemaining / this.lifetime;
             }
         }
         size /= 3;
@@ -1769,7 +1917,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
 
         if (this.playing) {
             mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size, size, size]);
-            this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, this.curFrame, alpha/255);
+            this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, this.curFrame, this.primColor);
         }
     }
 

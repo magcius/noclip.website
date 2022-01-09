@@ -1,3 +1,19 @@
+import * as Textures from './textures';
+import * as Viewer from '../viewer';
+
+import { SRC_FRAME_TO_MS, CONVERT_FRAMERATE } from './timing';
+
+import { mat4, vec3, vec4, quat } from 'gl-matrix';
+
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { Color, colorNewFromRGBA } from "../Color";
+
+import { GenericRenderable, GloverFlipbookRenderer } from './render';
+
+const identityRotation: quat = quat.create();
+
 export var framesets = {
     "smoke": [0xfd05d6ed],
     "smk": [0xb7726c76, 0x6c65c4e1, 0x2568a36c, 0xde8b8878, 0x9786eff5, 0x4c914762, 0x59c20ef],
@@ -347,201 +363,323 @@ export interface ParticleParams {
     lifetimeMin: number;
     lifetimeJitter: number;
     bboxHeight: number;
-    beh0xc: number;
+    friction: number;
     unknown: number;
 }
 
 export var particleParameters: ParticleParams[] = [
     {
-        actorFlags: 0,
+        actorFlags: 0, // smoke
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.70,
+        friction: 0.70,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // smk
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.90,
+        friction: 0.90,
         unknown: 24
     },
     {
-        actorFlags: 0x1,
+        actorFlags: 0x1, // plat
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0x1,
+        actorFlags: 0x1, // ai_spl
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0x1,
+        actorFlags: 0x1, // ???
         lifetimeMin: 13,
         lifetimeJitter: 6,
         bboxHeight: 5,
-        beh0xc: 0.87,
+        friction: 0.87,
         unknown: 24
     },
     {
-        actorFlags: 0x800000,
+        actorFlags: 0x800000, // bstar
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.70,
+        friction: 0.70,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // glow
         lifetimeMin: 30,
         lifetimeJitter: 8,
         bboxHeight: 5,
-        beh0xc: 0.70,
+        friction: 0.70,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // newisp
         lifetimeMin: 18,
         lifetimeJitter: 8,
         bboxHeight: 5,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     },
     {
-        actorFlags: 0x40000091,
+        actorFlags: 0x40000091, // photon
         lifetimeMin: 30,
         lifetimeJitter: 10,
         bboxHeight: 7,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 5
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // sfair
         lifetimeMin: 12,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // fardus
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // fardus
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0x800000,
+        actorFlags: 0x800000, // sfair
         lifetimeMin: 6,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     },
     {
-        actorFlags: 0x40000010,
+        actorFlags: 0x40000010, // traj
         lifetimeMin: 60,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 1,
+        friction: 1,
         unknown: 5
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // popa
         lifetimeMin: 3,
         lifetimeJitter: 0,
         bboxHeight: 0,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // popb
         lifetimeMin: 4,
         lifetimeJitter: 0,
         bboxHeight: 0,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     },
     {
-        actorFlags: 0x1000000,
+        actorFlags: 0x1000000, // p
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 0,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     },
     {
-        actorFlags: 0x800000,
+        actorFlags: 0x800000, // splat
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 0,
-        beh0xc: 0,
+        friction: 0,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // heart
         lifetimeMin: 14,
         lifetimeJitter: 10,
         bboxHeight: 0,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0x800000,
+        actorFlags: 0x800000, // star
         lifetimeMin: 8,
         lifetimeJitter: 0,
         bboxHeight: 0,
-        beh0xc: 0,
+        friction: 0,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // bubble
         lifetimeMin: 1000,
         lifetimeJitter: 5,
         bboxHeight: 0,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // puff
         lifetimeMin: 10,
         lifetimeJitter: 5,
         bboxHeight: 0,
-        beh0xc: 0.70,
+        friction: 0.70,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // traj
         lifetimeMin: 12,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 0.80,
+        friction: 0.80,
         unknown: 24
     },
     {
-        actorFlags: 0,
+        actorFlags: 0, // score
         lifetimeMin: 40,
         lifetimeJitter: 0,
         bboxHeight: 5,
-        beh0xc: 1,
+        friction: 1,
         unknown: 24
     }
 ]
+
+export class Particle {
+    public active: boolean = true;
+
+    public flipbook: GloverFlipbookRenderer;
+
+    private position: vec3 = vec3.create();
+    private velocity: vec3 = vec3.create();
+
+    private scale: vec3 = vec3.create();
+
+    private lastFrameAdvance: number = 0;
+
+    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private particleType: number) {
+        // TODO: use one renderer for all particles of
+        //       same time, possibly even with same renderInst template
+        this.flipbook = new GloverFlipbookRenderer(
+            device, cache, textureHolder, particleFlipbooks[particleType]);
+        // this.scale = [ // TODO: not sure this is right
+        //     3/particleParameters[particleType].bboxHeight,
+        //     3/particleParameters[particleType].bboxHeight,
+        //     3/particleParameters[particleType].bboxHeight
+        // ];
+        this.scale = [
+            1,
+            1,
+            1
+        ];
+
+    } 
+
+    public spawn(origin: vec3 | number[], velocity: vec3 | number[]) {
+        const params = particleParameters[this.particleType];
+        this.position = vec3.fromValues(origin[0], origin[1], origin[2]);
+        this.velocity = vec3.fromValues(velocity[0], velocity[1], velocity[2]);
+        this.active = true;
+        this.flipbook.reset();
+        this.setLifetime(params.lifetimeMin + Math.floor(Math.random() * params.lifetimeJitter))
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const params = particleParameters[this.particleType];
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+
+        vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
+        for (let x = this.lastFrameAdvance; x > 50; x -= 50) {
+            this.lastFrameAdvance = 0;
+            vec3.scale(this.velocity, this.velocity, params.friction);
+        }
+        
+        mat4.fromRotationTranslationScale(this.flipbook.drawMatrix, identityRotation, this.position, this.scale);
+
+        this.flipbook.prepareToRender(device, renderInstManager, viewerInput);
+        if (!this.flipbook.playing) {
+            this.active = false;
+        }
+    }
+
+    public setLifetime(frames: number): void {
+        this.flipbook.setLifetime(frames * SRC_FRAME_TO_MS);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.flipbook.destroy(device);
+    }
+}
+
+export class ParticlePool implements GenericRenderable {
+    private particles: Particle[] = [];
+
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private particleType: number) {
+    }
+
+    public spawn(origin: vec3 | number[], velocity: vec3 | number[]): Particle {
+        let newParticle = null;
+        for (let particle of this.particles) {
+            if (!particle.active) {
+                newParticle = particle;
+                break;
+            }
+        }
+        if (newParticle === null) {
+            newParticle = new Particle(this.device, this.cache, this.textureHolder, this.particleType);
+            this.particles.push(newParticle);
+        }
+        newParticle.spawn(origin, velocity);
+        return newParticle
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let particle of this.particles) {
+            if (particle.active) {
+                particle.prepareToRender(device, renderInstManager, viewerInput);
+            }
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let particle of this.particles) {
+            particle.destroy(device)
+        }
+    }
+}
+
+const exitParticleColors: number[][] = [
+    [0xfd, 0xad, 0x29],
+    [0xff, 0xd2, 0x05],
+    [0xfe, 0x8d, 0x1e],
+    [0xfb, 0xe3, 0x15],
+    [0xff, 0x6a, 0x11],
+]
+
+
+export function spawnExitParticle(particles: ParticlePool, origin: vec3 | number[], velocity: vec3 | number[], scale: number): Particle {
+    const particle = particles.spawn(origin, velocity);
+    const color = exitParticleColors[Math.floor(Math.random() * exitParticleColors.length)];
+    particle.flipbook.startSize *= scale;
+    particle.flipbook.endSize *= scale;
+    particle.flipbook.setPrimColor(color[0], color[1], color[2]);
+    return particle;
+}
