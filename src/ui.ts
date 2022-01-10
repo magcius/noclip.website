@@ -935,8 +935,7 @@ class SceneSelect extends Panel {
 
         const topBox = document.createElement('div');
         topBox.style.display = 'grid';
-        topBox.style.gridTemplateColumns = '1fr 24px';
-        topBox.style.gap = '8px';
+        topBox.style.gridTemplateColumns = '1fr 40px';
         topBox.style.background = 'rgba(0, 0, 0, 1.0)';
         this.contents.append(topBox);
 
