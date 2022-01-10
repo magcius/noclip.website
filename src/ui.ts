@@ -9,10 +9,11 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
-import { clamp, invlerp, lerp } from './MathHelpers';
+import { clamp, invlerp, lerp, randomRange } from './MathHelpers';
 import { DebugFloaterHolder } from './DebugFloaters';
 import { DraggingMode } from './InputManager';
 import { CLAPBOARD_ICON, StudioPanel } from './Studio';
+import { SceneDesc, SceneGroup } from './SceneBase';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
@@ -46,6 +47,7 @@ const TEXTURES_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 
 const FRUSTUM_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="20" fill="white"><polygon points="48.2573,19.8589 33.8981,15.0724 5,67.8384 48.2573,90.3684" /><polygon points="51.5652,19.8738 51.5652,90.3734 95,67.8392 65.9366,15.2701" /><polygon points="61.3189,13.2756 49.9911,9.6265 38.5411,13.1331 49.9213,16.9268" /></svg>`;
 const STATISTICS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 0 55 60" height="16" fill="white"><g><polygon points="6.9,11.5 6.9,56 55.4,56 55.4,53 9.9,53 9.9,11.5"/><path d="M52.7,15.8c-2.7,0-4.9,2.2-4.9,4.9c0,1,0.3,1.8,0.8,2.6l-5,6.8c-0.4-0.1-0.9-0.2-1.3-0.2c-1.5,0-2.9,0.7-3.8,1.8l-5.6-2.8   c0-0.2,0.1-0.5,0.1-0.8c0-2.7-2.2-4.9-4.9-4.9s-4.9,2.2-4.9,4.9c0,1.1,0.3,2,0.9,2.8l-3.9,5.1c-0.5-0.2-1.1-0.3-1.7-0.3   c-2.7,0-4.9,2.2-4.9,4.9s2.2,4.9,4.9,4.9s4.9-2.2,4.9-4.9c0-1-0.3-2-0.8-2.7l4-5.2c0.5,0.2,1.1,0.3,1.6,0.3c1.4,0,2.6-0.6,3.5-1.5   l5.8,2.9c0,0.1,0,0.2,0,0.3c0,2.7,2.2,4.9,4.9,4.9c2.7,0,4.9-2.2,4.9-4.9c0-1.2-0.4-2.2-1.1-3.1l4.8-6.5c0.6,0.2,1.2,0.4,1.9,0.4   c2.7,0,4.9-2.2,4.9-4.9S55.4,15.8,52.7,15.8z"/></g></svg>`;
 const ABOUT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="16" fill="white"><path d="M50,1.1C23,1.1,1.1,23,1.1,50S23,98.9,50,98.9C77,98.9,98.9,77,98.9,50S77,1.1,50,1.1z M55.3,77.7c0,1.7-1.4,3.1-3.1,3.1  h-7.9c-1.7,0-3.1-1.4-3.1-3.1v-5.1c0-1.7,1.4-3.1,3.1-3.1h7.9c1.7,0,3.1,1.4,3.1,3.1V77.7z M67.8,47.3c-2.1,2.9-4.7,5.2-7.9,6.9  c-1.8,1.2-3,2.4-3.6,3.8c-0.4,0.9-0.7,2.1-0.9,3.5c-0.1,1.1-1.1,1.9-2.2,1.9h-9.7c-1.3,0-2.3-1.1-2.2-2.3c0.2-2.7,0.9-4.8,2-6.4  c1.4-1.9,3.9-4.2,7.5-6.7c1.9-1.2,3.3-2.6,4.4-4.3c1.1-1.7,1.6-3.7,1.6-6c0-2.3-0.6-4.2-1.9-5.6c-1.3-1.4-3-2.1-5.3-2.1  c-1.9,0-3.4,0.6-4.7,1.7c-0.8,0.7-1.3,1.6-1.6,2.8c-0.4,1.4-1.7,2.3-3.2,2.3l-9-0.2c-1.1,0-2-1-1.9-2.1c0.3-4.8,2.2-8.4,5.5-11  c3.8-2.9,8.7-4.4,14.9-4.4c6.6,0,11.8,1.7,15.6,5c3.8,3.3,5.7,7.8,5.7,13.5C70.9,41.2,69.8,44.4,67.8,47.3z"/></svg>`;
+const DICE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="18" height="18" fill="white"><path d="M 12.161286,0.33596185 C 9.1715371,-0.03245869 6.4678746,2.0779729 6.099454,5.0677219 L 0.33596183,51.838714 c -0.36842076,2.989751 1.74201117,5.693411 4.73176007,6.061832 l 46.7709931,5.763492 c 2.98975,0.368421 5.69341,-1.742009 6.061831,-4.73176 L 63.664038,12.161286 C 64.032459,9.171537 61.922029,6.4678748 58.932279,6.0994541 Z M 20.047281,10.438667 a 5.4374807,5.4374806 7.0250241 0 1 4.731761,6.061832 5.4374807,5.4374806 7.0250241 0 1 -6.061833,4.73176 5.4374807,5.4374806 7.0250241 0 1 -4.73176,-6.061832 5.4374807,5.4374806 7.0250241 0 1 6.061832,-4.73176 z m 28.782293,3.546782 a 5.4374807,5.4374806 7.0250241 0 1 4.731295,6.061775 5.4374807,5.4374806 7.0250241 0 1 -6.061367,4.731817 5.4374807,5.4374806 7.0250241 0 1 -4.731761,-6.061832 5.4374807,5.4374806 7.0250241 0 1 6.061833,-4.73176 z M 32.665036,26.603204 a 5.4374807,5.4374806 7.0250241 0 1 4.731295,6.061775 5.4374807,5.4374806 7.0250241 0 1 -6.06131,4.731351 5.4374807,5.4374806 7.0250241 0 1 -4.731817,-6.061366 5.4374807,5.4374806 7.0250241 0 1 6.061832,-4.73176 z M 16.500499,39.220959 a 5.4374807,5.4374806 7.0250241 0 1 4.731761,6.061833 5.4374807,5.4374806 7.0250241 0 1 -6.061776,4.731295 5.4374807,5.4374806 7.0250241 0 1 -4.731817,-6.061367 5.4374807,5.4374806 7.0250241 0 1 6.061832,-4.731761 z m 28.782293,3.546782 a 5.4374807,5.4374806 7.0250241 0 1 4.731295,6.061776 5.4374807,5.4374806 7.0250241 0 1 -6.06131,4.731353 5.4374807,5.4374806 7.0250241 0 1 -4.731818,-6.061368 5.4374807,5.4374806 7.0250241 0 1 6.061833,-4.731761 z"/></svg>`;
 
 // Custom icons used by game-specific panels.
 export const LAYER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" height="20" fill="white"><g transform="translate(0,-1036.3622)"><path d="m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z"/></g></svg>`;
@@ -168,6 +170,7 @@ export class TextEntry implements Widget {
 
         this.textfield = new TextField();
         const textarea = this.textfield.textarea;
+        textarea.title = 'Search Bar';
         textarea.style.boxSizing = 'border-box';
         textarea.style.padding = '12px';
         textarea.style.paddingLeft = '32px';
@@ -191,6 +194,7 @@ export class TextEntry implements Widget {
 
         this.clearButton = document.createElement('div');
         this.clearButton.textContent = '🗙';
+        this.clearButton.title = 'Clear';
         this.clearButton.style.color = 'white';
         this.clearButton.style.position = 'absolute';
         this.clearButton.style.width = '24px';
@@ -292,6 +296,19 @@ export abstract class ScrollSelect implements Widget {
         const selector = outer.querySelector('.selector') as HTMLElement;
         if (selector) {
             outer.focus();
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public scrollItemIntoView(i: number): boolean {
+        const outer = this.getOuterForIndex(i);
+        if (!this.itemIsVisible(outer))
+            return false;
+        const selector = outer.querySelector('.selector') as HTMLElement;
+        if (selector) {
+            outer.scrollIntoView();
             return true;
         } else {
             return false;
@@ -534,6 +551,11 @@ export class SingleSelect extends ScrollSelect {
         return true;
     }
 
+    public scrollFocus(): void {
+        if (this.highlightedIndex !== -1)
+            this.scrollItemIntoView(this.highlightedIndex);
+    }
+
     public setItems(items: ScrollSelectItem[]): void {
         this.highlightedIndex = -1;
         super.setItems(items);
@@ -725,7 +747,7 @@ export class Panel implements Widget {
         this.toplevel.style.overflow = 'hidden';
         this.toplevel.style.display = 'grid';
         this.toplevel.style.gridAutoFlow = 'column';
-        this.toplevel.style.gridGap = '20px';
+        this.toplevel.style.gap = '20px';
         this.toplevel.style.transition = '.25s ease-out';
         this.toplevel.style.alignItems = 'start';
         this.toplevel.style.outline = 'none';
@@ -742,7 +764,7 @@ export class Panel implements Widget {
 
         this.extraRack = document.createElement('div');
         this.extraRack.style.gridAutoFlow = 'column';
-        this.extraRack.style.gridGap = '20px';
+        this.extraRack.style.gap = '20px';
         this.extraRack.style.transition = '.15s ease-out .10s';
         this.toplevel.appendChild(this.extraRack);
 
@@ -884,29 +906,41 @@ function matchRegExps(n: RegExp[], S: string): boolean {
     })
 }
 
+function randomChoice<T>(L: T[]): T {
+    const idx = Math.floor(Math.random() * L.length);
+    return assertExists(L[idx]);
+}
+
 class SceneSelect extends Panel {
-    private sceneGroups: (string | Viewer.SceneGroup)[] = [];
-    private sceneDescs: (string | Viewer.SceneDesc)[] = [];
+    private sceneGroups: (string | SceneGroup)[] = [];
+    private sceneDescs: (string | SceneDesc)[] = [];
 
     private searchEntry: TextEntry;
+    private randomButton: HTMLElement;
     private sceneGroupList: SingleSelect;
     private sceneDescList: SingleSelect;
 
-    private selectedSceneGroup: Viewer.SceneGroup;
-    private currentSceneGroup: Viewer.SceneGroup;
-    private currentSceneDesc: Viewer.SceneDesc;
+    private selectedSceneGroup: SceneGroup;
+    private currentSceneGroup: SceneGroup;
+    private currentSceneDesc: SceneDesc;
     private loadProgress: number;
 
     private currentSearchTokens: RegExp[] = [];
 
-    public onscenedescselected: (sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) => void;
+    public onscenedescselected: (sceneGroup: SceneGroup, sceneDesc: SceneDesc) => void;
 
     constructor(public viewer: Viewer.Viewer) {
         super();
         this.setTitle(OPEN_ICON, 'Games');
 
+        const topBox = document.createElement('div');
+        topBox.style.display = 'grid';
+        topBox.style.gridTemplateColumns = '1fr 24px';
+        topBox.style.gap = '8px';
+        topBox.style.background = 'rgba(0, 0, 0, 1.0)';
+        this.contents.append(topBox);
+
         this.searchEntry = new TextEntry();
-        this.searchEntry.elem.style.background = 'rgba(0, 0, 0, 1.0)';
         this.searchEntry.setIcon(SEARCH_ICON);
         this.searchEntry.setPlaceholder('Search...');
         this.searchEntry.ontext = (searchString: string) => {
@@ -918,7 +952,22 @@ class SceneSelect extends Panel {
             this.setExpanded(true, false);
             this.setAutoClosed(false);
         };
-        this.contents.appendChild(this.searchEntry.elem);
+        topBox.appendChild(this.searchEntry.elem);
+
+        this.randomButton = document.createElement('div');
+        this.randomButton.title = 'Random';
+        this.randomButton.style.placeSelf = 'stretch';
+        this.randomButton.style.color = 'white';
+        this.randomButton.style.lineHeight = '20px';
+        this.randomButton.style.cursor = 'pointer';
+        this.randomButton.style.backgroundRepeat = 'no-repeat';
+        this.randomButton.style.backgroundPosition = 'center center';
+        this.randomButton.style.backgroundImage = svgStringToCSSBackgroundImage(DICE_ICON);
+        this.randomButton.onclick = () => {
+            this.selectRandom();
+        };
+        this.syncRandomButtonVisible();
+        topBox.appendChild(this.randomButton);
 
         this.sceneGroupList = new SingleSelect();
         this.sceneGroupList.setHeight('400px');
@@ -932,11 +981,11 @@ class SceneSelect extends Panel {
         this.extraRack.appendChild(this.sceneDescList.elem);
 
         this.sceneGroupList.onselectionchange = (i: number) => {
-            this.selectSceneGroup(i);
+            this.selectSceneGroupIndex(i);
         };
 
         this.sceneDescList.onselectionchange = (i: number) => {
-            this.selectSceneDesc(i);
+            this.selectSceneDescIndex(i);
         };
     }
 
@@ -965,12 +1014,15 @@ class SceneSelect extends Panel {
         this.syncVisibility();
     }
 
+    private syncRandomButtonVisible(): void {
+    }
+
     private syncVisibility(): void {
         // Start searching!
         const n = this.currentSearchTokens;
 
         let lastDescHeaderVisible = false;
-        function matchSceneDesc(item: (string | Viewer.SceneDesc)): boolean {
+        function matchSceneDesc(item: (string | SceneDesc)): boolean {
             if (typeof item === 'string') {
                 // If this is a header, then all items under the header should match.
                 lastDescHeaderVisible = matchRegExps(n, item);
@@ -1034,18 +1086,17 @@ class SceneSelect extends Panel {
         this.sceneDescList.computeHeaderVisibility();
     }
 
-    public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
+    public setCurrentDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
-
-        const index = this.sceneGroups.indexOf(this.currentSceneGroup);
-        this.sceneGroupList.setHighlighted(index);
-
         this.syncSceneDescs();
+
+        this.sceneGroupList.setHighlighted(this.sceneGroups.indexOf(this.currentSceneGroup));
+        this.sceneDescList.setHighlighted(this.sceneDescs.indexOf(this.currentSceneDesc));
     }
 
-    public setSceneGroups(sceneGroups: (string | Viewer.SceneGroup)[]) {
+    public setSceneGroups(sceneGroups: (string | SceneGroup)[]) {
         this.sceneGroups = sceneGroups;
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
@@ -1062,8 +1113,23 @@ class SceneSelect extends Panel {
         this.syncHeaderStyle();
     }
 
-    private selectSceneDesc(i: number) {
-        this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i] as Viewer.SceneDesc);
+    private selectSceneDesc(sceneDesc: SceneDesc) {
+        this.onscenedescselected(this.selectedSceneGroup, sceneDesc);
+    }
+
+    private selectSceneDescIndex(i: number) {
+        this.selectSceneDesc(this.sceneDescs[i] as SceneDesc);
+    }
+
+    private selectRandom(): void {
+        const sceneGroups = this.sceneGroups.filter((v) => typeof v !== 'string' && !v.hidden && v.sceneDescs.length > 0) as SceneGroup[];
+        this.selectSceneGroup(randomChoice(sceneGroups));
+
+        const sceneDescs = this.sceneDescs.filter((v) => typeof v !== 'string') as SceneDesc[];
+        this.selectSceneDesc(randomChoice(sceneDescs));
+
+        this.sceneGroupList.scrollFocus();
+        this.sceneDescList.scrollFocus();
     }
 
     private getLoadingGradient(rightColor: string) {
@@ -1104,10 +1170,13 @@ class SceneSelect extends Panel {
         this.sceneDescList.setFlairs(sceneDescFlairs);
     }
 
-    private selectSceneGroup(i: number) {
-        const sceneGroup = this.sceneGroups[i];
-        this.selectedSceneGroup = sceneGroup as Viewer.SceneGroup;
+    private selectSceneGroup(sceneGroup: SceneGroup): void {
+        this.selectedSceneGroup = sceneGroup;
         this.syncSceneDescs();
+    }
+
+    private selectSceneGroupIndex(i: number) {
+        this.selectSceneGroup(this.sceneGroups[i] as SceneGroup);
     }
 
     private syncSceneDescs() {
@@ -1117,7 +1186,7 @@ class SceneSelect extends Panel {
             this.setSceneDescs([]);
     }
 
-    private setSceneDescs(sceneDescs: (string | Viewer.SceneDesc)[]) {
+    private setSceneDescs(sceneDescs: (string | SceneDesc)[]) {
         this.sceneDescs = sceneDescs;
         this.sceneDescList.setItems(sceneDescs.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
@@ -2248,7 +2317,7 @@ class BottomBar {
         this.elem.style.right = '32px';
         this.elem.style.display = 'grid';
         this.elem.style.gridTemplateColumns = '1fr 1fr 1fr';
-        this.elem.style.gridGap = '8px';
+        this.elem.style.gap = '8px';
         this.elem.style.transition = '.1s ease-out';
         this.elem.style.pointerEvents = 'none';
 
@@ -2269,7 +2338,7 @@ class BottomBar {
         const area = document.createElement('div');
         area.style.display = 'grid';
         area.style.gridAutoFlow = 'column';
-        area.style.gridGap = '8px';
+        area.style.gap = '8px';
         return area;
     }
 
@@ -2647,7 +2716,7 @@ export class UI {
         this.panelContainer = document.createElement('div');
         this.panelContainer.style.display = 'grid';
         this.panelContainer.style.gridTemplateColumns = '1fr';
-        this.panelContainer.style.gridGap = '20px';
+        this.panelContainer.style.gap = '20px';
         this.panelToplevel.appendChild(this.panelContainer);
 
         this.toplevel.appendChild(this.panelToplevel);
