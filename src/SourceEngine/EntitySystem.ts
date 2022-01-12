@@ -622,10 +622,12 @@ class player extends BaseEntity {
 export class worldspawn extends BaseEntity {
     public static classname = `worldspawn`;
     public detailMaterial: string;
+    public skyname: string | undefined;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
         this.detailMaterial = fallbackUndefined(this.entity.detailmaterial, `detail/detailsprites`);
+        this.skyname = this.entity.skyname;
     }
 }
 

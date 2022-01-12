@@ -14,8 +14,8 @@ class TheStanleyParableDesc implements SceneDesc {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await Promise.all([
-                filesystem.createVPKMount(`${pathBase2}/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase2}/hl2_misc`),
+                filesystem.createVPKMount(`HalfLife2/hl2_textures`),
+                filesystem.createVPKMount(`HalfLife2/hl2_misc`),
             ]);
             const dir = decodeString(await context.dataFetcher.fetchData(`${pathBase}/thestanleyparable/dir.txt`));
             const files = dir.split('\n');
@@ -28,7 +28,6 @@ class TheStanleyParableDesc implements SceneDesc {
 }
 
 const pathBase = `TheStanleyParable`;
-const pathBase2 = `HalfLife2`;
 
 const id = 'TheStanleyParable';
 const name = 'The Stanley Parable';

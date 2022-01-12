@@ -50,7 +50,7 @@ export class CustomMount {
 
 function normalizeZip(zip: ZipFile): void {
     for (let i = 0; i < zip.length; i++)
-        zip[i].filename = zip[i].filename.replace(/\\/g, '/');  
+        zip[i].filename = zip[i].filename.toLowerCase().replace(/\\/g, '/');  
 }
 
 export class SourceFileSystem {

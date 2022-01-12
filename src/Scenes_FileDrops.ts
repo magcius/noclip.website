@@ -14,6 +14,7 @@ import * as CTR_H3D from './Common/CTR_H3D/H3D';
 import * as RRES from './rres/scenes';
 import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
 import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
+import * as SourceFileDrops from './SourceEngine/Scenes_FileDrops';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
@@ -101,6 +102,9 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
 
     if (buffer.name.endsWith('.bch'))
         CTR_H3D.parse(buffer);
+
+    if (buffer.name.endsWith('.bsp'))
+        return SourceFileDrops.createFileDropsScene(context, buffer); 
 
     throw "whoops";
 }
