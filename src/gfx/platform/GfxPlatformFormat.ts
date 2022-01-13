@@ -58,6 +58,7 @@ export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: 
 }
 
 export enum GfxFormat {
+    F16_R           = makeFormat(FormatTypeFlags.F16,       FormatCompFlags.R,                FormatFlags.None),
     F16_RG          = makeFormat(FormatTypeFlags.F16,       FormatCompFlags.RG,               FormatFlags.None),
     F16_RGB         = makeFormat(FormatTypeFlags.F16,       FormatCompFlags.RGB,              FormatFlags.None),
     F16_RGBA        = makeFormat(FormatTypeFlags.F16,       FormatCompFlags.RGBA,             FormatFlags.None),

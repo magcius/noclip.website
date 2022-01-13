@@ -430,6 +430,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _EXT_texture_norm16: EXT_texture_norm16 | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
     private _OES_draw_buffers_indexed: OES_draw_buffers_indexed | null = null;
+    private _OES_texture_float_linear: OES_texture_float_linear | null = null;
+    private _OES_texture_half_float_linear: OES_texture_half_float_linear | null = null;
 
     // Swap Chain
     private _scTexture: GfxTexture | null = null;
@@ -501,6 +503,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._EXT_texture_filter_anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
         this._EXT_texture_norm16 = gl.getExtension('EXT_texture_norm16');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
+        this._OES_texture_float_linear = gl.getExtension('OES_texture_float_linear');
+        this._OES_texture_half_float_linear = gl.getExtension('OES_texture_half_float_linear');
         // this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
@@ -623,6 +627,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     //#region GfxDevice
     private translateTextureInternalFormat(fmt: GfxFormat): GLenum {
         switch (fmt) {
+        case GfxFormat.F16_R:
+            return WebGL2RenderingContext.R16F;
+        case GfxFormat.F16_RG:
+            return WebGL2RenderingContext.RG16F;
+        case GfxFormat.F16_RGB:
+            return WebGL2RenderingContext.RGB16F;
         case GfxFormat.F16_RGBA:
             return WebGL2RenderingContext.RGBA16F;
         case GfxFormat.F32_R:
@@ -1454,6 +1464,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case GfxFormat.U16_RG_NORM:
         case GfxFormat.U16_RGBA_NORM:
             return this._EXT_texture_norm16 !== null;
+        case GfxFormat.F32_R:
+        case GfxFormat.F32_RG:
+        case GfxFormat.F32_RGB:
+        case GfxFormat.F32_RGBA:
+            return this._OES_texture_float_linear !== null;
+        case GfxFormat.F16_R:
+        case GfxFormat.F16_RG:
+        case GfxFormat.F16_RGB:
+        case GfxFormat.F16_RGBA:
+            return this._OES_texture_half_float_linear !== null;
         default:
             return true;
         }

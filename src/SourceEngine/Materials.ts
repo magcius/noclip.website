@@ -4055,7 +4055,7 @@ export class LightCache {
 //#region Lightmap / Lighting data
 class LightmapPage {
     public gfxTexture: GfxTexture;
-    public data: Uint8Array | Uint16Array;
+    public data: Uint16Array | Float32Array | Uint8Array;
     public uploadDirty = false;
     public fixedPoint: number;
     public max: number;
@@ -4064,16 +4064,23 @@ class LightmapPage {
         const width = this.page.width, height = this.page.height, numSlices = 4;
 
         let pixelFormat: GfxFormat;
+        const lightmapScale = 16.0; // Needs to match g_LightmapScale in shader.
         if (device.queryTextureFormatSupported(GfxFormat.U16_RGBA_NORM, width, height)) {
             pixelFormat = GfxFormat.U16_RGBA_NORM;
             this.max = 0xFFFF;
+            this.fixedPoint = (this.max + 1) / lightmapScale;
             this.data = new Uint16Array(width * height * numSlices * 4);
+        } else if (device.queryTextureFormatSupported(GfxFormat.F32_RGBA, width, height)) {
+            pixelFormat = GfxFormat.F32_RGBA;
+            this.max = 1.0;
+            this.fixedPoint = this.max / lightmapScale;
+            this.data = new Float32Array(width * height * numSlices * 4);
         } else {
             pixelFormat = GfxFormat.U8_RGBA_NORM;
             this.max = 0xFF;
+            this.fixedPoint = (this.max + 1) / lightmapScale;
             this.data = new Uint8Array(width * height * numSlices * 4);
         }
-        this.fixedPoint = (this.max + 1) / 16.0;
 
         this.gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray,
@@ -4188,7 +4195,7 @@ function gammaToLinear(v: number): number {
 }
 
 function linearToFixedPoint(v: number, fixedPoint: number, max: number): number {
-    return clamp(Math.round(v * fixedPoint), 0.0, max);
+    return clamp(v * fixedPoint, 0.0, max);
 }
 
 function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>, src: Float32Array, srcOffs: number): void {
