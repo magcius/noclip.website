@@ -1071,6 +1071,13 @@ export class SourceRenderContext {
         this.studioModelCache = new StudioModelCache(this, this.filesystem);
         this.colorCorrection = new SourceColorCorrection(device, this.renderCache);
         this.flashlight = new Flashlight(this);
+
+        if (!this.device.queryLimits().occlusionQueriesRecommended) {
+            // Disable auto-exposure system on backends where we shouldn't use occlusion queries.
+            // TODO(jstpierre): We should be able to do system with compute shaders instead of
+            // occlusion queries on WebGPU, once that's more widely deployed.
+            this.enableAutoExposure = false;
+        }
     }
 
     public destroy(device: GfxDevice): void {

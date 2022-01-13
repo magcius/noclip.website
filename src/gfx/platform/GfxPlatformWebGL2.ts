@@ -490,6 +490,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public uniformBufferWordAlignment: number;
     public uniformBufferMaxPageWordSize: number;
     public supportedSampleCounts: number[];
+    public occlusionQueriesRecommended: boolean;
 
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._contextAttributes = assertExists(gl.getContextAttributes());
@@ -568,9 +569,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (!this.supportedSampleCounts.includes(1))
             this.supportedSampleCounts.push(1);
         this.supportedSampleCounts.sort((a, b) => (a - b));
+
+        this.occlusionQueriesRecommended = true;
     }
 
     private _checkForBugQuirks(): void {
+        if (navigator.userAgent.includes('Firefox')) {
+            // TODO(jstpierre): File Bugzilla bug, check Firefox version.
+            // getQueryParameter on Firefox causes a full GL command buffer sync
+            // (verified with private correspondence with Kelsey Gilbert).
+            this.occlusionQueriesRecommended = false;
+        }
     }
 
     //#region GfxSwapChain

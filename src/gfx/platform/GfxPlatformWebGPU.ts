@@ -1410,6 +1410,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             uniformBufferMaxPageWordSize: 0x1000,
             uniformBufferWordAlignment: 0x40,
             supportedSampleCounts: [1],
+            occlusionQueriesRecommended: false,
         };
     }
 

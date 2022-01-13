@@ -273,6 +273,7 @@ export interface GfxDeviceLimits {
     uniformBufferWordAlignment: number;
     uniformBufferMaxPageWordSize: number;
     readonly supportedSampleCounts: number[];
+    occlusionQueriesRecommended: boolean;
 }
 
 export interface GfxDebugGroup {
