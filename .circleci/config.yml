@@ -40,6 +40,7 @@ jobs:
           paths:
             - node_modules
             - .cache
+            - .cargo
           key: v3-dependencies-{{ checksum "package.json" }}
 
       - add_ssh_keys:
