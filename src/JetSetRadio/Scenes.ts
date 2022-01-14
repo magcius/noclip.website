@@ -174,6 +174,7 @@ interface SkyboxData {
 }
 
 interface StageData {
+    BaseAddress: number;
     TexlistData: TexlistData;
     Models: ModelData[];
     Objects: ObjectData[];
@@ -265,7 +266,7 @@ class ModelCache {
         const model = this.stageData.Models[id];
         //console.warn(`${hexzero0x(id)}`)
         const binData = this.getAFSRef(model);
-        const stageLoadAddr = 0x8CB00000;
+        const stageLoadAddr = this.stageData.BaseAddress;
         const objects = Ninja.parseNjsObjects(binData, stageLoadAddr, model.Offset);
         const action: Ninja.NJS_ACTION = { frames: 0, objects, motions: [] };
         const actionData = new NjsActionData(this.device, this.cache, action, 0);
@@ -277,7 +278,7 @@ class ModelCache {
     public loadFromModelData(dat: ModelData) {
         const model = dat;
         const binData = this.getAFSRef(model);
-        const stageLoadAddr = 0x8CB00000;
+        const stageLoadAddr = this.stageData.BaseAddress;
         const objects = Ninja.parseNjsObjects(binData, stageLoadAddr, model.Offset);
         const action: Ninja.NJS_ACTION = { frames: 0, objects, motions: [] };
         const actionData = new NjsActionData(this.device, this.cache, action, 0);

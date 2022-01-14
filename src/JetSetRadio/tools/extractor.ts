@@ -55,6 +55,7 @@ interface StageSliceData {
 }
 
 interface StageData extends StageSliceData {
+    BaseAddress: number;
     TexlistData: TexlistData;
     Skybox: SkyboxData | null;
 }
@@ -492,7 +493,7 @@ function extractObjectTableSinglesSize(execBuffer: ArrayBufferSlice, afsFile: AF
 
 
 
-function packStageData(texChunk: TexChunk, slices: StageSliceData[], Skybox: SkyboxData | null = null): StageData {
+function packStageData(texChunk: TexChunk, slices: StageSliceData[], BaseAddress: number, Skybox: SkyboxData | null = null): StageData {
     const usedTexlists: number[] = [];
     const usedTexlistMap = new Map<number, number>();
 
@@ -535,7 +536,7 @@ function packStageData(texChunk: TexChunk, slices: StageSliceData[], Skybox: Sky
         }));
     }
 
-    return { TexlistData, Models, Objects, Skybox };
+    return { TexlistData, Models, Objects, BaseAddress, Skybox };
 }
 
 function saveStageData(dstFilename: string, crg1: StageData): void {
@@ -641,7 +642,7 @@ function extractStage1(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const interactables = extractInteractables();    
     const skybox = extractSkybox();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables], skybox);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables], STAGE_ALLOCATION_ADDRESS, skybox);
     saveStageData(dstFilename, crg1);
 }
 
@@ -724,7 +725,7 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const interactables = extractInteractables();
     const skybox = extractSkybox();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables], skybox);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, interactables], STAGE_ALLOCATION_ADDRESS, skybox);
     saveStageData(dstFilename, crg1);
 }
 
@@ -817,7 +818,7 @@ function extractStage3(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     //const interactables = extractInteractables(); //xayrga: parser is having a hard time with one of the models here, too
     const skybox = extractSkybox();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4], skybox);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3, slice4], STAGE_ALLOCATION_ADDRESS, skybox);
     saveStageData(dstFilename, crg1);
 }
 
@@ -898,7 +899,7 @@ function extractStage5(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     //we need to fix that before we can have interactables on this map.
     //const interactables = extractInteractables();
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3], skybox);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3], STAGE_ALLOCATION_ADDRESS, skybox);
     saveStageData(dstFilename, crg1);
 }
 
@@ -965,7 +966,7 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     const slice3 = extractSlice3();
     // const interactables = extractInteractables(); xayrga: One of the textures in this breaks the PVR decoder.
 
-    const crg1 = packStageData(texChunk, [slice1, slice2, slice3]);
+    const crg1 = packStageData(texChunk, [slice1, slice2, slice3], STAGE_ALLOCATION_ADDRESS);
     saveStageData(dstFilename, crg1);
 }
 
@@ -1003,7 +1004,7 @@ function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     }
 
     const slice1 = extractObjects();
-    const crg1 = packStageData(texChunk, [slice1]);
+    const crg1 = packStageData(texChunk, [slice1], STAGE_COMPACT_ALLOCATION_ADDRESS);
     saveStageData(dstFilename, crg1);
 }
 
