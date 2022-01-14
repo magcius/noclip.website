@@ -30,6 +30,15 @@ import { GloverObjbank, GloverTexbank } from './parsers';
 import { Flipbook, FlipbookType } from './framesets';
 import { SRC_FRAME_TO_MS } from './timing';
 
+export const enum GloverRendererLayer {
+    OPAQUE,
+    OPAQUE_BILLBOARD,
+    XLU,
+    XLU_BILLBOARD,
+    OVERLAY, // TODO: on this layer, instead of setRenderMode, use setCloudSurfaceRenderMode
+    FOOTPRINTS,
+}
+
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
 
@@ -55,7 +64,7 @@ export class SceneLighting {
 };
 
 function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, alpha: number): void {    
-    // TODO: prehist 1 bridge still doesn't have right depth behavior
+    // TODO: billboards and prehist 1 bridge still don't have right depth behavior
 
     rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
     if (xlu) {
@@ -907,13 +916,13 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, actorObject.mesh, maxAnimTime)
 
-        // TODO: get scene lights out of level data
-
-        // TODO: use render mode and actor type to identify other layers
-
-        const layer = ((this.actorObject.mesh.renderMode & 0x2) != 0) ?
-            GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        this.sortKey = makeSortKey(layer);
+        if ((this.actorObject.mesh.renderMode & 0x80) != 0) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OVERLAY);
+        } else if ((this.actorObject.mesh.renderMode & 0x2) != 0) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.XLU);
+        } else {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OPAQUE);
+        }
     }
 
     public getPosition(): vec3 {
@@ -1564,7 +1573,7 @@ export class GloverSpriteRenderer {
 
     protected frames: number[] = [];
 
-    private sortKey: number;
+    protected sortKey: number;
 
     public visible: boolean = true;
     
@@ -1577,9 +1586,11 @@ export class GloverSpriteRenderer {
         private frameset: number[],
         private xlu: boolean = false)
     {
-        // TODO: fix water drawing over closer garibs
-        const layer = xlu ? GfxRendererLayer.TRANSLUCENT + 1 : GfxRendererLayer.OPAQUE + 1; // TODO: this isn't right
-        this.sortKey = makeSortKey(layer);
+        if (xlu) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.XLU_BILLBOARD);
+        } else {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OPAQUE_BILLBOARD);
+        }
 
         this.megaStateFlags = {};
 
@@ -1912,6 +1923,7 @@ export class GloverShadowRenderer extends GloverSpriteRenderer {
         textures: Textures.GloverTextureHolder)
     {
         super(device, cache, textures, [0x147b7297]);
+        this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.FOOTPRINTS);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
