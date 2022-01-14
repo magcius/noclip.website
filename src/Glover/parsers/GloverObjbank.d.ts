@@ -67,13 +67,14 @@ declare namespace GloverObjbank {
     _io: any;
 
     mesh: GloverObjbank.Mesh;
+    animation: GloverObjbank.Animation;
     objId: number;
     bankBaseAddr: number;
     u2: number;
     meshPtr: number;
     u3: number;
     u4: number;
-    u5: number;
+    animationPtr: number;
 
     _debug: {
       objId: DebugPosition;
@@ -82,7 +83,7 @@ declare namespace GloverObjbank {
       meshPtr: DebugPosition;
       u3: DebugPosition;
       u4: DebugPosition;
-      u5: DebugPosition;
+      animationPtr: DebugPosition;
     };
   }
 }
@@ -143,6 +144,26 @@ declare namespace GloverObjbank {
 }
 
 declare namespace GloverObjbank {
+  class AnimationDefinition {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'AnimationDefinition';
+    _io: any;
+
+    startTime: number;
+    endTime: number;
+    playbackSpeed: number;
+    u1: number;
+
+    _debug: {
+      startTime: DebugPosition;
+      endTime: DebugPosition;
+      playbackSpeed: DebugPosition;
+      u1: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverObjbank {
   class Face {
     constructor(io: any, parent?: any, root?: any);
     __type: 'Face';
@@ -188,6 +209,45 @@ declare namespace GloverObjbank {
       u5: DebugPosition;
       u6: DebugPosition;
       u7: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverObjbank {
+  class Animation {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'Animation';
+    _io: any;
+
+    animationDefinitions: GloverObjbank.AnimationDefinition[];
+    numAnimationDefinitions: number;
+    currentAnimationIdx: number;
+    u3: number;
+    isPlaying: number;
+    timeDelta: number;
+    nextAnimIdx: number[];
+    pad: number;
+    nextIsPlaying: number[];
+    nextTimeDelta: number[];
+    nextAnimSlotIdx: number;
+    u15: number;
+    animationDefinitionsPtr: number;
+    curTime: number;
+
+    _debug: {
+      numAnimationDefinitions: DebugPosition;
+      currentAnimationIdx: DebugPosition;
+      u3: DebugPosition;
+      isPlaying: DebugPosition;
+      timeDelta: DebugPosition;
+      nextAnimIdx: DebugPosition;
+      pad: DebugPosition;
+      nextIsPlaying: DebugPosition;
+      nextTimeDelta: DebugPosition;
+      nextAnimSlotIdx: DebugPosition;
+      u15: DebugPosition;
+      animationDefinitionsPtr: DebugPosition;
+      curTime: DebugPosition;
     };
   }
 }

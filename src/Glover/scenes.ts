@@ -162,15 +162,16 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                     ];
                     GloverPlatform.exitSparkleEmitTheta += 0.4;
 
+                    mat4.getTranslation(this.scratchVec3, this.actor.modelMatrix);
                     const particleOrigin1 = [
-                        this.position[0] + particleVelocity[0] * 9.0,
-                        this.position[1] + 4.0,
-                        this.position[2] + particleVelocity[2] * 9.0,
+                        this.scratchVec3[0] + particleVelocity[0] * 9.0,
+                        this.scratchVec3[1] + 4.0,
+                        this.scratchVec3[2] + particleVelocity[2] * 9.0,
                     ]
                     const particleOrigin2 = [
-                        this.position[0] - particleVelocity[0] * 9.0,
-                        this.position[1] + 4.0,
-                        this.position[2] - particleVelocity[2] * 9.0,
+                        this.scratchVec3[0] - particleVelocity[0] * 9.0,
+                        this.scratchVec3[1] + 4.0,
+                        this.scratchVec3[2] - particleVelocity[2] * 9.0,
                     ]
 
                     particleVelocity[0] /= SRC_FRAME_TO_MS;

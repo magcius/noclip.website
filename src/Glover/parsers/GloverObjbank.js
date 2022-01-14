@@ -122,9 +122,9 @@ var GloverObjbank = (function() {
       this._debug.u4 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u4 = this._io.readU4be();
       this._debug.u4.end = this._io.pos;
-      this._debug.u5 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u5 = this._io.readU4be();
-      this._debug.u5.end = this._io.pos;
+      this._debug.animationPtr = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.animationPtr = this._io.readU4be();
+      this._debug.animationPtr.end = this._io.pos;
     }
     Object.defineProperty(ObjectRoot.prototype, 'mesh', {
       get: function() {
@@ -139,6 +139,21 @@ var GloverObjbank = (function() {
           this._io.seek(_pos);
         }
         return this._m_mesh;
+      }
+    });
+    Object.defineProperty(ObjectRoot.prototype, 'animation', {
+      get: function() {
+        if (this._m_animation !== undefined)
+          return this._m_animation;
+        if (this.animationPtr != 0) {
+          var _pos = this._io.pos;
+          this._io.seek(this.animationPtr);
+          this._debug._m_animation = { start: this._io.pos, ioOffset: this._io.byteOffset };
+          this._m_animation = new Animation(this._io, this, this._root);
+          this._debug._m_animation.end = this._io.pos;
+          this._io.seek(_pos);
+        }
+        return this._m_animation;
       }
     });
 
@@ -235,6 +250,34 @@ var GloverObjbank = (function() {
     return AffineFrame;
   })();
 
+  var AnimationDefinition = GloverObjbank.AnimationDefinition = (function() {
+    function AnimationDefinition(_io, _parent, _root) {
+      this.__type = 'AnimationDefinition';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    AnimationDefinition.prototype._read = function() {
+      this._debug.startTime = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.startTime = this._io.readS2be();
+      this._debug.startTime.end = this._io.pos;
+      this._debug.endTime = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.endTime = this._io.readS2be();
+      this._debug.endTime.end = this._io.pos;
+      this._debug.playbackSpeed = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.playbackSpeed = this._io.readF4be();
+      this._debug.playbackSpeed.end = this._io.pos;
+      this._debug.u1 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.u1 = this._io.readU4be();
+      this._debug.u1.end = this._io.pos;
+    }
+
+    return AnimationDefinition;
+  })();
+
   var Face = GloverObjbank.Face = (function() {
     function Face(_io, _parent, _root) {
       this.__type = 'Face';
@@ -304,6 +347,100 @@ var GloverObjbank = (function() {
     }
 
     return Sprite;
+  })();
+
+  var Animation = GloverObjbank.Animation = (function() {
+    function Animation(_io, _parent, _root) {
+      this.__type = 'Animation';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    Animation.prototype._read = function() {
+      this._debug.numAnimationDefinitions = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.numAnimationDefinitions = this._io.readS2be();
+      this._debug.numAnimationDefinitions.end = this._io.pos;
+      this._debug.currentAnimationIdx = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.currentAnimationIdx = this._io.readS2be();
+      this._debug.currentAnimationIdx.end = this._io.pos;
+      this._debug.u3 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.u3 = this._io.readU4be();
+      this._debug.u3.end = this._io.pos;
+      this._debug.isPlaying = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.isPlaying = this._io.readU4be();
+      this._debug.isPlaying.end = this._io.pos;
+      this._debug.timeDelta = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.timeDelta = this._io.readF4be();
+      this._debug.timeDelta.end = this._io.pos;
+      this._debug.nextAnimIdx = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.nextAnimIdx = new Array(5);
+      this._debug.nextAnimIdx.arr = new Array(5);
+      for (var i = 0; i < 5; i++) {
+        this._debug.nextAnimIdx.arr[i] = { start: this._io.pos, ioOffset: this._io.byteOffset };
+        this.nextAnimIdx[i] = this._io.readS2be();
+        this._debug.nextAnimIdx.arr[i].end = this._io.pos;
+      }
+      this._debug.nextAnimIdx.end = this._io.pos;
+      this._debug.pad = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.pad = this._io.readU2be();
+      this._debug.pad.end = this._io.pos;
+      this._debug.nextIsPlaying = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.nextIsPlaying = new Array(5);
+      this._debug.nextIsPlaying.arr = new Array(5);
+      for (var i = 0; i < 5; i++) {
+        this._debug.nextIsPlaying.arr[i] = { start: this._io.pos, ioOffset: this._io.byteOffset };
+        this.nextIsPlaying[i] = this._io.readU4be();
+        this._debug.nextIsPlaying.arr[i].end = this._io.pos;
+      }
+      this._debug.nextIsPlaying.end = this._io.pos;
+      this._debug.nextTimeDelta = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.nextTimeDelta = new Array(5);
+      this._debug.nextTimeDelta.arr = new Array(5);
+      for (var i = 0; i < 5; i++) {
+        this._debug.nextTimeDelta.arr[i] = { start: this._io.pos, ioOffset: this._io.byteOffset };
+        this.nextTimeDelta[i] = this._io.readU4be();
+        this._debug.nextTimeDelta.arr[i].end = this._io.pos;
+      }
+      this._debug.nextTimeDelta.end = this._io.pos;
+      this._debug.nextAnimSlotIdx = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.nextAnimSlotIdx = this._io.readS2be();
+      this._debug.nextAnimSlotIdx.end = this._io.pos;
+      this._debug.u15 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.u15 = this._io.readU2be();
+      this._debug.u15.end = this._io.pos;
+      this._debug.animationDefinitionsPtr = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.animationDefinitionsPtr = this._io.readU4be();
+      this._debug.animationDefinitionsPtr.end = this._io.pos;
+      this._debug.curTime = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.curTime = this._io.readF4be();
+      this._debug.curTime.end = this._io.pos;
+    }
+    Object.defineProperty(Animation.prototype, 'animationDefinitions', {
+      get: function() {
+        if (this._m_animationDefinitions !== undefined)
+          return this._m_animationDefinitions;
+        if (this.animationDefinitionsPtr != 0) {
+          var _pos = this._io.pos;
+          this._io.seek(this.animationDefinitionsPtr);
+          this._debug._m_animationDefinitions = { start: this._io.pos, ioOffset: this._io.byteOffset };
+          this._m_animationDefinitions = new Array(this.numAnimationDefinitions);
+          this._debug._m_animationDefinitions.arr = new Array(this.numAnimationDefinitions);
+          for (var i = 0; i < this.numAnimationDefinitions; i++) {
+            this._debug._m_animationDefinitions.arr[i] = { start: this._io.pos, ioOffset: this._io.byteOffset };
+            this._m_animationDefinitions[i] = new AnimationDefinition(this._io, this, this._root);
+            this._debug._m_animationDefinitions.arr[i].end = this._io.pos;
+          }
+          this._debug._m_animationDefinitions.end = this._io.pos;
+          this._io.seek(_pos);
+        }
+        return this._m_animationDefinitions;
+      }
+    });
+
+    return Animation;
   })();
 
   var Mesh = GloverObjbank.Mesh = (function() {

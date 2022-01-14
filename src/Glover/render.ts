@@ -54,65 +54,29 @@ export class SceneLighting {
     public ambientColor: vec3 = vec3.fromValues(.5, .5, .5);
 };
 
-function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, zbuffer: boolean, alpha: number): void {    
-    // This isn't exactly right but whatever, good enough
+function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, alpha: number): void {    
+    // TODO: prehist 1 bridge still doesn't have right depth behavior
 
-    const two_cycle = false;
-
-    if (textured) {
-        if (xlu) {
-            // rspState.gDPSetCombineMode(G_CC_MODULATEI, G_CC_MODULATEIA);
-            rspState.gDPSetCombine(0xFC127E24, 0xFF33F9FF);
+    rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+    if (xlu) {
+        if (textured) {
+            rspState.gDPSetCombine(0xFCFF97FF, 0xFFFCFE38); // gsDPSetCombineLERP(0, 0, 0, TEXEL0, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
         } else {
-            // rspState.gDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2);
-            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); 
-
+            rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); // gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
         }
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
     } else {
-        // rspState.gDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE);// 0xFC127E24 0xFFFFF7FB;
-        rspState.gDPSetCombine(0xFC127E24, 0xFFFFF7FB);
-    }
+        if (textured) {
+            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // gsDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2));
+            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
+        } else {
+            rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); //  gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
+            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_OPA_SURF2);
+        }
 
+    }
     assert(0 <= alpha && alpha <= 1);
     rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);
-
-    if (xlu) {
-        if (zbuffer) {
-            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-            rspState.gDPSetRenderMode( // 0xB900031D 0x005049D8
-                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_ZB_XLU_SURF,
-                RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
-        } else {
-            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
-            rspState.gDPSetRenderMode( // 0xB900031D 0x0C1841C8/0x005041C8
-                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_XLU_SURF,
-                RDPRenderModes.G_RM_AA_XLU_SURF2);
-        }
-    } else if (textured) {
-        if (zbuffer) {
-            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-            rspState.gDPSetRenderMode( // 0xB900031D 0x0C193078/0x00553078
-                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_ZB_TEX_EDGE,
-                RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
-        } else {
-            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
-            rspState.gDPSetRenderMode( // 0xB900031D 0x0C193048/0x00553048
-                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_TEX_EDGE,
-                RDPRenderModes.G_RM_AA_TEX_EDGE2);
-        }
-    } else {
-        if (zbuffer) {
-            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-            rspState.gDPSetRenderMode( // 0xB900031D 0x0C192078/0x00552078
-                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_ZB_OPA_SURF,
-                RDPRenderModes.G_RM_AA_ZB_OPA_SURF2);
-        } else {
-            rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB6000000 0x00000001
-            rspState.gDPSetRenderMode( // 0xB900031D 0x0C192048/0x00552048
-                (two_cycle) ? RDPRenderModes.G_RM_PASS : RDPRenderModes.G_RM_AA_OPA_SURF,
-                RDPRenderModes.G_RM_AA_OPA_SURF2);
-        }
-    }
 }
 
 
@@ -1230,14 +1194,14 @@ class GloverMeshRenderer {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
         const xlu = meshData.alpha != 255 || (this.meshData.renderMode & 0x2) != 0;
-        const texturing = true;
+        const texturing = (this.meshData.renderMode & 0x4) != 0;
 
         this.id = meshData.id;
 
         initializeRenderState(rspState);
 
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        setRenderMode(rspState, texturing, xlu, true, meshData.alpha/255);
+        setRenderMode(rspState, texturing, xlu, meshData.alpha/255);
 
         if ((this.meshData.renderMode & 0x8) == 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
@@ -1483,7 +1447,7 @@ export class GloverBackdropRenderer {
         const rspState = new GloverRSPState(segments, textures);
 
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, false, true, 1.0);
+        setRenderMode(rspState, true, false, 1.0);
 
         rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
         rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
@@ -1634,7 +1598,7 @@ export class GloverSpriteRenderer {
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, true, true, 1.0);
+        setRenderMode(rspState, true, true, 1.0);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
 
         if (this.xlu) {
