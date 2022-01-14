@@ -35,7 +35,7 @@ export const enum GloverRendererLayer {
     OPAQUE_BILLBOARD,
     XLU,
     XLU_BILLBOARD,
-    OVERLAY, // TODO: on this layer, instead of setRenderMode, use setCloudSurfaceRenderMode
+    OVERLAY,
     FOOTPRINTS,
 }
 
@@ -63,29 +63,36 @@ export class SceneLighting {
     public ambientColor: vec3 = vec3.fromValues(.5, .5, .5);
 };
 
-function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, alpha: number): void {    
+function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, overlay: boolean, alpha: number): void {    
     // TODO: billboards and prehist 1 bridge still don't have right depth behavior
 
-    rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-    if (xlu) {
-        if (textured) {
-            rspState.gDPSetCombine(0xFCFF97FF, 0xFFFCFE38); // gsDPSetCombineLERP(0, 0, 0, TEXEL0, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
-        } else {
-            rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); // gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
-        }
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
-    } else {
-        if (textured) {
-            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // gsDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2));
-            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
-        } else {
-            rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); //  gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
-            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_OPA_SURF2);
-        }
-
-    }
     assert(0 <= alpha && alpha <= 1);
-    rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);
+
+    rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+
+    if (overlay) {
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2);
+        rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
+        rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, alpha * 255);
+    } else {
+        if (xlu) {
+            if (textured) {
+                rspState.gDPSetCombine(0xFCFF97FF, 0xFFFCFE38); // gsDPSetCombineLERP(0, 0, 0, TEXEL0, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
+            } else {
+                rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); // gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
+            }
+            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
+        } else {
+            if (textured) {
+                rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // gsDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2));
+                rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
+            } else {
+                rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); //  gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
+                rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_OPA_SURF2);
+            }
+        }
+        rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);
+    }
 }
 
 
@@ -747,11 +754,12 @@ class ActorMeshNode {
         segments: ArrayBufferSlice[],
         textures: Textures.GloverTextureHolder,
         sceneLights: SceneLighting,
+        overlay: boolean,
         public mesh: GloverObjbank.Mesh,
         private maxAnimTime: number)
     {
         if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
-            this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, mesh);
+            this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, overlay, mesh);
             ActorMeshNode.rendererCache.set(mesh.id, this.renderer);
         } else {
             this.renderer = ActorMeshNode.rendererCache.get(mesh.id)!;
@@ -759,7 +767,7 @@ class ActorMeshNode {
 
         let current_child = mesh.child;
         while (current_child !== undefined) {
-            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, current_child, this.maxAnimTime));
+            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, current_child, this.maxAnimTime));
             current_child = current_child.sibling;
         }
     }
@@ -914,11 +922,14 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         }
         findMaxT(this.actorObject.mesh)
 
-        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, actorObject.mesh, maxAnimTime)
+        const overlay = (this.actorObject.mesh.renderMode & 0x80) != 0;
+        const xlu = (this.actorObject.mesh.renderMode & 0x2) != 0;
 
-        if ((this.actorObject.mesh.renderMode & 0x80) != 0) {
+        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.mesh, maxAnimTime)
+
+        if (overlay) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OVERLAY);
-        } else if ((this.actorObject.mesh.renderMode & 0x2) != 0) {
+        } else if (xlu) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.XLU);
         } else {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OPAQUE);
@@ -1198,11 +1209,12 @@ class GloverMeshRenderer {
         private segments: ArrayBufferSlice[],
         private textures: Textures.GloverTextureHolder,
         private sceneLights: SceneLighting,
+        overlay: boolean,
         public meshData: GloverObjbank.Mesh)
     {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
-        const xlu = meshData.alpha != 255 || (this.meshData.renderMode & 0x2) != 0;
+        const xlu = (this.meshData.renderMode & 0x2) != 0;
         const texturing = (this.meshData.renderMode & 0x4) != 0;
 
         this.id = meshData.id;
@@ -1210,7 +1222,7 @@ class GloverMeshRenderer {
         initializeRenderState(rspState);
 
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        setRenderMode(rspState, texturing, xlu, meshData.alpha/255);
+        setRenderMode(rspState, texturing, xlu, overlay meshData.alpha/255);
 
         if ((this.meshData.renderMode & 0x8) == 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
@@ -1456,7 +1468,7 @@ export class GloverBackdropRenderer {
         const rspState = new GloverRSPState(segments, textures);
 
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, false, 1.0);
+        setRenderMode(rspState, true, false, false, 1.0);
 
         rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
         rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
@@ -1609,7 +1621,7 @@ export class GloverSpriteRenderer {
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, true, 1.0);
+        setRenderMode(rspState, true, true, false, 1.0);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
 
         if (this.xlu) {
