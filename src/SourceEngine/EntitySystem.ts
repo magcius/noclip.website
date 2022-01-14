@@ -2087,7 +2087,6 @@ class color_correction extends BaseEntity {
 
         this.layer = lutData.createTypedArray(Uint8Array);
         renderContext.colorCorrection.addLayer(this.layer);
-        this.updateWeight(renderContext);
     }
 
     private calcWeight(renderContext: SourceRenderContext): number {
