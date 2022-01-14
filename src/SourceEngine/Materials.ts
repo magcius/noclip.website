@@ -4883,8 +4883,10 @@ class MaterialProxy_WaterLOD {
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
-        (map['$cheapwaterstartdistance'] as ParameterNumber).value = renderContext.cheapWaterStartDistance;
-        (map['$cheapwaterenddistance'] as ParameterNumber).value = renderContext.cheapWaterEndDistance;
+        if (map['$cheapwaterstartdistance'] !== undefined)
+            (map['$cheapwaterstartdistance'] as ParameterNumber).value = renderContext.cheapWaterStartDistance;
+        if (map['$cheapwaterenddistance'] !== undefined)
+            (map['$cheapwaterenddistance'] as ParameterNumber).value = renderContext.cheapWaterEndDistance;
     }
 }
 

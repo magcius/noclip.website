@@ -1667,6 +1667,7 @@ class trigger_multiple extends BaseEntity {
 
     private output_onTrigger = new EntityOutput();
     private output_onStartTouch = new EntityOutput();
+    private output_onStartTouchAll = new EntityOutput();
     private output_onEndTouch = new EntityOutput();
     private output_onEndTouchAll = new EntityOutput();
     private output_onTouching = new EntityOutput();
@@ -1677,6 +1678,7 @@ class trigger_multiple extends BaseEntity {
 
         this.output_onTrigger.parse(this.entity.ontrigger);
         this.output_onStartTouch.parse(this.entity.onstarttouch);
+        this.output_onStartTouchAll.parse(this.entity.onstarttouchall);
         this.output_onEndTouch.parse(this.entity.onendtouch);
         this.output_onEndTouchAll.parse(this.entity.onendtouchall);
         this.output_onTouching.parse(this.entity.ontouching);
@@ -1713,6 +1715,7 @@ class trigger_multiple extends BaseEntity {
 
     protected onStartTouch(entitySystem: EntitySystem): void {
         this.output_onStartTouch.fire(entitySystem, this);
+        this.output_onStartTouchAll.fire(entitySystem, this);
 
         // TODO(jstpierre): wait
         this.multiStartTouch(entitySystem);
