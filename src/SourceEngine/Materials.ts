@@ -3637,7 +3637,7 @@ export class MaterialCache {
     public async createMaterialInstance(path: string): Promise<BaseMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
-        if (vmt['%compilesky'] || vmt['%compiletrigger'])
+        if (vmt['%compilesky'] || vmt['%compiletrigger'] || vmt['%compile2dsky'])
             materialInstance.isToolMaterial = true;
         return materialInstance;
     }
@@ -4796,6 +4796,9 @@ class MaterialProxy_TextureScroll {
             p.matrix[5] = scale;
             p.matrix[12] = offsS;
             p.matrix[13] = offsT;
+        } else if (p instanceof ParameterVector) {
+            p.index(0)!.value = offsS;
+            p.index(1)!.value = offsT;
         } else {
             // not sure
             debugger;

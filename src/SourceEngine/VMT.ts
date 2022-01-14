@@ -83,7 +83,7 @@ class ValveKeyValueParser {
         while (this.hastok()) {
             this.skipcomment();
             const tok = this.chew();
-            if (tok == "}") {
+            if (tok === "}" || tok === "") {
                 return val;
             } else {
                 this.spit();

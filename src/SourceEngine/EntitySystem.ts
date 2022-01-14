@@ -3,24 +3,22 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
-import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum, ProjectedLight } from './Materials';
+import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
-import { VTF } from './VTF';
 
 type EntityMessageValue = string;
 
@@ -2640,15 +2638,21 @@ class env_tonemap_controller extends BaseEntity {
     }
 
     private input_setbloomscale(entitySystem: EntitySystem, value: string): void {
-        entitySystem.renderContext.toneMapParams.bloomScale = Number(value);
+        const v = Number(value);
+        if (v > 0.0)
+            entitySystem.renderContext.toneMapParams.bloomScale = v;
     }
 
     private input_setautoexposuremin(entitySystem: EntitySystem, value: string): void {
-        entitySystem.renderContext.toneMapParams.autoExposureMin = Number(value);
+        const v = Number(value);
+        if (v > 0.0)
+            entitySystem.renderContext.toneMapParams.autoExposureMin = v;
     }
 
     private input_setautoexposuremax(entitySystem: EntitySystem, value: string): void {
-        entitySystem.renderContext.toneMapParams.autoExposureMax = Number(value);
+        const v = Number(value);
+        if (v > 0.0)
+            entitySystem.renderContext.toneMapParams.autoExposureMax = v;
     }
 
     private input_settonemaprate(entitySystem: EntitySystem, value: string): void {
