@@ -1816,7 +1816,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         if (GloverFlipbookRenderer.renderCache.has(key)) {
             this.spriteRenderer = GloverFlipbookRenderer.renderCache.get(key)!;
         } else {
-            const xlu = flipbookMetadata.startAlpha != flipbookMetadata.endAlpha;
+            const xlu = (flipbookMetadata.startAlpha != flipbookMetadata.endAlpha) || (flipbookMetadata.flags & 0x10000) != 0;
             this.spriteRenderer = new GloverSpriteRenderer(this.device, this.cache, this.textures, flipbookMetadata.frameset, xlu);
             GloverFlipbookRenderer.renderCache.set(key, this.spriteRenderer);
         }        
