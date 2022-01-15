@@ -424,6 +424,14 @@ class GloverRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
 
+        const forceBackfaceCullingCheckbox = new UI.Checkbox('Force Backface Culling', false);
+        forceBackfaceCullingCheckbox.onchanged = () => {
+            for (let actor of this.actors) {
+                actor.setBackfaceCullingEnabled(forceBackfaceCullingCheckbox.checked);
+            }
+        };
+        renderHacksPanel.contents.appendChild(forceBackfaceCullingCheckbox.elem);
+
         const madGaribsCheckbox = new UI.Checkbox('Mad garibs', false);
         madGaribsCheckbox.onchanged = () => {
             // C-Down, C-Right, C-Down, C-Up, C-Left, C-Down, C-Left, C-Up

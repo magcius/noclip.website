@@ -64,7 +64,7 @@ export class SceneLighting {
 };
 
 function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, overlay: boolean, alpha: number): void {    
-    // TODO: billboards and prehist 1 bridge still don't have right depth behavior
+    // TODO: prehist 1 bridge still doesn't have right depth behavior
 
     assert(0 <= alpha && alpha <= 1);
 
@@ -72,7 +72,12 @@ function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean
 
     if (overlay) {
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2);
-        rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
+        // TODO: the active line of code here reproduces how
+        //       colorful the exit cone is on hardware, but
+        //       the commented-out line is what the code actually
+        //       does. Investigate this.
+        rspState.gDPSetCombine(0xFC121624, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA, G_CC_MODULATEIA)
+        // rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, alpha * 255);
     } else {
         if (xlu) {
@@ -555,7 +560,7 @@ export class DrawCallInstance {
             }
         }
         this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
-        this.setBackfaceCullingEnabled(true);
+        this.setBackfaceCullingEnabled(false);
         this.createProgram();
     }
 
@@ -599,7 +604,7 @@ export class DrawCallInstance {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? F3DEX.translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.None;
+        const cullMode = v ? GfxCullMode.Back : F3DEX.translateCullMode(this.drawCall.SP_GeometryMode);
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -769,6 +774,13 @@ class ActorMeshNode {
         while (current_child !== undefined) {
             this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, current_child, this.maxAnimTime));
             current_child = current_child.sibling;
+        }
+    }
+
+    public setBackfaceCullingEnabled(enabled: boolean): void {
+        this.renderer.setBackfaceCullingEnabled(enabled);
+        for (let child of this.children) {
+            child.setBackfaceCullingEnabled(enabled);
         }
     }
 
@@ -948,6 +960,10 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     public setRenderMode(value: number, mask: number = 0xFFFFFFFF) {
         this.actorObject.mesh.renderMode &= ~mask;
         this.actorObject.mesh.renderMode |= value & mask;
+    }
+
+    public setBackfaceCullingEnabled(enabled: boolean): void {
+        this.rootMesh.setBackfaceCullingEnabled(enabled);
     }
 
     public setVertexColorsEnabled(enabled: boolean): void {
@@ -1194,6 +1210,7 @@ class GloverMeshRenderer {
     // General rendering attributes
     private rspOutput: GloverRSPOutput | null;
     private vertexColorsEnabled = true;
+    private backfaceCullingEnabled = false;
 
     // UV animation
     private lastFrameAdvance: number = 0;
@@ -1374,6 +1391,10 @@ class GloverMeshRenderer {
         // }
     }
 
+    public setBackfaceCullingEnabled(enabled: boolean): void {
+        this.backfaceCullingEnabled = enabled;
+    }
+
     public setVertexColorsEnabled(enabled: boolean): void {
         this.vertexColorsEnabled = enabled;        
     }
@@ -1402,6 +1423,9 @@ class GloverMeshRenderer {
                 //     console.log(drawCall.vertices);
                 // },
                 const drawCallInstance = new DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache, this.sceneLights);
+                if (this.backfaceCullingEnabled) {
+                    drawCallInstance.setBackfaceCullingEnabled(true);
+                }
                 if (!this.vertexColorsEnabled) {
                     drawCallInstance.setVertexColorsEnabled(false);
                 }
@@ -1501,8 +1525,8 @@ export class GloverBackdropRenderer {
         sH *= backdropObject.scaleY / 1024;
 
         const spriteCoords = [
-            [sX, sY, ulS, ulT],
             [sX, sY + sH, ulS, lrT],
+            [sX, sY, ulS, ulT],
             [sX + sW, sY + sH, lrS, lrT],
 
             [sX, sY, ulS, ulT],
@@ -1675,8 +1699,8 @@ export class GloverSpriteRenderer {
         let lrT = frame_textures[0].height * 32;
 
         const spriteCoords = [
-            [sX, sY, ulS, lrT],
             [sX, sY + sH, ulS, ulT],
+            [sX, sY, ulS, lrT],
             [sX + sW, sY + sH, lrS, ulT],
 
             [sX, sY, ulS, lrT],
