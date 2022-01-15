@@ -93,10 +93,11 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     // Implementation
 
     constructor(
-        public actor: GloverActorRenderer)
+        public actor: GloverActorRenderer | null)
     { }
 
     public initExitSparkle(): ParticlePool {
+        assert(this.actor !== null);
         assert(this.exitSparkle == false);
         this.exitSparkle = true;
         this.exitSparkleParticles = new ParticlePool(
@@ -136,6 +137,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 
     public updateActorModelMatrix() {
+        if (this.actor === null) {
+            return;
+        }
         quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
         let finalPosition = this.position;
         if (this.parent !== undefined) {
@@ -150,7 +154,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             return;
         }
 
-        if (this.exitSparkle) {
+        if (this.exitSparkle && this.actor !== null) {
             // Only emit exit particles after scene load
             if (viewerInput !== null) {
                 if (this.exitSparkleFrame) {
@@ -411,7 +415,9 @@ class GloverRenderer implements Viewer.SceneGfx {
         const hideDynamicsCheckbox = new UI.Checkbox('Hide dynamic objects', false);
         hideDynamicsCheckbox.onchanged = () => {
             for (let platform of this.platforms) {
-                platform.actor.visible = !hideDynamicsCheckbox.checked;
+                if (platform.actor !== null) {
+                    platform.actor.visible = !hideDynamicsCheckbox.checked;
+                }
             }
         };
         renderHacksPanel.contents.appendChild(hideDynamicsCheckbox.elem);
@@ -449,7 +455,9 @@ class GloverRenderer implements Viewer.SceneGfx {
         showHiddenCheckbox.onchanged = () => {
             // TODO: make uncheck hide
             for (let platform of this.platforms) {
-                platform.actor.visible = true;
+                if (platform.actor !== null) {
+                    platform.actor.visible = true;
+                }
             }
         };
         renderHacksPanel.contents.appendChild(showHiddenCheckbox.elem);
@@ -960,6 +968,12 @@ class SceneDesc implements Viewer.SceneDesc {
                     sceneRenderer.platforms.push(currentPlatform)
                     break;
                 }
+                case 'NullPlatform': {
+                    currentPlatform = new GloverPlatform(null);
+                    currentObject = currentPlatform;
+                    sceneRenderer.platforms.push(currentPlatform);
+                    break;
+                }
                 case 'PlatSetInitialPos': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
@@ -1041,6 +1055,16 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     break;
                 }
+                case 'PlatActorEnableWaterAnimation': {
+                    if (currentObject instanceof GloverPlatform) {
+                        if (currentObject.actor !== null) {
+                            currentObject.actor.setRenderMode(0x20, 0x20);
+                        }
+                    } else if (currentObject instanceof GloverActorRenderer){
+                        currentObject.setRenderMode(0x20, 0x20);
+                    }
+                    break;
+                }
                 case 'SetExit': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
@@ -1050,7 +1074,9 @@ class SceneDesc implements Viewer.SceneDesc {
                         sceneRenderer.miscParticleEmitters.push(emitter);
                     }
                     if (!cmd.params.visible) {
-                        currentPlatform.actor.visible = false;
+                        if (currentPlatform.actor !== null) {
+                            currentPlatform.actor.visible = false;
+                        }
                     }
                     break;
                 }

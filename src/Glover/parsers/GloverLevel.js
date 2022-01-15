@@ -644,6 +644,25 @@ var GloverLevel = (function() {
     return PlatSpecial0x8e;
   })();
 
+  var PlatActorSurfaceType = GloverLevel.PlatActorSurfaceType = (function() {
+    function PlatActorSurfaceType(_io, _parent, _root) {
+      this.__type = 'PlatActorSurfaceType';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatActorSurfaceType.prototype._read = function() {
+      this._debug.value = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.value = this._io.readU2be();
+      this._debug.value.end = this._io.pos;
+    }
+
+    return PlatActorSurfaceType;
+  })();
+
   var Plat0x9f = GloverLevel.Plat0x9f = (function() {
     function Plat0x9f(_io, _parent, _root) {
       this.__type = 'Plat0x9f';
@@ -1519,6 +1538,22 @@ var GloverLevel = (function() {
     return PlatSound0xc1;
   })();
 
+  var PlatActorEnableWaterAnimation = GloverLevel.PlatActorEnableWaterAnimation = (function() {
+    function PlatActorEnableWaterAnimation(_io, _parent, _root) {
+      this.__type = 'PlatActorEnableWaterAnimation';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatActorEnableWaterAnimation.prototype._read = function() {
+    }
+
+    return PlatActorEnableWaterAnimation;
+  })();
+
   var EnemyInstructionC = GloverLevel.EnemyInstructionC = (function() {
     function EnemyInstructionC(_io, _parent, _root) {
       this.__type = 'EnemyInstructionC';
@@ -1608,6 +1643,22 @@ var GloverLevel = (function() {
     }
 
     return PlatSpecial0xc7;
+  })();
+
+  var NullPlatform = GloverLevel.NullPlatform = (function() {
+    function NullPlatform(_io, _parent, _root) {
+      this.__type = 'NullPlatform';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    NullPlatform.prototype._read = function() {
+    }
+
+    return NullPlatform;
   })();
 
   var Powerup = GloverLevel.Powerup = (function() {
@@ -1754,22 +1805,6 @@ var GloverLevel = (function() {
     }
 
     return UnknownSound0xbd;
-  })();
-
-  var Plat0x5d = GloverLevel.Plat0x5d = (function() {
-    function Plat0x5d(_io, _parent, _root) {
-      this.__type = 'Plat0x5d';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    Plat0x5d.prototype._read = function() {
-    }
-
-    return Plat0x5d;
   })();
 
   var PlatCheckpoint = GloverLevel.PlatCheckpoint = (function() {
@@ -1974,7 +2009,7 @@ var GloverLevel = (function() {
         this.params = new PlatRope(this._io, this, this._root);
         break;
       case 93:
-        this.params = new Plat0x5d(this._io, this, this._root);
+        this.params = new NullPlatform(this._io, this, this._root);
         break;
       case 118:
         this.params = new PlatOrbitPause0x76(this._io, this, this._root);
@@ -2052,7 +2087,7 @@ var GloverLevel = (function() {
         this.params = new LookAtBall0x61(this._io, this, this._root);
         break;
       case 106:
-        this.params = new PlatOrActor0x6a(this._io, this, this._root);
+        this.params = new PlatActorSurfaceType(this._io, this, this._root);
         break;
       case 145:
         this.params = new BackgroundActor0x91(this._io, this, this._root);
@@ -2196,7 +2231,7 @@ var GloverLevel = (function() {
         this.params = new PlatStr0x7a(this._io, this, this._root);
         break;
       case 179:
-        this.params = new Render0xb3(this._io, this, this._root);
+        this.params = new PlatActorEnableWaterAnimation(this._io, this, this._root);
         break;
       case 195:
         this.params = new Plat0xc3(this._io, this, this._root);
@@ -2938,25 +2973,6 @@ var GloverLevel = (function() {
     return Plat0xa4;
   })();
 
-  var PlatOrActor0x6a = GloverLevel.PlatOrActor0x6a = (function() {
-    function PlatOrActor0x6a(_io, _parent, _root) {
-      this.__type = 'PlatOrActor0x6a';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatOrActor0x6a.prototype._read = function() {
-      this._debug.value = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.value = this._io.readU2be();
-      this._debug.value.end = this._io.pos;
-    }
-
-    return PlatOrActor0x6a;
-  })();
-
   var PlatSpin0x7b = GloverLevel.PlatSpin0x7b = (function() {
     function PlatSpin0x7b(_io, _parent, _root) {
       this.__type = 'PlatSpin0x7b';
@@ -3605,22 +3621,6 @@ var GloverLevel = (function() {
     }
 
     return CameoInst5;
-  })();
-
-  var Render0xb3 = GloverLevel.Render0xb3 = (function() {
-    function Render0xb3(_io, _parent, _root) {
-      this.__type = 'Render0xb3';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    Render0xb3.prototype._read = function() {
-    }
-
-    return Render0xb3;
   })();
 
   var PlatTopple0x81 = GloverLevel.PlatTopple0x81 = (function() {
