@@ -220,7 +220,7 @@ export class NjsObjectData {
 export class NjsActionData {
     public objects: NjsObjectData[] = [];
     public motions: Ninja.NJS_MOTION[] = [];
-    public texlist: (number | null)[] | null | null;
+    public texlist: (number | null)[] | null | null = null;
 
     constructor (device: GfxDevice, cache: GfxRenderCache, public action: Ninja.NJS_ACTION, public wrapMode: number = 0) {
         for (let i = 0; i < this.action.objects.length; ++i) {
@@ -404,7 +404,7 @@ export class NjsObjectInstance {
     public position = vec3.create();
     public rotation = vec3.create();
     public scale = vec3.create();
-    public model: NjsModelInstance;
+    public model: NjsModelInstance | null = null;
 
     constructor(cache: GfxRenderCache, public data: NjsObjectData, texlist: (number | null)[] | null, textureHolder: PVRTextureHolder) {
         if (this.data.model)
@@ -422,9 +422,8 @@ export class NjsObjectInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.model) {
+        if (this.model !== null)
             this.model.prepareToRender(renderInstManager, viewerInput, this.modelMatrix);
-        }
     }
 }
 
@@ -464,7 +463,7 @@ export class NjsActionInstance {
 
     public frame: number = -1;
     public visible = true;
-    public modelID: number;
+    public modelID!: number;
 
     constructor (cache: GfxRenderCache, public data: NjsActionData, texlist: (number | null)[] | null, textureHolder: PVRTextureHolder) {
         for (let i = 0; i < this.data.objects.length; ++i)

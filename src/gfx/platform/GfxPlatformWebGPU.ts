@@ -447,7 +447,7 @@ function translateBindGroupTextureBinding(sampler: GfxBindingLayoutSamplerDescri
 
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public commandEncoder: GPUCommandEncoder | null = null;
-    public descriptor: GfxRenderPassDescriptor;
+    public descriptor!: GfxRenderPassDescriptor;
     private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
     private gpuRenderPassDescriptor: GPURenderPassDescriptor;
     private gpuColorAttachments: GPURenderPassColorAttachment[];

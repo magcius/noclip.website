@@ -447,11 +447,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // Cached GL driver state
     private _currentColorAttachments: (GfxRenderTargetP_GL | null)[] = [];
     private _currentColorResolveTos: (GfxTextureP_GL | null)[] = [];
-    private _currentDepthStencilAttachment: GfxRenderTargetP_GL | null;
+    private _currentDepthStencilAttachment: GfxRenderTargetP_GL | null = null;
     private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
     private _currentSampleCount: number = -1;
-    private _currentPipeline: GfxRenderPipelineP_GL;
-    private _currentInputState: GfxInputStateP_GL;
+    private _currentPipeline!: GfxRenderPipelineP_GL;
+    private _currentInputState!: GfxInputStateP_GL;
     private _currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
     private _currentSamplers: (WebGLSampler | null)[] = [];
     private _currentTextures: (WebGLTexture | null)[] = [];
@@ -489,10 +489,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxLimits
     private _uniformBufferMaxPageByteSize: number;
-    public uniformBufferWordAlignment: number;
-    public uniformBufferMaxPageWordSize: number;
-    public supportedSampleCounts: number[];
-    public occlusionQueriesRecommended: boolean;
+    public uniformBufferWordAlignment!: number;
+    public uniformBufferMaxPageWordSize!: number;
+    public supportedSampleCounts!: number[];
+    public occlusionQueriesRecommended!: boolean;
 
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._contextAttributes = assertExists(gl.getContextAttributes());
@@ -527,7 +527,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._readbackFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
 
         this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
-        this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
+        this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);

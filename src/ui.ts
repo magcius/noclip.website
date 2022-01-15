@@ -1625,7 +1625,7 @@ class ViewerSettings extends Panel {
         this.setCameraControllerClass(cameraControllerClass);
     }
 
-    private onFovSliderChange(e: UIEvent): void {
+    private onFovSliderChange(): void {
         const value = this.fovSlider.getT();
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
@@ -1737,7 +1737,7 @@ class XRSettings extends Panel {
         this.contents.appendChild(this.scaleSlider.elem);
     }
 
-    private async enableXRChecked(saveManager: SaveManager, key: string) {
+    private enableXRChecked() {
         const enableXR = this.enableXRCheckBox.checked;
         this.enableXRCheckBox.setChecked(enableXR);
         this.onWebXRStateRequested(enableXR);

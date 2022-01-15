@@ -1230,68 +1230,68 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
 //#endregion
 
 //#region BMD
-function assocHierarchy(bmd: BMD): void {
-    const view = bmd.inf1.hierarchyData.createDataView();
-
-    let offs = 0x00;
-    let currentMaterialIndex = -1;
-    while (true) {
-        const type: HierarchyNodeType = view.getUint16(offs + 0x00);
-        const value = view.getUint16(offs + 0x02);
-
-        if (type === HierarchyNodeType.End) {
-            break;
-        } else if (type === HierarchyNodeType.Material) {
-            currentMaterialIndex = value;
-        } else if (type === HierarchyNodeType.Shape) {
-            const shape = bmd.shp1.shapes[value];
-            assert(currentMaterialIndex !== -1);
-            assert(shape.materialIndex === -1);
-            shape.materialIndex = currentMaterialIndex;
-        }
-
-        offs += 0x04;
-    }
-
-    // Double-check that we have everything done.
-    for (let i = 0; i < bmd.shp1.shapes.length; i++)
-        assert(bmd.shp1.shapes[i].materialIndex !== -1);
-
-    // Go through and auto-optimize materials which don't use MULTI
-    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
-        let multiCount = 0;
-        for (let j = 0; j < bmd.shp1.shapes.length; j++) {
-            const shp1 = bmd.shp1.shapes[j];
-            if (shp1.materialIndex !== i)
-                continue;
-
-            if (bmd.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
-                ++multiCount;
-        }
-
-        if (multiCount === 0)
-            bmd.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
-    }
-}
-
 export class BMD {
-    public static parseReader(j3d: JSystemFileReaderHelper): BMD {
-        const bmd = new BMD();
-
-        bmd.subversion = j3d.subversion;
-        bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
-        bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
-        bmd.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
-        bmd.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
-        bmd.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
-        bmd.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), bmd);
-        bmd.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+    private constructor(j3d: JSystemFileReaderHelper) {
+        this.subversion = j3d.subversion;
+        this.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
+        this.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
+        this.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
+        this.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
+        this.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
+        this.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), this);
+        this.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
         const mdl3 = j3d.maybeNextChunk('MDL3');
-        bmd.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
+        this.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
 
-        assocHierarchy(bmd);
+        this.assocHierarchy();
+    }
 
-        return bmd;
+    private assocHierarchy(): void {
+        const view = this.inf1.hierarchyData.createDataView();
+    
+        let offs = 0x00;
+        let currentMaterialIndex = -1;
+        while (true) {
+            const type: HierarchyNodeType = view.getUint16(offs + 0x00);
+            const value = view.getUint16(offs + 0x02);
+    
+            if (type === HierarchyNodeType.End) {
+                break;
+            } else if (type === HierarchyNodeType.Material) {
+                currentMaterialIndex = value;
+            } else if (type === HierarchyNodeType.Shape) {
+                const shape = this.shp1.shapes[value];
+                assert(currentMaterialIndex !== -1);
+                assert(shape.materialIndex === -1);
+                shape.materialIndex = currentMaterialIndex;
+            }
+    
+            offs += 0x04;
+        }
+    
+        // Double-check that we have everything done.
+        for (let i = 0; i < this.shp1.shapes.length; i++)
+            assert(this.shp1.shapes[i].materialIndex !== -1);
+    
+        // Go through and auto-optimize materials which don't use MULTI
+        for (let i = 0; i < this.mat3.materialEntries.length; i++) {
+            let multiCount = 0;
+            for (let j = 0; j < this.shp1.shapes.length; j++) {
+                const shp1 = this.shp1.shapes[j];
+                if (shp1.materialIndex !== i)
+                    continue;
+    
+                if (this.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
+                    ++multiCount;
+            }
+    
+            if (multiCount === 0)
+                this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
+        }
+    }
+
+    public static parseReader(j3d: JSystemFileReaderHelper): BMD {
+        return new BMD(j3d);
     }
 
     public static parse(buffer: ArrayBufferSlice): BMD {
@@ -1315,22 +1315,22 @@ export class BMD {
 
 //#region BMT
 export class BMT {
-    public static parse(buffer: ArrayBufferSlice): BMT {
-        const bmt = new BMT();
+    public mat3: MAT3 | null;
+    public tex1: TEX1 | null;
 
-        const j3d = new JSystemFileReaderHelper(buffer);
+    private constructor(j3d: JSystemFileReaderHelper) {
         assert(j3d.magic === 'J3D2bmt3');
 
         const mat3Chunk = j3d.maybeNextChunk('MAT3');
-        bmt.mat3 = mat3Chunk !== null ? readMAT3Chunk(mat3Chunk) : null;
+        this.mat3 = mat3Chunk !== null ? readMAT3Chunk(mat3Chunk) : null;
         const tex1Chunk = j3d.maybeNextChunk('TEX1');
-        bmt.tex1 = tex1Chunk !== null ? readTEX1Chunk(tex1Chunk) : null;
-
-        return bmt;
+        this.tex1 = tex1Chunk !== null ? readTEX1Chunk(tex1Chunk) : null;
     }
 
-    public mat3: MAT3 | null;
-    public tex1: TEX1 | null;
+    public static parse(buffer: ArrayBufferSlice): BMT {
+        const j3d = new JSystemFileReaderHelper(buffer);
+        return new BMT(j3d);
+    }
 }
 //#endregion
 
@@ -1922,7 +1922,5 @@ export class BVA {
 
         return readVAF1Chunk(j3d.nextChunk('VAF1'));
     }
-
-    public vaf1: VAF1;
 }
 //#endregion

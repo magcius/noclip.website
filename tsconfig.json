@@ -8,8 +8,10 @@
         "noImplicitReturns": true,
         "noImplicitThis": true,
         "noImplicitAny": true,
+        "strictBindCallApply": true,
         "strictFunctionTypes": true,
         "strictNullChecks": true,
+        "useUnknownInCatchVariables": true,
         "resolveJsonModule": true,
         "lib": [
             "es2015",

@@ -1799,7 +1799,7 @@ export class MaterialFactory {
         return new WaterMaterial(this);
     }
 
-    public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
+    public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, texIds: number[], isMapBlock: boolean): SFAMaterial {
         return new FurMaterial(this.device, this, shader, texFetcher, isMapBlock);
     }
 

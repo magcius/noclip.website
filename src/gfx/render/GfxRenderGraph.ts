@@ -329,7 +329,7 @@ export interface GfxrGraphBuilderDebug {
 }
 
 class RenderTarget {
-    public debugName: string;
+    public debugName: string = '';
 
     public readonly dimension = GfxTextureDimension.n2D;
     public readonly depth = 1;
@@ -360,11 +360,15 @@ class RenderTarget {
         } else {
             // Single-sampled textures can be backed by regular textures.
             this.texture = device.createTexture(this);
-            device.setResourceName(this.texture, this.debugName);
 
             this.attachment = device.createRenderTargetFromTexture(this.texture);
         }
+    }
 
+    public setDebugName(device: GfxDevice, debugName: string): void {
+        this.debugName = debugName;
+        if (this.texture !== null)
+            device.setResourceName(this.texture, this.debugName);
         device.setResourceName(this.attachment, this.debugName);
     }
 
@@ -654,7 +658,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         if (!this.renderTargetAliveForID[renderTargetID]) {
             const desc = graph.renderTargetDescriptions[renderTargetID];
             const newRenderTarget = this.acquireRenderTargetForDescription(desc);
-            newRenderTarget.debugName = graph.renderTargetDebugNames[renderTargetID];
+            newRenderTarget.setDebugName(this.device, graph.renderTargetDebugNames[renderTargetID]);
             this.renderTargetAliveForID[renderTargetID] = newRenderTarget;
         }
 
