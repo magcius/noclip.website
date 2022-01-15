@@ -5,6 +5,7 @@ import { assert, assertExists, hexzero0x, readString } from "../../util";
 import * as AFS from '../AFS';
 import * as BYML from "../../byml";
 import { Console } from "console";
+import { exec } from "child_process";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -346,12 +347,15 @@ function extractModelTableIndirect(execBuffer: ArrayBufferSlice, texlists: Texli
     const modelTable = execBuffer.createTypedArray(Uint32Array, modelTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
     const texlistTable = texlistTableAddr !== null ? execBuffer.createTypedArray(Uint32Array, texlistTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount) : null;
     const stageview = afsFile.buffer.createDataView();
+    const execview = execBuffer.createDataView();
 
     const models: ModelData[] = [];
     for (let i = 0; i < tableCount; i++) {
-        const indirectModelAddr = modelTable[i];
-        const modelAddr = stageview.getUint32(modelTable[i] - STAGE_COMPACT_ALLOCATION_ADDRESS, true);
-        const modelOffs = modelAddr - STAGE_ALLOCATION_ADDRESS;
+
+        const indirectModelAddr = stageview.getUint32(modelTable[i] - STAGE_COMPACT_ALLOCATION_ADDRESS, true);   
+        const modelAddr = indirectModelAddr - STAGE_COMPACT_ALLOCATION_ADDRESS;    
+        const modelOffs = modelAddr;
+    
         let texlistIndex = -1;
         if (texlistTable !== null) {
             const texlistAddr = texlistTable[i];
@@ -974,26 +978,26 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
 
-    extractTexLoadTable(texChunk, execBuffer, 0x8c183d20, 0x8c800000, 2, 18);
+    //extractTexLoadTable(texChunk, execBuffer, 0x8c183d20, 0x8c800000, 2, 18);
 
-    const SCENE_FILE = afsLoad('GARAGE.AFS', 1);
+    const SCENE_FILE = afsLoad('U_GARAGE.AFS', 1);
     const OBJECT_COUNT = 15;
-    const ASSET_COUNT = 15;
+    const ASSET_COUNT = 1;
 
     function createDummyObject(modelId: number) : ObjectData {
         return {
             ModelID: modelId,
             Translation: [0,0,0],
             Rotation: [0,0,0],
-            Scale: [0,0,0], 
+            Scale: [1,1,1], 
             Flags: 0 
         };
     }
 
 
     function extractObjects() {
-        const ASSET_TABLE_ADDRESS = 0x8c105b68;
-        const TEXTURE_TABLE_ADDRESS = 0x8c105af0;
+        const ASSET_TABLE_ADDRESS = 0x8c105c24;
+        const TEXTURE_TABLE_ADDRESS = 0x8c105c60;
 
         const Models = extractModelTableIndirect(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
         const Objects = [] as ObjectData[];
@@ -1012,12 +1016,12 @@ function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void 
 
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
-        extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-        extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
-        extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
-        extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
-        extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
-        //extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
+        //extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
+        //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+        //extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
+        //extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
+        //extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
+        extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
 }
 
 main();

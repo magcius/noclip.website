@@ -2,6 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec2, vec3, vec4 } from "gl-matrix";
 import { Color, colorNewFromRGBA, TransparentBlack, White } from "../Color";
+import { hexzero0x } from "../util";
 
 const enum ROTATION_TYPE {
     INVALID = -1,
@@ -299,6 +300,10 @@ function parseChunkList(buffer: ArrayBufferSlice, offs: number, callback: (type:
     let type = CNK_TYPE.CNK_END;
 
     const view = buffer.createDataView();
+    if (offs === -1) { // xayrga: Some objects don't select a list for this and instead pass -1 as an offset.
+        console.log("PLIST pointer was invalid!")
+        return;
+    }
     while (true) {
         const header = view.getUint8(offs++);
         const flags = view.getUint8(offs++);
@@ -432,6 +437,7 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
     const meshsets: MeshSet[] = [];
 
     const processPlistChunks = (type: CNK_TYPE, header: number, flags: number, extra: number | undefined, data: ArrayBufferSlice | undefined): void => {
+        console.log(offset);
         switch(type) {
             case CNK_TYPE.CNK_BITS:
                 {
@@ -666,6 +672,8 @@ function parseNjsModel(buffer: ArrayBufferSlice, baseOffset: number, offset: num
 function parseNjsObject(buffer: ArrayBufferSlice, baseOffset: number, offset: number, index: number, parent: number): NJS_OBJECT | undefined {
     const view = buffer.createDataView();
 
+    console.log(hexzero0x(offset));
+    console.log(hexzero0x(baseOffset))
     const flags = view.getUint32(offset + 0x00, true);
 
 	const child:    number = parseOffset(view.getUint32(offset + 0x2C, true), baseOffset);
@@ -678,9 +686,10 @@ function parseNjsObject(buffer: ArrayBufferSlice, baseOffset: number, offset: nu
     const modelOffset = parseOffset(view.getUint32(offset + 0x04, true), baseOffset);
    
     let model 
-    if (modelOffset > 0) 
+    if (modelOffset > 0) {
         model = parseNjsModel(buffer, baseOffset, modelOffset);   
-
+        console.log("item has model.");
+    }
     return { flags, index, parent, child, sibling, position, rotation, scale, model };
 }
 
