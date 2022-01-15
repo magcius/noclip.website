@@ -32,9 +32,9 @@ import { SRC_FRAME_TO_MS } from './timing';
 
 export const enum GloverRendererLayer {
     OPAQUE,
-    OPAQUE_BILLBOARD,
+    OPAQUE_BILLBOARD, // TODO: use correct render modes
     XLU,
-    XLU_BILLBOARD,
+    XLU_BILLBOARD, // TODO: use correct render modes
     OVERLAY,
     FOOTPRINTS,
 }
@@ -1598,6 +1598,7 @@ export class GloverSpriteRenderer {
         private frameset: number[],
         private xlu: boolean = false)
     {
+        // TODO: figre out billboard flags
         if (xlu) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.XLU_BILLBOARD);
         } else {
@@ -1621,15 +1622,16 @@ export class GloverSpriteRenderer {
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
-        setRenderMode(rspState, true, true, false, 1.0);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-
         if (this.xlu) {
             rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
+            // TODO: figure out which of these gets used:
+            // rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_ZB_TEX_EDGE, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2); // 0xb900031d 0x00504b50
+            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         } else {
-            rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // G_CC_MODULATEIDECALA, G_CC_PASS2
+            rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIDECALA, G_CC_PASS2
+            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_ZB_TEX_EDGE, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
         }
-
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF); // 0xFA000000, (*0x801ec878) & 0xFF);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
     }
