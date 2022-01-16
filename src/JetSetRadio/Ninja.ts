@@ -437,159 +437,156 @@ function parseNjsPlist(buffer: ArrayBufferSlice, offset: number, vertices: NJS_V
     const meshsets: MeshSet[] = [];
 
     const processPlistChunks = (type: CNK_TYPE, header: number, flags: number, extra: number | undefined, data: ArrayBufferSlice | undefined): void => {
-        console.log(offset);
         switch(type) {
-            case CNK_TYPE.CNK_BITS:
-                {
-                    // TODO(jstpierre): Handle other BITS types.
-                    const dstAlpha = (flags >>> 0) & 0x07;
-                    const srcAlpha = (flags >>> 3) & 0x07;
+        case CNK_TYPE.CNK_BITS:
+            {
+                // TODO(jstpierre): Handle other BITS types.
+                const dstAlpha = (flags >>> 0) & 0x07;
+                const srcAlpha = (flags >>> 3) & 0x07;
 
-                    material.dstAlpha = dstAlpha;
-                    material.srcAlpha = srcAlpha;
-                } break;
-            case CNK_TYPE.CNK_TINY:
-                {
-                    const mipMapAdjust = (flags >>> 0) & 0x0F;
-                    const clampU = (flags >>> 5) & 0x01;
-                    const clampV = (flags >>> 4) & 0x01;
-                    const flipU  = (flags >>> 7) & 0x01;
-                    const flipV  = (flags >>> 6) & 0x01;
-                    const texFlags = extra!;
-                    const superSample = (texFlags >>> 13) & 0x01;
-                    const filterMode = (texFlags >>> 14) & 0x03;
+                material.dstAlpha = dstAlpha;
+                material.srcAlpha = srcAlpha;
+            } break;
+        case CNK_TYPE.CNK_TINY:
+            {
+                const mipMapAdjust = (flags >>> 0) & 0x0F;
+                const clampU = (flags >>> 5) & 0x01;
+                const clampV = (flags >>> 4) & 0x01;
+                const flipU  = (flags >>> 7) & 0x01;
+                const flipV  = (flags >>> 6) & 0x01;
+                const texFlags = extra!;
+                const superSample = (texFlags >>> 13) & 0x01;
+                const filterMode = (texFlags >>> 14) & 0x03;
 
-                    texture.texture = texFlags & 0x1FFF;
-                    texture.clampU = clampU;
-                    texture.clampV = clampV;
-                    texture.flipU = flipU;
-                    texture.flipV = flipV;
-                    texture.superSample = superSample;
-                    texture.filterMode = filterMode;
-                    texture.mipMapAdjust = mipMapAdjust;
-                } break;
-            default:
-                {
-                    const view = data!.createDataView();
-                    let dataOffset = 0;
+                texture.texture = texFlags & 0x1FFF;
+                texture.clampU = clampU;
+                texture.clampV = clampV;
+                texture.flipU = flipU;
+                texture.flipV = flipV;
+                texture.superSample = superSample;
+                texture.filterMode = filterMode;
+                texture.mipMapAdjust = mipMapAdjust;
+            } break;
+        case CNK_TYPE.CNK_MAT:
+            {
+                const view = data!.createDataView();
+                let dataOffset = 0;
+        
+                const dstAlpha = (flags >>> 0) & 0x07;
+                const srcAlpha = (flags >>> 3) & 0x07;
 
-                    switch(type) {
-                        case CNK_TYPE.CNK_MAT:
+                material.dstAlpha = dstAlpha;
+                material.srcAlpha = srcAlpha;
+
+                if ((header & 0x01) !== 0) {
+                    const diffuse = view.getUint32(dataOffset, true);
+                    material.diffuse = colorNewFromARGB8(diffuse);
+
+                    dataOffset += 4;
+                }
+                if ((header & 0x02) !== 0) {
+                    const ambient = view.getUint32(dataOffset, true);
+                    material.ambient = colorNewFromARGB8(ambient);
+
+                    dataOffset += 4;
+                }
+                if ((header & 0x04) !== 0) {
+                    const specular = view.getUint32(dataOffset, true);
+                    material.specular = colorNewFromARGB8(specular);
+
+                    dataOffset += 4;
+                }
+            } break;
+        case CNK_TYPE.CNK_VOL:
+            {
+                ;
+            } break;
+        case CNK_TYPE.CNK_STRIP:
+            {
+                const view = data!.createDataView();
+                let dataOffset = 0;
+
+                const stripType = header - type;
+                const stripFlags = flags;
+                const stripFormat = (stripType / 3) | 0;
+                const uvFormat = (stripType % 3);
+                const stripInfo = view.getUint16(dataOffset, true);
+                const stripCount = stripInfo & 0x3FFF;
+                const userOffset = (stripInfo >>> 14) << 4;
+
+                dataOffset += 0x02;
+
+                const tex = {...texture};
+                const mat = {...material};
+                mat.texture = tex;
+
+                const ignoreAmbient = !!(stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_AMBIENT);
+                const ignoreSpecular = !!(stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_SPECULAR);
+                if (ignoreAmbient) mat.ambient = TransparentBlack;
+                if (ignoreSpecular) mat.specular = TransparentBlack;
+
+                const meshset: MeshSet = { material: mat, type: stripType, flags: stripFlags, strips: [] };
+                meshsets.push(meshset);
+
+                const strips: Strip[] = meshset.strips;
+
+                for (let i = 0; i < stripCount; ++i) {
+                    const stripHeader = view.getInt16(dataOffset, true);
+                    const flip = stripHeader < 0;
+                    const indexCount = Math.abs(stripHeader);
+                    dataOffset += 0x02;
+
+                    const strip: Strip = { flags: stripFlags, flip, indices: [], normals: [], uvs: [], diffuse: [] };
+                    strips.push(strip);
+
+                    for (let j = 0; j < indexCount; ++j) {
+                        const index = view.getUint16(dataOffset, true);
+                        dataOffset += 0x02;
+
+                        strip.indices.push(index);
+
+                        switch (uvFormat) {
+                            case 1: // UVN
+                            case 2: // UVH
                             {
-                                const dstAlpha = (flags >>> 0) & 0x07;
-                                const srcAlpha = (flags >>> 3) & 0x07;
+                                const divisor = (uvFormat === 1) ? 256.0 : 1024.0;
+                                const u = view.getInt16(dataOffset + 0x00, true) / divisor;
+                                const v = view.getInt16(dataOffset + 0x02, true) / divisor;
+                                const uv = vec2.fromValues(u, v);
+                                strip.uvs.push(uv);
 
-                                material.dstAlpha = dstAlpha;
-                                material.srcAlpha = srcAlpha;
-
-                                if ((header & 0x01) !== 0) {
-                                    const diffuse = view.getUint32(dataOffset, true);
-                                    material.diffuse = colorNewFromARGB8(diffuse);
-
-                                    dataOffset += 4;
-                                }
-                                if ((header & 0x02) !== 0) {
-                                    const ambient = view.getUint32(dataOffset, true);
-                                    material.ambient = colorNewFromARGB8(ambient);
-
-                                    dataOffset += 4;
-                                }
-                                if ((header & 0x04) !== 0) {
-                                    const specular = view.getUint32(dataOffset, true);
-                                    material.specular = colorNewFromARGB8(specular);
-
-                                    dataOffset += 4;
-                                }
+                                dataOffset += 4;
                             } break;
-                        case CNK_TYPE.CNK_VOL:
+                        }
+
+                        switch (stripFormat) {
+                            case 1: // D8
                             {
-                                ;
+                                const diffuse = view.getUint32(dataOffset, true);
+                                strip.diffuse.push(colorNewFromARGB8(diffuse));
+
+                                dataOffset += 4;
                             } break;
-                        case CNK_TYPE.CNK_STRIP:
+                            case 2: // VN
                             {
-                                const stripType = header - type;
-                                const stripFlags = flags;
-                                const stripFormat = (stripType / 3) | 0;
-                                const uvFormat = (stripType % 3);
-                                const stripInfo = view.getUint16(dataOffset, true);
-                                const stripCount = stripInfo & 0x3FFF;
-                                const userOffset = (stripInfo >>> 14) << 4;
+                                const vnx = view.getInt16(dataOffset + 0x00, true) / 32767.0;
+                                const vny = view.getInt16(dataOffset + 0x02, true) / 32767.0;
+                                const vnz = view.getInt16(dataOffset + 0x04, true) / 32767.0;
+                                const normal = vec3.fromValues(vnx, vny, vnz);
+                                vec3.normalize(normal, normal);
+                                strip.normals.push(normal);
 
-                                dataOffset += 0x02;
-
-                                const tex = {...texture};
-                                const mat = {...material};
-                                mat.texture = tex;
-
-                                const ignoreAmbient = !!(stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_AMBIENT);
-                                const ignoreSpecular = !!(stripFlags & NJS_ATTRIBUTE_FLAGS.IGNORE_SPECULAR);
-                                if (ignoreAmbient) mat.ambient = TransparentBlack;
-                                if (ignoreSpecular) mat.specular = TransparentBlack;
-
-                                const meshset: MeshSet = { material: mat, type: stripType, flags: stripFlags, strips: [] };
-                                meshsets.push(meshset);
-
-                                const strips: Strip[] = meshset.strips;
-
-                                for (let i = 0; i < stripCount; ++i) {
-                                    const stripHeader = view.getInt16(dataOffset, true);
-                                    const flip = stripHeader < 0;
-                                    const indexCount = Math.abs(stripHeader);
-                                    dataOffset += 0x02;
-
-                                    const strip: Strip = { flags: stripFlags, flip, indices: [], normals: [], uvs: [], diffuse: [] };
-                                    strips.push(strip);
-
-                                    for (let j = 0; j < indexCount; ++j) {
-                                        const index = view.getUint16(dataOffset, true);
-                                        dataOffset += 0x02;
-
-                                        strip.indices.push(index);
-
-                                        switch (uvFormat) {
-                                            case 1: // UVN
-                                            case 2: // UVH
-                                            {
-                                                const divisor = (uvFormat === 1) ? 256.0 : 1024.0;
-                                                const u = view.getInt16(dataOffset + 0x00, true) / divisor;
-                                                const v = view.getInt16(dataOffset + 0x02, true) / divisor;
-                                                const uv = vec2.fromValues(u, v);
-                                                strip.uvs.push(uv);
-
-                                                dataOffset += 4;
-                                            } break;
-                                        }
-
-                                        switch (stripFormat) {
-                                            case 1: // D8
-                                            {
-                                                const diffuse = view.getUint32(dataOffset, true);
-                                                strip.diffuse.push(colorNewFromARGB8(diffuse));
-
-                                                dataOffset += 4;
-                                            } break;
-                                            case 2: // VN
-                                            {
-                                                const vnx = view.getInt16(dataOffset + 0x00, true) / 32767.0;
-                                                const vny = view.getInt16(dataOffset + 0x02, true) / 32767.0;
-                                                const vnz = view.getInt16(dataOffset + 0x04, true) / 32767.0;
-                                                const normal = vec3.fromValues(vnx, vny, vnz);
-                                                vec3.normalize(normal, normal);
-                                                strip.normals.push(normal);
-
-                                                dataOffset += 0x06;
-                                            } break;
-                                        }
-
-                                        if (j >= 2) {
-                                            // Skip User flags
-                                            dataOffset += userOffset;
-                                        }
-                                    }
-                                }
+                                dataOffset += 0x06;
                             } break;
+                        }
+
+                        if (j >= 2) {
+                            // Skip User flags
+                            dataOffset += userOffset;
+                        }
                     }
-                } break;
+                }
+            } break;
         }
     }
 
@@ -672,8 +669,6 @@ function parseNjsModel(buffer: ArrayBufferSlice, baseOffset: number, offset: num
 function parseNjsObject(buffer: ArrayBufferSlice, baseOffset: number, offset: number, index: number, parent: number): NJS_OBJECT | undefined {
     const view = buffer.createDataView();
 
-    console.log(hexzero0x(offset));
-    console.log(hexzero0x(baseOffset))
     const flags = view.getUint32(offset + 0x00, true);
 
 	const child:    number = parseOffset(view.getUint32(offset + 0x2C, true), baseOffset);
@@ -685,11 +680,10 @@ function parseNjsObject(buffer: ArrayBufferSlice, baseOffset: number, offset: nu
 
     const modelOffset = parseOffset(view.getUint32(offset + 0x04, true), baseOffset);
    
-    let model 
-    if (modelOffset > 0) {
+    let model: NJS_MODEL | undefined = undefined;
+    if (modelOffset > 0)
         model = parseNjsModel(buffer, baseOffset, modelOffset);   
-        console.log("item has model.");
-    }
+
     return { flags, index, parent, child, sibling, position, rotation, scale, model };
 }
 

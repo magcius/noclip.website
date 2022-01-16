@@ -4,8 +4,6 @@ import { readFileSync, writeFileSync } from "fs";
 import { assert, assertExists, hexzero0x, readString } from "../../util";
 import * as AFS from '../AFS';
 import * as BYML from "../../byml";
-import { Console } from "console";
-import { exec } from "child_process";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -721,8 +719,6 @@ function extractStage2(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         return  { Meshes : SkyboxMeshes }
     }
 
-
-
     const slice1 = extractSlice1();
     const slice2 = extractSlice2();
     const slice3 = extractSlice3();
@@ -994,7 +990,6 @@ function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         };
     }
 
-
     function extractObjects() {
         const ASSET_TABLE_ADDRESS = 0x8c105c24;
         const TEXTURE_TABLE_ADDRESS = 0x8c105c60;
@@ -1004,7 +999,7 @@ function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void 
         for (let i=0; i < ASSET_COUNT; i++)
             Objects[i] = createDummyObject(i);
 
-        return {Models,Objects}
+        return { Models, Objects };
     }
 
     const slice1 = extractObjects();
@@ -1012,16 +1007,14 @@ function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     saveStageData(dstFilename, crg1);
 }
 
-
-
 function main() {
     const exec = fetchDataSync(`${pathBaseIn}/1ST_READ.BIN`);
-        //extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
-        //extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
-        //extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
-        //extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
-        //extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
-        extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
+    extractStage1(`${pathBaseOut}/Stage1.crg1`, exec);
+    extractStage2(`${pathBaseOut}/Stage2.crg1`, exec);
+    extractStage3(`${pathBaseOut}/Stage3.crg1`, exec);
+    extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
+    extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
+    extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
 }
 
 main();
