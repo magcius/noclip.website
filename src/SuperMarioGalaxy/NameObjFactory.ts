@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
+import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 
 export interface NameObjFactory {
@@ -110,6 +110,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("KuriboMini",                     KuriboMini),
     _("Mogucchi",                       Mogucchi),
     _("Onimasu",                        OnimasuJump),
+    _("OnimasuPivot",                   OnimasuPivot),
     _("Unizo",                          Unizo),
     _("UnizoLand",                      Unizo),
     _("UnizoShoal",                     Unizo),

@@ -147,12 +147,10 @@ export class Dossun extends LiveActor<DossunNrv> {
     }
 }
 
-
 const enum OnimasuNrv { Wait, Jump, WaitForStamp, Stamp }
 abstract class Onimasu extends LiveActor<OnimasuNrv> {
     protected effectHostMtx = mat4.create();
-
-    private rotationAxis = vec3.create();
+    protected rotationAxis = vec3.create();
     private poseQuat = quat.create();
     private poseQuatLast = quat.create();
     private poseQuatNext = quat.create();
@@ -225,7 +223,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         } else if (currentNerve === OnimasuNrv.Jump) {
             if (isFirstStep(this)) {
                 this.incrementNextPoint(sceneObjHolder);
-                this.calcTargetPose(sceneObjHolder);
+                this.calcTargetPose();
                 this.startMoveInner(sceneObjHolder);
             }
 
@@ -260,7 +258,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         }
     }
 
-    private calcTargetPose(sceneObjHolder: SceneObjHolder): void {
+    private calcTargetPose(): void {
         const lastNormal = this.getLastPointNormal();
         const nextNormal = this.getNextPointNormal();
 
@@ -285,6 +283,13 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         quat.mul(this.poseQuatNext, scratchQuat, this.poseQuatNext);
         quat.setAxisAngle(scratchQuat, this.rotationAxis, MathConstants.TAU / 4);
         quat.mul(this.poseQuatNext, scratchQuat, this.poseQuatNext);
+
+        quatGetAxisZ(scratchVec3a, this.poseQuatLast);
+        quatGetAxisZ(scratchVec3b, this.poseQuatNext);
+        if (isSameDirection(scratchVec3a, scratchVec3b, 0.01)) {
+            quat.setAxisAngle(scratchQuat, this.rotationAxis, Math.PI / 1000.0);
+            quat.mul(this.poseQuatLast, scratchQuat, this.poseQuatLast);
+        }
     }
 
     private updatePose(sceneObjHolder: SceneObjHolder): void {
@@ -359,6 +364,10 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
     protected abstract getLastPointNormal(): vec3;
     protected abstract getNextPointNormal(): vec3;
     protected abstract getNextPointNo(): number;
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('Onimasu');
+    }
 }
 
 const triangleScratch = new Triangle();
@@ -389,14 +398,14 @@ export class OnimasuJump extends Onimasu {
 
     protected incrementNextPoint(): void {
         this.nextPointNo++;
-        if (this.nextPointNo >= getRailPointNum(this))
+        if (this.nextPointNo >= this.pointCount)
             this.nextPointNo = 0;
     }
 
     protected getLastPointNo(): number {
         let lastPointNo = this.nextPointNo - 1;
         if (lastPointNo < 0)
-            lastPointNo += getRailPointNum(this);
+            lastPointNo += this.pointCount;
         return lastPointNo;
     }
 
@@ -429,6 +438,81 @@ export class OnimasuJump extends Onimasu {
         vec3.scale(scratchVec3b, scratchVec3b, -0.5 * timeToNextPoint);
 
         vec3.add(this.velocity, scratchVec3a, scratchVec3b);
+    }
+}
+
+export class OnimasuPivot extends Onimasu {
+    private pointCount: number;
+    private normals: vec3[];
+    private nextPointNo: number = 0;
+    private poseLastPoint = quat.create();
+    private poseNextPoint = quat.create();
+
+    protected initFromRailPoint(sceneObjHolder: SceneObjHolder): void {
+        this.pointCount = getRailPointNum(this) / 2;
+        this.normals = nArray(this.pointCount, () => vec3.create());
+    }
+
+    protected collectRailPointInfo(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.pointCount; i++)
+            getPolygonOnRailPoint(sceneObjHolder, scratchVec3a, this.normals[i], this, i * 2);
+    }
+
+    protected incrementNextPoint(): void {
+        this.nextPointNo++;
+        if (this.nextPointNo >= this.pointCount)
+            this.nextPointNo = 0;
+    }
+
+    protected getLastPointNo(): number {
+        let lastPointNo = this.nextPointNo - 1;
+        if (lastPointNo < 0)
+            lastPointNo += this.pointCount;
+        return lastPointNo;
+    }
+
+    protected getLastPointNormal(): vec3 {
+        return this.normals[this.getLastPointNo()];
+    }
+
+    protected getNextPointNo(): number {
+        return this.nextPointNo * 2;
+    }
+
+    protected getNextPointNormal(): vec3 {
+        return this.normals[this.nextPointNo];
+    }
+
+    protected updatePoseInner(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        const timeToNextPoint = this.getTimeToNextPoint(sceneObjHolder);
+
+        const t = saturate(this.getNerveStep() / timeToNextPoint);
+        quat.slerp(scratchQuat, this.poseLastPoint, this.poseNextPoint, t);
+
+        quatGetAxisZ(scratchVec3a, scratchQuat);
+        normToLength(scratchVec3a, 565.6854);
+
+        const lastPointNo = this.getLastPointNo();
+        calcRailPointPos(this.translation, this, lastPointNo * 2 + 1);
+        vec3.add(this.translation, this.translation, scratchVec3a);
+    }
+
+    protected startMoveInner(sceneObjHolder: SceneObjHolder): void {
+        const lastPointNo = this.getLastPointNo();
+        calcRailPointPos(scratchVec3a, this, lastPointNo * 2 + 1);
+        calcRailPointPos(scratchVec3b, this, lastPointNo * 2);
+        calcRailPointPos(scratchVec3c, this, this.getNextPointNo());
+
+        vec3.sub(scratchVec3b, scratchVec3b, scratchVec3a);
+        vec3.sub(scratchVec3c, scratchVec3c, scratchVec3a);
+
+        if (isSameDirection(scratchVec3b, scratchVec3b, 0.01)) {
+            mat4.fromRotation(scratchMatrix, Math.PI / 1000.0, this.rotationAxis);
+            transformVec3Mat4w0(scratchVec3b, scratchMatrix, scratchVec3b);
+        }
+
+        makeQuatFromVec(this.poseLastPoint, scratchVec3b, this.rotationAxis);
+        makeQuatFromVec(this.poseNextPoint, scratchVec3c, this.rotationAxis);
     }
 }
 
