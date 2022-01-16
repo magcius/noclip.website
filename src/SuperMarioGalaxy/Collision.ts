@@ -60,6 +60,7 @@ export class Triangle {
         transformVec3Mat4w1(this.pos2, collisionParts.worldMtx, this.pos2);
         server.getFaceNormal(this.faceNormal, prism);
         transformVec3Mat4w0(this.faceNormal, collisionParts.worldMtx, this.faceNormal);
+        vec3.normalize(this.faceNormal, this.faceNormal);
     }
 }
 
