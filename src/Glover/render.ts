@@ -1247,6 +1247,11 @@ class GloverMeshRenderer {
             rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
         }
 
+        if (xlu) {
+            // Make sure we cull back-faces for transparent models, lest
+            // we wake up sloppy modeling artifact beasts
+            rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_CULL_BACK);
+        }
 
         try {
             if (meshData.displayListPtr != 0) {
@@ -1948,7 +1953,7 @@ export class GloverShadowRenderer extends GloverSpriteRenderer {
 
     protected initializePipeline(rspState: GloverRSPState) {
         initializeRenderState(rspState);
-        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001        
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
