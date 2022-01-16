@@ -262,6 +262,7 @@ class Main {
 
     public sceneTimeScale = 1.0;
     public isEmbedMode = false;
+    private isFrameStep = false;
 
     // Link to debugJunk so we can reference it from the DevTools.
     private debugJunk = debugJunk;
@@ -413,10 +414,15 @@ class Main {
                 }
             }
         }
+
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
             this.ui.togglePlayPause();
+        if (inputManager.isKeyDown('Comma')) {
+            this.ui.togglePlayPause(false);
+            this.isFrameStep = true;
+        }
     }
 
     private async _onWebXRStateRequested(state: boolean) {
@@ -450,8 +456,17 @@ class Main {
         // Needs to be called before this.viewer.update()
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
-        this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
+        let sceneTimeScale = this.sceneTimeScale;
+        if (!this.ui.isPlaying) {
+            if (this.isFrameStep) {
+                sceneTimeScale /= 4.0;
+                this.isFrameStep = false;
+            } else {
+                sceneTimeScale = 0.0;
+            }
+        }
 
+        this.viewer.sceneTimeScale = sceneTimeScale;
         this.viewer.update(updateInfo);
 
         if (shouldTakeScreenshot)
