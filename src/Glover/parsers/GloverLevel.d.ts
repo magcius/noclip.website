@@ -854,7 +854,7 @@ declare namespace GloverLevel {
 
     u160x08: number;
     u160x0a: number;
-    tag: number;
+    parentTag: number;
     f0x38: number;
     f0x3c: number;
     f0x40: number;
@@ -865,7 +865,7 @@ declare namespace GloverLevel {
     _debug: {
       u160x08: DebugPosition;
       u160x0a: DebugPosition;
-      tag: DebugPosition;
+      parentTag: DebugPosition;
       f0x38: DebugPosition;
       f0x3c: DebugPosition;
       f0x40: DebugPosition;
@@ -1150,20 +1150,20 @@ declare namespace GloverLevel {
     __type: 'Powerup';
     _io: any;
 
-    u160x00: number;
+    type: number;
     u160x02: number;
     u160x04: number;
-    f0x06: number;
-    f0x0a: number;
-    f0x0e: number;
+    x: number;
+    y: number;
+    z: number;
 
     _debug: {
-      u160x00: DebugPosition;
+      type: DebugPosition;
       u160x02: DebugPosition;
       u160x04: DebugPosition;
-      f0x06: DebugPosition;
-      f0x0a: DebugPosition;
-      f0x0e: DebugPosition;
+      x: DebugPosition;
+      y: DebugPosition;
+      z: DebugPosition;
     };
   }
 }

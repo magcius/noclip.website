@@ -42,6 +42,25 @@ import { KaitaiStream } from 'kaitai-struct';
 
 const pathBase = `glover`;
 
+const powerup_objects = [
+    0x03F49393, // rblades.ndo
+    0x55DC14E1, // death.ndo
+    0x5EC39A4D, // frogspell.ndo
+    0xC187E8C7, // sticky.ndo
+    0xBEC26EFE, // hercules.ndo
+    0x8EF60ED1, // fast.ndo
+    0x94B8EFB2, // blades.ndo
+    0x0EE2F4E2, // bowling.ndo
+    0x571F7F95, // power.ndo
+    0x8516AC66, // bearing.ndo
+    0x87C43A84, // beach.ndo
+    0, // unused
+    0, // unused
+    0xFA9272E0, // boomer.ndo
+    0xAB3EA4DB, // vanish.ndo
+];
+
+
 class PlatformPathPoint {
     constructor(public pos: vec3, public duration: number) {}
 
@@ -259,7 +278,11 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 }
 
-export class GaribSparkle implements GenericRenderable {
+enum CollectibleSparkleType {
+  ExtraLife,
+  Powerup
+}
+export class CollectibleSparkle implements GenericRenderable {
 
     private particles: ParticlePool;
 
@@ -268,7 +291,7 @@ export class GaribSparkle implements GenericRenderable {
 
     static private velocity = [0,0,0];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private type: CollectibleSparkleType) {
         this.particles = new ParticlePool(device, cache, textureHolder, 6);
     }
 
@@ -282,12 +305,17 @@ export class GaribSparkle implements GenericRenderable {
             this.lastFrameAdvance = 0;
             this.frameCount += 1;
 
-            const particleOrigin = [
-                this.position[0] - Math.sin(-this.frameCount/3.0) * 10,
-                this.position[1] + Math.sin(this.frameCount/5.0) * 5,
-                this.position[2] + Math.cos(-this.frameCount/3.0) * 10
-            ]
-            const particle = this.particles.spawn(particleOrigin, GaribSparkle.velocity);
+            let particleOrigin = this.position.slice();
+            if (this.type === CollectibleSparkleType.ExtraLife) {
+                particleOrigin[0] -= Math.sin(-this.frameCount/3.0) * 10;
+                particleOrigin[1] += Math.sin(this.frameCount/5.0) * 5;
+                particleOrigin[2] += Math.cos(-this.frameCount/3.0) * 10;
+            } else if (this.type === CollectibleSparkleType.Powerup) {
+                particleOrigin[0] -= Math.sin(-this.frameCount/3.0) * 14;
+                particleOrigin[1] += Math.sin(this.frameCount/5.0) * 5 + Math.floor(Math.random()*5) - 2;
+                particleOrigin[2] += Math.cos(-this.frameCount/3.0) * 14;
+            }
+            const particle = this.particles.spawn(particleOrigin, CollectibleSparkle.velocity);
             particle.setLifetime(10);
         }
 
@@ -1093,8 +1121,20 @@ class SceneDesc implements Viewer.SceneDesc {
                     shadowCasters.push(flipbook);
                     if (cmd.params.type == 2) {
                         // Extra lives are sparkly
-                        sceneRenderer.miscParticleEmitters.push(new GaribSparkle(device, cache, textureHolder, pos));
+                        sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife));
                     }
+                    break;
+                }
+                case 'Powerup': {
+                    const actor = loadActor(powerup_objects[cmd.params.type]);
+                    const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
+                    mat4.fromRotationTranslationScale(actor.modelMatrix,
+                        identityRotation,
+                        pos,
+                        [0.4, 0.4, 0.4]);
+                    actor.shadowSize = 10;
+                    shadowCasters.push(actor); // TODO: set shadow size
+                    sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
                     break;
                 }
                 case 'MrTip': {

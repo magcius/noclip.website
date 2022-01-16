@@ -1237,9 +1237,9 @@ var GloverLevel = (function() {
       this._debug.u160x0a = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u160x0a = this._io.readU2be();
       this._debug.u160x0a.end = this._io.pos;
-      this._debug.tag = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.tag = this._io.readU2be();
-      this._debug.tag.end = this._io.pos;
+      this._debug.parentTag = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.parentTag = this._io.readU2be();
+      this._debug.parentTag.end = this._io.pos;
       this._debug.f0x38 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.f0x38 = this._io.readF4be();
       this._debug.f0x38.end = this._io.pos;
@@ -1672,24 +1672,24 @@ var GloverLevel = (function() {
       this._read();
     }
     Powerup.prototype._read = function() {
-      this._debug.u160x00 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u160x00 = this._io.readU2be();
-      this._debug.u160x00.end = this._io.pos;
+      this._debug.type = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.type = this._io.readU2be();
+      this._debug.type.end = this._io.pos;
       this._debug.u160x02 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u160x02 = this._io.readU2be();
       this._debug.u160x02.end = this._io.pos;
       this._debug.u160x04 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u160x04 = this._io.readU2be();
       this._debug.u160x04.end = this._io.pos;
-      this._debug.f0x06 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.f0x06 = this._io.readF4be();
-      this._debug.f0x06.end = this._io.pos;
-      this._debug.f0x0a = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.f0x0a = this._io.readF4be();
-      this._debug.f0x0a.end = this._io.pos;
-      this._debug.f0x0e = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.f0x0e = this._io.readF4be();
-      this._debug.f0x0e.end = this._io.pos;
+      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.x = this._io.readF4be();
+      this._debug.x.end = this._io.pos;
+      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.y = this._io.readF4be();
+      this._debug.y.end = this._io.pos;
+      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.z = this._io.readF4be();
+      this._debug.z.end = this._io.pos;
     }
 
     return Powerup;
