@@ -39,31 +39,6 @@ var GloverLevel = (function() {
     this._debug.body.end = this._io.pos;
   }
 
-  var PlatSpecial0x68 = GloverLevel.PlatSpecial0x68 = (function() {
-    function PlatSpecial0x68(_io, _parent, _root) {
-      this.__type = 'PlatSpecial0x68';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatSpecial0x68.prototype._read = function() {
-      this._debug.u320x5c = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x5c = this._io.readU4be();
-      this._debug.u320x5c.end = this._io.pos;
-      this._debug.u320x60 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x60 = this._io.readU4be();
-      this._debug.u320x60.end = this._io.pos;
-      this._debug.u320x65 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x65 = this._io.readU4be();
-      this._debug.u320x65.end = this._io.pos;
-    }
-
-    return PlatSpecial0x68;
-  })();
-
   var PuzzleAction0x54 = GloverLevel.PuzzleAction0x54 = (function() {
     function PuzzleAction0x54(_io, _parent, _root) {
       this.__type = 'PuzzleAction0x54';
@@ -1695,6 +1670,31 @@ var GloverLevel = (function() {
     return Powerup;
   })();
 
+  var PlatformConveyor = GloverLevel.PlatformConveyor = (function() {
+    function PlatformConveyor(_io, _parent, _root) {
+      this.__type = 'PlatformConveyor';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatformConveyor.prototype._read = function() {
+      this._debug.velX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.velX = this._io.readF4be();
+      this._debug.velX.end = this._io.pos;
+      this._debug.velY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.velY = this._io.readF4be();
+      this._debug.velY.end = this._io.pos;
+      this._debug.velZ = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.velZ = this._io.readF4be();
+      this._debug.velZ.end = this._io.pos;
+    }
+
+    return PlatformConveyor;
+  })();
+
   var SetTeleport = GloverLevel.SetTeleport = (function() {
     function SetTeleport(_io, _parent, _root) {
       this.__type = 'SetTeleport';
@@ -2123,7 +2123,7 @@ var GloverLevel = (function() {
         this.params = new PlatMvspn0x59(this._io, this, this._root);
         break;
       case 104:
-        this.params = new PlatSpecial0x68(this._io, this, this._root);
+        this.params = new PlatformConveyor(this._io, this, this._root);
         break;
       case 98:
         this.params = new Platform(this._io, this, this._root);

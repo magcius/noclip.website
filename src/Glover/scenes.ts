@@ -109,6 +109,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     public pathAccel : number = 0;
     public pathMaxVel : number = NaN;
 
+    // Conveyor
+
+    private conveyorVel : vec3 | null = null;
+
     // Implementation
 
     constructor(
@@ -148,6 +152,14 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         this.scale[0] = x;
         this.scale[1] = y;
         this.scale[2] = z;
+    }
+
+    public setConveyor(vel: vec3) {
+        this.conveyorVel = vel;
+        if (this.actor !== null) {
+            this.actor.rootMesh.renderer.conveyorX = -this.conveyorVel[0];
+            this.actor.rootMesh.renderer.conveyorZ = -this.conveyorVel[2];
+        }
     }
 
     public setNeutralSpin(axis: number, initial_theta: number, speed: number) {
@@ -1091,6 +1103,13 @@ class SceneDesc implements Viewer.SceneDesc {
                     } else if (currentObject instanceof GloverActorRenderer){
                         currentObject.setRenderMode(0x20, 0x20);
                     }
+                    break;
+                }
+                case 'PlatformConveyor': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setConveyor(vec3.fromValues(cmd.params.velX, cmd.params.velY, cmd.params.velZ));
                     break;
                 }
                 case 'SetExit': {

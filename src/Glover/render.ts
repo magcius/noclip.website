@@ -1213,8 +1213,11 @@ class GloverMeshRenderer {
     private backfaceCullingEnabled = false;
 
     // UV animation
+    private lastRender: number = 0;
     private lastFrameAdvance: number = 0;
     private frameCount: number = 0;
+    public conveyorX: number = 0;
+    public conveyorZ: number = 0;
 
     // TODO: remove:
     private log: string[] = [];
@@ -1333,67 +1336,71 @@ class GloverMeshRenderer {
             if (drawCall.renderData === null) {
                 continue;
             }
-
-            let faceid = 0;
-            let vtxid = 0;
-
-            // const maxVal = 2.147484e9;
-            // let uvIdx = 0;
-            // assert(drawCall.originalUVs.length === drawCall.vertices.length * 2);
             for (let vertex of drawCall.vertices) {
-                // let coordSum = vertex.x + vertex.z;
-
-                // let harmonic = drawCall.originalUVs[uvIdx] + Math.sin((frameCount + coordSum) / 20.0) * 300.0;
-                // vertex.tx = (harmonic < maxVal) ? harmonic : harmonic - maxVal;
-
-                // harmonic = drawCall.originalUVs[uvIdx + 1] + Math.sin((coordSum*2 + 12*Math.PI + frameCount) / 25.0) * 300.0; // 12*PI=(double)37.699111848 from ram
-                // vertex.ty = (harmonic < maxVal) ? harmonic : harmonic - maxVal;
-
-                // uvIdx += 2;
-                ///////////////////////////////////////////////////
                 let coordSum = vertex.x + vertex.y + vertex.z;
 
                 vertex.tx += Math.sin((frameCount + coordSum) / 20.0) * 8;
 
                 // In the asm this minus is actually a + ? Audit the asm by hand maybe.
                 vertex.ty += Math.sin((frameCount + Math.floor((coordSum - (coordSum < 0 ? 1 : 0)) / 2.0))/ 20.0) * 8;
-                
-                // vertex.tx = Math.floor(vertex.tx);
-                // vertex.ty = Math.floor(vertex.ty);
-                // vertex.tx = (vertex.tx > 0x7FFF) ? vertex.tx - 0xFFFF : vertex.tx;
-                // vertex.ty = (vertex.ty > 0x7FFF) ? vertex.ty - 0xFFFF : vertex.ty;
-
-                // TODO: remove:
-                // if (!this.log_dumped) {
-                //     this.log.push(frameCount + ",0x" + this.meshData.id.toString(16) + "," + faceid + "," + vtxid + "," + vertex.tx + "," + vertex.ty)
-                //     vtxid += 1;
-                //     if(vtxid==3){
-                //         vtxid=0;
-                //         faceid+=1;
-                //     }
-                // }
             }
             drawCall.renderData.updateBuffers();
         }
+    }
 
-        // TODO: remove:
-        // if (frameCount >= 500) {
-        //     if (!this.log_dumped) {
-        //         var data = new Blob([this.log.join("\n")], {type: 'text/plain'});
-
-        //         // https://stackoverflow.com/questions/19327749/javascript-blob-filename-without-link
-        //         var a = document.createElement("a");
-        //         document.body.appendChild(a);
-        //         a.setAttribute("style", "display: none");
-        //         a.href = window.URL.createObjectURL(data);
-        //         a.download = "data.csv";
-        //         a.click();
-        //         window.URL.revokeObjectURL(a.href);
-
-        //         this.log_dumped = true;
-
-        //     }
-        // }
+    private animateConveyorUVs(): void {
+        // TODO: Round edges of conveyors in OoTW3 aren't animating properly
+        if (this.rspOutput === null || this.meshData.geometry.numFaces === 0) {
+            return;
+        }
+        for (let drawCall of this.rspOutput.drawCalls) {
+            if (drawCall.renderData === null) {
+                continue;
+            }
+            for (let idx = 0; idx < drawCall.vertices.length; idx += 3) {
+                const v1 = drawCall.vertices[idx];
+                const v2 = drawCall.vertices[idx+1];
+                const v3 = drawCall.vertices[idx+2];
+                let dS = Math.max(Math.abs(v1.tx - v3.tx), Math.abs(v1.tx - v2.tx));
+                let dT = Math.max(Math.abs(v1.ty - v3.ty), Math.abs(v1.ty - v2.ty));
+                let dX = Math.max(Math.abs(v1.x - v3.x), Math.abs(v1.x - v2.x));
+                let dZ = Math.max(Math.abs(v1.z - v3.z), Math.abs(v1.z - v2.z));
+                // TODO:
+                // dX *= scale.x;
+                // dZ *= scale.z;
+                let shiftZ = 0;
+                if (dZ !== 0) {
+                    shiftZ = this.conveyorZ * dS/dZ;
+                }
+                let shiftX = 0;
+                if (dX !== 0) {
+                    shiftX = this.conveyorX * dT/dX;
+                }
+                let x_overflow = false;
+                let z_overflow = false;
+                for (let v of [v1, v2, v3]) {
+                    v.tx += shiftZ;
+                    v.ty += shiftX;
+                    if (v.tx > 0x7ffff || v.tx < -0x7ffff) {
+                        x_overflow = true;
+                    }
+                    if (v.ty > 0x7ffff || v.ty < -0x7ffff) {
+                        z_overflow = true;
+                    }
+                }
+                if (x_overflow) {
+                    for (let v of [v1, v2, v3]) {
+                        v.tx += (shiftZ < 1) ? dS : -dS;
+                    }
+                }
+                if (z_overflow) {
+                    for (let v of [v1, v2, v3]) {
+                        v.ty += (shiftX < 1) ? dT : -dT;
+                    }
+                }
+            }
+            drawCall.renderData.updateBuffers();
+        }
     }
 
     public setBackfaceCullingEnabled(enabled: boolean): void {
@@ -1405,15 +1412,21 @@ class GloverMeshRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {
-        this.lastFrameAdvance += viewerInput.deltaTime;
-        if (this.lastFrameAdvance > 50) {
-            if ((this.meshData.renderMode & 0x20) !== 0) {
-                this.animateWaterUVs(this.frameCount);
+        if (viewerInput.time !== this.lastRender) {
+            this.lastFrameAdvance += viewerInput.deltaTime;
+            if (this.lastFrameAdvance > 50) {
+                if ((this.meshData.renderMode & 0x20) !== 0) {
+                    this.animateWaterUVs(this.frameCount);
+                }
+                if (this.conveyorX !== 0 || this.conveyorZ !== 0) {
+                    this.animateConveyorUVs();
+                }
+                this.lastFrameAdvance = 0;
+                this.frameCount += 1;
+                this.frameCount &= 0xFFFF;
             }
-            this.lastFrameAdvance = 0;
-            this.frameCount += 1;
-            this.frameCount &= 0xFFFF;
         }
+        this.lastRender = viewerInput.time;
 
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
