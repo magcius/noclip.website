@@ -134,7 +134,7 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         return cache.device.createProgramSimple(getGfxProgramDescriptorBasic(cache, programString, variantSettings));
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         for (const v of this.cache.values())
             device.destroyProgram(v);
     }

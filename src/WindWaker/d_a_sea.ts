@@ -214,7 +214,7 @@ export class d_a_sea extends fopAc_ac_c {
     private ddraw = new TDDraw();
     private materialHelper: GXMaterialHelperGfx;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.waveInfo = new daSea_WaveInfo(globals);
 
         const resCtrl = globals.resCtrl;
@@ -430,7 +430,7 @@ export class d_a_sea extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentRenderInstList(globals.dlst.sea);
 
         this.ddraw.beginDraw();
@@ -581,7 +581,7 @@ export class d_a_sea extends fopAc_ac_c {
     private fadeTable = nArray(65, () => 0);
 
     private copyPos = true;
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.copyPos)
             vec3.copy(this.playerPos, globals.playerPosition);
 
@@ -687,7 +687,7 @@ export class d_a_sea extends fopAc_ac_c {
         this.animCounter += deltaTimeInFrames;
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const device = globals.modelCache.device;
         this.ddraw.destroy(device);
     }

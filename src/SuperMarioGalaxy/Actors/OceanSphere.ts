@@ -352,7 +352,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.planeEdges.push(new OceanSpherePlaneEdge(count, pos, Vec3NegZ,  Vec3UnitX, vec2.set(v1, 0.0, 0.0), vec2.set(v2, 1.0, 0.0)));
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         this.isCameraInside = false;
 
         // TODO(jstpierre): getCameraWaterInfo
@@ -456,7 +456,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         }
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -658,14 +658,14 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         }
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.oceanSphereTex.destroy(device);
         this.oceanSphereEnvRefTex.destroy(device);
         this.ddrawXlu.destroy(device);
         this.ddrawEnv.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
         WaterAreaHolder.requestArchives(sceneObjHolder);
     }

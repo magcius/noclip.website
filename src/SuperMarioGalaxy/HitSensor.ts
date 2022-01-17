@@ -369,7 +369,7 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.characterGroup;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         this.clearGroup(this.playerGroup);

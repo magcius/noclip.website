@@ -508,7 +508,7 @@ export class fopAc_ac_c extends leafdraw_class {
         }
     }
 
-    public load(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
+    public override load(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
         if (!this.loadInit) {
             this.loadInit = true;
 
@@ -603,7 +603,7 @@ export class fopAc_ac_c extends leafdraw_class {
         return true;
     }
 
-    public delete(globals: GlobalUserData): void {
+    public override delete(globals: GlobalUserData): void {
         fopDwTg_DrawQTo(globals.frameworkGlobals, this, this.drawPriority);
     }
 
@@ -655,7 +655,7 @@ export class kankyo_class extends leafdraw_class {
 
     private loadInit: boolean = false;
 
-    public load(globals: GlobalUserData, prm: fopKyM_prm_class | null): cPhs__Status {
+    public override load(globals: GlobalUserData, prm: fopKyM_prm_class | null): cPhs__Status {
         if (!this.loadInit) {
             this.loadInit = true;
 
@@ -674,7 +674,7 @@ export class kankyo_class extends leafdraw_class {
         return status;
     }
 
-    public delete(globals: GlobalUserData): void {
+    public override delete(globals: GlobalUserData): void {
         fopDwTg_DrawQTo(globals.frameworkGlobals, this, this.drawPriority);
     }
 

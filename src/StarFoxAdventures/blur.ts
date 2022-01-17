@@ -29,9 +29,9 @@ layout(std140) uniform ub_Params {
 `;
 
 class BlurDownProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
-    public frag = `
+    public override frag = `
 ${BindingsDefinition}
 
 in vec2 v_TexCoord;
@@ -51,9 +51,9 @@ void main() {
 }
 
 class BlurUpProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
-    public frag = `
+    public override frag = `
 ${BindingsDefinition}
 
 in vec2 v_TexCoord;

@@ -162,7 +162,7 @@ class ModelExhibitRenderer extends SFARenderer {
         }
     }
     
-    protected update(viewerInput: Viewer.ViewerRenderInput) {
+    protected override update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
     }

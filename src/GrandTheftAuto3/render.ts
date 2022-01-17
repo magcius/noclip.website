@@ -188,7 +188,7 @@ class GTA3Program extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     private static program = program_glsl;
-    public both = GTA3Program.program;
+    public override both = GTA3Program.program;
 
     constructor(def: GTA3ProgramDef = {}) {
         super();

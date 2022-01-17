@@ -193,7 +193,7 @@ class d_a_grass extends fopAc_ac_c {
         ]
     ];
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const enum FoliageType {
             Grass,
             Tree,
@@ -272,7 +272,7 @@ class d_a_ep extends fopAc_ac_c {
 
     private static arcName = `Ep`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_ep.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -309,7 +309,7 @@ class d_a_ep extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
@@ -323,7 +323,7 @@ class d_a_ep extends fopAc_ac_c {
         alphaModel0.set(dDlst_alphaModel__Type.Bonbori, this.alphaModelMtx, this.alphaModelAlpha);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         if (this.type === 0 || this.type === 3) {
@@ -367,7 +367,7 @@ class d_a_ep extends fopAc_ac_c {
         this.ep_move();
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         dKy_plight_cut(globals.g_env_light, this.light);
     }
 
@@ -474,7 +474,7 @@ class d_a_bg extends fopAc_ac_c {
     private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
     private bgW = new dBgW();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
 
         const roomNo = this.parameters;
@@ -534,7 +534,7 @@ class d_a_bg extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
                 this.bgBtkAnm[i]!.play(deltaTimeInFrames);
@@ -543,7 +543,7 @@ class d_a_bg extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // TODO(jstpierre): Proper culling check
         // if (!this.cullingCheck(viewerInput.camera))
         //     return;
@@ -564,7 +564,7 @@ class d_a_bg extends fopAc_ac_c {
         settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         globals.scnPlay.bgS.Release(this.bgW);
     }
 }
@@ -573,7 +573,7 @@ class d_a_vrbox extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox;
     private model: J3DModelInstance;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
 
         const res = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`));
@@ -629,7 +629,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.dungeon_rain_proc(globals);
     }
 
@@ -653,7 +653,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
         this.daVrbox_color_set(globals);
@@ -684,7 +684,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     private usoUmi: J3DModelInstance | null = null;
     private scrollSpeed = 0.0005;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const backCloudRes = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_back_cloud.bdl`));
         this.backCloud = new J3DModelInstance(backCloudRes);
 
@@ -764,11 +764,11 @@ class d_a_vrbox2 extends fopAc_ac_c {
             this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiCol);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.daVrbox2_color_set(globals, deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
         let sum = 0;
@@ -833,7 +833,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     private innerRadius = 0.0;
     private outerRadius = 0.0;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.colpat = this.parameters & 0xFF;
         this.effectMode = (this.parameters >>> 8) & 0xFF;
         this.invert = !!((this.rot[0] >>> 8) & 0xFF);
@@ -873,7 +873,7 @@ class d_a_kytag00 extends fopAc_ac_c {
         // Moved inside wether_tag_move.
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.invert) {
             this.target = cLib_addCalc(this.target, 0.0, 0.1, 0.01, 0.0001);
         } else {
@@ -1001,7 +1001,7 @@ class d_a_kytag01 extends fopAc_ac_c {
 
     private influence = new WAVE_INFLUENCE();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         vec3.copy(this.influence.pos, this.pos);
 
         this.influence.innerRadius = this.scale[0] * 5000.0;
@@ -1044,7 +1044,7 @@ class d_a_kytag01 extends fopAc_ac_c {
         }
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         dKy__waveinfl_cut(globals.g_env_light, this.influence);
     }
 }
@@ -1059,7 +1059,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
 
     private static arcName = `Ygush00`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_Ygush00.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -1084,7 +1084,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.type !== 3) {
             this.btkAnm.play(deltaTimeInFrames);
             this.bckAnm.play(deltaTimeInFrames);
@@ -1095,7 +1095,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -1121,7 +1121,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
     private static arcName = `Oyashi`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_lpalm.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -1152,7 +1152,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     };
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const envLight = globals.g_env_light;
 
         const windVec = dKyw_get_wind_vec(envLight);
@@ -1186,7 +1186,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -1235,7 +1235,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
 
     private static arcName = `VzouK`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_zouK.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -1266,7 +1266,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.set_mtx();
     }
 
@@ -1274,7 +1274,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         dDlst_texSpecmapST(this.effectMtx, globals, pos, this.tevStr, refl);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -1297,7 +1297,7 @@ class d_a_swhit0 extends fopAc_ac_c {
     private static color1Hit = colorNewFromRGBA8(0xE6C8006E);
     private static color2Hit = colorNewFromRGBA8(0x78643264);
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Always`, 0x35));
 
@@ -1320,12 +1320,12 @@ class d_a_swhit0 extends fopAc_ac_c {
         mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.bckAnm.play(deltaTimeInFrames);
         this.btkAnm.play(deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -1697,7 +1697,7 @@ class d_a_mgameboard extends fopAc_ac_c {
 
     private static arcName = `Kaisen_e`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
         status = dComIfG_resLoad(globals, d_a_mgameboard.arcName);
@@ -1968,7 +1968,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.minigameResetTimer = 30;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const inputManager = globals.context.inputManager;
         if (this.minigameResetTimer >= 0) {
             this.minigameResetTimer -= deltaTimeInFrames;
@@ -1985,7 +1985,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -2376,7 +2376,7 @@ class d_a_sie_flag extends fopAc_ac_c {
     private static arcName = `Eshata`;
     private static arcNameCloth = `Cloth`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
         status = dComIfG_resLoad(globals, d_a_sie_flag.arcName);
@@ -2403,7 +2403,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -2414,7 +2414,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.set_mtx();
@@ -2444,7 +2444,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.setMtx(calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         this.cloth.destroy(globals.modelCache.device);
     }
 }
@@ -2462,7 +2462,7 @@ class d_a_tori_flag extends fopAc_ac_c {
     private static arcName = `Trflag`;
     private static arcNameCloth = `Cloth`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
         status = dComIfG_resLoad(globals, d_a_tori_flag.arcName);
@@ -2489,7 +2489,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -2500,7 +2500,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.set_mtx();
@@ -2531,7 +2531,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.setMtx(calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         this.cloth.destroy(globals.modelCache.device);
     }
 }
@@ -2598,7 +2598,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
     private static arcNames = [null, `Matif`, `Vsvfg`, `Xhcf`];
     private static arcNameCloth = `Cloth`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.flagType = this.parameters & 0xFF;
         this.texType = (this.parameters >>> 24) & 0xFF;
 
@@ -2792,7 +2792,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -2936,7 +2936,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
             this.setNrmVtx(this.nrmArr[i], i);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         const mMonotone = false;
@@ -2978,7 +2978,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         mat4.copy(this.mtx, calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const device = globals.modelCache.device;
         if (this.rawTex !== null)
             this.rawTex.destroy(device);
@@ -3023,7 +3023,7 @@ class d_a_kamome extends fopAc_ac_c {
 
     private static arcName = 'Kamome';
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
 
         let status: cPhs__Status;
 
@@ -3177,7 +3177,7 @@ class d_a_kamome extends fopAc_ac_c {
         this.kamome_pos_move(globals, deltaTimeInFrames);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.noDraw = false;
 
         if (this.type === 6) {
@@ -3212,7 +3212,7 @@ class d_a_kamome extends fopAc_ac_c {
         this.daKamome_setMtx();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.noDraw || this.switch_id !== 0)
             return;
 
@@ -3320,7 +3320,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
     private static arcName = `IkadaH`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_ikada.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -3469,7 +3469,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -3560,7 +3560,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.modePathMoveTerryInit, this.modePathMoveTerry,
     ];
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.waveAnim1Timer += 0x200 * deltaTimeInFrames;
@@ -3675,7 +3675,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         if (this.splash !== null)
@@ -3727,7 +3727,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
 
     public curMode: d_a_oship_mode = d_a_oship_mode.wait;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const arcName = `Oship`;
 
         const status = dComIfG_resLoad(globals, arcName);
@@ -4004,7 +4004,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
             mDoMtx_ZrotM(dst, -this.aimRotX + 0x2800);
     };
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.cullingCheck(viewerInput.camera))
             return;
 
@@ -4126,7 +4126,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.splash.maxScaleTimer = 300.0;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         // TODO(jstpierre): smoke
         // TODO(jstpierre): bomb
 
@@ -4195,7 +4195,7 @@ class d_a_obj_flame extends fopAc_ac_c {
 
     private mode = d_a_obj_flame_mode.wait;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const arcName = `Yfire_00`;
 
         const status = dComIfG_resLoad(globals, arcName);
@@ -4268,7 +4268,7 @@ class d_a_obj_flame extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -4500,7 +4500,7 @@ class d_a_obj_flame extends fopAc_ac_c {
         // hitbox
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.mode_proc_call(globals, deltaTimeInFrames);

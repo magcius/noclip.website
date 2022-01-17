@@ -196,14 +196,14 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
     private pos: ReadonlyVec3;
     private rot: ReadonlyVec3;
 
-    public setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    public override setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
         this.emitter = emitter;
         this.state = 0;
         this.pos = pos;
         this.rot = rot;
     }
 
-    public execute(emitter: JPABaseEmitter): void {
+    public override execute(emitter: JPABaseEmitter): void {
         const deltaTimeFrames = emitter.emitterManager.workData.deltaTime;
         const globals = this.globals, envLight = globals.g_env_light;
 
@@ -255,7 +255,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
 
     private ddraw = new TDDraw();
 
-    constructor(protected globals: dGlobals) {
+    constructor(protected override globals: dGlobals) {
         super(globals);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -264,7 +264,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
     }
 
-    public setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    public override setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
         this.emitter = emitter;
         this.state = 0;
         this.pos = pos;
@@ -274,7 +274,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
         this.maxParticleVelocity = 10000.0;
     }
 
-    public draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+    public override draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
         if (emitter.aliveParticlesBase.length < 2)
             return;
 
@@ -310,7 +310,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public executeAfter(emitter: JPABaseEmitter): void {
+    public override executeAfter(emitter: JPABaseEmitter): void {
         const workData = emitter.emitterManager.workData;
         mat4.copy(this.rotMtx, workData.emitterGlobalRotation);
 
@@ -365,7 +365,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
     private trackPrevPos = nArray(3, () => vec3.create());
 
-    constructor(protected globals: dGlobals) {
+    constructor(protected override globals: dGlobals) {
         super(globals);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -374,7 +374,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
     }
 
-    public draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+    public override draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
         // There should always be a multiple of three particles, with how we emit them.
         const trackCount = (emitter.aliveParticlesBase.length / 3) | 0;
         if (trackCount < 2)
@@ -426,7 +426,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    public override setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
         this.emitter = emitter;
         this.state = 0;
         this.pos = pos;
@@ -448,7 +448,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
         dst[1] += 2.0;
     }
 
-    public execute(emitter: JPABaseEmitter): void {
+    public override execute(emitter: JPABaseEmitter): void {
         const workData = emitter.emitterManager.workData;
 
         dKy_get_seacolor(this.globals.g_env_light, emitter.globalColorPrm, null);

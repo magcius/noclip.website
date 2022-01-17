@@ -1221,12 +1221,12 @@ export class LayoutPicture extends LayoutPane {
     public vertexColors: Color[];
     public texCoords: ReadonlyVec2[][];
 
-    public parse(rlyt: RLYTPicture, layout: Layout): void {
+    public override parse(rlyt: RLYTPicture, layout: Layout): void {
         super.parse(rlyt, layout);
         parseWindowContent(this, rlyt);
     }
 
-    protected setAnimationValueFloat(type: RLANAnimationTrackType, value: number): void {
+    protected override setAnimationValueFloat(type: RLANAnimationTrackType, value: number): void {
         if (type === RLANAnimationTrackType.PaneVertexColor_TL_R)
             this.vertexColors[0].r = value / 0xFF;
         else if (type === RLANAnimationTrackType.PaneVertexColor_TL_G)
@@ -1263,7 +1263,7 @@ export class LayoutPicture extends LayoutPane {
             super.setAnimationValueFloat(type, value);
     }
 
-    protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+    protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
         const material = drawGetMaterial(layout, this);
         if (material === null)
             return;
@@ -1301,7 +1301,7 @@ export class LayoutTextbox extends LayoutPane {
 
     private font: ResFont | null = null;
 
-    public parse(rlyt: RLYTTextbox, layout: Layout): void {
+    public override parse(rlyt: RLYTTextbox, layout: Layout): void {
         super.parse(rlyt, layout);
         this.maxLength = rlyt.maxLength;
         this.materialIndex = rlyt.materialIndex;
@@ -1370,7 +1370,7 @@ export class LayoutTextbox extends LayoutPane {
         charWriter.calcRect(dst, this.str);
     }
 
-    protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+    protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
         if (this.font === null)
             return;
 
@@ -1418,7 +1418,7 @@ export class LayoutWindow extends LayoutPane {
     private paddingT: number;
     private paddingB: number;
 
-    public parse(rlyt: RLYTWindow, layout: Layout): void {
+    public override parse(rlyt: RLYTWindow, layout: Layout): void {
         super.parse(rlyt, layout);
         parseWindowContent(this, rlyt);
 
@@ -1572,7 +1572,7 @@ export class LayoutWindow extends LayoutPane {
         drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
     }
 
-    protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+    protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
         const template = renderInstManager.pushTemplateRenderInst();
         this.setOnRenderInst(template);
 

@@ -355,7 +355,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.controller.isProjected || !this.controller.isDraw())
             return;
 
@@ -380,7 +380,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -431,7 +431,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
     protected abstract loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void;
     protected abstract drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void;
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.isDraw())
             return;
 
@@ -493,7 +493,7 @@ class ShadowVolumeSphere extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeSphere');
     }
 
-    protected isDraw(): boolean {
+    protected override isDraw(): boolean {
         return this.controller.isProjected && super.isDraw();
     }
 
@@ -509,7 +509,7 @@ class ShadowVolumeSphere extends ShadowVolumeModel {
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
     }
 }
@@ -522,7 +522,7 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeSphere');
     }
 
-    protected isDraw(): boolean {
+    protected override isDraw(): boolean {
         return this.controller.isProjected && super.isDraw();
     }
 
@@ -559,7 +559,7 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
     }
 }
@@ -610,7 +610,7 @@ class ShadowVolumeOvalPole extends ShadowVolumeModel {
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
     }
 }
@@ -639,7 +639,7 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
     }
 }
@@ -835,7 +835,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -937,7 +937,7 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -1075,7 +1075,7 @@ class AlphaShadow extends NameObj {
         sceneObjHolder.specialTextureBinder.registerTextureMapping(this.textureMapping, SpecialTextureType.OpaqueSceneTexture);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         colorFromRGBA(materialParams.u_Color[ColorKind.K0], 0.0, 0.0, 0.0, 1 / 0xFF);
@@ -1101,7 +1101,7 @@ class AlphaShadow extends NameObj {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.orthoQuad.destroy(device);
     }
 }
@@ -1117,7 +1117,7 @@ export class ShadowControllerHolder extends NameObj {
         this.alphaShadow = new AlphaShadow(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         for (let i = 0; i < this.shadowControllers.length; i++) {
@@ -1127,7 +1127,7 @@ export class ShadowControllerHolder extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
         this.updateController(sceneObjHolder);
     }
@@ -1141,7 +1141,7 @@ export class ShadowControllerHolder extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         ShadowVolumeSphere.requestArchives(sceneObjHolder);
         ShadowVolumeOval.requestArchives(sceneObjHolder);
         ShadowVolumeCylinder.requestArchives(sceneObjHolder);

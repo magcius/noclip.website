@@ -90,7 +90,7 @@ class PsychonautsProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MeshFragParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 // Expected to be constant across the entire scene.

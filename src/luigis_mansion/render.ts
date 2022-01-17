@@ -197,7 +197,7 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         for (let i = 0; i < this.binCommands.length; i++)
             this.binCommands[i].destroy(device);

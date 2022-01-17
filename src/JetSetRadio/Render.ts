@@ -25,7 +25,7 @@ export class JSRProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
@@ -54,7 +54,7 @@ uniform sampler2D u_Texture;
 #endif
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
@@ -79,7 +79,7 @@ void main() {
 }
 `;
 
-public frag = `
+public override frag = `
 void main() {
     vec4 t_Color = clamp(u_Diffuse /*+ u_Ambient + u_Specular*/, 0.0, 1.0);
 #ifdef TEXTURE

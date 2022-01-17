@@ -180,7 +180,7 @@ class WorldRenderer extends SFARenderer {
     private sky: Sky; // TODO: move to World?
     private sphereMapMan: SphereMapManager;
 
-    constructor(protected world: World, materialFactory: MaterialFactory) {
+    constructor(protected override world: World, materialFactory: MaterialFactory) {
         super(world.device, world.animController, materialFactory);
         if (this.world.resColl.texFetcher instanceof SFATextureFetcher)
             this.textureHolder = this.world.resColl.texFetcher.textureHolder;
@@ -275,7 +275,7 @@ class WorldRenderer extends SFARenderer {
             console.log(`Failed to load texture`);
     }
 
-    protected update(viewerInput: Viewer.ViewerRenderInput) {
+    protected override update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
 
         this.materialFactory.update(this.animController);
@@ -298,11 +298,11 @@ class WorldRenderer extends SFARenderer {
         }
     }
     
-    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+    protected override addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         this.sky.addSkyRenderInsts(device, renderInstManager, renderLists, sceneCtx);
     }
 
-    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
+    protected override addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         this.sky.addSkyRenderPasses(device, this.renderHelper, builder, renderInstManager, renderLists, mainColorTargetID, this.mainDepthDesc, sceneCtx);
     }
 
@@ -315,7 +315,7 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+    protected override addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         renderInstManager.setCurrentRenderInstList(renderLists.world[0]);
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -358,19 +358,19 @@ class WorldRenderer extends SFARenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
-    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    protected override addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         this.sphereMapMan.renderMaps(device, builder, this.renderHelper, renderInstManager, sceneCtx);
     }
 
-    protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {
+    protected override attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {
         this.sphereMapMan.attachResolveTextures(builder, pass);
     }
 
-    protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
+    protected override resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
         this.sphereMapMan.resolveLateSamplerBindings(renderList, scope, this.renderHelper.getCache());
     }
 
-    public destroy(device: GfxDevice) {
+    public override destroy(device: GfxDevice) {
         super.destroy(device);
         this.world.destroy(device);
         this.sky.destroy(device);

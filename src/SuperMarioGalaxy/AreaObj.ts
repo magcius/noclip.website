@@ -246,7 +246,7 @@ export class AreaObj extends NameObj {
         this.isValid = false;
     }
 
-    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
         this.aliveScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
     }
 

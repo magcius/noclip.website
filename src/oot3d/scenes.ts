@@ -18,7 +18,7 @@ import { OrbitCameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
-    public findTextureEntryIndex(name: string): number {
+    public override findTextureEntryIndex(name: string): number {
         let i: number = -1;
 
         i = this.searchTextureEntryIndex(name);

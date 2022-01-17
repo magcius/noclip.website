@@ -71,7 +71,7 @@ class ClipAreaShapeBox extends ClipAreaShape {
         super(sceneObjHolder, 'ClipVolumeBox');
     }
 
-    public calcVolumeMatrix(dst: mat4, mtx: ReadonlyMat4, scale: ReadonlyVec3): void {
+    public override calcVolumeMatrix(dst: mat4, mtx: ReadonlyMat4, scale: ReadonlyVec3): void {
         if (this.isBottom) {
             vec3.set(scratchVec3a, 0.0, this.size * scale[1], 0.0);
             mat4.translate(dst, mtx, scratchVec3a);
@@ -94,7 +94,7 @@ class ClipAreaShapeSphere extends ClipAreaShape {
         super(sceneObjHolder, 'ClipVolumeSphere');
     }
 
-    public calcVolumeMatrix(dst: mat4, mtx: ReadonlyMat4, scale: ReadonlyVec3): void {
+    public override calcVolumeMatrix(dst: mat4, mtx: ReadonlyMat4, scale: ReadonlyVec3): void {
         vec3.scale(scratchVec3a, scale, this.size * 0.01);
         mat4.scale(dst, mtx, scratchVec3a);
     }
@@ -117,11 +117,11 @@ abstract class ClipArea<TNerve extends number = number> extends LiveActor<TNerve
         sceneObjHolder.clipAreaHolder!.registerActor(this);
     }
 
-    public getBaseMtx(): mat4 {
+    public override getBaseMtx(): mat4 {
         return this.baseMtx;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         const clipAreaHolder = sceneObjHolder.clipAreaHolder!;
@@ -187,7 +187,7 @@ class ClipAreaMovable extends ClipArea {
             this.railMover.movement(sceneObjHolder, viewerInput);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
         if (!isValidSwitchB(this) || isOnSwitchB(sceneObjHolder, this))
@@ -204,12 +204,12 @@ class ClipAreaMovable extends ClipArea {
         setMatrixTranslation(this.baseMtx, this.translation);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.startMoveFunction(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
         this.endMoveFunction(sceneObjHolder);
     }
@@ -269,18 +269,18 @@ class ClipAreaDrop extends ClipArea<ClipAreaDropNrv> {
         this.baseSize = v;
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.sphere.size = 0.0;
         this.setNerve(ClipAreaDropNrv.Wait);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
         mat4.fromTranslation(this.baseMtx, this.translation);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ClipAreaDropNrv.Wait) {
@@ -373,7 +373,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         this.materialLaser = new GXMaterialHelperGfx(mb.finish());
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropLaserNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ClipAreaDropLaserNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ClipAreaDropLaserNrv.Wait) {
@@ -429,7 +429,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         this.drawCount = Math.min(this.drawCount + 1, 64);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (this.drawCount < 3)
@@ -478,11 +478,11 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 
-    public static requestArchives(): void {
+    public static override requestArchives(): void {
     }
 }
 
@@ -517,8 +517,8 @@ export class ClipAreaHolder extends LiveActorGroup<ClipArea> {
 }
 
 class FullscreenBlitProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
@@ -545,12 +545,12 @@ uniform sampler2D u_Texture;
 ${fallOutFieldDrawCommon}
 `;
 
-    public vert = `
+    public override vert = `
 ${FallOutFieldDrawThresholdProgram.Common}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 
-    public frag = `
+    public override frag = `
 ${FallOutFieldDrawThresholdProgram.Common}
 ${GfxShaderLibrary.saturate}
 
@@ -569,12 +569,12 @@ uniform sampler2D u_Texture;
 ${fallOutFieldDrawCommon}
 `;
 
-    public vert = `
+    public override vert = `
 ${FallOutFieldDrawBlurProgram.Common}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 
-    public frag = `
+    public override frag = `
 ${FallOutFieldDrawBlurProgram.Common}
 ${GfxShaderLibrary.saturate}
 ${generateBlurFunction('Blur', 5, '0.004', glslGenerateFloat(1.0))}
@@ -601,12 +601,12 @@ uniform sampler2D u_TextureMask;
 ${fallOutFieldDrawCommon}
 `;
 
-    public vert = `
+    public override vert = `
 ${FallOutFieldDrawCompositeBlurProgram.Common}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 
-    public frag = `
+    public override frag = `
 ${FallOutFieldDrawCompositeBlurProgram.Common}
 
 in vec2 v_TexCoord;
@@ -626,12 +626,12 @@ uniform sampler2D u_Texture;
 ${fallOutFieldDrawCommon}
 `;
 
-    public vert = `
+    public override vert = `
 ${FallOutFieldDrawMaskProgram.Common}
 ${GfxShaderLibrary.makeFullscreenVS(reverseDepthForDepthOffset(1.0), 1.0)}
 `;
 
-    public frag = `
+    public override frag = `
 ${FallOutFieldDrawMaskProgram.Common}
 
 in vec2 v_TexCoord;

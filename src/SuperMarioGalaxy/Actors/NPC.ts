@@ -258,7 +258,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
             useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         calcGravity(sceneObjHolder, this);
         if (this.talkParam.waitActionName !== null) {
             startAction(this, this.talkParam.waitActionName);
@@ -274,7 +274,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         vec3.copy(this.initPoseTrans, this.translation);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (!vec3.equals(this.rotation, this.lastRotation)) {
             quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
             vec3.copy(this.lastRotation, this.rotation);
@@ -299,7 +299,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         }
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         if (this.goods0 !== null)
             this.goods0.makeActorAppeared(sceneObjHolder);
@@ -307,7 +307,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.goods1.makeActorAppeared(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
         if (this.goods0 !== null)
             this.goods0.makeActorDead(sceneObjHolder);
@@ -385,7 +385,7 @@ export class Butler extends NPCActor<ButlerNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ButlerNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ButlerNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ButlerNrv.Wait) {
@@ -418,7 +418,7 @@ export class Rosetta extends NPCActor {
         this.talkParam.waitActionName = 'WaitA';
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RosettaNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RosettaNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === RosettaNrv.Wait) {
@@ -466,7 +466,7 @@ export class Tico extends NPCActor<TicoNrv> {
         setBckFrameAtRandom(this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TicoNrv.Wait) {
@@ -474,7 +474,7 @@ export class Tico extends NPCActor<TicoNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Tico');
     }
 }
@@ -583,7 +583,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (this.mapObjConnector !== null) {
             this.mapObjConnector.connect();
             // TODO(jstpierre): faceQuat
@@ -593,7 +593,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === KinopioNrv.Wait) {
@@ -621,7 +621,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         // TODO(jstpierre): Rail point arg0.
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Kinopio');
         const itemGoodsIdx = fallback(getJMapInfoArg7(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
@@ -646,7 +646,7 @@ export class Peach extends NPCActor<PeachNrv> {
     }
 
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PeachNrv.Wait) {
@@ -863,7 +863,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         if (this.mode === 2 || this.mode === 3) {
@@ -880,7 +880,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PenguinNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PenguinNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         // drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.translation, this.gravityVector, 100);
@@ -909,7 +909,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
 
         const arg0 = getJMapInfoArg0(infoIter);
@@ -940,7 +940,7 @@ export class PenguinRacer extends NPCActor {
         startAction(this, 'RacerWait');
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Penguin');
         requestArchivesForNPCGoods(sceneObjHolder, getObjectName(infoIter), 0);
     }
@@ -978,7 +978,7 @@ export class TicoComet extends NPCActor<TicoCometNrv> {
         startAction(this, 'Wait');
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoCometNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoCometNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TicoCometNrv.Wait) {
@@ -986,7 +986,7 @@ export class TicoComet extends NPCActor<TicoCometNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         const itemGoodsIdx = 0;
         requestArchivesForNPCGoods(sceneObjHolder, 'TicoComet', itemGoodsIdx);
@@ -1041,7 +1041,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             this.initNerve(TicoRailNrv.Move);
     }
 
-    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+    public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
         if (isSensorPlayer(otherSensor)) {
             // sendMsgPush
         } else if (isSensorNpc(otherSensor)) {
@@ -1068,7 +1068,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return vec3.equals(getRailPointPosStart(this), getRailPointPosStart(other)) && vec3.equals(getRailPointPosEnd(this), getRailPointPosEnd(other));
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.TicoRail_StartTalk) {
             const currentNerve = this.getCurrentNerve();
 
@@ -1094,7 +1094,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         // Gravity vector
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.direction);
     }
@@ -1111,7 +1111,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return false;
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         // this.railRider!.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
@@ -1244,7 +1244,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return this.getCurrentNerve() === TicoRailNrv.Wait && isGreaterStep(this, step);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Tico');
     }
 }
@@ -1299,18 +1299,18 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    public override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
         vec3.negate(scratchVec3a, this.gravityVector);
         blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.2, 0.2);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StrayTicoNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StrayTicoNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === StrayTicoNrv.Wait) {
@@ -1324,7 +1324,7 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('StrayTico');
         sceneObjHolder.modelCache.requestObjectData('ItemBubble');
     }
@@ -1355,7 +1355,7 @@ export class CollectTico extends LiveActor<CollectTicoNrv> {
         this.makeActorDead(sceneObjHolder);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         StrayTico.requestArchives(sceneObjHolder);
     }
 }
@@ -1415,7 +1415,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         initFur(sceneObjHolder, this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HoneyBeeNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HoneyBeeNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === HoneyBeeNrv.Wait) {
@@ -1465,7 +1465,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('HoneyBee');
         const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'HoneyBee', itemGoodsIdx);
@@ -1579,12 +1579,12 @@ export class Caretaker extends NPCActor<CaretakerNrv> {
         }
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         if (isExistRail(this))
             followRailPoseOnGround(sceneObjHolder, this, this, 1.0);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CaretakerNrv, deltaTimeFrames: number): void {
+    public override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CaretakerNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === CaretakerNrv.Talk) {
@@ -1593,7 +1593,7 @@ export class Caretaker extends NPCActor<CaretakerNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Caretaker');
         const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Caretaker', itemGoodsIdx);

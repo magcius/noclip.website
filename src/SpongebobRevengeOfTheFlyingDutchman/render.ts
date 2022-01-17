@@ -64,7 +64,7 @@ class RotfdProgram extends DeviceProgram {
     public static MATERIALPARAM_SIZE = 4*3 + 4*3 + 4 + 4 + 4*2;
     public static INSTANCEPARAM_SIZE = 4 + 4 + 4 + 4*4 + 4 + 4 * (4 + 4 + 4);
 
-    public both = program_glsl;
+    public override both = program_glsl;
 
     constructor() {
         super();

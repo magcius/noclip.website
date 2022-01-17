@@ -22,8 +22,8 @@ import { Entity_World, Lightmap_Table } from "./Entity";
 import { TheWitnessGlobals } from "./Globals";
 
 class DepthCopyProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
@@ -38,7 +38,7 @@ class TheWitnessProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;
 
-    public both = `
+    public override both = `
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ViewProjection;
     vec4 u_CameraPosWorld;
@@ -115,7 +115,7 @@ vec3 CalcLightMapColor(in vec2 t_TexCoord) {
 }
 `;
 
-    public vert = `
+    public override vert = `
 precision mediump float;
 
 layout(location = 0) in vec4 a_Position;
@@ -161,7 +161,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public override frag = `
 in vec2 v_TexCoord0;
 in vec3 v_LightMapData;
 in vec4 v_Color0;

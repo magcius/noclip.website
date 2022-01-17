@@ -526,7 +526,7 @@ export class StudioCameraController extends FPSCameraController {
         super();
     }
 
-    public update(inputManager: InputManager, dt: number): CameraUpdateResult {
+    public override update(inputManager: InputManager, dt: number): CameraUpdateResult {
         let result;
 
         if (this.isAnimationPlaying) {

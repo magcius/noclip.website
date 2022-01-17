@@ -39,11 +39,11 @@ export class LGTPointLgt extends SFAClass { // Class 681: LGTPointLgt
         this.light.affectsMap = !!data.getUint8(0x3f);
     }
 
-    public mount(obj: ObjectInstance, world: World) {
+    public override mount(obj: ObjectInstance, world: World) {
         world.worldLights.addLight(this.light);
     }
 
-    public unmount(obj: ObjectInstance, world: World) {
+    public override unmount(obj: ObjectInstance, world: World) {
         world.worldLights.removeLight(this.light);
     }
 }
@@ -78,11 +78,11 @@ export class LGTProjecte extends SFAClass {
         this.light.obj = obj;
     }
 
-    public mount(obj: ObjectInstance, world: World) {
+    public override mount(obj: ObjectInstance, world: World) {
         world.worldLights.addLight(this.light);
     }
 
-    public unmount(obj: ObjectInstance, world: World) {
+    public override unmount(obj: ObjectInstance, world: World) {
         world.worldLights.removeLight(this.light);
     }
 }
@@ -137,11 +137,11 @@ export class Torch extends SFAClass { // Class 518: WM_Torch, PoleFlame
         this.light.obj = obj;
     }
 
-    public mount(obj: ObjectInstance, world: World) {
+    public override mount(obj: ObjectInstance, world: World) {
         world.worldLights.addLight(this.light);
     }
 
-    public unmount(obj: ObjectInstance, world: World) {
+    public override unmount(obj: ObjectInstance, world: World) {
         world.worldLights.removeLight(this.light);
     }
 }
@@ -207,11 +207,11 @@ export class Torch2 extends SFAClass { // Class 689: CmbSrcTWall
         this.light.affectsMap = !!(data.getUint8(0x29) & 0x20);
     }
 
-    public mount(obj: ObjectInstance, world: World) {
+    public override mount(obj: ObjectInstance, world: World) {
         world.worldLights.addLight(this.light);
     }
 
-    public unmount(obj: ObjectInstance, world: World) {
+    public override unmount(obj: ObjectInstance, world: World) {
         world.worldLights.removeLight(this.light);
     }
 }

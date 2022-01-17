@@ -21,7 +21,7 @@ export class ModelObj<T extends number = number> extends LiveActor<T> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (this.transformMatrix !== null) {
             mat4.getTranslation(this.translation, this.transformMatrix);
             mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);

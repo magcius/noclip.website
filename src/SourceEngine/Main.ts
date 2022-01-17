@@ -1320,7 +1320,7 @@ const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
 ];
 
 class FullscreenPostProgram extends DeviceProgram {
-    public both = `
+    public override both = `
 precision mediump float;
 precision lowp sampler3D;
 
@@ -1328,8 +1328,8 @@ uniform sampler2D u_FramebufferColor;
 uniform sampler3D u_ColorCorrectTexture;
 uniform sampler2D u_BloomColor;
 `;
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -1350,7 +1350,7 @@ void main() {
 }
 
 class BloomDownsampleProgram extends DeviceProgram {
-    public both = `
+    public override both = `
 layout(std140) uniform ub_Params {
     vec4 u_Misc[2];
 };
@@ -1359,8 +1359,8 @@ layout(std140) uniform ub_Params {
 #define u_BloomExp  (u_Misc[0].a)
 `;
 
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 uniform sampler2D u_FramebufferColor;
 in vec2 v_TexCoord;
 
@@ -1403,7 +1403,7 @@ void main() {
 }
 
 class BloomBlurProgram extends DeviceProgram {
-    public both = `
+    public override both = `
 layout(std140) uniform ub_Params {
     vec4 u_Misc[2];
 };
@@ -1411,8 +1411,8 @@ layout(std140) uniform ub_Params {
 #define u_BloomScale (u_Misc[1].x)
 `;
 
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 uniform sampler2D u_FramebufferColor;
 in vec2 v_TexCoord;
 

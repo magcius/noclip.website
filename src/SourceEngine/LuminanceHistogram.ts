@@ -34,7 +34,7 @@ const scratchVec4 = vec4.create();
 //     layout is decided in updateLayout().
 
 class LuminanceThreshProgram extends DeviceProgram {
-    public both = `
+    public override both = `
 layout(std140) uniform ub_Params {
     vec4 u_Misc[2];
 };
@@ -45,8 +45,8 @@ layout(std140) uniform ub_Params {
 #define u_ThreshPass (u_Misc[1].z)
 `;
 
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 

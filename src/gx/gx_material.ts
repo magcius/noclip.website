@@ -407,7 +407,7 @@ export class GX_Program extends DeviceProgram {
     public static ub_MaterialParams = 1;
     public static ub_DrawParams = 2;
 
-    public name: string;
+    public override name: string;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
         super();

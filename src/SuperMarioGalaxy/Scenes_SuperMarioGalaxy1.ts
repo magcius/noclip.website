@@ -10,8 +10,8 @@ import { TicoRail } from './Actors/NPC';
 import { SceneContext } from '../SceneBase';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
-    public pathBase: string = `SuperMarioGalaxy`;
-    public gameBit = GameBits.SMG1;
+    public override pathBase: string = `SuperMarioGalaxy`;
+    public override gameBit = GameBits.SMG1;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
         const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
@@ -80,7 +80,7 @@ class DayInTheLifeOfALumaController extends NameObj {
         this.switchCounter = isShortRail ? 2000 : -1;
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
         this.ticos = sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail') as TicoRail[];
         this.pickNewTico();
@@ -130,7 +130,7 @@ class DayInTheLifeOfALumaController extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         this.tryPickNewTico(getDeltaTimeFrames(viewerInput));
@@ -146,11 +146,11 @@ class DayInTheLifeOfALumaController extends NameObj {
 class DayInTheLifeOfALuma extends SMG1SceneDesc {
     private controller: DayInTheLifeOfALumaController;
 
-    public placeExtra(sceneObjHolder: SceneObjHolder): void {
+    public override placeExtra(sceneObjHolder: SceneObjHolder): void {
         this.controller = new DayInTheLifeOfALumaController(sceneObjHolder);
     }
 
-    protected setup(context: SceneContext, renderer: SMGRenderer): void {
+    protected override setup(context: SceneContext, renderer: SMGRenderer): void {
         context.inputManager.isInteractive = false;
     }
 }

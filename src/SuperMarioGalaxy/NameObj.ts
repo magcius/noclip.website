@@ -372,22 +372,22 @@ export class NameObjAdaptor extends NameObj {
     public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
     public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.calcAnimCallback !== null)
             this.calcAnimCallback(sceneObjHolder);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
         if (this.calcViewAndEntryCallback !== null)
             this.calcViewAndEntryCallback(sceneObjHolder, camera, viewMatrix);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         if (this.movementCallback !== null)
             this.movementCallback(sceneObjHolder, viewerInput);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.drawCallback !== null)
             this.drawCallback(sceneObjHolder, renderInstManager, viewerInput);
     }

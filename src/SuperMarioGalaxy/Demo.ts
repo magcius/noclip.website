@@ -415,7 +415,7 @@ export class DemoExecutor extends DemoCastGroup {
             this.stageSwitchCtrl.onSwitchDead(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
         this.timeKeeper.update(deltaTimeFrames);
@@ -429,7 +429,7 @@ export class DemoExecutor extends DemoCastGroup {
         }
     }
 
-    public registerDemoActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    public override registerDemoActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
         super.registerDemoActor(sceneObjHolder, actor, infoIter);
         // this.cameraKeeper.initCast(actor, infoIter);
         this.actionKeeper.initCast(sceneObjHolder, actor, infoIter);
@@ -448,7 +448,7 @@ export class DemoExecutor extends DemoCastGroup {
         // this.cameraKeeper.start();
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         DemoDirector.requestArchives(sceneObjHolder);
     }
 }
@@ -498,7 +498,7 @@ export class DemoDirector extends NameObj {
         return this.demoSheetArchives[zoneId];
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         if (this.currentExecutor !== null) {
@@ -560,7 +560,7 @@ export class DemoDirector extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('DemoSheet');
     }
 }

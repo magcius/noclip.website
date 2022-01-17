@@ -609,7 +609,7 @@ export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerI
 }
 
 export class GXRenderHelperGfx extends GfxRenderHelper {
-    public pushTemplateRenderInst(): GfxRenderInst {
+    public override pushTemplateRenderInst(): GfxRenderInst {
         const template = super.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
         template.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);

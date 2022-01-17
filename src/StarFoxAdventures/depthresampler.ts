@@ -17,7 +17,7 @@ import { TextureMapping } from "../TextureHolder";
  * - Outputs to a color texture to allow for bilinear filtering
  */
 class DepthResamplerProgram extends DeviceProgram {
-    public frag: string = `
+    public override frag: string = `
 uniform sampler2D u_DepthTexture;
 
 in vec2 v_TexCoord;
@@ -29,7 +29,7 @@ void main() {
     gl_FragColor = vec4(d);
 }
 `;
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 0, numSamplers: 1 }];

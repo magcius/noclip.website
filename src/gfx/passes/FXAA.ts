@@ -8,9 +8,9 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../ren
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
 class FXAAProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
-    public frag = `
+    public override frag = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 

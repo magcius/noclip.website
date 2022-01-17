@@ -190,9 +190,9 @@ uniform sampler2D u_TextureMultiB;    // _a2
 uniform sampler2D u_TextureIndirect;  // _a3
 `;
 
-    public both = TurboUBER.globalDefinitions;
+    public override both = TurboUBER.globalDefinitions;
 
-    public vert = `
+    public override vert = `
 layout(location = ${this.getAttrLocation('_p0')}) in vec3 a_p0; // _p0
 layout(location = ${this.getAttrLocation('_c0')}) in vec4 a_c0; // _c0
 layout(location = ${this.getAttrLocation('_u0')}) in vec2 a_u0; // _u0

@@ -217,7 +217,7 @@ export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => 
 export abstract class StandardMaterial extends MaterialBase {
     private blendOverride?: BlendOverride = undefined;
 
-    constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
+    constructor(public device: GfxDevice, factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
         super(factory);
     }
 

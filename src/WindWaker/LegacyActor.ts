@@ -45,7 +45,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public objectRenderers: BMDObjectRenderer[] = [];
 
-    public subload(globals: dGlobals, prm: fopAcM_prm_class): cPhs__Status {
+    public override subload(globals: dGlobals, prm: fopAcM_prm_class): cPhs__Status {
         if (this.phase === cPhs__Status.Started) {
             this.phase = cPhs__Status.Loading;
 
@@ -57,7 +57,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         return this.phase;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const device = globals.modelCache.device;
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.main[0]);
@@ -65,7 +65,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         const device = globals.modelCache.device;
@@ -1912,7 +1912,7 @@ class d_a_py_lk extends BMDObjectRenderer {
         this.faceAnimController.setPhaseToCurrent();
     }
 
-    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         this.faceAnimController.setTimeFromViewerInput(viewerInput);
 
         const hatMaterial = this.modelInstance.materialInstances[18];

@@ -388,7 +388,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         colorCopy(emitter.globalColorPrm, this.globalColorPrm);
     }
 
-    public execute(emitter: JPA.JPABaseEmitter): void {
+    public override execute(emitter: JPA.JPABaseEmitter): void {
         this.followSRT(emitter, false);
         // this.effectLight(emitter);
         this.setColor(emitter);
@@ -1129,7 +1129,7 @@ export class EffectSystem extends NameObj {
         }
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.emitterManager.destroy(device);
     }
 }

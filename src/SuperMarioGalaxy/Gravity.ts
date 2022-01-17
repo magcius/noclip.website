@@ -289,7 +289,7 @@ class ParallelGravity extends PlanetGravity {
         this.globalBoxMtx = mat4.create();
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         transformVec3Mat4w0(this.globalDir, parentMtx, this.localDir);
         vec3.normalize(this.localDir, this.localDir);
         transformVec3Mat4w1(this.globalPos, parentMtx, this.localPos);
@@ -432,7 +432,7 @@ class CubeGravity extends PlanetGravity {
         mat4.copy(this.localMtx, mtx);
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         mat4.mul(this.globalMtx, parentMtx, this.localMtx);
         calcMtxAxis(scratchVec3a, scratchVec3b, scratchVec3c, this.globalMtx);
         this.extents[0] = vec3.length(scratchVec3a);
@@ -798,7 +798,7 @@ class PointGravity extends PlanetGravity {
         dst[2] = this.globalPos[2] + getRandomFloat(-this.range, this.range);
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         transformVec3Mat4w1(this.globalPos, parentMtx, this.localPos);
     }
 }
@@ -847,7 +847,7 @@ class SegmentGravity extends PlanetGravity {
         vec3.transformMat4(this.localSideVector, scratchVec3b, scratchMatrix);
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         for (let i = 0; i < 2; i++)
             transformVec3Mat4w1(this.globalGravityPoints[i], parentMtx, this.localGravityPoints[i]);
 
@@ -959,7 +959,7 @@ class DiskGravity extends PlanetGravity {
         vec3.transformMat4(this.localSideDirOrtho, scratchVec3b, scratchMatrix);
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         transformVec3Mat4w1(this.globalPos, parentMtx, this.localPos);
         transformVec3Mat4w0(this.globalDir, parentMtx, this.localDir);
         transformVec3Mat4w0(this.globalSideDir, parentMtx, this.localSideDirOrtho);
@@ -1012,7 +1012,7 @@ class DiskGravity extends PlanetGravity {
         dst[2] = this.globalPos[2] + getRandomFloat(-this.range, this.range);
     }
 
-    public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         const ctx = getDebugOverlayCanvas2D();
         drawWorldSpaceVector(ctx, viewerInput.camera.clipFromWorldMatrix, this.globalPos, this.globalSideDir, this.globalRad, Red);
         drawWorldSpaceVector(ctx, viewerInput.camera.clipFromWorldMatrix, this.globalPos, this.globalDir, 100, Green);
@@ -1055,7 +1055,7 @@ class DiskTorusGravity extends PlanetGravity {
         vec3.normalize(this.localDir, v);
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         transformVec3Mat4w1(this.globalPos, parentMtx, this.localPos);
         transformVec3Mat4w0(this.globalDir, parentMtx, this.localDir);
         const length = vec3.length(this.globalDir);
@@ -1138,7 +1138,7 @@ class ConeGravity extends PlanetGravity {
         mat4.copy(this.localMtx, m);
     }
 
-    public updateMtx(parentMtx: ReadonlyMat4): void {
+    public override updateMtx(parentMtx: ReadonlyMat4): void {
         mat4.mul(this.globalMtx, parentMtx, this.localMtx);
         getMatrixAxisX(scratchVec3a, this.globalMtx);
         this.globalMagX = vec3.length(scratchVec3a);
@@ -1303,7 +1303,7 @@ class WireGravity extends PlanetGravity {
     protected generateOwnRandomPoint(dst: vec3): void {
     }
 
-    public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.points.length - 1; i++) {
             drawWorldSpaceLine(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.points[i], this.points[i + 1]);
         }
@@ -1363,18 +1363,18 @@ export class GlobalGravityObj extends LiveActor {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) {
         super.movement(sceneObjHolder, viewerInput);
         this.updateSwitch(sceneObjHolder);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.gravity.alive = true;
         this.updateSwitch(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
         this.gravity.alive = false;
     }

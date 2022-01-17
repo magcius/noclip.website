@@ -945,7 +945,7 @@ class d_s_play extends fopScn {
 
     public vrboxLoaded: boolean = false;
 
-    public load(globals: dGlobals, userData: any): cPhs__Status {
+    public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
         this.treePacket = new TreePacket(globals);
@@ -957,7 +957,7 @@ class d_s_play extends fopScn {
         return cPhs__Status.Complete;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
         // Grass/Flowers/Trees
@@ -978,7 +978,7 @@ class d_s_play extends fopScn {
         this.grassPacket.draw(globals, renderInstManager, viewerInput);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         const device = globals.modelCache.device;

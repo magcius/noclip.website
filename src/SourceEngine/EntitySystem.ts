@@ -596,7 +596,7 @@ class player extends BaseEntity {
         return controller;
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.currentFogController = this.getMasterFogController(entitySystem);
@@ -606,7 +606,7 @@ class player extends BaseEntity {
         this.currentFogController = entitySystem.findEntityByTargetName(value) as env_fog_controller;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         const view = renderContext.currentView;
@@ -633,7 +633,7 @@ export class sky_camera extends BaseEntity {
     public static classname = `sky_camera`;
     public area: number = -1;
     public scale: number = 1;
-    public modelMatrix = mat4.create();
+    public override modelMatrix = mat4.create();
     private fogEnabled: boolean;
     private fogStart: number;
     private fogEnd: number;
@@ -736,7 +736,7 @@ abstract class BaseToggle extends BaseEntity {
             vec3.scale(this.angVelPerSecond, this.angVelPerSecond, 1.0 / this.moveTimeLeftInSeconds);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         const deltaTimeInSeconds = renderContext.globalDeltaTime;
@@ -782,7 +782,7 @@ class func_movelinear extends BaseToggle {
         this.registerInput('close', this.input_close.bind(this));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         angleVec(scratchVec3a, null, null, this.moveDir);
@@ -850,7 +850,7 @@ abstract class BaseDoor extends BaseToggle {
             this.goToTop(entitySystem);
     }
 
-    public use(entitySystem: EntitySystem): void {
+    public override use(entitySystem: EntitySystem): void {
         let allowUse = false;
 
         // TODO(jstpierre): SF_DOOR_NEW_USE_RULES
@@ -950,7 +950,7 @@ class func_door extends BaseDoor {
         this.lip = Number(fallbackUndefined(this.entity.lip, '0'));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         vec3.copy(this.positionOpened, this.localOrigin);
@@ -992,7 +992,7 @@ class func_door_rotating extends BaseDoor {
     protected anglesOpened = vec3.create();
     protected anglesClosed = vec3.create();
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         const enum SpawnFlags {
@@ -1077,7 +1077,7 @@ class func_rotating extends BaseEntity {
         this.output_ongetspeed.parse(this.entity.ongetspeed);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.friction = Math.max(Number(fallbackUndefined(this.entity.fanfriction, '0')), 1);
@@ -1111,7 +1111,7 @@ class func_rotating extends BaseEntity {
             this.toggle();
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.useAcceleration && this.targetSpeed !== this.speed) {
@@ -1206,7 +1206,7 @@ class func_rotating extends BaseEntity {
 class func_areaportalwindow extends BaseEntity {
     public static classname = `func_areaportalwindow`;
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         // We don't support areaportals yet, so just hide the replacement target entity.
@@ -1251,7 +1251,7 @@ class logic_auto extends BaseEntity {
         this.output_onMapSpawn.parse(this.entity.onmapspawn);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
         this.output_onMapSpawn.fire(entitySystem, this);
     }
@@ -1271,7 +1271,7 @@ class logic_relay extends BaseEntity {
         this.registerInput('trigger', this.input_trigger.bind(this));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
         this.output_onSpawn.fire(entitySystem, this);
     }
@@ -1447,7 +1447,7 @@ class logic_timer extends BaseEntity {
         this.fireTimer(entitySystem);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (!this.enabled)
@@ -1727,7 +1727,7 @@ class trigger_multiple extends BaseEntity {
         this.output_onEndTouchAll.fire(entitySystem, this);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         const aabb = this.getAABB();
@@ -1765,16 +1765,16 @@ class trigger_multiple extends BaseEntity {
 }
 
 class trigger_once extends trigger_multiple {
-    public static classname = `trigger_once`;
+    public static override classname = `trigger_once`;
 
-    protected activateTrigger(entitySystem: EntitySystem): void {
+    protected override activateTrigger(entitySystem: EntitySystem): void {
         super.activateTrigger(entitySystem);
         this.remove();
     }
 }
 
 class trigger_look extends trigger_once {
-    public static classname = `trigger_look`;
+    public static override classname = `trigger_look`;
 
     private fieldOfView: number = 0;
     private lookTimeAmount: number = 0;
@@ -1789,13 +1789,13 @@ class trigger_look extends trigger_once {
         this.lookTimeAmount = Number(this.entity.looktime);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.target = entitySystem.findEntityByTargetName(this.entity.target);
     }
 
-    protected multiStartTouch(entitySystem: EntitySystem): void {
+    protected override multiStartTouch(entitySystem: EntitySystem): void {
         // Do nothing.
     }
 
@@ -1803,7 +1803,7 @@ class trigger_look extends trigger_once {
         this.startLookTime = -1;
     }
 
-    protected onTouch(entitySystem: EntitySystem): void {
+    protected override onTouch(entitySystem: EntitySystem): void {
         super.onTouch(entitySystem);
 
         if (this.target === null)
@@ -1835,7 +1835,7 @@ class trigger_look extends trigger_once {
         }
     }
 
-    protected onEndTouch(entitySystem: EntitySystem): void {
+    protected override onEndTouch(entitySystem: EntitySystem): void {
         super.onEndTouch(entitySystem);
         this.reset();
     }
@@ -2002,7 +2002,7 @@ class material_modify_control extends BaseEntity {
         this.value = null;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.lerpValid) {
@@ -2040,7 +2040,7 @@ class info_overlay_accessor extends BaseEntity {
         this.materialParams = new EntityMaterialParameters();
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.needsMaterialInit !== null) {
@@ -2114,7 +2114,7 @@ class color_correction extends BaseEntity {
         renderContext.colorCorrection.setLayerWeight(this.layer, weight);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
         this.updateWeight(renderContext);
     }
@@ -2179,7 +2179,7 @@ abstract class BaseLight extends BaseEntity {
         this.isOn = true;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.style >= 32) {
@@ -2203,7 +2203,7 @@ class point_template extends BaseEntity {
 
     public templateEntities: BaseEntity[] = [];
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         for (let i = 1; i <= 16; i++) {
@@ -2384,7 +2384,7 @@ class env_steam extends BaseEntity {
         }
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.calcLightingRamp(entitySystem);
@@ -2445,7 +2445,7 @@ class env_steam extends BaseEntity {
         }
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         this.emit(renderContext);
@@ -2466,7 +2466,7 @@ class env_steam extends BaseEntity {
         colorLerp(dst, this.lightingRamp[i0], this.lightingRamp[i1], t);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (!this.shouldDraw())
             return;
 
@@ -2549,7 +2549,7 @@ class env_sprite extends BaseEntity {
         this.registerInput('colorbluevalue', this.input_colorbluevalue.bind(this));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         const sprite = assertExists(this.modelSprite);
@@ -2564,7 +2564,7 @@ class env_sprite extends BaseEntity {
         this.once = !!(spawnflags & SpawnFlags.Once);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         this.frame += this.framerate * renderContext.globalDeltaTime;
@@ -2615,11 +2615,11 @@ class env_sprite extends BaseEntity {
 
 // Alias
 class env_glow extends env_sprite {
-    public static classname = `env_glow`;
+    public static override classname = `env_glow`;
 }
 
 class env_sprite_clientside extends env_sprite {
-    public static classname = `env_sprite_clientside`;
+    public static override classname = `env_sprite_clientside`;
 }
 
 class env_tonemap_controller extends BaseEntity {
@@ -2738,7 +2738,7 @@ export class env_projectedtexture extends BaseEntity {
         this.projectedLightRenderer.light.texture = await materialCache.fetchVTF(textureName, true);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (!this.shouldDraw())
@@ -2747,7 +2747,7 @@ export class env_projectedtexture extends BaseEntity {
         this.updateFrustumView(renderContext);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.projectedLightRenderer.destroy(device);
     }
 
@@ -2787,7 +2787,7 @@ export class point_camera extends BaseEntity {
         calcFrustumViewProjection(frustumView, renderContext, this.fovY, aspect, this.nearZ, this.farZ);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (!this.shouldDraw())
@@ -2820,7 +2820,7 @@ class BaseMonitor extends BaseEntity {
         this.target = this.entity.target;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (!this.shouldDraw() || !this.checkFrustum(renderContext))

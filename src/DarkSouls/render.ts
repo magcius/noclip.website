@@ -302,7 +302,7 @@ uniform samplerCube u_TextureEnvDif;
 uniform samplerCube u_TextureEnvSpc;
 `;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 ${DKSProgram.BindingDefinitions}
@@ -317,7 +317,7 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = ${DKSProgram.a_Position})  in vec3 a_Position;
 layout(location = ${DKSProgram.a_Color})     in vec4 a_Color;
 layout(location = ${DKSProgram.a_TexCoord0}) in vec4 a_TexCoord0;

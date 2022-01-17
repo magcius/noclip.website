@@ -2004,14 +2004,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             currentAttachmentState.rgbBlendState.blendDstFactor !== newAttachmentState.rgbBlendState.blendDstFactor ||
             currentAttachmentState.alphaBlendState.blendDstFactor !== newAttachmentState.alphaBlendState.blendDstFactor
         );
-    
+
         if (blendFuncChanged || blendModeChanged) {
             if (isBlendStateNone(currentAttachmentState.rgbBlendState) && isBlendStateNone(currentAttachmentState.alphaBlendState))
                 gl.enable(gl.BLEND);
             else if (isBlendStateNone(newAttachmentState.rgbBlendState) && isBlendStateNone(newAttachmentState.alphaBlendState))
                 gl.disable(gl.BLEND);
         }
-    
+
         if (blendModeChanged) {
             gl.blendEquationSeparate(
                 newAttachmentState.rgbBlendState.blendMode,
@@ -2193,6 +2193,23 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;
+
+        if (window.debug === 1) {
+            gl.disable(gl.BLEND);
+            gl.blendEquation(gl.FUNC_ADD);
+            gl.blendFunc(gl.ONE, gl.ZERO);
+            gl.depthMask(true);
+            gl.colorMask(true, true, true, false);
+            gl.depthFunc(gl.ALWAYS);
+            gl.disable(gl.CULL_FACE);
+        } else if (window.debug === 2) {
+            // gl.disable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.colorMask(false, false, false, false);
+            gl.depthMask(false);
+            gl.frontFace(gl.CW);
+        }
+
         const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * assertExists(inputState.indexBufferCompByteSize);
         gl.drawElements(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset);
         this._debugGroupStatisticsDrawCall();

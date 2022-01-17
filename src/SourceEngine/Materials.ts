@@ -1131,7 +1131,7 @@ class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
 
     public static MaxDynamicWorldLights = 4;
 
-    public generateProgramString(variantSettings: Map<string, string>): string {
+    public override generateProgramString(variantSettings: Map<string, string>): string {
         return `
 precision mediump float;
 precision mediump sampler2DArray;
@@ -2009,7 +2009,7 @@ class Material_Generic extends BaseMaterial {
     private sortKeyBase: number = 0;
     private projectedLight: ProjectedLight | null = null;
 
-    public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
+    public override setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
         let wantsDynamicVertexLighting: boolean;
         let wantsDynamicPixelLighting: boolean;
 
@@ -2048,7 +2048,7 @@ class Material_Generic extends BaseMaterial {
             this.gfxProgram = null;
     }
 
-    protected initParameters(): void {
+    protected override initParameters(): void {
         super.initParameters();
 
         const p = this.param;
@@ -2120,7 +2120,7 @@ class Material_Generic extends BaseMaterial {
         }
     }
 
-    protected initStaticBeforeResourceFetch() {
+    protected override initStaticBeforeResourceFetch() {
         const shaderTypeStr = this.vmt._Root.toLowerCase();
         if (shaderTypeStr === 'lightmappedgeneric')
             this.shaderType = GenericShaderType.LightmappedGeneric;
@@ -2154,7 +2154,7 @@ class Material_Generic extends BaseMaterial {
             this.paramGetTexture('$envmap').ref = null;
     }
 
-    protected initStatic(materialCache: MaterialCache) {
+    protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Generic);
@@ -2353,7 +2353,7 @@ class Material_Generic extends BaseMaterial {
         }
     }
 
-    public calcProjectedLight(renderContext: SourceRenderContext, bbox: AABB): void {
+    public override calcProjectedLight(renderContext: SourceRenderContext, bbox: AABB): void {
         if (this.shaderType === GenericShaderType.UnlitGeneric)
             return;
 
@@ -2478,7 +2478,7 @@ class Material_Generic extends BaseMaterial {
 class ShaderTemplate_Modulate extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public program = `
+    public override program = `
 precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
@@ -2524,7 +2524,7 @@ class Material_Modulate extends BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
 
-    protected initParameters(): void {
+    protected override initParameters(): void {
         super.initParameters();
 
         const p = this.param;
@@ -2533,7 +2533,7 @@ class Material_Modulate extends BaseMaterial {
         p['$writez']                       = new ParameterBoolean(false, false);
     }
 
-    protected initStatic(materialCache: MaterialCache) {
+    protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Modulate);
@@ -2589,7 +2589,7 @@ class Material_Modulate extends BaseMaterial {
 class ShaderTemplate_UnlitTwoTexture extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public program = `
+    public override program = `
 precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
@@ -2639,7 +2639,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
 
-    protected initParameters(): void {
+    protected override initParameters(): void {
         super.initParameters();
 
         const p = this.param;
@@ -2651,7 +2651,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         // TODO(jstpierre): MonitorScreen tint/constrast/saturation.
     }
 
-    protected initStatic(materialCache: MaterialCache) {
+    protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.UnlitTwoTexture);
@@ -2699,7 +2699,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 class ShaderTemplate_Water extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public program = `
+    public override program = `
 precision mediump float;
 precision mediump sampler2DArray;
 
@@ -3031,7 +3031,7 @@ class Material_Water extends BaseMaterial {
     private wantsTexScroll = false;
     private wantsFlowmap = false;
 
-    protected initParameters(): void {
+    protected override initParameters(): void {
         super.initParameters();
 
         const p = this.param;
@@ -3087,7 +3087,7 @@ class Material_Water extends BaseMaterial {
         }
     }
 
-    protected initStatic(materialCache: MaterialCache) {
+    protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Water);
@@ -3221,7 +3221,7 @@ class Material_Water extends BaseMaterial {
 class ShaderTemplate_Refract extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public program = `
+    public override program = `
 precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
@@ -3384,7 +3384,7 @@ class Material_Refract extends BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
 
-    protected initParameters(): void {
+    protected override initParameters(): void {
         super.initParameters();
 
         const p = this.param;
@@ -3409,7 +3409,7 @@ class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$basetexture').ref = '_rt_RefractTexture';
     }
 
-    protected initStatic(materialCache: MaterialCache) {
+    protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Refract);
@@ -4876,7 +4876,7 @@ class MaterialProxy_MaterialModify {
 }
 
 class MaterialProxy_MaterialModifyAnimated extends MaterialProxy_AnimatedTexture {
-    public static type = 'materialmodifyanimated';
+    public static override type = 'materialmodifyanimated';
 }
 
 class MaterialProxy_WaterLOD {

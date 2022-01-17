@@ -25,7 +25,7 @@ import { GX_Program } from "../gx/gx_material";
 
 //#region Water
 export class WaterArea extends AreaObj {
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return "Water";
     }
 }
@@ -99,7 +99,7 @@ export class WaterAreaHolder extends NameObj {
         // TODO(jstpierre)
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         getCamPos(scratchVec3, viewerInput.camera);
@@ -133,7 +133,7 @@ export class WaterAreaHolder extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         WaterCameraFilter.requestArchives(sceneObjHolder);
     }
 }
@@ -281,7 +281,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
         if (isCameraInWater(sceneObjHolder)) {
@@ -292,7 +292,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterCameraFilterNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterCameraFilterNrv, deltaTimeFrames: number): void {
         if (currentNerve === WaterCameraFilterNrv.Air) {
             if (isCameraInWater(sceneObjHolder))
                 this.setNerve(WaterCameraFilterNrv.AirToWater);
@@ -326,7 +326,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         return this.getCurrentNerve() !== WaterCameraFilterNrv.Air;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!this.isOnWaterCameraFilter())
@@ -378,11 +378,11 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.filterTexture.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('WaterCameraFilter');
     }
 }
@@ -394,13 +394,13 @@ export class SwitchArea extends AreaObj {
     public turnOffSwitch: boolean;
     public needsPlayerOnGround: boolean;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.forwardSwitchB = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
         this.turnOffSwitch = getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), -1));
         this.needsPlayerOnGround = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         connectToSceneAreaObj(sceneObjHolder, this);
     }
 
@@ -417,7 +417,7 @@ export class SwitchArea extends AreaObj {
             return !this.switchCtrl.isOnSwitchA(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         if (!this.isUpdate(sceneObjHolder))
             return;
 
@@ -437,7 +437,7 @@ export class SwitchArea extends AreaObj {
         }
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return 'SwitchArea';
     }
 }
@@ -459,15 +459,15 @@ export function createSwitchCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder:
 export class HazeCube extends AreaObj {
     public depth: number;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.depth = fallback(getJMapInfoArg0(infoIter), 1000);
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.create(SceneObj.HeatHazeDirector);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         HeatHazeDirector.requestArchives(sceneObjHolder);
     }
 }
@@ -485,11 +485,11 @@ export function requestArchivesHazeCube(sceneObjHolder: SceneObjHolder, infoIter
 export class MercatorTransformCube extends AreaObj {
     public sphereRadius: number;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.sphereRadius = fallback(getJMapInfoArg0(infoIter), 3000.0);
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
     }
 }
 
@@ -500,16 +500,16 @@ export function createMercatorCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: S
 
 //#region DeathArea
 export class DeathArea extends AreaObj {
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         connectToSceneAreaObj(sceneObjHolder, this);
     }
 
-    public isInVolume(v: ReadonlyVec3) {
+    public override isInVolume(v: ReadonlyVec3) {
         // TODO(jstpierre): SwitchA
         return super.isInVolume(v);
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return 'DeathArea';
     }
 }

@@ -107,20 +107,20 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         super.calcAndSetBaseMtx(sceneObjHolder);
 
         const time = sceneObjHolder.viewerInput.time / 1000;
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.isSkybox)
             getCamPos(this.translation, sceneObjHolder.viewerInput.camera);
         super.calcAnim(sceneObjHolder);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NoclipLegacyActorNrv, deltaTimeFrames: number): void {
+    public override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NoclipLegacyActorNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (isFirstStep(this)) {

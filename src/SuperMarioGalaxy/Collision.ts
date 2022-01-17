@@ -69,7 +69,7 @@ export class HitInfo extends Triangle {
     public distance: number = -1;
     public classification: number = 0;
 
-    public copy(other: HitInfo): void {
+    public override copy(other: HitInfo): void {
         super.copy(other);
         vec3.copy(this.strikeLoc, other.strikeLoc);
         this.distance = other.distance;
@@ -776,7 +776,7 @@ export class CollisionDirector extends NameObj {
         connectToScene(sceneObjHolder, this, MovementType.CollisionDirector, -1, -1, -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         for (let i = 0; i < this.keepers.length; i++)

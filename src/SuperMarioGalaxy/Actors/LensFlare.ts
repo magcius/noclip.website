@@ -186,11 +186,11 @@ export class BrightObjBase {
 class LensFlareArea extends AreaObj {
     public flags: number;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.flags = fallback(getJMapInfoArg0(infoIter), -1);
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.create(SceneObj.LensFlareDirector);
     }
 }
@@ -255,16 +255,16 @@ abstract class LensFlareModel extends LiveActor<LensFlareModelNrv> {
             this.setNerve(LensFlareModelNrv.Hide);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.appearAnim(sceneObjHolder);
     }
 
-    public control(sceneObjHolder: SceneObjHolder): void {
+    public override control(sceneObjHolder: SceneObjHolder): void {
         this.controlAnim(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LensFlareModelNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LensFlareModelNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === LensFlareModelNrv.Show) {
@@ -341,7 +341,7 @@ class LensFlareRing extends LensFlareModel {
         setBckFrameAndStop(this, this.distFromCenter * endFrameBck);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('LensFlare');
     }
 }
@@ -362,7 +362,7 @@ class LensFlareGlow extends LensFlareModel {
         setBrkFrameAndStop(this, (1.0 - this.brightness * this.fade) * endFrame);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('GlareGlow');
     }
 }
@@ -382,7 +382,7 @@ class LensFlareLine extends LensFlareModel {
         setBrkFrameAndStop(this, (1.0 - this.brightness * this.fade) * endFrame);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('GlareLine');
     }
 }
@@ -447,7 +447,7 @@ export class LensFlareDirector extends NameObj {
         return false;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         const areaFlags = this.checkArea(sceneObjHolder);
         const hasBrightObj = this.checkBrightObj(!!areaFlags);
 
@@ -489,7 +489,7 @@ export class LensFlareDirector extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         LensFlareRing.requestArchives(sceneObjHolder);
         LensFlareGlow.requestArchives(sceneObjHolder);
         LensFlareLine.requestArchives(sceneObjHolder);

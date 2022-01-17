@@ -96,11 +96,11 @@ export class GfxRenderHelper extends GfxRenderHelperBase {
         });
     }
 
-    public getDebugTextDrawer(): TextDrawer | null {
+    public override getDebugTextDrawer(): TextDrawer | null {
         return this.debugTextDrawer.getValueOrStart();
     }
 
-    public destroy(): void {
+    public override destroy(): void {
         super.destroy();
         this.debugThumbnails.destroy();
     }

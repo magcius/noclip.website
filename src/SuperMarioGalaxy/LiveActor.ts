@@ -755,7 +755,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     // HACK(jstpierre): For not having proper culling that stops movement
     public initWaitPhase: number = 0;
 
-    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
+    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, name: string) {
         super(sceneObjHolder, name);
     }
 
@@ -822,7 +822,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // disconnectToDrawTemporarily
     }
 
-    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
         const newVisibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
         if (this.visibleScenario === newVisibleScenario)
             return;
@@ -872,7 +872,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelInstance.modelMatrix;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const modelCache = sceneObjHolder.modelCache;
 
         // By default, we request the object's name.
@@ -972,7 +972,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (!this.visibleAlive || !this.visibleScenario)
             return;
 
@@ -990,7 +990,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             setCollisionMtx(this, this.collisionParts);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
         if (this.modelInstance === null)
             return;
 
@@ -1066,7 +1066,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         // Don't do anything. All cleanup should have happened at offScenario time.
         if (!this.visibleScenario)
             return;
@@ -1176,7 +1176,7 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         if (this.pendingMessageType !== null) {

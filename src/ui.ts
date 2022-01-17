@@ -556,7 +556,7 @@ export class SingleSelect extends ScrollSelect {
             this.scrollItemIntoView(this.highlightedIndex);
     }
 
-    public setItems(items: ScrollSelectItem[]): void {
+    public override setItems(items: ScrollSelectItem[]): void {
         this.highlightedIndex = -1;
         super.setItems(items);
     }
@@ -988,7 +988,7 @@ class SceneSelect extends Panel {
         };
     }
 
-    protected onKeyDown(e: KeyboardEvent): void {
+    protected override onKeyDown(e: KeyboardEvent): void {
         if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
             this.sceneGroupList.elem.onkeydown!(e);
         } else {
@@ -1136,7 +1136,7 @@ class SceneSelect extends Panel {
         return `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, ${rightColor} ${pct})`;
     }
 
-    protected syncHeaderStyle() {
+    protected override syncHeaderStyle() {
         super.syncHeaderStyle();
 
         setElementHighlighted(this.header, !!this.expanded);
@@ -2476,7 +2476,7 @@ class PanelButton extends SingleIconButton {
         this.syncStyle();
     }
 
-    public setArea(area: BottomBarArea): void {
+    public override setArea(area: BottomBarArea): void {
         super.setArea(area);
         setAreaAnchor(this.panel, area);
     }
@@ -2496,7 +2496,7 @@ class PanelButton extends SingleIconButton {
         this.setIsOpen(false);
     }
 
-    public syncStyle(): void {
+    public override syncStyle(): void {
         super.syncStyle();
 
         if (this.isOpen) {
@@ -2585,7 +2585,7 @@ class FullscreenButton extends SingleIconButton {
         return document.fullscreenElement === document.body;
     }
 
-    public syncStyle() {
+    public override syncStyle() {
         super.syncStyle();
         setFontelloIcon(this.icon, this.isFS() ? FontelloIcon.resize_small : FontelloIcon.resize_full);
         this.tooltipElem.textContent = this.isFS() ? 'Unfullscreen' : 'Fullscreen';
@@ -2603,7 +2603,7 @@ class PlayPauseButton extends SingleIconButton {
     public onplaypause: ((shouldBePlaying: boolean) => void) | null = null;
     public isPlaying: boolean;
 
-    public syncStyle(): void {
+    public override syncStyle(): void {
         super.syncStyle();
         setFontelloIcon(this.icon, this.isPlaying ? FontelloIcon.pause : FontelloIcon.play);
         this.tooltipElem.textContent = this.isPlaying ? 'Pause' : 'Play';

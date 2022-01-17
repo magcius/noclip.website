@@ -54,9 +54,9 @@ layout(std140) uniform ub_PacketParams {
 uniform sampler2D u_Texture;
 `;
 
-    public both = NITRO_Program.both;
+    public override both = NITRO_Program.both;
 
-    public vert = `
+    public override vert = `
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
@@ -78,7 +78,7 @@ void main() {
     }
 }
 `;
-    public frag = `
+    public override frag = `
 precision mediump float;
 in vec4 v_Color;
 in vec2 v_TexCoord;

@@ -1,5 +1,5 @@
 
-import { getDeltaTimeFrames, ModelCache, SceneObj, SceneObjHolder } from "./Main";
+import { getDeltaTimeFrames, ModelCache, SceneObjHolder } from "./Main";
 import { NameObj } from "./NameObj";
 import { Spine } from "./Spine";
 import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane, LayoutTextbox } from "../Common/NW4R/lyt/Layout";
@@ -347,7 +347,7 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    public movement(sceneObjHolder: SceneObjHolder): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (!this.visibleAlive)
             return;
 
@@ -366,7 +366,7 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
             this.layoutManager.movement(sceneObjHolder);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.isStopCalcAnim || !this.visibleAlive || this.layoutManager === null)
             return;
 
@@ -401,12 +401,12 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.setAnimFrameAndStop(frameCtrl.endFrame, index);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         if (this.layoutManager !== null)
             this.layoutManager.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         GameSystemFontHolder.requestArchives(sceneObjHolder);
     }
 }

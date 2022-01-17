@@ -83,7 +83,7 @@ export class TriggerObj extends SFAClass {
         }
     };
 
-    public update(obj: ObjectInstance, updateCtx: ObjectUpdateContext) {
+    public override update(obj: ObjectInstance, updateCtx: ObjectUpdateContext) {
         if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {
             const currPoint = scratchVec0;
             // FIXME: The current point is not always the camera. It can also be the player character.

@@ -136,7 +136,7 @@ export class AreaAttributes extends Entity {
     public needSky: boolean = false;
     public overrideSky: CMDL | null = null;
 
-    public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
+    public override readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
         switch (propertyID) {
             case 0x95D4BEE7:
                 this.needSky = stream.readBool();

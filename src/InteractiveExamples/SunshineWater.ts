@@ -218,7 +218,7 @@ class SeaRenderer extends SunshineRenderer {
         return new OrbitCameraController(true);
     }
 
-    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+    protected override prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         this.sunshineWaterModel.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();

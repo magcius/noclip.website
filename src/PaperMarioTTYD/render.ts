@@ -38,7 +38,7 @@ export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
@@ -46,7 +46,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -59,7 +59,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -655,7 +655,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         return [renderHacksPanel];
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
 
         this.bufferCoalescer.destroy(device);

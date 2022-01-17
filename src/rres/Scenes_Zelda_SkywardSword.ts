@@ -133,7 +133,7 @@ const enum ZSSPass {
 }
 
 class ZSSTextureHolder extends RRESTextureHolder {
-    public findTextureEntryIndex(name: string): number {
+    public override findTextureEntryIndex(name: string): number {
         let i: number = -1;
 
         i = this.searchTextureEntryIndex(name);

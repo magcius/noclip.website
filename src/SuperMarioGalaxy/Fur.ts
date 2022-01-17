@@ -602,14 +602,14 @@ export class FurDrawManager extends NameObj {
         this.furCtrls.push(furCtrl);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         for (let i = 0; i < this.furCtrls.length; i++)
             this.furCtrls[i].drawFur(sceneObjHolder, renderInstManager, viewerInput);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         for (let i = 0; i < this.furBank.furMultis.length; i++)
             this.furBank.furMultis[i].destroy(device);
     }

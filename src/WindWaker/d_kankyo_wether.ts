@@ -2326,7 +2326,7 @@ export class d_thunder extends kankyo_class {
     private brkAnm = new mDoExt_brkAnm();
     private rotation: number = 0.0;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const modelData = globals.resCtrl.getObjectRes(ResType.Model, `Always`, 0x3E);
         this.model = new J3DModelInstance(modelData);
 
@@ -2360,7 +2360,7 @@ export class d_thunder extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         MtxTrans(this.pos, false);
         mDoMtx_ZrotM(calc_mtx, this.rotation);
         mDoMtx_XrotM(calc_mtx, this.rotation);
@@ -2372,7 +2372,7 @@ export class d_thunder extends kankyo_class {
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const hasStopped = this.brkAnm.play(deltaTimeInFrames);
         if (hasStopped) {
             fopKyM_Delete(globals.frameworkGlobals, this);

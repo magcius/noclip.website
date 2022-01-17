@@ -230,12 +230,12 @@ class MapSceneRenderer extends SFARenderer {
         this.map.setMatrix(matrix);
     }
 
-    protected update(viewerInput: Viewer.ViewerRenderInput) {
+    protected override update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
     }
 
-    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+    protected override addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 

@@ -48,7 +48,7 @@ class OceanBowlBloomDrawer extends NameObj {
         connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanBowlBloomDrawer);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this.bowl))
@@ -307,7 +307,7 @@ export class OceanBowl extends LiveActor {
         this.materialHelperBloom = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         // Every frame, we add -0.04 onto the counter.
         this.animationController.setTimeFromViewerInput(viewerInput);
         const time = this.animationController.getTimeInFrames();
@@ -326,7 +326,7 @@ export class OceanBowl extends LiveActor {
         this.tex2Trans[1] = (1.0 + time * -0.001) % 1.0;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -434,7 +434,7 @@ export class OceanBowl extends LiveActor {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.water.destroy(device);
         this.waterIndirect.destroy(device);
         this.mask.destroy(device);
@@ -445,7 +445,7 @@ export class OceanBowl extends LiveActor {
         device.destroyInputState(this.inputState);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
         WaterAreaHolder.requestArchives(sceneObjHolder);
     }

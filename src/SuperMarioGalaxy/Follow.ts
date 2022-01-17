@@ -116,7 +116,7 @@ export class BaseMatrixFollowTargetHolder extends NameObj {
         follower.followTarget = followTarget;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         for (let i = 0; i < this.followers.length; i++) {
