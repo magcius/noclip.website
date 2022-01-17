@@ -1218,6 +1218,8 @@ class GloverMeshRenderer {
     private frameCount: number = 0;
     public conveyorX: number = 0;
     public conveyorZ: number = 0;
+    public conveyorScaleX: number = 1;
+    public conveyorScaleZ: number = 1;
 
     // TODO: remove:
     private log: string[] = [];
@@ -1365,16 +1367,15 @@ class GloverMeshRenderer {
                 let dT = Math.max(Math.abs(v1.ty - v3.ty), Math.abs(v1.ty - v2.ty));
                 let dX = Math.max(Math.abs(v1.x - v3.x), Math.abs(v1.x - v2.x));
                 let dZ = Math.max(Math.abs(v1.z - v3.z), Math.abs(v1.z - v2.z));
-                // TODO:
-                // dX *= scale.x;
-                // dZ *= scale.z;
-                let shiftZ = 0;
+                dX *= this.conveyorScaleX;
+                dZ *= this.conveyorScaleZ;
+                let shiftZ = -dX;
                 if (dZ !== 0) {
-                    shiftZ = this.conveyorZ * dS/dZ;
+                    shiftZ = Math.floor(this.conveyorZ * dS/dZ);
                 }
-                let shiftX = 0;
+                let shiftX = -dZ;
                 if (dX !== 0) {
-                    shiftX = this.conveyorX * dT/dX;
+                    shiftX = Math.floor(this.conveyorX * dT/dX);
                 }
                 let x_overflow = false;
                 let z_overflow = false;

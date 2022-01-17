@@ -152,6 +152,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         this.scale[0] = x;
         this.scale[1] = y;
         this.scale[2] = z;
+        if (this.actor !== null) {
+            this.actor.rootMesh.renderer.conveyorScaleX = this.scale[0];
+            this.actor.rootMesh.renderer.conveyorScaleZ = this.scale[2];
+        }
     }
 
     public setConveyor(vel: vec3) {
@@ -159,6 +163,8 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         if (this.actor !== null) {
             this.actor.rootMesh.renderer.conveyorX = -this.conveyorVel[0];
             this.actor.rootMesh.renderer.conveyorZ = -this.conveyorVel[2];
+            this.actor.rootMesh.renderer.conveyorScaleX = this.scale[0];
+            this.actor.rootMesh.renderer.conveyorScaleZ = this.scale[2];
         }
     }
 
