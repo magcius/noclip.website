@@ -1649,7 +1649,11 @@ class mgameboard_seres {
             return status;
 
         if (this.decodeState === cPhs__Status.Started) {
-            ctx.ctx.decodeAudioData(globals.modelCache.getFileData(this.filename).arrayBuffer as ArrayBuffer).then((buffer) => {
+            // Unfortunately, because the WebAudio API, in its infinite wisdom, detaches the original audio buffer,
+            // we have to make a copy here. Amazing stuff.
+            // https://github.com/WebAudio/web-audio-api/issues/1175
+            const buffer = globals.modelCache.getFileData(this.filename).copyToBuffer();
+            ctx.ctx.decodeAudioData(buffer).then((buffer) => {
                 this.buffer = buffer;
                 this.decodeState = cPhs__Status.Complete;
             });
