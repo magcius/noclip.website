@@ -1126,15 +1126,17 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Powerup': {
-                    const actor = loadActor(powerup_objects[cmd.params.type]);
-                    const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
-                    mat4.fromRotationTranslationScale(actor.modelMatrix,
-                        identityRotation,
-                        pos,
-                        [0.4, 0.4, 0.4]);
-                    actor.shadowSize = 10;
-                    shadowCasters.push(actor); // TODO: set shadow size
-                    sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
+                    if (cmd.params.type != 7 && cmd.params.type != 9) {
+                        const actor = loadActor(powerup_objects[cmd.params.type]);
+                        const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
+                        mat4.fromRotationTranslationScale(actor.modelMatrix,
+                            identityRotation,
+                            pos,
+                            [0.4, 0.4, 0.4]);
+                        actor.shadowSize = 10;
+                        shadowCasters.push(actor);
+                        sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
+                    }
                     break;
                 }
                 case 'MrTip': {
