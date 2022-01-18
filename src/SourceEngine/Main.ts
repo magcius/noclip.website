@@ -602,8 +602,8 @@ export class SourceEngineView {
         const leaf = bsp.findLeafForPoint(this.cameraPos);
 
         const pvs = this.pvs;
-        const numclusters = bsp.visibility.numclusters;
-        if (leaf !== null && leaf.cluster !== 0xFFFF) {
+        const numclusters = bsp.visibility !== null ? bsp.visibility.numclusters : this.pvs.words.length;
+        if (bsp.visibility !== null && leaf !== null && leaf.cluster !== 0xFFFF) {
             const cluster = bsp.visibility.pvs[leaf.cluster];
             if (parentView !== null) {
                 for (let i = 0; i < numclusters; i++)

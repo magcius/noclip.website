@@ -826,7 +826,7 @@ export class BSPFile {
     public leafwaterdata: BSPLeafWaterData[] = [];
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
-    public visibility: BSPVisibility;
+    public visibility: BSPVisibility | null = null;
     public lightmapPacker = new LightmapPacker();
 
     public indexData: ArrayBuffer;
@@ -919,7 +919,9 @@ export class BSPFile {
         }
 
         // Parse out visibility.
-        this.visibility = new BSPVisibility(getLumpData(LumpType.VISIBILITY));
+        const visibilityData = getLumpData(LumpType.VISIBILITY);
+        if (visibilityData.byteLength > 0)
+            this.visibility = new BSPVisibility(visibilityData);
 
         // Parse out entities.
         this.entitiesStr = new TextDecoder('utf8').decode(getLumpData(LumpType.ENTITIES).createTypedArray(Uint8Array));
