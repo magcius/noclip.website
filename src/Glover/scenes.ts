@@ -1009,6 +1009,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (cmd.params.objectId == 0x7FDADB91) {
                         // special case exitpost.ndo
                         currentPlatform.setScale(1.5, 2.0, 1.5);
+                        currentPlatform.actor!.playSkeletalAnimation(0, true, false);
                     }
 
                     sceneRenderer.platforms.push(currentPlatform)
@@ -1159,6 +1160,7 @@ class SceneDesc implements Viewer.SceneDesc {
                             pos,
                             [0.4, 0.4, 0.4]);
                         actor.shadowSize = 10;
+                        actor.playSkeletalAnimation(0, true, false);
                         shadowCasters.push(actor);
                         sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
                     }

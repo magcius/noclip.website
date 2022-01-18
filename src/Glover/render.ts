@@ -688,15 +688,14 @@ interface ActorKeyframeSet {
     scale: number;
     rotation: number;
     translation: number;
-    time: number;
 }
 
 function keyframeLerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec3 {
-    let duration = (next.t - cur.t) * SRC_FRAME_TO_MS
+    let duration = next.t - cur.t
     if (duration == 0) {
         t = 1
     } else {
-        t = (t - (cur.t * SRC_FRAME_TO_MS)) / duration;
+        t = (t - cur.t) / duration;
     }
     return vec3.fromValues(
         cur.v1*(1-t) + next.v1*t,
@@ -706,11 +705,11 @@ function keyframeLerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.Affine
 }
 
 function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec4 {
-    let duration = (next.t - cur.t) * SRC_FRAME_TO_MS
+    let duration = next.t - cur.t
     if (duration == 0) {
         t = 1
     } else {
-        t = (t - (cur.t * SRC_FRAME_TO_MS)) / duration;
+        t = (t - cur.t) / duration;
     }
 
     let dot = ((cur.v1 * next.v1) +
@@ -751,7 +750,7 @@ class ActorMeshNode {
 
     public children: ActorMeshNode[] = [];
 
-    private keyframeState: ActorKeyframeSet = {scale: 0, rotation: 0, translation: 0, time: 0};
+    private keyframeState: ActorKeyframeSet = {scale: 0, rotation: 0, translation: 0};
 
     constructor(
         device: GfxDevice,
@@ -760,8 +759,7 @@ class ActorMeshNode {
         textures: Textures.GloverTextureHolder,
         sceneLights: SceneLighting,
         overlay: boolean,
-        public mesh: GloverObjbank.Mesh,
-        private maxAnimTime: number)
+        public mesh: GloverObjbank.Mesh)
     {
         if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
             this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, overlay, mesh);
@@ -772,7 +770,7 @@ class ActorMeshNode {
 
         let current_child = mesh.child;
         while (current_child !== undefined) {
-            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, current_child, this.maxAnimTime));
+            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, current_child));
             current_child = current_child.sibling;
         }
     }
@@ -791,52 +789,60 @@ class ActorMeshNode {
         }
     }
 
-    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, curAnimTime: number, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
         const drawMatrix = mat4.clone(parentMatrix);
 
-        const curTime = viewerInput.time % this.maxAnimTime;
         if (this.mesh.numRotation > 1 || this.mesh.numTranslation > 1 || this.mesh.numScale > 1) {
             
-            if (this.keyframeState.time > curTime) {
-                this.keyframeState.scale = 0;
-                this.keyframeState.rotation = 0;
-                this.keyframeState.translation = 0;
-            }
-            this.keyframeState.time = curTime;
-
             const nextKeyframes = {
                 scale: Math.min(this.keyframeState.scale + 1, this.mesh.numScale - 1),
                 translation: Math.min(this.keyframeState.translation + 1, this.mesh.numTranslation - 1),
                 rotation: Math.min(this.keyframeState.rotation + 1, this.mesh.numRotation - 1),
-                time: 0
             };
-            if (curTime >= this.mesh.scale[nextKeyframes.scale].t * SRC_FRAME_TO_MS) {
-                this.keyframeState.scale = nextKeyframes.scale;
-                nextKeyframes.scale = Math.min(nextKeyframes.scale + 1, this.mesh.numScale - 1);
+            while (!(curAnimTime >= this.mesh.scale[this.keyframeState.scale].t && curAnimTime <= this.mesh.scale[nextKeyframes.scale].t)) {
+                this.keyframeState.scale += 1;
+                if (this.keyframeState.scale >= this.mesh.numScale) {
+                    this.keyframeState.scale = 0;
+                }
+                nextKeyframes.scale = this.keyframeState.scale + 1;
+                if (nextKeyframes.scale >= this.mesh.numScale) {
+                    nextKeyframes.scale = this.keyframeState.scale;
+                }
             }
-            if (curTime >= this.mesh.translation[nextKeyframes.translation].t * SRC_FRAME_TO_MS) {
-                this.keyframeState.translation = nextKeyframes.translation;
-                nextKeyframes.translation = Math.min(nextKeyframes.translation + 1, this.mesh.numTranslation - 1);
+            while (!(curAnimTime >= this.mesh.translation[this.keyframeState.translation].t && curAnimTime <= this.mesh.translation[nextKeyframes.translation].t)) {
+                this.keyframeState.translation += 1;
+                if (this.keyframeState.translation >= this.mesh.numTranslation) {
+                    this.keyframeState.translation = 0;
+                }
+                nextKeyframes.translation = this.keyframeState.translation + 1;
+                if (nextKeyframes.translation >= this.mesh.numTranslation) {
+                    nextKeyframes.translation = this.keyframeState.translation;
+                }
             }
-            if (curTime >= this.mesh.rotation[nextKeyframes.rotation].t * SRC_FRAME_TO_MS) {
-                this.keyframeState.rotation = nextKeyframes.rotation;
-                nextKeyframes.rotation = Math.min(nextKeyframes.rotation + 1, this.mesh.numRotation - 1);
+            while (!(curAnimTime >= this.mesh.rotation[this.keyframeState.rotation].t && curAnimTime <= this.mesh.rotation[nextKeyframes.rotation].t)) {
+                this.keyframeState.rotation += 1;
+                if (this.keyframeState.rotation >= this.mesh.numRotation) {
+                    this.keyframeState.rotation = 0;
+                }
+                nextKeyframes.rotation = this.keyframeState.rotation + 1;
+                if (nextKeyframes.rotation >= this.mesh.numRotation) {
+                    nextKeyframes.rotation = this.keyframeState.rotation;
+                }
             }
-
             var scale = keyframeLerp(
                 this.mesh.scale[this.keyframeState.scale],
                 this.mesh.scale[nextKeyframes.scale],
-                curTime);
+                curAnimTime);
 
             var translation = keyframeLerp(
                 this.mesh.translation[this.keyframeState.translation],
                 this.mesh.translation[nextKeyframes.translation],
-                curTime);
+                curAnimTime);
 
             var rotation = keyframeSlerp(
                 this.mesh.rotation[this.keyframeState.rotation],
                 this.mesh.rotation[nextKeyframes.rotation],
-                curTime);
+                curAnimTime);
 
         } else {
             var rotation = vec4.fromValues(this.mesh.rotation[0].v1, this.mesh.rotation[0].v2, this.mesh.rotation[0].v3, this.mesh.rotation[0].v4);
@@ -853,7 +859,7 @@ class ActorMeshNode {
         mat4.mul(drawMatrix, drawMatrix, rotXlateMatrix);
 
         for (let child of this.children) {
-            child.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, scale);
+            child.prepareToRender(device, renderInstManager, viewerInput, curAnimTime, drawMatrix, scale);
         }
  
         mat4.scale(drawMatrix, drawMatrix, scale); 
@@ -874,13 +880,28 @@ class ActorMeshNode {
 
 }
 
+interface QueuedSkeletalAnimation {
+    anim: GloverObjbank.AnimationDefinition;
+    startPlaying: boolean;
+    playbackSpeed: number;
+}
+
 export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCaster {
 
+
+    private vec3Scratch: vec3 = vec3.create();
+
+    // General
+    
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     private inputState: GfxInputState;
 
     public rootMesh: ActorMeshNode;
+
+    // Render state
+
+    public modelMatrix: mat4 = mat4.create();
 
     public visible: boolean = true;
 
@@ -888,13 +909,17 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
     private showDebugInfo: boolean = false;
 
-    private vec3Scratch: vec3 = vec3.create();
-
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 1;
 
-    public modelMatrix: mat4 = mat4.create();
+    // Animation state
+    
+    public isPlaying: boolean = false;
 
+    private currentPlaybackSpeed: number = 0;
+    private currentAnim: GloverObjbank.AnimationDefinition | null = null;
+    private currentAnimTime: number = 0;
+    private animQueue: QueuedSkeletalAnimation[] = [];
 
     constructor(
         public device: GfxDevice,
@@ -916,28 +941,10 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-
-        let maxAnimTime = 0;
-        function findMaxT(node: GloverObjbank.Mesh): void {
-            maxAnimTime = Math.max(
-                maxAnimTime,
-                node.scale[node.numScale - 1].t * SRC_FRAME_TO_MS,
-                node.translation[node.numTranslation - 1].t * SRC_FRAME_TO_MS,
-                node.rotation[node.numRotation - 1].t * SRC_FRAME_TO_MS
-            );
-            if (node.child !== undefined) {
-                findMaxT(node.child);
-            }
-            if (node.sibling !== undefined) {
-                findMaxT(node.sibling);
-            }
-        }
-        findMaxT(this.actorObject.mesh)
-
         const overlay = (this.actorObject.mesh.renderMode & 0x80) != 0;
         const xlu = (this.actorObject.mesh.renderMode & 0x2) != 0;
 
-        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.mesh, maxAnimTime)
+        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.mesh)
 
         if (overlay) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OVERLAY);
@@ -945,6 +952,27 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.XLU);
         } else {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + GloverRendererLayer.OPAQUE);
+        }
+    }
+
+    public playSkeletalAnimation(animIdx: number, startPlaying: boolean, queue: boolean, playbackSpeed: number | null = null) {
+        const animDefs = this.actorObject.animation.animationDefinitions;
+        const animDef = (animIdx < animDefs.length) ? animDefs[animIdx] : animDefs[0];
+        if (playbackSpeed === null) {
+            playbackSpeed = animDef.playbackSpeed;
+        }
+        if (queue) {
+            this.animQueue.push({
+                anim: animDef,
+                startPlaying: startPlaying,
+                playbackSpeed: playbackSpeed
+            });
+        } else {
+            this.currentAnim = animDef;
+            this.currentPlaybackSpeed = playbackSpeed;
+            this.isPlaying = startPlaying;
+            this.currentAnimTime = (playbackSpeed >= 0) ? animDef.startTime : 
+                                                            animDef.endTime;
         }
     }
 
@@ -1029,6 +1057,21 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             return;
         }
 
+        if (this.currentAnim !== null) {
+            const reversePlay = this.currentPlaybackSpeed < 0;
+            this.currentAnimTime += (viewerInput.deltaTime / SRC_FRAME_TO_MS) * this.currentPlaybackSpeed;
+            if ((reversePlay && this.currentAnimTime < this.currentAnim.startTime) || 
+                (!reversePlay && this.currentAnimTime > this.currentAnim.endTime)) {
+                if (this.animQueue.length > 0) {
+                    const nextAnim = this.animQueue.shift();
+                    this.currentAnim = nextAnim!.anim;
+                    this.currentPlaybackSpeed = nextAnim!.playbackSpeed;
+                    this.isPlaying = nextAnim!.startPlaying;
+                }
+                this.currentAnimTime = reversePlay ? this.currentAnim.endTime : this.currentAnim.startTime;
+            }
+        }
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
@@ -1072,7 +1115,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);            
         }
 
-        this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
+        this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, this.currentAnimTime, this.modelMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }
