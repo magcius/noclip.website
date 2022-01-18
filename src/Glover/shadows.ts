@@ -38,6 +38,11 @@ export class Shadow {
 
     private static renderer: GloverShadowRenderer;
 
+    // TODO: track the object that the shadow was
+    //       cast onto. have a protocol such that
+    //       when said object changes its draw matrix,
+    //       it calls updatePosition() here
+
     constructor(private source: ShadowCaster, public terrain: Collidable[]) {
         this.source.shadow = this;
         this.updatePosition();

@@ -63,7 +63,7 @@ export class SceneLighting {
     public ambientColor: vec3 = vec3.fromValues(.5, .5, .5);
 };
 
-function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean, overlay: boolean, alpha: number): void {    
+function setRenderMode(rspState: GloverRSPState, decal: boolean, xlu: boolean, overlay: boolean, alpha: number): void {    
     // TODO: prehist 1 bridge still doesn't have right depth behavior
 
     assert(0 <= alpha && alpha <= 1);
@@ -81,14 +81,14 @@ function setRenderMode(rspState: GloverRSPState, textured: boolean, xlu: boolean
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, alpha * 255);
     } else {
         if (xlu) {
-            if (textured) {
+            if (decal) {
                 rspState.gDPSetCombine(0xFCFF97FF, 0xFFFCFE38); // gsDPSetCombineLERP(0, 0, 0, TEXEL0, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
             } else {
                 rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); // gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
             }
             rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
         } else {
-            if (textured) {
+            if (decal) {
                 rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // gsDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2));
                 rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
             } else {
@@ -1280,14 +1280,14 @@ class GloverMeshRenderer {
         const buffer = meshData._io.buffer;
         const rspState = new GloverRSPState(segments, textures);
         const xlu = (this.meshData.renderMode & 0x2) != 0;
-        const texturing = (this.meshData.renderMode & 0x4) != 0;
+        const decals = (this.meshData.renderMode & 0x4) != 0;
 
         this.id = meshData.id;
 
         initializeRenderState(rspState);
 
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        setRenderMode(rspState, texturing, xlu, overlay meshData.alpha/255);
+        setRenderMode(rspState, decals, xlu, overlay meshData.alpha/255);
 
         if ((this.meshData.renderMode & 0x8) == 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);

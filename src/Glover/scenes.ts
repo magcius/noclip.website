@@ -233,7 +233,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
         let curSpeed = vec3.length(this.velocity);
 
-        if (this.path.length > 0) {
+        if (this.path.length > 0 && !this.pathPaused) {
             const dstPt = this.path[this.pathCurPt].pos;
             const journeyVector = this.scratchVec3;
             vec3.sub(journeyVector, dstPt, this.position);
@@ -265,20 +265,17 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                 this.velocity[2] *= damping;
             }
 
-
-            if (!this.pathPaused) {
-                if (this.pathTimeLeft > 0) {
-                    this.pathTimeLeft -= deltaTime;
-                } else {
-                    if (distRemaining < curSpeed + 0.01) {
-                        this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
-                        this.pathTimeLeft = this.path[this.pathCurPt].duration;
-                        this.pathPaused = this.path[this.pathCurPt].duration < 0;
-                        vec3.copy(this.position, dstPt);
-                        vec3.zero(this.velocity);
-                        curSpeed = 0;
-                    }                
-                }
+            if (this.pathTimeLeft > 0) {
+                this.pathTimeLeft -= deltaTime;
+            } else {
+                if (distRemaining < curSpeed + 0.01) {
+                    this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
+                    this.pathTimeLeft = this.path[this.pathCurPt].duration;
+                    this.pathPaused = this.path[this.pathCurPt].duration < 0;
+                    vec3.copy(this.position, dstPt);
+                    vec3.zero(this.velocity);
+                    curSpeed = 0;
+                }                
             }
         }
 
