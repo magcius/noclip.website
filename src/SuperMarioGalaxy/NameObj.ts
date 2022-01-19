@@ -24,6 +24,7 @@ export const enum MovementType {
     ScreenEffect                   = 0x03,
     SensorHitChecker               = 0x05,
     MsgSharedGroup                 = 0x06,
+    TalkDirector                   = 0x01,
     DemoDirector                   = 0x0B,
     AreaObj                        = 0x0D,
     Layout                         = 0x0E,
@@ -133,7 +134,7 @@ export const enum DrawType {
     BloomModel                     = 0x36,
     BrightSun                      = 0x39,
     WaterCameraFilter              = 0x3A,
-
+    Layout                         = 0x3C,
     EffectDraw3D                   = 0x47,
     EffectDrawIndirect             = 0x48,
     EffectDrawAfterIndirect        = 0x49,
@@ -141,6 +142,7 @@ export const enum DrawType {
     EffectDrawFor2DModel           = 0x4B,
     EffectDrawForBloomEffect       = 0x4C,
     EffectDrawAfterImageEffect     = 0x4D,
+    TalkLayout                     = 0x4E,
 
     GravityExplainer               = 0x200,
 };

@@ -16,6 +16,7 @@ import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from ".
 import { isFirstStep } from "../Spine";
 import { GalaxyNameSortTable } from "./MiscActor";
 import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers";
+import { getLayoutMessageDirect } from "../MessageData";
 
 export class GalaxyMapBackground extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder) {
@@ -132,7 +133,7 @@ class GalaxyMapDomeIcon extends LayoutActor {
 
         this.namePlate = new GalaxyNamePlate(sceneObjHolder);
 
-        const namePlateText = sceneObjHolder.messageDataHolder!.getStringById(`ScenarioName_AstroDome${this.domeIndex}`)!;
+        const namePlateText = getLayoutMessageDirect(sceneObjHolder, `ScenarioName_AstroDome${this.domeIndex}`)!;
         this.namePlate.show(namePlateText, 2, false, true);
     }
 

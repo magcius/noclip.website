@@ -55,6 +55,8 @@ import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { TakoHeiInkHolder } from './Actors/Enemy';
 import { BaseMatrixFollowTargetHolder } from './Follow';
+import { MessageArea, TalkDirector } from './Talk';
+import { getLayoutMessageDirect, MessageHolder } from './MessageData';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -208,8 +210,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
             scenarioData.setRecord(scenarioIndex);
 
             let name: string | null = null;
-            if (name === null && this.sceneObjHolder.messageDataHolder !== null)
-                name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i}`);
+            if (name === null && this.sceneObjHolder.messageHolder !== null)
+                name = getLayoutMessageDirect(this.sceneObjHolder, `ScenarioName_${galaxyName}${i}`);
 
             if (name === null || name === '')
                 name = assertExists(scenarioData.getValueString(`ScenarioName`));
@@ -666,6 +668,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 // exceuteDrawList2DNormal()
                 this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
+                this.execute(passRenderer, DrawType.Layout);
             });
         });
 
@@ -919,6 +922,7 @@ class AreaObjContainer extends NameObj {
         this.managers.push(new AreaObjMgr<HazeCube>(sceneObjHolder, 'HazeCube'));
         this.managers.push(new AreaObjMgr<MercatorTransformCube>(sceneObjHolder, 'MercatorCube'));
         this.managers.push(new AreaObjMgr<DeathArea>(sceneObjHolder, 'DeathArea'));
+        this.managers.push(new AreaObjMgr<MessageArea>(sceneObjHolder, 'MessageArea'));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {
@@ -1080,7 +1084,7 @@ export class SceneObjHolder {
     public lightDirector: LightDirector;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
-    public messageDataHolder: MessageDataHolder | null = null;
+    public messageHolder: MessageHolder;
 
     public sensorHitChecker: SensorHitChecker | null = null;
     public collisionDirector: CollisionDirector | null = null;
@@ -1091,6 +1095,7 @@ export class SceneObjHolder {
     public sleepControllerHolder: SleepControllerHolder | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
     public liveActorGroupArray: LiveActorGroupArray | null = null;
+    public talkDirector: TalkDirector | null = null;
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
     public bloomEffectSimple: BloomEffectSimple | null = null;
@@ -1165,6 +1170,8 @@ export class SceneObjHolder {
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.LiveActorGroupArray)
             return this.liveActorGroupArray;
+        else if (sceneObj === SceneObj.TalkDirector)
+            return this.talkDirector;
         else if (sceneObj === SceneObj.ImageEffectSystemHolder)
             return this.imageEffectSystemHolder;
         else if (sceneObj === SceneObj.BloomEffect)
@@ -1249,6 +1256,8 @@ export class SceneObjHolder {
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.LiveActorGroupArray)
             this.liveActorGroupArray = new LiveActorGroupArray(this);
+        else if (sceneObj === SceneObj.TalkDirector)
+            this.talkDirector = new TalkDirector(this);
         else if (sceneObj === SceneObj.ImageEffectSystemHolder)
             this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
         else if (sceneObj === SceneObj.BloomEffect)
@@ -1317,6 +1326,7 @@ export class SceneObjHolder {
         ShadowControllerHolder.requestArchives(this);
         StarPieceDirector.requestArchives(this);
         CoinHolder.requestArchives(this);
+        TalkDirector.requestArchives(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1691,79 +1701,6 @@ class StageDataHolder {
     }
 }
 
-class BMG {
-    private inf1: ArrayBufferSlice;
-    private dat1: ArrayBufferSlice;
-    private numStrings: number;
-    private inf1ItemSize: number;
-
-    constructor(private mesgData: ArrayBufferSlice) {
-        const readerHelper = new JSystemFileReaderHelper(this.mesgData);
-        assert(readerHelper.magic === 'MESGbmg1');
-
-        this.inf1 = readerHelper.nextChunk('INF1');
-        this.dat1 = readerHelper.nextChunk('DAT1');
-
-        const view = this.inf1.createDataView();
-        this.numStrings = view.getUint16(0x08);
-        this.inf1ItemSize = view.getUint16(0x0A);
-    }
-
-    public getStringByIndex(i: number): string {
-        const inf1View = this.inf1.createDataView();
-        const dat1Offs = 0x08 + inf1View.getUint32(0x10 + (i * this.inf1ItemSize) + 0x00);
-
-        const view = this.dat1.createDataView();
-        let idx = dat1Offs;
-        let S = '';
-        while (true) {
-            const c = view.getUint16(idx + 0x00);
-            if (c === 0)
-                break;
-            if (c === 0x001A) {
-                // Escape sequence.
-                const size = view.getUint8(idx + 0x02);
-                const escapeKind = view.getUint8(idx + 0x03);
-
-                if (escapeKind === 0x05) {
-                    // Current character name -- 'Mario' or 'Luigi'. We use 'Mario'
-                    S += "Mario";
-                } else {
-                    console.warn(`Unknown escape kind ${escapeKind}`);
-                }
-
-                idx += size;
-            } else {
-                S += String.fromCharCode(c);
-                idx += 0x02;
-            }
-        }
-
-        return S;
-    }
-}
-
-class MessageDataHolder {
-    private mesg: BMG;
-    private messageIds: string[];
-
-    constructor(messageArc: RARC.JKRArchive) {
-        const messageIds = createCsvParser(messageArc.findFileData(`MessageId.tbl`)!);
-        this.messageIds = messageIds.mapRecords((iter) => {
-            return assertExists(iter.getValueString('MessageId'));
-        });
-
-        this.mesg = new BMG(messageArc.findFileData(`Message.bmg`)!);
-    }
-
-    public getStringById(id: string): string | null {
-        const index = this.messageIds.indexOf(id);
-        if (index < 0)
-            return null;
-        return this.mesg.getStringByIndex(index);
-    }
-}
-
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public id: string;
     public pathBase: string;
@@ -1839,12 +1776,10 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.lightDirector = new LightDirector(sceneObjHolder, lightDataHolder);
         sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
         sceneObjHolder.objNameTable = this.getObjNameTable(modelCache);
+        sceneObjHolder.messageHolder = new MessageHolder(sceneObjHolder);
 
         sceneObjHolder.create(SceneObj.EffectSystem);
         sceneObjHolder.create(SceneObj.StarPieceDirector);
-
-        if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
-            sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`)!);
 
         const spawner = new SMGSpawner(sceneObjHolder);
         sceneObjHolder.spawner = spawner;

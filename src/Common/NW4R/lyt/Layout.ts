@@ -19,8 +19,9 @@ import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";
 import { LoopMode } from "../../../rres/brres";
 import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
 import { TPL } from "../../../PaperMarioTTYD/tpl";
-import { CharWriter, ResFont } from "./Font";
+import { CharWriter, ResFont, TagProcessor } from "./Font";
 import { fillMatrix4x3 } from "../../../gfx/helpers/UniformBufferHelpers";
+import { drawWorldSpacePoint } from "../../../DebugJunk";
 
 //#region BRLYT
 interface RLYTSampler extends TEX1_SamplerSub {
@@ -1285,6 +1286,10 @@ export class LayoutPicture extends LayoutPane {
     }
 }
 
+interface LayoutTagProcessor extends TagProcessor {
+    configure(box: LayoutTextbox, layout: Layout): void;
+}
+
 export class LayoutTextbox extends LayoutPane {
     public maxLength: number;
     public materialIndex: number;
@@ -1300,6 +1305,7 @@ export class LayoutTextbox extends LayoutPane {
     public str: string;
 
     private font: ResFont | null = null;
+    public tagProcessor: LayoutTagProcessor | null = null;
 
     public override parse(rlyt: RLYTTextbox, layout: Layout): void {
         super.parse(rlyt, layout);
@@ -1365,9 +1371,15 @@ export class LayoutTextbox extends LayoutPane {
         if (this.font === null)
             return;
 
+        if (this.tagProcessor !== null)
+            this.tagProcessor.configure(this, layout);
+
         const charWriter = layout.charWriter;
         this.setCharWriterFont(charWriter);
-        charWriter.calcRect(dst, this.str);
+
+        vec3.set(charWriter.origin, 0, 0, 0);
+        vec3.copy(charWriter.cursor, charWriter.origin);
+        charWriter.calcRect(dst, this.str, this.tagProcessor);
     }
 
     protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
@@ -1384,10 +1396,9 @@ export class LayoutTextbox extends LayoutPane {
         const template = renderInstManager.pushTemplateRenderInst();
         this.setOnRenderInst(template);
 
-        const charWriter = layout.charWriter;
-        this.setCharWriterFont(charWriter);
-        charWriter.calcRect(scratchVec4, this.str);
+        this.getTextDrawRect(scratchVec4, layout);
 
+        const charWriter = layout.charWriter;
         colorMultAlpha(charWriter.colorT, this.colorT, alpha);
         colorMultAlpha(charWriter.colorB, this.colorB, alpha);
         colorCopy(charWriter.color0, material.colorRegisters[0]);
@@ -1398,8 +1409,9 @@ export class LayoutTextbox extends LayoutPane {
         const x0 = this.getBasePositionX() + (this.width  - w) * this.getTextPositionX();
         const y0 = this.getBasePositionY() - (this.height - h) * this.getTextPositionY();
 
-        vec3.set(charWriter.cursor, x0, y0, 0);
-        charWriter.drawString(renderInstManager, ddraw, this.str);
+        vec3.set(charWriter.origin, x0, y0, 0);
+        vec3.copy(charWriter.cursor, charWriter.origin);
+        charWriter.drawString(renderInstManager, ddraw, this.str, this.tagProcessor);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -1557,7 +1569,7 @@ export class LayoutWindow extends LayoutPane {
         const borderB = frameBR.getTextureHeight() - this.paddingB;
 
         const baseX = this.getBasePositionX() + borderL;
-        const baseY = this.getBasePositionY() + borderT;
+        const baseY = this.getBasePositionY() - borderT;
         const baseZ = 0.0;
 
         const width = this.width - borderL - borderR;
@@ -1565,7 +1577,7 @@ export class LayoutWindow extends LayoutPane {
 
         const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
         ddraw.begin(GX.Command.DRAW_QUADS, 1);
-        drawQuad(ddraw, baseX, baseY, baseZ, width, height, vertexColors, alpha, this.texCoords);
+        drawQuad(ddraw, baseX, baseY, baseZ, width, -height, vertexColors, alpha, this.texCoords);
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);

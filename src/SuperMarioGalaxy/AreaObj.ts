@@ -191,7 +191,7 @@ export class AreaObj extends NameObj {
     public isValid: boolean = true;
     public isAwake: boolean = true;
 
-    constructor(private zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
+    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
         super(sceneObjHolder, getObjectName(infoIter));
 
         if (formType === AreaFormType.CenterOriginCube)

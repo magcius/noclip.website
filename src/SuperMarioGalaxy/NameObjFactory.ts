@@ -18,6 +18,7 @@ import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
 import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
+import { createMessageAreaCube, createMessageAreaCylinder } from './Talk';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -839,6 +840,9 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("ClipAreaSphere",               createClipAreaSphere,    requestArchivesClipAreaSphere, GameBits.SMG1),
     _("ClipAreaDropLaser",            ClipAreaDropLaser),
 
+    E("MessageAreaCube",              createMessageAreaCube),
+    E("MessageAreaCylinder",          createMessageAreaCylinder),
+
     N("WaterArea"),
     N("SwitchArea"),
     N("CameraArea"),
@@ -849,8 +853,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("DeathArea"),
     N("PostFogArea"),
     N("MessageArea"),
-    N("MessageAreaCube"),
-    N("MessageAreaCylinder"),
     N("AudioEffectCube"),
     N("AudioEffectCylinder"),
     N("AudioEffectSphere"),

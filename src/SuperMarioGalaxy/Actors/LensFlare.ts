@@ -45,13 +45,13 @@ const scratchVec3c = vec3.create();
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();
 
-export function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
+function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
     vec4.set(dst, v[0], v[1], v[2], 1.0);
     vec4.transformMat4(dst, dst, viewerInput.camera.clipFromWorldMatrix);
     divideByW(dst, dst);
 }
 
-export function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
+function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
     dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
     dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
 }

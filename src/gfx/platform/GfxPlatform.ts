@@ -290,8 +290,8 @@ export const enum GfxViewportOrigin {
 }
 
 export const enum GfxClipSpaceNearZ {
-    NegativeOne,
-    Zero,
+    NegativeOne = -1.0,
+    Zero = 0.0,
 }
 
 export interface GfxVendorInfo {
