@@ -1190,9 +1190,8 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
 
         // Try to find existing texture data.
         const textureData = btiTexture.data;
-        if (textureData) {
+        if (textureData)
             textureDataIndex = textureDatas.findIndex((tex) => tex.data && tex.data.byteOffset === textureData.byteOffset);
-        }
 
         if (textureDataIndex < 0) {
             const textureData: TEX1_TextureData = {
@@ -1202,8 +1201,8 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
                 format: btiTexture.format,
                 mipCount: btiTexture.mipCount,
                 data: btiTexture.data,
-                paletteFormat: btiTexture.paletteFormat!,
-                paletteData: btiTexture.paletteData!,
+                paletteFormat: btiTexture.paletteFormat,
+                paletteData: btiTexture.paletteData,
             };
             textureDatas.push(textureData);
             textureDataIndex = textureDatas.length - 1;
