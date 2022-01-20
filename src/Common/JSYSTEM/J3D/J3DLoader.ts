@@ -788,14 +788,14 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         }
         */
 
-       const textureIndexes = [];
-       for (let j = 0; j < 8; j++) {
-           const textureTableIndex = view.getUint16(materialEntryIdx + 0x84 + j * 0x02);
-           if (textureTableIndex !== 0xFFFF)
-               textureIndexes.push(view.getUint16(textureTableOffs + textureTableIndex * 0x02));
-           else
-               textureIndexes.push(-1);
-       }
+        const textureIndexes = [];
+        for (let j = 0; j < 8; j++) {
+            const textureTableIndex = view.getUint16(materialEntryIdx + 0x84 + j * 0x02);
+            if (textureTableIndex !== 0xFFFF)
+                textureIndexes.push(view.getUint16(textureTableOffs + textureTableIndex * 0x02));
+            else
+                textureIndexes.push(-1);
+        }
 
         const colorConstants: Color[] = [];
         for (let j = 0; j < 4; j++) {
