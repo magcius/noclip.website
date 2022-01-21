@@ -35,7 +35,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
-import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle } from './framesets';
+import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './framesets';
 
 
 import { KaitaiStream } from 'kaitai-struct';
@@ -59,7 +59,6 @@ const powerup_objects = [
     0xFA9272E0, // boomer.ndo
     0xAB3EA4DB, // vanish.ndo
 ];
-
 
 class PlatformPathPoint {
     constructor(public pos: vec3, public duration: number) {}
@@ -926,7 +925,6 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw `Object 0x${id.toString(16)} is not loaded!`;
             }
             let new_actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, sceneRenderer.sceneLights);
-            sceneRenderer.actors.push(new_actor)
             return new_actor;
         }
 
@@ -941,6 +939,7 @@ class SceneDesc implements Viewer.SceneDesc {
             switch (cmd.params.__type) {
                 case 'Water': {
                     currentActor = loadActor(cmd.params.objectId);
+                    sceneRenderer.actors.push(currentActor)
                     currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     currentActor.setRenderMode(0x20, 0x20);
@@ -950,6 +949,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 case 'BackgroundActor0xbc':
                 case 'BackgroundActor0x91': {
                     currentActor = loadActor(cmd.params.objectId);
+                    sceneRenderer.actors.push(currentActor)
                     currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     break;
@@ -973,6 +973,21 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active actor for ${cmd.params.__type}!`;
                     }
                     mat4.scale(currentActor.modelMatrix, currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    break;
+                }
+                case 'SetObjectSparkle': {
+                    let sparkleActor: GloverActorRenderer | null = null;
+                    if (currentObject instanceof GloverPlatform) {
+                        if (currentObject.actor !== null) {
+                            sparkleActor = currentObject.actor;
+                        }
+                    } else if (currentObject instanceof GloverActorRenderer){
+                        sparkleActor = currentObject;
+                    }
+                    if (sparkleActor !== null) {
+                        sceneRenderer.miscParticleEmitters.push(new MeshSparkle(
+                            device, cache, textureHolder, sparkleActor, cmd.params.period));
+                    }
                     break;
                 }
                 case 'FogConfiguration': {
@@ -1002,6 +1017,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 case 'Platform': {
                     currentPlatform = new GloverPlatform(loadActor(cmd.params.objectId));
+                    sceneRenderer.actors.push(currentPlatform.actor!)
+
                     currentObject = currentPlatform;
                     if (cmd.params.objectId == 0x7FDADB91) {
                         // special case exitpost.ndo
@@ -1151,6 +1168,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 case 'Powerup': {
                     if (cmd.params.type != 7 && cmd.params.type != 9) {
                         const actor = loadActor(powerup_objects[cmd.params.type]);
+                        sceneRenderer.actors.push(actor)
                         const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
                         mat4.fromRotationTranslationScale(actor.modelMatrix,
                             identityRotation,

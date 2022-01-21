@@ -943,6 +943,25 @@ var GloverLevel = (function() {
     return EndLevelData;
   })();
 
+  var SetObjectSparkle = GloverLevel.SetObjectSparkle = (function() {
+    function SetObjectSparkle(_io, _parent, _root) {
+      this.__type = 'SetObjectSparkle';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    SetObjectSparkle.prototype._read = function() {
+      this._debug.period = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.period = this._io.readU2be();
+      this._debug.period.end = this._io.pos;
+    }
+
+    return SetObjectSparkle;
+  })();
+
   var PlatFan0x8a = GloverLevel.PlatFan0x8a = (function() {
     function PlatFan0x8a(_io, _parent, _root) {
       this.__type = 'PlatFan0x8a';
@@ -2171,7 +2190,7 @@ var GloverLevel = (function() {
         this.params = new PlatSpecial0xb9(this._io, this, this._root);
         break;
       case 180:
-        this.params = new PlatSpecial0xb4(this._io, this, this._root);
+        this.params = new SetObjectSparkle(this._io, this, this._root);
         break;
       case 156:
         this.params = new EnemyAttackInstruction(this._io, this, this._root);
@@ -3977,25 +3996,6 @@ var GloverLevel = (function() {
     }
 
     return Platform;
-  })();
-
-  var PlatSpecial0xb4 = GloverLevel.PlatSpecial0xb4 = (function() {
-    function PlatSpecial0xb4(_io, _parent, _root) {
-      this.__type = 'PlatSpecial0xb4';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatSpecial0xb4.prototype._read = function() {
-      this._debug.u80x23 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u80x23 = this._io.readU2be();
-      this._debug.u80x23.end = this._io.pos;
-    }
-
-    return PlatSpecial0xb4;
   })();
 
   var PlatPos0xa7 = GloverLevel.PlatPos0xa7 = (function() {

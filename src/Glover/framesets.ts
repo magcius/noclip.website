@@ -10,7 +10,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { Color, colorNewFromRGBA } from "../Color";
 
-import { GenericRenderable, GloverFlipbookRenderer } from './render';
+import { GenericRenderable, GloverFlipbookRenderer, GloverActorRenderer } from './render';
 
 const identityRotation: quat = quat.create();
 
@@ -225,9 +225,16 @@ export var particleFlipbooks: Flipbook[] = [
         startSize: 0x70,
         endSize: 0x70,
         flags: 0x10000,
+        // frameDelay: 0x10,
+        // type: 0x2,
+        // startAlpha: 0xff,
+        // endAlpha: 0xff,
+        // startSize: 0x40,
+        // endSize: 0x40,
+        // flags: 0x10000,
     },
     {
-        frameset: framesets["fardus"],
+        frameset: framesets["fardus.4"],
         frameDelay: 0x0,
         type: 0x2,
         startAlpha: 0xff,
@@ -682,4 +689,61 @@ export function spawnExitParticle(particles: ParticlePool, origin: vec3 | number
     particle.flipbook.endSize *= scale;
     particle.flipbook.setPrimColor(color[0], color[1], color[2]);
     return particle;
+}
+
+export class MeshSparkle implements GenericRenderable {
+    private particles: ParticlePool;
+
+    private lastFrameAdvance: number = 0;
+    private frameCount: number = 0;
+
+    private static velocity = [0,0,0];
+
+    private static positionScratch1 = vec3.create();
+    private static positionScratch2 = vec3.create();
+
+    private geo: GloverObjbank.Geometry;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private actor: GloverActorRenderer, private period: number) {
+        this.geo = actor.rootMesh.mesh.geometry;
+        this.particles = new ParticlePool(device, cache, textureHolder, 10);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.particles.destroy(device);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            this.lastFrameAdvance = 0;
+            this.frameCount += 1;
+
+            if (this.frameCount >= this.period) {
+                this.frameCount = 0;
+                const face = this.geo.faces[Math.floor(Math.random()*this.geo.numFaces)];
+                const vertRnd = Math.floor(Math.random()*3);
+                const vertIdx = vertRnd == 0 ? face.v0 : vertRnd == 1 ? face.v1 : face.v2;
+                const vert = this.geo.vertices[vertIdx];
+                
+                const origin = MeshSparkle.positionScratch1;
+                const lookat = MeshSparkle.positionScratch2;
+                vec3.set(origin, vert.x, vert.y, vert.z);
+                vec3.transformMat4(origin, origin, this.actor.modelMatrix)
+
+                mat4.getTranslation(lookat, viewerInput.camera.worldMatrix);
+                vec3.sub(lookat, origin, lookat);
+                vec3.normalize(lookat, lookat);
+                vec3.scaleAndAdd(origin, origin, lookat, -6);
+
+                const particle = this.particles.spawn(origin, MeshSparkle.velocity);
+                particle.setLifetime(-1);
+                // TODO: particle->flipbookFrameDuration = 0; ???
+            }
+
+        }
+
+        this.particles.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
 }
