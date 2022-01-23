@@ -474,7 +474,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _readbackFramebuffer: WebGLFramebuffer;
 
     private _fallbackTexture2D: WebGLTexture;
-    private _fallbackTexture2DDepth: WebGLTexture;
+    private _fallbackTexture2DDepth: WebGLTexture | undefined = undefined;
     private _fallbackTexture2DArray: WebGLTexture;
     private _fallbackTexture3D: WebGLTexture;
     private _fallbackTextureCube: WebGLTexture;
@@ -527,7 +527,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._readbackFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
 
         this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
-        this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
+        // this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
@@ -552,7 +552,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): WebGLTexture {
         const depth = dimension === GfxTextureDimension.Cube ? 6 : 1;
-        const pixelFormat = formatKind === GfxSamplerFormatKind.Depth ? GfxFormat.D24 : GfxFormat.U8_RGBA_NORM;
+        const pixelFormat = formatKind === GfxSamplerFormatKind.Depth ? GfxFormat.D32F : GfxFormat.U8_RGBA_NORM;
         const texture = this.createTexture({
             dimension, pixelFormat, usage: GfxTextureUsage.Sampled,
             width: 1, height: 1, depth, numLevels: 1,
@@ -1840,8 +1840,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _getFallbackTexture(samplerEntry: GfxBindingLayoutSamplerDescriptorP_GL): WebGLTexture {
         const gl = this.gl;
         const gl_target = samplerEntry.gl_target, formatKind = samplerEntry.formatKind;
-        if (gl_target === gl.TEXTURE_2D)
-            return formatKind === GfxSamplerFormatKind.Depth ? this._fallbackTexture2DDepth : this._fallbackTexture2D;
+        if (gl_target === gl.TEXTURE_2D && formatKind === GfxSamplerFormatKind.Depth)
+            return this._fallbackTexture2DDepth!;
+        else if (gl_target === gl.TEXTURE_2D)
+            return this._fallbackTexture2D;
         else if (gl_target === gl.TEXTURE_2D_ARRAY)
             return this._fallbackTexture2DArray;
         else if (gl_target === gl.TEXTURE_3D)
@@ -1907,8 +1909,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     // Validate sampler entry.
 
                     // TODO(webgpu): Turn this on at some point in the future when we've ported all of the code over.
-                    // assert(samplerEntry.gl_target === gl_target);
-                    // assert(samplerEntry.formatKind === formatKind);
+                    assert(samplerEntry.gl_target === gl_target);
+                    assert(samplerEntry.formatKind === formatKind);
                 } else {
                     gl.bindTexture(samplerEntry.gl_target, this._getFallbackTexture(samplerEntry));
                 }

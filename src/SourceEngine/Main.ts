@@ -1480,6 +1480,11 @@ export class SourceRenderer implements SceneGfx {
         this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
     }
 
+    private resetTextureMappings(): void {
+        for (let i = 0; i < this.textureMapping.length; i++)
+            this.textureMapping[i].reset();
+    }
+
     public setLateBindingTexture(binding: LateBindingTexture, texture: GfxTexture, sampler: GfxSampler): void {
         const m = assertExists(this.textureMapping[this.bindingMapping.indexOf(binding)]);
         m.gfxTexture = texture;
@@ -1759,6 +1764,8 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
+                this.resetTextureMappings();
+        
                 renderInst.setGfxProgram(bloomDownsampleProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
@@ -1810,8 +1817,7 @@ export class SourceRenderer implements SceneGfx {
         const staticResources = renderContext.materialCache.staticResources;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        for (let i = 0; i < this.textureMapping.length; i++)
-            this.textureMapping[i].reset();
+        this.resetTextureMappings();
 
         this.prepareToRender(viewerInput);
 
