@@ -35,6 +35,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
+import { radianModulo, subtractAngles, axisRotationToQuaternion } from './util';
 import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './framesets';
 
 
@@ -70,6 +71,7 @@ class PlatformPathPoint {
 
 export class GloverPlatform implements Shadows.ShadowCaster {
 
+    private scratchQuat = quat.create();
     private scratchMatrix = mat4.create();
     private scratchVec3 = vec3.create();
 
@@ -86,6 +88,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     // Spin
 
     private spinSpeed = vec3.fromValues(0,0,0);
+    private spinEnabled = [false, false, false];
+    private rockingDeceleration = 0.0;
+    private lastRockingAdvance: number = 0;
 
     // General actor state
 
@@ -167,22 +172,69 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         }
     }
 
-    public setNeutralSpin(axis: number, initial_theta: number, speed: number) {
-        this.eulers[axis] = initial_theta * 180 / Math.PI;
-        this.spinSpeed[axis] = -speed;
+    public setConstantSpin(axis: number, initial_theta: number, speed: number) {
+        this.eulers[axis] = initial_theta;
+        this.spinSpeed[axis] = -speed / SRC_FRAME_TO_MS;
+        this.rockingDeceleration = 0.0;
+        this.spinEnabled[axis] = true;
     }
+
+    public setRocking(axis: number, max_theta: number, decel_factor: number) {
+        this.eulers[axis] = max_theta;
+        this.spinSpeed[axis] = 0;
+        this.rockingDeceleration = decel_factor;
+        this.spinEnabled[axis] = true;
+    }
+
+    public advanceRocking(deltaTime: number) {
+        // TODO: this is unstable and diverges over time:
+        if (this.rockingDeceleration > 0) {
+            this.lastRockingAdvance += deltaTime;
+            for (let axis = 0; axis < 3; axis += 1) {
+                if (!this.spinEnabled[axis]) {
+                    continue;
+                }
+                if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
+                    this.spinSpeed[axis] -= subtractAngles(this.eulers[axis], Math.PI/2) / this.rockingDeceleration;
+                    if (Math.abs(this.spinSpeed[axis]) <= .0005) {
+                        this.spinSpeed[axis] = 0.0;
+                    }
+                    this.eulers[axis] += this.spinSpeed[axis] / SRC_FRAME_TO_MS;
+                    this.eulers[axis] = radianModulo(this.eulers[axis]);
+                }
+            }
+            if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
+                this.lastRockingAdvance = 0;
+            }
+        }
+    }    
 
     public updateActorModelMatrix() {
         if (this.actor === null) {
             return;
         }
-        quat.fromEuler(this.rotation, this.eulers[0], this.eulers[1], this.eulers[2]);
+
+        // In-game algorithm, rather than quat.fromEuler:
+        // quat.identity(this.rotation);
+        // quat.mul(this.rotation, this.rotation, axisRotationToQuaternion([0,1,0], this.eulers[1]));
+        // quat.mul(this.rotation, this.rotation, axisRotationToQuaternion([0,0,1], this.eulers[2]));
+        // quat.mul(this.rotation, this.rotation, axisRotationToQuaternion([1,0,0], this.eulers[0]));
+
+        quat.fromEuler(this.rotation, this.eulers[0] * 180 / Math.PI, this.eulers[1] * 180 / Math.PI, this.eulers[2] * 180 / Math.PI);
+
         let finalPosition = this.position;
+        let finalRotation = this.rotation;
         if (this.parent !== undefined) {
+            this.parent.updateActorModelMatrix();
+
+            finalRotation = this.scratchQuat;
+            quat.mul(finalRotation, this.parent.rotation, this.rotation);
+            
             finalPosition = this.scratchVec3
-            vec3.add(finalPosition, this.position, this.parent.position);
+            vec3.transformQuat(finalPosition, this.position, this.parent.rotation);
+            vec3.add(finalPosition, finalPosition, this.parent.position);
         }
-        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.rotation, finalPosition, this.scale);
+        mat4.fromRotationTranslationScale(this.actor.modelMatrix, finalRotation, finalPosition, this.scale);
     }
 
     public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
@@ -278,15 +330,20 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             }
         }
 
+
         // TODO: add deceleration
         vec3.add(this.position, this.position, this.velocity);
 
-        this.eulers[0] += this.spinSpeed[0] * deltaTime;
-        this.eulers[1] += this.spinSpeed[1] * deltaTime;
-        this.eulers[2] += this.spinSpeed[2] * deltaTime;
-        this.eulers[0] = this.eulers[0] % 360;
-        this.eulers[1] = this.eulers[1] % 360;
-        this.eulers[2] = this.eulers[2] % 360;
+        if (this.rockingDeceleration > 0.0) {
+            this.advanceRocking(deltaTime);
+        } else {
+            this.eulers[0] += this.spinSpeed[0] * deltaTime;
+            this.eulers[1] += this.spinSpeed[1] * deltaTime;
+            this.eulers[2] += this.spinSpeed[2] * deltaTime;
+            this.eulers[0] = radianModulo(this.eulers[0]);
+            this.eulers[1] = radianModulo(this.eulers[1]);
+            this.eulers[2] = radianModulo(this.eulers[2]);
+        }
 
         this.updateActorModelMatrix()
     }
@@ -1042,12 +1099,22 @@ class SceneDesc implements Viewer.SceneDesc {
                     currentPlatform.setPosition(cmd.params.x, cmd.params.y, cmd.params.z);
                     break;
                 }
-                case 'PlatSpin0x7f': {
+                case 'PlatConstantSpin': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
-                    // TODO: account for frame rate difference?
-                    currentPlatform.setNeutralSpin(cmd.params.axis, cmd.params.initialTheta, cmd.params.speed);
+                    currentPlatform.setConstantSpin(cmd.params.axis, cmd.params.initialTheta, cmd.params.speed);
+                    break;
+                }
+                case 'PlatRocking': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setRocking(cmd.params.axis, cmd.params.theta, cmd.params.deceleration);
+                    // TODO: blur
+                    for (let i = 0; i < cmd.params.frameAdvance; i++) {
+                        currentPlatform.advanceRocking(SRC_FRAME_TO_MS);
+                    }
                     break;
                 }
                 case 'PlatScale': {
@@ -1112,7 +1179,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     for (let i = 0; i < cmd.params.numFrames / CONVERT_FRAMERATE; i++) {
-                        currentPlatform.advanceFrame(DST_FRAME_TO_MS);
+                        currentPlatform.advanceFrame(SRC_FRAME_TO_MS);
                     }
                     break;
                 }

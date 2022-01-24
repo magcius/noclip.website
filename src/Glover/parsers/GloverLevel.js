@@ -858,6 +858,31 @@ var GloverLevel = (function() {
     return Cameo;
   })();
 
+  var PlatConstantSpin = GloverLevel.PlatConstantSpin = (function() {
+    function PlatConstantSpin(_io, _parent, _root) {
+      this.__type = 'PlatConstantSpin';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatConstantSpin.prototype._read = function() {
+      this._debug.axis = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.axis = this._io.readU2be();
+      this._debug.axis.end = this._io.pos;
+      this._debug.initialTheta = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.initialTheta = this._io.readF4be();
+      this._debug.initialTheta.end = this._io.pos;
+      this._debug.speed = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.speed = this._io.readF4be();
+      this._debug.speed.end = this._io.pos;
+    }
+
+    return PlatConstantSpin;
+  })();
+
   var PlatSpinFlip0x7d = GloverLevel.PlatSpinFlip0x7d = (function() {
     function PlatSpinFlip0x7d(_io, _parent, _root) {
       this.__type = 'PlatSpinFlip0x7d';
@@ -1002,37 +1027,6 @@ var GloverLevel = (function() {
     return PlatFan0x8a;
   })();
 
-  var PlatSpinBlur0x70 = GloverLevel.PlatSpinBlur0x70 = (function() {
-    function PlatSpinBlur0x70(_io, _parent, _root) {
-      this.__type = 'PlatSpinBlur0x70';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatSpinBlur0x70.prototype._read = function() {
-      this._debug.idx = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.idx = this._io.readU2be();
-      this._debug.idx.end = this._io.pos;
-      this._debug.u320x38 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x38 = this._io.readU4be();
-      this._debug.u320x38.end = this._io.pos;
-      this._debug.u320x18 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x18 = this._io.readU4be();
-      this._debug.u320x18.end = this._io.pos;
-      this._debug.fBlur0x578 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.fBlur0x578 = this._io.readF4be();
-      this._debug.fBlur0x578.end = this._io.pos;
-      this._debug.count = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.count = this._io.readU2be();
-      this._debug.count.end = this._io.pos;
-    }
-
-    return PlatSpinBlur0x70;
-  })();
-
   var PlatSpinSound0xc5 = GloverLevel.PlatSpinSound0xc5 = (function() {
     function PlatSpinSound0xc5(_io, _parent, _root) {
       this.__type = 'PlatSpinSound0xc5';
@@ -1090,31 +1084,6 @@ var GloverLevel = (function() {
     }
 
     return PuzzleCondC;
-  })();
-
-  var PlatSpin0x7f = GloverLevel.PlatSpin0x7f = (function() {
-    function PlatSpin0x7f(_io, _parent, _root) {
-      this.__type = 'PlatSpin0x7f';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatSpin0x7f.prototype._read = function() {
-      this._debug.axis = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.axis = this._io.readU2be();
-      this._debug.axis.end = this._io.pos;
-      this._debug.initialTheta = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.initialTheta = this._io.readF4be();
-      this._debug.initialTheta.end = this._io.pos;
-      this._debug.speed = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.speed = this._io.readF4be();
-      this._debug.speed.end = this._io.pos;
-    }
-
-    return PlatSpin0x7f;
   })();
 
   var PuzzleAction0x4a = GloverLevel.PuzzleAction0x4a = (function() {
@@ -2049,7 +2018,7 @@ var GloverLevel = (function() {
         this.params = new PlatSpecial0x8e(this._io, this, this._root);
         break;
       case 112:
-        this.params = new PlatSpinBlur0x70(this._io, this, this._root);
+        this.params = new PlatRocking(this._io, this, this._root);
         break;
       case 163:
         this.params = new VentAppend0xa3(this._io, this, this._root);
@@ -2118,7 +2087,7 @@ var GloverLevel = (function() {
         this.params = new PlatSine(this._io, this, this._root);
         break;
       case 127:
-        this.params = new PlatSpin0x7f(this._io, this, this._root);
+        this.params = new PlatConstantSpin(this._io, this, this._root);
         break;
       case 100:
         this.params = new PlatCheckpoint(this._io, this, this._root);
@@ -3493,6 +3462,37 @@ var GloverLevel = (function() {
     }
 
     return PlatSpin0x80;
+  })();
+
+  var PlatRocking = GloverLevel.PlatRocking = (function() {
+    function PlatRocking(_io, _parent, _root) {
+      this.__type = 'PlatRocking';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatRocking.prototype._read = function() {
+      this._debug.axis = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.axis = this._io.readU2be();
+      this._debug.axis.end = this._io.pos;
+      this._debug.theta = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.theta = this._io.readF4be();
+      this._debug.theta.end = this._io.pos;
+      this._debug.deceleration = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.deceleration = this._io.readF4be();
+      this._debug.deceleration.end = this._io.pos;
+      this._debug.fBlur0x578 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.fBlur0x578 = this._io.readF4be();
+      this._debug.fBlur0x578.end = this._io.pos;
+      this._debug.frameAdvance = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.frameAdvance = this._io.readU2be();
+      this._debug.frameAdvance.end = this._io.pos;
+    }
+
+    return PlatRocking;
   })();
 
   var Plat0x7e = GloverLevel.Plat0x7e = (function() {
