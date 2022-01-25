@@ -639,6 +639,8 @@ export class Particle {
 export class ParticlePool implements GenericRenderable {
     private particles: Particle[] = [];
 
+    public visible: boolean = true;
+
     constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private particleType: number) {
     }
 
@@ -659,6 +661,9 @@ export class ParticlePool implements GenericRenderable {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
         for (let particle of this.particles) {
             if (particle.active) {
                 particle.prepareToRender(device, renderInstManager, viewerInput);
@@ -704,6 +709,8 @@ export class MeshSparkle implements GenericRenderable {
 
     private geo: GloverObjbank.Geometry;
 
+    public visible: boolean = true;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private actor: GloverActorRenderer, private period: number) {
         this.geo = actor.rootMesh.mesh.geometry;
         this.particles = new ParticlePool(device, cache, textureHolder, 10);
@@ -743,6 +750,9 @@ export class MeshSparkle implements GenericRenderable {
 
         }
 
+        if (!this.visible) {
+            return;
+        }
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
     }
 

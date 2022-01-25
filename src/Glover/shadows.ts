@@ -17,6 +17,7 @@ export interface ShadowCaster {
     getPosition: () => vec3;
     shadowSize: number | ConstantShadowSize;
     shadow: Shadow | null;
+    visible: boolean;
 }
 
 export interface Collision {
@@ -37,6 +38,8 @@ export class Shadow {
     private static ray: vec3 = vec3.fromValues(0, -1, 0);
 
     private static renderer: GloverShadowRenderer;
+
+    public visible: boolean = true;
 
     // TODO: track the object that the shadow was
     //       cast onto. have a protocol such that
@@ -83,6 +86,10 @@ export class Shadow {
         if (Shadow.renderer === undefined || this.position === null) {
             return;
         }        
+
+        if (!this.visible) {
+            return;
+        }
 
         let scaleVal = 1/3;
         if (this.source.shadowSize instanceof ConstantShadowSize) {

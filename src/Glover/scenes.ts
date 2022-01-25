@@ -92,6 +92,8 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private rockingDeceleration = 0.0;
     private lastRockingAdvance: number = 0;
 
+    public copySpinFromParent = false;
+
     // General actor state
 
     private eulers = vec3.fromValues(0,0,0);
@@ -101,6 +103,20 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private scale = vec3.fromValues(1,1,1);
 
     public parent: GloverPlatform | undefined = undefined;
+
+    public get visible(): boolean {
+        if (this.actor === null) {
+            return false;
+        } else {
+            return this.actor.visible;
+        }
+    }
+
+    public set visible(val: boolean) {
+        if (this.actor !== null) {
+            this.actor.visible = val;
+        }
+    }
 
     // Path
     // TODO: use time deltas instead of frames for this
@@ -227,8 +243,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         if (this.parent !== undefined) {
             this.parent.updateActorModelMatrix();
 
-            finalRotation = this.scratchQuat;
-            quat.mul(finalRotation, this.parent.rotation, this.rotation);
+            if (this.copySpinFromParent) {
+                finalRotation = this.scratchQuat;
+                quat.mul(finalRotation, this.parent.rotation, this.rotation);
+            }
             
             finalPosition = this.scratchVec3
             vec3.transformQuat(finalPosition, this.position, this.parent.rotation);
@@ -362,6 +380,8 @@ export class CollectibleSparkle implements GenericRenderable {
 
     static private velocity = [0,0,0];
 
+    public visible: boolean = true;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private type: CollectibleSparkleType) {
         this.particles = new ParticlePool(device, cache, textureHolder, 6);
     }
@@ -390,6 +410,10 @@ export class CollectibleSparkle implements GenericRenderable {
             particle.setLifetime(10);
         }
 
+        if (!this.visible) {
+            return;
+        }
+
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
     }
 
@@ -416,6 +440,8 @@ export class GloverMrTip implements Shadows.ShadowCaster {
     private particles: ParticlePool;
 
     private drawMatrix: mat4 = mat4.create();
+
+    public visible: boolean = true;
 
     private static primColor = {r: 1, g: 1, b: 1, a: 0.94};
 
@@ -470,8 +496,12 @@ export class GloverMrTip implements Shadows.ShadowCaster {
         vec3.add(finalPosition, this.position, [0,Math.sin((this.yOffset + viewerInput.time)/300)*4+10,0]);
 
         mat4.fromRotationTranslationScale(this.drawMatrix, identityRotation, finalPosition, this.scale);
-        this.mainBillboard.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, this.curFrame, GloverMrTip.primColor);
 
+        if (!this.visible) {
+            return;
+        }
+
+        this.mainBillboard.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, this.curFrame, GloverMrTip.primColor);
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
     }
 }
@@ -495,6 +525,8 @@ class GloverRenderer implements Viewer.SceneGfx {
     public renderPassDescriptor = standardFullClearRenderPassDescriptor; 
 
     private initTime: number;
+
+    private originalVisibility = new Map<Object, boolean>();
 
     constructor(device: GfxDevice, public textureHolder: GloverTextureHolder) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -553,12 +585,43 @@ class GloverRenderer implements Viewer.SceneGfx {
         const showHiddenCheckbox = new UI.Checkbox('Show hidden objects', false);
         showHiddenCheckbox.onchanged = () => {
             // TODO: make uncheck hide
-            for (let platform of this.platforms) {
-                if (platform.actor !== null) {
-                    platform.actor.visible = true;
+            if (showHiddenCheckbox.checked === true) {
+                for (let platform of this.platforms) {
+                    if (platform.actor !== null) {
+                        this.originalVisibility.set(platform.actor, platform.actor.visible);
+                        platform.actor.visible = true;
+                    }
+                }
+                for (let renderer of this.flipbooks) {
+                    this.originalVisibility.set(renderer, renderer.visible);
+                    renderer.visible = true;
+                }
+                for (let renderer of this.shadows) {
+                    this.originalVisibility.set(renderer, renderer.visible);
+                    renderer.visible = true;
+                }
+                for (let renderer of this.miscParticleEmitters) {
+                    this.originalVisibility.set(renderer, renderer.visible);
+                    renderer.visible = true;
+                }
+            } else {
+                for (let platform of this.platforms) {
+                    if (platform.actor !== null) {
+                        platform.actor.visible = this.originalVisibility.get(platform.actor)!;
+                    }
+                }
+                for (let renderer of this.flipbooks) {
+                    renderer.visible = this.originalVisibility.get(renderer)!;
+                }
+                for (let renderer of this.shadows) {
+                    renderer.visible = this.originalVisibility.get(renderer)!;
+                }
+                for (let renderer of this.miscParticleEmitters) {
+                    renderer.visible = this.originalVisibility.get(renderer)!;
                 }
             }
         };
+
         renderHacksPanel.contents.appendChild(showHiddenCheckbox.elem);
 
         const enableDebugInfoCheckbox = new UI.Checkbox('Show debug information', false);
@@ -975,6 +1038,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let currentActor: GloverActorRenderer | null = null; 
         let currentPlatform: GloverPlatform | null = null; 
         let currentObject: GloverActorRenderer | GloverPlatform | null = null;
+        let currentGaribState: number = 0;
 
         function loadActor(id : number) : GloverActorRenderer {
             const objRoot = loadedObjects.get(id);
@@ -1193,6 +1257,13 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     break;
                 }
+                case 'PlatCopySpinFromParent': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.copySpinFromParent = true;
+                    break;
+                }
                 case 'PlatformConveyor': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
@@ -1215,6 +1286,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     break;
                 }
+                case 'GaribGroup': {
+                    currentGaribState = cmd.params.initialState;
+                    break;
+                }
                 case 'Garib': {
                     const flipbookMetadata = collectibleFlipbooks[cmd.params.type];
                     if (flipbookMetadata === undefined) {
@@ -1225,10 +1300,16 @@ class SceneDesc implements Viewer.SceneDesc {
                     const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
                     mat4.fromTranslation(flipbook.drawMatrix, pos);
                     sceneRenderer.flipbooks.push(flipbook);
-                    shadowCasters.push(flipbook);
+                    if (!cmd.params.dynamicShadow) {
+                        // TODO: handle dynamic shadow flag properly
+                        shadowCasters.push(flipbook);
+                    }
+                    flipbook.visible = (currentGaribState !== 0);
                     if (cmd.params.type == 2) {
                         // Extra lives are sparkly
-                        sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife));
+                        const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife);
+                        sceneRenderer.miscParticleEmitters.push(emitter);
+                        emitter.visible = (currentGaribState !== 0);
                     }
                     break;
                 }
@@ -1285,7 +1366,9 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const shadowTerrain = sceneRenderer.actors; // TODO: figure out actual list
         for (let shadowCaster of shadowCasters) {
-            sceneRenderer.shadows.push(new Shadows.Shadow(shadowCaster, shadowTerrain));
+            const shadow = new Shadows.Shadow(shadowCaster, shadowTerrain);
+            sceneRenderer.shadows.push(shadow);
+            shadow.visible = shadowCaster.visible;
         }
 
         sceneRenderer.renderPassDescriptor = makeAttachmentClearDescriptor(

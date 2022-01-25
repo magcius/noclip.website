@@ -1149,6 +1149,22 @@ var GloverLevel = (function() {
     return PlatSetTag;
   })();
 
+  var PlatCopySpinFromParent = GloverLevel.PlatCopySpinFromParent = (function() {
+    function PlatCopySpinFromParent(_io, _parent, _root) {
+      this.__type = 'PlatCopySpinFromParent';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatCopySpinFromParent.prototype._read = function() {
+    }
+
+    return PlatCopySpinFromParent;
+  })();
+
   var Enemy0xa1 = GloverLevel.Enemy0xa1 = (function() {
     function Enemy0xa1(_io, _parent, _root) {
       this.__type = 'Enemy0xa1';
@@ -2177,7 +2193,7 @@ var GloverLevel = (function() {
         this.params = new Backdrop(this._io, this, this._root);
         break;
       case 123:
-        this.params = new PlatSpin0x7b(this._io, this, this._root);
+        this.params = new PlatCopySpinFromParent(this._io, this, this._root);
         break;
       case 160:
         this.params = new Water(this._io, this, this._root);
@@ -2961,22 +2977,6 @@ var GloverLevel = (function() {
     return Plat0xa4;
   })();
 
-  var PlatSpin0x7b = GloverLevel.PlatSpin0x7b = (function() {
-    function PlatSpin0x7b(_io, _parent, _root) {
-      this.__type = 'PlatSpin0x7b';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatSpin0x7b.prototype._read = function() {
-    }
-
-    return PlatSpin0x7b;
-  })();
-
   var PlatSpecial0xb6 = GloverLevel.PlatSpecial0xb6 = (function() {
     function PlatSpecial0xb6(_io, _parent, _root) {
       this.__type = 'PlatSpecial0xb6';
@@ -3075,9 +3075,9 @@ var GloverLevel = (function() {
       this._debug.type = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.type = this._io.readU2be();
       this._debug.type.end = this._io.pos;
-      this._debug.u80x0f = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u80x0f = this._io.readU2be();
-      this._debug.u80x0f.end = this._io.pos;
+      this._debug.dynamicShadow = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.dynamicShadow = this._io.readU2be();
+      this._debug.dynamicShadow.end = this._io.pos;
     }
 
     return Garib;
@@ -3094,12 +3094,12 @@ var GloverLevel = (function() {
       this._read();
     }
     GaribGroup.prototype._read = function() {
-      this._debug.u160xd2 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u160xd2 = this._io.readU2be();
-      this._debug.u160xd2.end = this._io.pos;
-      this._debug.u80xd1 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u80xd1 = this._io.readU2be();
-      this._debug.u80xd1.end = this._io.pos;
+      this._debug.puzzleIdentifier0xd2 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.puzzleIdentifier0xd2 = this._io.readU2be();
+      this._debug.puzzleIdentifier0xd2.end = this._io.pos;
+      this._debug.initialState = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.initialState = this._io.readS2be();
+      this._debug.initialState.end = this._io.pos;
     }
 
     return GaribGroup;

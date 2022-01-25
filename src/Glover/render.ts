@@ -55,6 +55,7 @@ const G_TX_NOLOD = 0
 export interface GenericRenderable {
     destroy: (device: GfxDevice) => void;
     prepareToRender: (device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void;
+    visible: boolean;
 }
 
 export class SceneLighting {
@@ -1856,6 +1857,8 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 8;
 
+    public visible: boolean = true;
+
     public drawMatrix: mat4 = mat4.create();
 
     private drawMatrixScratch: mat4 = mat4.create();
@@ -1990,7 +1993,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
             }
         }
 
-        if (this.playing) {
+        if (this.visible) {
             mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size, size, size]);
             this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, this.curFrame, this.primColor);
         }
