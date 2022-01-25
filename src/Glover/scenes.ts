@@ -203,7 +203,6 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 
     public advanceRocking(deltaTime: number) {
-        // TODO: this is unstable and diverges over time:
         if (this.rockingDeceleration > 0) {
             this.lastRockingAdvance += deltaTime;
             for (let axis = 0; axis < 3; axis += 1) {
@@ -211,16 +210,16 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                     continue;
                 }
                 if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
-                    this.spinSpeed[axis] -= subtractAngles(this.eulers[axis], Math.PI/2) / this.rockingDeceleration;
+                    this.spinSpeed[axis] -= subtractAngles(this.eulers[axis], 0) / this.rockingDeceleration;
+                    this.eulers[axis] += this.spinSpeed[axis];
+                    this.eulers[axis] = radianModulo(this.eulers[axis]);
                     if (Math.abs(this.spinSpeed[axis]) <= .0005) {
                         this.spinSpeed[axis] = 0.0;
                     }
-                    this.eulers[axis] += this.spinSpeed[axis] / SRC_FRAME_TO_MS;
-                    this.eulers[axis] = radianModulo(this.eulers[axis]);
                 }
             }
             if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
-                this.lastRockingAdvance = 0;
+                this.lastRockingAdvance -= SRC_FRAME_TO_MS;
             }
         }
     }    
@@ -230,12 +229,11 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             return;
         }
 
-        // In-game algorithm, rather than quat.fromEuler:
+        // // In-game algorithm, rather than quat.fromEuler:
         // quat.identity(this.rotation);
-        // quat.mul(this.rotation, this.rotation, axisRotationToQuaternion([0,1,0], this.eulers[1]));
-        // quat.mul(this.rotation, this.rotation, axisRotationToQuaternion([0,0,1], this.eulers[2]));
-        // quat.mul(this.rotation, this.rotation, axisRotationToQuaternion([1,0,0], this.eulers[0]));
-
+        // quat.mul(this.rotation, axisRotationToQuaternion([0,1,0], this.eulers[1]), this.rotation);
+        // quat.mul(this.rotation, axisRotationToQuaternion([0,0,1], Math.PI + this.eulers[0]), this.rotation);
+        // quat.mul(this.rotation, axisRotationToQuaternion([1,0,0], this.eulers[2]), this.rotation);
         quat.fromEuler(this.rotation, this.eulers[0] * 180 / Math.PI, this.eulers[1] * 180 / Math.PI, this.eulers[2] * 180 / Math.PI);
 
         let finalPosition = this.position;

@@ -1,9 +1,11 @@
 export function subtractAngles(a: number, b: number): number {
     let diff = a - b;
-    if (a <= Math.PI) {
-        return diff + 2*Math.PI;
-    } else if (diff > Math.PI) {
-        return diff - 2*Math.PI;
+    if (a <= -Math.PI || Math.PI < diff) {
+        if (diff <= Math.PI) {
+            return a - b + 2*Math.PI;
+        } else {
+            return a - b - 2*Math.PI;
+        }
     } else {
         return diff;
     }
@@ -13,11 +15,10 @@ export function radianModulo(theta: number): number {
     if (theta > 2*Math.PI) {
         theta -=  2*Math.PI;
     }
-    if (theta >= 0) {
-        return theta;
-    } else {
-        return theta + 2*Math.PI;
+    if (theta < 0) {
+        theta += 2*Math.PI;
     }
+    return theta;
 }
 
 export function axisRotationToQuaternion(axis: [number, number, number], theta: number): [number, number, number, number] {
