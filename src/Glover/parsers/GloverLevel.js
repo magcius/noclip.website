@@ -1461,37 +1461,6 @@ var GloverLevel = (function() {
     return SetExit;
   })();
 
-  var PlatOrbit0x75 = GloverLevel.PlatOrbit0x75 = (function() {
-    function PlatOrbit0x75(_io, _parent, _root) {
-      this.__type = 'PlatOrbit0x75';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    PlatOrbit0x75.prototype._read = function() {
-      this._debug.idx = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.idx = this._io.readU2be();
-      this._debug.idx.end = this._io.pos;
-      this._debug.u320x18 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x18 = this._io.readU4be();
-      this._debug.u320x18.end = this._io.pos;
-      this._debug.u320x1c = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x1c = this._io.readU4be();
-      this._debug.u320x1c.end = this._io.pos;
-      this._debug.u320x20 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x20 = this._io.readU4be();
-      this._debug.u320x20.end = this._io.pos;
-      this._debug.u320x28 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x28 = this._io.readU4be();
-      this._debug.u320x28.end = this._io.pos;
-    }
-
-    return PlatOrbit0x75;
-  })();
-
   var PlatSound0xc1 = GloverLevel.PlatSound0xc1 = (function() {
     function PlatSound0xc1(_io, _parent, _root) {
       this.__type = 'PlatSound0xc1';
@@ -2217,7 +2186,7 @@ var GloverLevel = (function() {
         this.params = new PlatSpecial0x9e(this._io, this, this._root);
         break;
       case 117:
-        this.params = new PlatOrbit0x75(this._io, this, this._root);
+        this.params = new PlatOrbitAroundPoint(this._io, this, this._root);
         break;
       case 152:
         this.params = new AmbientLight(this._io, this, this._root);
@@ -4127,6 +4096,37 @@ var GloverLevel = (function() {
     }
 
     return PuzzleAction0x350x3b0x3c0x3d0x3e0x3f0x40;
+  })();
+
+  var PlatOrbitAroundPoint = GloverLevel.PlatOrbitAroundPoint = (function() {
+    function PlatOrbitAroundPoint(_io, _parent, _root) {
+      this.__type = 'PlatOrbitAroundPoint';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    PlatOrbitAroundPoint.prototype._read = function() {
+      this._debug.axis = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.axis = this._io.readU2be();
+      this._debug.axis.end = this._io.pos;
+      this._debug.x = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.x = this._io.readF4be();
+      this._debug.x.end = this._io.pos;
+      this._debug.y = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.y = this._io.readF4be();
+      this._debug.y.end = this._io.pos;
+      this._debug.z = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.z = this._io.readF4be();
+      this._debug.z.end = this._io.pos;
+      this._debug.speed = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.speed = this._io.readF4be();
+      this._debug.speed.end = this._io.pos;
+    }
+
+    return PlatOrbitAroundPoint;
   })();
 
   var PuzzleCondB = GloverLevel.PuzzleCondB = (function() {

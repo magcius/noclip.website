@@ -1509,181 +1509,43 @@ class GloverMeshRenderer {
 
 }
 
-export class GloverBackdropRenderer {
-    static projectionMatrix = mat4.create();
+const scratchProjectionMatrix = mat4.create();
 
-    private rspOutput: GloverRSPOutput | null;
+interface SpriteRect {
+    sX: number;
+    sY: number;
+    sW: number;
+    sH: number;
+    ulS: number;
+    ulT: number;
+    lrS: number;
+    lrT: number;
+};
 
-    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+class GloverBaseSpriteRenderer {
+    protected drawCall: DrawCall;
+    protected textureCache: RDP.TextureCache;
 
-    private inputState: GfxInputState;
-
-    private drawMatrix = mat4.create();
-
-    private backdropWidth: number = 0; 
-    private backdropHeight: number = 0; 
-
-    public sortKey: number;
-    public textureId: number;
-
-    constructor(
-        private device: GfxDevice,
-        private cache: GfxRenderCache,
-        private textures: Textures.GloverTextureHolder,
-        private backdropObject: GloverLevel.Backdrop,
-        private primitiveColor: number[])
-    {
-        /* Object bank in first segment, then one
-           texture bank for each subsequent */
-        const segments = textures.textureSegments();
-
-        this.sortKey = backdropObject.sortKey;
-        this.textureId = backdropObject.textureId;
-
-        this.megaStateFlags = {};
-
-        const texFile = this.textures.idToTexture.get(this.textureId);
-        if (texFile === undefined) {
-            throw `Texture 0x${this.textureId.toString(16)} not loaded`;
-        }
-
-        setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
-        const rspState = new GloverRSPState(segments, textures);
-
-        initializeRenderState(rspState);
-        setRenderMode(rspState, true, false, false, 1.0);
-
-        rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
-        rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
-        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
-        rspState.gDPSetPrimColor(0, 0, primitiveColor[0], primitiveColor[1], primitiveColor[2], 0xFF);
-
-        let drawCall = rspState._newDrawCall();
-
-        drawCall.textureIndices.push(loadRspTexture(rspState, this.textures, this.textureId, 
-            G_TX_WRAP | G_TX_NOMIRROR,
-            G_TX_CLAMP | G_TX_NOMIRROR
-        ));
-
-        let sX = 0;
-        let sY = 0;
-        let sW = texFile.width * 2;
-        let sH = texFile.height;
-
-        let ulS = 0;
-        let ulT = 0;
-        let lrS = sW * 32;
-        let lrT = sH * 32;
-
-        if (backdropObject.flipY != 0) {
-            [ulT, lrT] = [lrT, ulT];
-        } 
-
-        sW *= backdropObject.scaleX / 1024;
-        sH *= backdropObject.scaleY / 1024;
-
-        const spriteCoords = [
-            [sX, sY + sH, ulS, lrT],
-            [sX, sY, ulS, ulT],
-            [sX + sW, sY + sH, lrS, lrT],
-
-            [sX, sY, ulS, ulT],
-            [sX + sW, sY, lrS, ulT],
-            [sX + sW, sY + sH,  lrS, lrT],
-        ];
-
-        for (let coords of spriteCoords) {
-            const v = new F3DEX.Vertex();
-            v.x = coords[0];
-            v.y = coords[1];
-            v.z = 0;
-            v.tx = coords[2];
-            v.ty = coords[3];
-            v.c0 = 0xFF;
-            v.c1 = 0xFF;
-            v.c2 = 0xFF;
-            v.a = 0xFF;
-            drawCall.vertexCount += 1;
-            drawCall.vertices.push(v)
-        }
-
-        drawCall.renderData = new DrawCallRenderData(device, cache, rspState.textureCache, rspState.segmentBuffers, drawCall);
-        this.rspOutput = new GloverRSPOutput([drawCall], rspState.textureCache);
-
-        this.backdropWidth = sW;
-        this.backdropHeight = sH;
-
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
-        template.setMegaStateFlags(this.megaStateFlags);
-
-        const sceneParamsSize = 16;
-        const view = viewerInput.camera.viewMatrix;
-        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
-        const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
-        const pitch = Math.asin(view[6]) / (Math.PI * 2);
-
-        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
-        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-
-        mat4.ortho(GloverBackdropRenderer.projectionMatrix, 0, 640, 640 / aspect, 0, -1, 1);
-        offs += fillMatrix4x4(mappedF32, offs, GloverBackdropRenderer.projectionMatrix);
-
-        mat4.fromTranslation(this.drawMatrix, [
-            -(yaw + 0.5) * this.backdropObject.scrollSpeedX * this.backdropWidth / 2,
-            Math.min(((-Math.sin(pitch*2*Math.PI)*500 + this.backdropObject.offsetY)/2) + (136/(this.backdropObject.scaleY/1024)), 0),
-            0
-        ]);
-
-        if (this.rspOutput !== null) {
-            for (let drawCall of this.rspOutput.drawCalls) {
-                const drawCallInstance = new DrawCallInstance(drawCall, this.drawMatrix, this.rspOutput.textureCache);
-                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, true);
-            }
-        }
-
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.rspOutput !== null) {
-            for (let drawCall of this.rspOutput.drawCalls) {
-                drawCall.destroy(device);
-            }
-        }
-    }
-}
-
-export class GloverSpriteRenderer {
-    private rspOutput: GloverRSPOutput | null;
-
-    private drawCall: DrawCall;
-    private textureCache: RDP.TextureCache;
-
-    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    protected megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     protected frames: number[] = [];
+    protected frame_textures: GloverTexbank.Texture[] = [];
+
+    protected spriteRect: SpriteRect;
 
     protected sortKey: number;
 
     public visible: boolean = true;
     
     protected isBillboard: boolean = true;
+    protected isOrtho: boolean = false;
 
     constructor(
-        private device: GfxDevice,
-        private cache: GfxRenderCache,
-        private textures: Textures.GloverTextureHolder,
-        private frameset: number[],
-        private xlu: boolean = false)
+        protected device: GfxDevice,
+        protected cache: GfxRenderCache,
+        protected textures: Textures.GloverTextureHolder,
+        protected frameset: number[],
+        protected xlu: boolean = false)
     {
         // TODO: figre out billboard flags
         if (xlu) {
@@ -1699,8 +1561,21 @@ export class GloverSpriteRenderer {
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
+    }
 
-        this.loadFrameset(frameset);
+    protected initialize() {
+        this.loadFrameset(this.frameset);
+        const rect = {
+            sW: 1.0,
+            sH: 1.0,
+            sX: -1/2,
+            sY: -1/2,
+            ulS: 0,
+            ulT: 0,
+            lrS: this.frame_textures[0].width * 32,
+            lrT: this.frame_textures[0].height * 32
+        };
+        this.buildDrawCall(rect);
     }
 
     public cacheKey(): string {
@@ -1723,17 +1598,19 @@ export class GloverSpriteRenderer {
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
     }
 
-    private loadFrameset(frameset: number[]): void {
-        const segments = this.textures.textureSegments();
-
-        let frame_textures = []
+    protected loadFrameset(frameset: number[]): void {
+        this.frame_textures = []
         for (let frame_id of frameset) {
             const texFile = this.textures.idToTexture.get(frame_id);
             if (texFile === undefined) {
                 throw `Texture 0x${frame_id.toString(16)} not loaded`;
             }
-            frame_textures.push(texFile);
+            this.frame_textures.push(texFile);
         }
+    }
+
+    protected buildDrawCall(rect: SpriteRect, texSFlags: number = G_TX_CLAMP | G_TX_NOMIRROR, texTFlags: number = G_TX_CLAMP | G_TX_NOMIRROR) {
+        const segments = this.textures.textureSegments();
 
         const rspState = new GloverRSPState(segments, this.textures);
 
@@ -1742,33 +1619,23 @@ export class GloverSpriteRenderer {
         let drawCall = rspState._newDrawCall();
 
         this.frames = []
-        for (let texture of frame_textures) {
+        for (let texture of this.frame_textures) {
             this.frames.push(loadRspTexture(rspState, this.textures, texture.id, 
-                G_TX_CLAMP | G_TX_NOMIRROR,
-                G_TX_CLAMP | G_TX_NOMIRROR
+                texSFlags,
+                texTFlags
             ))
         }
 
         drawCall.textureIndices.push(0);
 
-        let sW = 1.0;
-        let sH = 1.0;
-        let sX = -sW/2;
-        let sY = -sH/2;
-
-        let ulS = 0;
-        let ulT = 0;
-        let lrS = frame_textures[0].width * 32;
-        let lrT = frame_textures[0].height * 32;
-
         const spriteCoords = [
-            [sX, sY + sH, ulS, ulT],
-            [sX, sY, ulS, lrT],
-            [sX + sW, sY + sH, lrS, ulT],
+            [rect.sX, rect.sY + rect.sH, rect.ulS, rect.ulT],
+            [rect.sX, rect.sY, rect.ulS, rect.lrT],
+            [rect.sX + rect.sW, rect.sY + rect.sH, rect.lrS, rect.ulT],
 
-            [sX, sY, ulS, lrT],
-            [sX + sW, sY, lrS, lrT],
-            [sX + sW, sY + sH,  lrS, ulT],
+            [rect.sX, rect.sY, rect.ulS, rect.lrT],
+            [rect.sX + rect.sW, rect.sY, rect.lrS, rect.lrT],
+            [rect.sX + rect.sW, rect.sY + rect.sH, rect.lrS, rect.ulT],
         ];
 
         for (let coords of spriteCoords) {
@@ -1800,16 +1667,25 @@ export class GloverSpriteRenderer {
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
-        mat4.getTranslation(lookatScratch, drawMatrix);
+        if (!this.isOrtho) {
+            mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+            mat4.getTranslation(lookatScratch, drawMatrix);
 
-        template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+            template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+        }
 
         const sceneParamsSize = 16;
 
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+
+        if (!this.isOrtho) {
+            offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        } else {
+            const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+            mat4.ortho(scratchProjectionMatrix, 0, 640, 640 / aspect, 0, -1, 1);
+            offs += fillMatrix4x4(mappedF32, offs, scratchProjectionMatrix);
+        }
 
         this.drawCall.textureIndices[0] = this.frames[frame];
         if (prim_color !== null) {
@@ -1821,13 +1697,114 @@ export class GloverSpriteRenderer {
         }
 
         const drawCallInstance = new DrawCallInstance(this.drawCall, drawMatrix, this.textureCache);
-        drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false, this.isBillboard);
+        drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, this.isOrtho, this.isBillboard);
 
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
         this.drawCall.destroy(device);
+    }
+}
+
+
+export class GloverSpriteRenderer extends GloverBaseSpriteRenderer {
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        textures: Textures.GloverTextureHolder,
+        frameset: number[],
+        xlu: boolean = false) {
+        super(device, cache, textures, frameset, xlu);
+        this.initialize();
+    }
+
+}
+
+export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
+
+    private drawMatrix = mat4.create();
+
+    private backdropWidth: number = 0; 
+    private backdropHeight: number = 0; 
+
+    public sortKey: number;
+    public textureId: number;
+
+    protected isOrtho = true;
+    protected isBillboard = false;
+
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        textures: Textures.GloverTextureHolder,
+        protected backdropObject: GloverLevel.Backdrop,
+        protected primitiveColor: number[])
+    {
+        super(device, cache, textures, [backdropObject.textureId]);
+
+        this.initialize();
+
+        this.sortKey = backdropObject.sortKey;
+        this.textureId = backdropObject.textureId;
+
+    }
+
+    protected initialize() {
+        this.loadFrameset(this.frameset);
+        const rect = {
+            sX: 0,
+            sY: 0,
+            sW: this.frame_textures[0].width * 2,
+            sH: this.frame_textures[0].height,
+            ulS: 0,
+            ulT: 0,
+            lrS: 0,
+            lrT: 0
+        };
+        rect.ulS = rect.sW * 32;
+        rect.ulT = rect.sH * 32;
+
+        if (this.backdropObject.flipY != 0) {
+            [rect.ulT, rect.lrT] = [rect.lrT, rect.ulT];
+        } 
+
+        rect.sW *= this.backdropObject.scaleX / 1024;
+        rect.sH *= this.backdropObject.scaleY / 1024;
+        this.buildDrawCall(rect, G_TX_WRAP | G_TX_NOMIRROR);
+
+        this.backdropWidth = rect.sW;
+        this.backdropHeight = rect.sH;
+    }
+
+    protected initializePipeline(rspState: GloverRSPState) {
+        initializeRenderState(rspState);
+        setRenderMode(rspState, true, false, false, 1.0);
+
+        rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
+        rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+        if (this.primitiveColor !== undefined) {
+            rspState.gDPSetPrimColor(0, 0, this.primitiveColor[0], this.primitiveColor[1], this.primitiveColor[2], 0xFF);
+        } else {
+            rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
+        }
+
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const view = viewerInput.camera.viewMatrix;
+        const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
+        const pitch = Math.asin(view[6]) / (Math.PI * 2);
+
+        mat4.fromTranslation(this.drawMatrix, [
+            -(yaw + 0.5) * this.backdropObject.scrollSpeedX * this.backdropWidth / 2,
+            Math.min(((-Math.sin(pitch*2*Math.PI)*500 + this.backdropObject.offsetY)/2) + (136/(this.backdropObject.scaleY/1024)), 0),
+            0
+        ]);
+
+        super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0); 
     }
 }
 

@@ -94,6 +94,12 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
     public copySpinFromParent = false;
 
+    // Orbit
+
+    private orbitPt = vec3.fromValues(0,0,0);
+    private orbitEnabled = [false, false, false];
+    private orbitSpeed = 0.0;
+
     // General actor state
 
     private eulers = vec3.fromValues(0,0,0);
@@ -200,6 +206,12 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         this.spinSpeed[axis] = 0;
         this.rockingDeceleration = decel_factor;
         this.spinEnabled[axis] = true;
+    }
+
+    public setOrbitAroundPoint(axis: number, point: [number, number, number], speed: number) {
+        this.orbitEnabled[axis] = true;
+        this.orbitSpeed = speed / SRC_FRAME_TO_MS;
+        vec3.copy(this.orbitPt, point);
     }
 
     public advanceRocking(deltaTime: number) {
@@ -346,6 +358,35 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             }
         }
 
+        for (let axis = 0; axis < 3; axis += 1) {
+            if (!this.orbitEnabled[axis]) {
+                continue;
+            }
+            // TODO: very very very not right:
+            // vec3.sub(this.scratchVec3, this.position, this.orbitPt);
+            // const dist = vec3.length(this.scratchVec3);
+            // let theta = 0;
+            // if (axis == 0) {
+            //     theta = Math.atan2(this.scratchVec3[1],this.scratchVec3[2]);
+            // } else if (axis == 1) {
+            //     theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[2]);
+            // } else {
+            //     theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[1]);
+            // }
+            // theta += this.orbitSpeed * deltaTime;
+            // const x = Math.cos(theta) * dist;
+            // const y = Math.sin(theta) * dist;
+            // if (axis == 0) {
+            //     this.position[1] = this.orbitPt[1] + x;
+            //     this.position[2] = this.orbitPt[2] + y;
+            // } else if (axis == 1) {
+            //     this.position[0] = this.orbitPt[0] + x;
+            //     this.position[2] = this.orbitPt[2] + y;
+            // } else {
+            //     this.position[0] = this.orbitPt[0] + x;
+            //     this.position[1] = this.orbitPt[1] + y;
+            // }
+        }
 
         // TODO: add deceleration
         vec3.add(this.position, this.position, this.velocity);
@@ -1177,6 +1218,13 @@ class SceneDesc implements Viewer.SceneDesc {
                     for (let i = 0; i < cmd.params.frameAdvance; i++) {
                         currentPlatform.advanceRocking(SRC_FRAME_TO_MS);
                     }
+                    break;
+                }
+                case 'PlatOrbitAroundPoint': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setOrbitAroundPoint(cmd.params.axis, [cmd.params.x, cmd.params.y, cmd.params.z], cmd.params.speed);
                     break;
                 }
                 case 'PlatScale': {
