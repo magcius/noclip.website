@@ -325,9 +325,9 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             dramPalAddr = 0;
         }
 
-        // TODO: at one point this seemed necessary, unclear why.
-        //       figure that out and remove it if it's really not:
-        // tile.line = 0;
+        // Textures in Glover texbanks aren't line-padded, so it's important
+        // to force this to 0 here lest some textures produce buffer overrruns
+        tile.line = 0;
 
         const texIdx = this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false);
         tile.line = old_line;
@@ -1301,12 +1301,22 @@ class GloverMeshRenderer {
             // we wake up sloppy modeling artifact beasts
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_CULL_BACK);
         }
-
         try {
             if (meshData.displayListPtr != 0) {
                 // TODO: incorporate mesh alpha here
                 const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
                 rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
+
+                if (meshData.id === 0x522ac7b) {
+                    // Hard-code fix for a broken display list in Atlantis 3,
+                    // which expects this texture to be loaded before executing
+                    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTLUT, 2, 0x8000); // G_TT_RGBA16
+                    rspState.gDPSetTextureImage(0, 2, 0, 0x6988203b);
+                    rspState.gDPSetTile(0, 2, 0, 256, 7, 0, 0, 6, 0, 0, 6, 0);
+                    rspState.gDPLoadTLUT(7, 15);
+                    rspState.gDPSetTile(0, 2, 0, 0, 7, 0, 0, 6, 0, 0, 6, 0);
+                    rspState.gDPLoadBlock(7, 0, 0, 256, 256);
+                }
                 F3DEX.runDL_F3DEX(rspState, displayListOffs);
                 this.rspOutput = rspState.finish();
             } else if (meshData.geometry.numFaces > 0) {
@@ -1316,6 +1326,7 @@ class GloverMeshRenderer {
                 this.rspOutput = null;
             }
         } catch (exc) {
+            console.log(meshData.id)
             console.error(exc);
             this.rspOutput = null;
         }
