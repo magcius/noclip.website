@@ -5,7 +5,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 import { vec3, quat, mat4 } from "gl-matrix";
 
-import { GloverShadowRenderer } from './render';
+import { GloverShadowRenderer } from './sprite';
 import * as Textures from './textures';
 
 

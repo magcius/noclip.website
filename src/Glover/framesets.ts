@@ -10,7 +10,9 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { Color, colorNewFromRGBA } from "../Color";
 
-import { GenericRenderable, GloverFlipbookRenderer, GloverActorRenderer } from './render';
+import { GenericRenderable } from './render';
+import { GloverFlipbookRenderer } from './sprite';
+import { GloverActorRenderer } from './actor';
 
 const identityRotation: quat = quat.create();
 

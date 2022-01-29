@@ -11,7 +11,9 @@ import { GloverTextureHolder } from './textures';
 import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT_FRAMERATE } from './timing';
 
 
-import { GenericRenderable, SceneLighting, GloverActorRenderer, GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer } from './render';
+import { GenericRenderable, SceneLighting } from './render';
+import { GloverActorRenderer } from './actor';
+import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer } from './sprite';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
