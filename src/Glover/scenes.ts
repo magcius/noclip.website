@@ -38,7 +38,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
 import { radianModulo, subtractAngles, axisRotationToQuaternion } from './util';
-import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './framesets';
+import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
 
 
 import { KaitaiStream } from 'kaitai-struct';
@@ -364,30 +364,32 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             if (!this.orbitEnabled[axis]) {
                 continue;
             }
-            // TODO: very very very not right:
-            // vec3.sub(this.scratchVec3, this.position, this.orbitPt);
-            // const dist = vec3.length(this.scratchVec3);
-            // let theta = 0;
-            // if (axis == 0) {
-            //     theta = Math.atan2(this.scratchVec3[1],this.scratchVec3[2]);
-            // } else if (axis == 1) {
-            //     theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[2]);
-            // } else {
-            //     theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[1]);
-            // }
-            // theta += this.orbitSpeed * deltaTime;
-            // const x = Math.cos(theta) * dist;
-            // const y = Math.sin(theta) * dist;
-            // if (axis == 0) {
-            //     this.position[1] = this.orbitPt[1] + x;
-            //     this.position[2] = this.orbitPt[2] + y;
-            // } else if (axis == 1) {
-            //     this.position[0] = this.orbitPt[0] + x;
-            //     this.position[2] = this.orbitPt[2] + y;
-            // } else {
-            //     this.position[0] = this.orbitPt[0] + x;
-            //     this.position[1] = this.orbitPt[1] + y;
-            // }
+            vec3.sub(this.scratchVec3, this.position, this.orbitPt);
+            let dist = 0;
+            let theta = 0;
+            if (axis == 0) {
+                theta = Math.atan2(this.scratchVec3[1],this.scratchVec3[2]);
+                dist = Math.sqrt(Math.pow(this.scratchVec3[1],2) + Math.pow(this.scratchVec3[2],2));
+            } else if (axis == 1) {
+                theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[2]);
+                dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[2],2));
+            } else {
+                theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[1]);
+                dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[1],2));
+            }
+            theta -= this.orbitSpeed * deltaTime;
+            const x = Math.cos(theta) * dist;
+            const y = Math.sin(theta) * dist;
+            if (axis == 0) {
+                this.position[1] = this.orbitPt[1] + y;
+                this.position[2] = this.orbitPt[2] + x;
+            } else if (axis == 1) {
+                this.position[0] = this.orbitPt[0] + y;
+                this.position[2] = this.orbitPt[2] + x;
+            } else {
+                this.position[0] = this.orbitPt[0] + y;
+                this.position[1] = this.orbitPt[1] + x;
+            }
         }
 
         // TODO: add deceleration
