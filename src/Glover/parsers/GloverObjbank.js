@@ -171,13 +171,22 @@ var GloverObjbank = (function() {
       this._read();
     }
     DisplayListCmd.prototype._read = function() {
-      this._debug.cmd = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.cmd = this._io.readU1();
-      this._debug.cmd.end = this._io.pos;
-      this._debug.params = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.params = this._io.readBytes(7);
-      this._debug.params.end = this._io.pos;
+      this._debug.w1 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.w1 = this._io.readU4be();
+      this._debug.w1.end = this._io.pos;
+      this._debug.w0 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.w0 = this._io.readU4be();
+      this._debug.w0.end = this._io.pos;
     }
+    Object.defineProperty(DisplayListCmd.prototype, 'cmd', {
+      get: function() {
+        if (this._m_cmd !== undefined)
+          return this._m_cmd;
+        this._debug._m_cmd = {  };
+        this._m_cmd = ((this.w1 >>> 24) & 255);
+        return this._m_cmd;
+      }
+    });
 
     return DisplayListCmd;
   })();

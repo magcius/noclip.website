@@ -95,11 +95,12 @@ declare namespace GloverObjbank {
     _io: any;
 
     cmd: number;
-    params: Uint8Array;
+    w1: number;
+    w0: number;
 
     _debug: {
-      cmd: DebugPosition;
-      params: DebugPosition;
+      w1: DebugPosition;
+      w0: DebugPosition;
     };
   }
 }

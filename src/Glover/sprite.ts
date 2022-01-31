@@ -24,6 +24,7 @@ import { Color } from "../Color";
 import { GloverTexbank } from './parsers';
 import { Flipbook, FlipbookType } from './particles';
 import { SRC_FRAME_TO_MS } from './timing';
+import { subtractAngles } from './util';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -190,6 +191,8 @@ class GloverBaseSpriteRenderer {
             mat4.getTranslation(lookatScratch, drawMatrix);
 
             template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+        } else {
+            template.sortKey = this.sortKey;
         }
 
         const sceneParamsSize = 16;
@@ -265,7 +268,6 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
 
         this.sortKey = backdropObject.sortKey;
         this.textureId = backdropObject.textureId;
-
     }
 
     protected initialize() {
@@ -500,7 +502,6 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
     }
 }
 
-
 export class GloverShadowRenderer extends GloverSpriteRenderer {
     protected isBillboard: boolean = false;
 
@@ -526,5 +527,264 @@ export class GloverShadowRenderer extends GloverSpriteRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0);
+    }
+}
+
+export enum WeatherType {
+    Rain,
+    Snow
+}
+
+
+export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
+    protected isOrtho = true;
+    protected isBillboard = false;
+    protected primColor: Color = {r: 1, g: 1, b: 1, a: 1};
+
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        textures: Textures.GloverTextureHolder,
+        protected textureId: number)
+    {
+        super(device, cache, textures, [textureId]);
+        this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.WEATHER);
+        this.initialize();
+    }
+
+    protected initialize() {
+        this.loadFrameset(this.frameset);
+        let tex = this.frame_textures[0];
+        const rect = {
+            sW: tex.width,
+            sH: tex.height,
+            sX: -tex.width/2,
+            sY: -tex.height/2,
+            ulS: 0,
+            ulT: 0,
+            lrS: tex.width * 32,
+            lrT: tex.height * 32
+        };
+        this.buildDrawCall(rect);
+    }
+
+    protected initializePipeline(rspState: Render.GloverRSPState) {
+        Render.initializeRenderState(rspState);
+        Render.setRenderMode(rspState, true, false, false, 1.0);
+
+        rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
+        rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        
+        // TODO: should be .5 rather than .99?
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+        rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, alpha: number): void {
+        this.primColor.a = alpha / 0xFF;
+        super.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, 0, this.primColor);
+    }
+}
+
+export interface WeatherParams {
+    type: WeatherType;
+    iterations_per_frame: number;
+    particles_per_iteration: number;
+    lifetime: number;
+    alphas: [number, number, number];
+    velocity: [number, number];
+    particle_lifetime_min: number;
+};
+
+class Debris {
+    public active: boolean = false;
+    public pos: [number, number] = [0, 0];
+    public vel: [number, number] = [0, 0];
+    public scale: [number, number] = [1, 1];
+    public curAlpha: number = 0xFF;
+    public targetAlpha: number = 0xFF;
+    public curParallaxEffect: number = 1;
+    public targetParallaxEffect: number = 1;
+    public lifetimeCounter: number = 0;
+    public countdownToFadeout: number = 0;
+}
+
+export class GloverWeatherRenderer {
+    private spriteRenderer: GloverUISpriteRenderer;
+    
+    public visible: boolean = true;
+
+    private drawMatrixScratch: mat4 = mat4.create();
+    private vec3Scratch: vec3 = vec3.create();
+
+    private debris: Debris[] = [];
+
+    private curIterCount: number = 0;
+    private curParticleCycle: number = 0;
+
+    private lastFrameAdvance: number = 0;
+
+    private lastYaw: number = 0;
+    private lastCamPos: vec3 = vec3.create();
+
+    constructor(
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder,
+        private params: WeatherParams)
+    {
+        this.spriteRenderer = new GloverUISpriteRenderer(
+            this.device, this.cache, this.textures,
+            (params.type === WeatherType.Rain) ? 0xCB588DD9 : 0x1AF9F784; // raindrop.bmp / ai_snow.bmp
+        );
+        for (let x=0; x<40; x++) {
+            this.debris.push(new Debris());
+        }
+    }
+
+    private generateWeatherParticles(viewerInput: Viewer.ViewerRenderInput) {
+        for (this.curIterCount += this.params.iterations_per_frame; this.curIterCount > 0x40; this.curIterCount -= 0x40) {
+            for (let particleCount = 0; particleCount < this.params.particles_per_iteration; particleCount += 1) {
+                let found = false;
+                for (let singleDebris of this.debris) {
+                    if (singleDebris.active) {
+                        continue;
+                    }
+                    found = true;
+                    
+                    singleDebris.active = true;
+                    singleDebris.pos = [Math.floor(Math.random()*viewerInput.backbufferWidth*4), 0];
+                    singleDebris.vel = [this.params.velocity[0], this.params.velocity[1]];
+                    singleDebris.countdownToFadeout = 0xf;
+                    if (this.curParticleCycle == 0) {
+                        singleDebris.curParallaxEffect = 0x400;
+                    } else if (this.curParticleCycle == 1) {
+                        singleDebris.curParallaxEffect = 0x300;
+                        singleDebris.vel[0] *= 0.75;
+                        singleDebris.vel[1] *= 0.75;
+                    } else {
+                        singleDebris.curParallaxEffect = 0x200;
+                        singleDebris.vel[0] *= 0.5;
+                        singleDebris.vel[1] *= 0.5;
+                    }
+                    singleDebris.scale = [singleDebris.curParallaxEffect, singleDebris.curParallaxEffect];
+                    singleDebris.targetParallaxEffect = singleDebris.curParallaxEffect;
+                    singleDebris.curAlpha = this.params.alphas[this.curParticleCycle];
+                    singleDebris.targetAlpha = singleDebris.curAlpha;
+                    singleDebris.lifetimeCounter = this.params.particle_lifetime_min + Math.floor(Math.random()*2);
+
+                    this.curParticleCycle = (this.curParticleCycle < 3) ? this.curParticleCycle + 1 : 0;
+                }
+                if (!found) {
+                    let tmp = this.curIterCount;
+                    if (tmp < 0) {
+                        tmp += 0x3f;
+                    }
+                    this.curIterCount -= ((tmp & 0xFFFF)>>6)*-0x40;
+                    return;
+                }
+            }            
+        }
+
+    }
+
+    private advanceActiveParticles(viewerInput: Viewer.ViewerRenderInput) {
+        // Advance state
+        const view = viewerInput.camera.viewMatrix;
+        const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
+        const camPosition = lookatScratch;
+        mat4.getTranslation(lookatScratch, view);
+
+        const scaleFactor = 1200;
+
+        let camVelocity = [camPosition[0]-this.lastCamPos[0], camPosition[2]-this.lastCamPos[2]];
+
+        for (let singleDebris of this.debris) {
+            if (!singleDebris.active) {
+                continue;
+            }
+
+            // [1,0] rotated by camera yaw:
+            let tmp_vec = [ 
+                Math.cos(-yaw),
+                Math.sin(-yaw)
+            ]
+
+            singleDebris.pos[0] -= (tmp_vec[0] * camVelocity[0] + tmp_vec[1] * camVelocity[1]) * Math.pow(singleDebris.curParallaxEffect, 2) / 2000000;
+
+            let angleDiff = subtractAngles(this.lastYaw, yaw);
+            singleDebris.pos[0] += angleDiff * Math.pow(singleDebris.curParallaxEffect,2) / -3000;
+
+            if (singleDebris.pos[0] > viewerInput.backbufferWidth - 40) {
+                singleDebris.pos[0] -= viewerInput.backbufferWidth;
+            } else if (singleDebris.pos[0] < -40) {
+                singleDebris.pos[0] += viewerInput.backbufferWidth;
+            }
+
+            if (this.params.type === WeatherType.Snow) {
+                // TODO: rain looks fine but snow looks way off
+                const drift = Math.sin(singleDebris.lifetimeCounter/10);
+                singleDebris.vel[0] = drift * singleDebris.curParallaxEffect / 256;
+ 
+                tmp_vec = [-tmp_vec[1], -tmp_vec[0]];
+
+                singleDebris.targetParallaxEffect += (tmp_vec[0] * camVelocity[0] + tmp_vec[1] * camVelocity[1]) * -3;
+                if (singleDebris.targetParallaxEffect > scaleFactor || singleDebris.targetParallaxEffect < 100) {
+                    singleDebris.targetParallaxEffect = scaleFactor;
+                }
+
+                singleDebris.curParallaxEffect = singleDebris.targetParallaxEffect;
+
+                const a = Math.floor(this.params.alphas[2]/2);
+                singleDebris.targetAlpha = a + (0xff - a) * singleDebris.curParallaxEffect / scaleFactor;
+                singleDebris.curAlpha = singleDebris.targetAlpha;
+
+                singleDebris.vel[1] = this.params.velocity[1] * (0.25 + singleDebris.curParallaxEffect / scaleFactor);
+            }
+
+            singleDebris.pos[0] -= singleDebris.vel[0]/4;
+            singleDebris.pos[1] += singleDebris.vel[1]/4;
+            singleDebris.lifetimeCounter -= 1;
+
+            if (singleDebris.lifetimeCounter == 0 || singleDebris.pos[1] > viewerInput.backbufferHeight * 4) {
+                singleDebris.active = false;
+            }
+        }
+
+        this.lastYaw = yaw;
+        vec3.copy(this.lastCamPos, camPosition);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+
+        // const scaleFactor = (1024*480)/viewerInput.backbufferHeight;
+        const scaleFactor = 1024;
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if(this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
+            this.advanceActiveParticles(viewerInput);
+            this.generateWeatherParticles(viewerInput);
+            this.lastFrameAdvance = 0;
+        }
+
+        for (let singleDebris of this.debris) {
+            if (!singleDebris.active) {
+                continue;
+            }
+            mat4.fromTranslation(this.drawMatrixScratch,
+                [singleDebris.pos[0]/4, singleDebris.pos[1]/4, 0]);
+            mat4.scale(this.drawMatrixScratch, this.drawMatrixScratch,
+                [singleDebris.scale[0]*4/scaleFactor, -singleDebris.scale[1]*4/scaleFactor, 1]);
+            this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, singleDebris.curAlpha);
+        }
+
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.spriteRenderer.destroy(device);
     }
 }

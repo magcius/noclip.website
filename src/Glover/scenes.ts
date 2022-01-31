@@ -13,7 +13,7 @@ import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT
 
 import { GenericRenderable, SceneLighting } from './render';
 import { GloverActorRenderer } from './actor';
-import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer } from './sprite';
+import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -37,7 +37,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
-import { radianModulo, subtractAngles, axisRotationToQuaternion } from './util';
+import { radianModulo, subtractAngles, angularDistance, axisRotationToQuaternion } from './util';
 import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
 
 
@@ -101,6 +101,12 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private orbitPt = vec3.fromValues(0,0,0);
     private orbitEnabled = [false, false, false];
     private orbitSpeed = 0.0;
+
+    private orbitPauseCurDuration = 0.0;
+    private orbitPauseDuration = 0.0;
+    private orbitPauseNumStops = 0;
+    private orbitPauseCurStop = 1;
+    private orbitPauseWaiting = false;
 
     // General actor state
 
@@ -216,6 +222,11 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         vec3.copy(this.orbitPt, point);
     }
 
+    public setOrbitPause(frames: number, pauses: number) {
+        this.orbitPauseNumStops = pauses;
+        this.orbitPauseDuration = frames * SRC_FRAME_TO_MS;
+    }
+
     public advanceRocking(deltaTime: number) {
         if (this.rockingDeceleration > 0) {
             this.lastRockingAdvance += deltaTime;
@@ -238,6 +249,71 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         }
     }    
 
+    public advanceOrbit(deltaTime: number) {
+        for (let axis = 0; axis < 3; axis += 1) {
+            if (!this.orbitEnabled[axis]) {
+                continue;
+            }
+            vec3.sub(this.scratchVec3, this.position, this.orbitPt);
+            let dist = 0;
+            let theta = 0;
+            if (axis == 0) {
+                theta = Math.atan2(this.scratchVec3[1],this.scratchVec3[2]);
+                dist = Math.sqrt(Math.pow(this.scratchVec3[1],2) + Math.pow(this.scratchVec3[2],2));
+            } else if (axis == 1) {
+                theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[2]);
+                dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[2],2));
+            } else {
+                theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[1]);
+                dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[1],2));
+            }
+
+            if (this.orbitPauseNumStops > 0) {
+                if (this.orbitPauseWaiting) {
+                    if (this.orbitPauseCurDuration > 0) {
+                        this.orbitPauseCurDuration -= deltaTime;
+                        if (this.orbitPauseCurDuration <= 0) {
+                            this.orbitPauseCurDuration = SRC_FRAME_TO_MS;
+                            this.orbitPauseWaiting = false;
+                        }
+                    }
+                } else {
+                    if (this.orbitPauseCurDuration > 0) {
+                        this.orbitPauseCurDuration -= deltaTime;
+                    } else {
+                        let nextStopAngle = (this.orbitPauseCurStop/this.orbitPauseNumStops) * 2 * Math.PI;
+                        let distFromStop = Math.abs(angularDistance(theta, nextStopAngle));
+                        let stepDist = Math.abs(this.orbitSpeed)*deltaTime;
+                        if (distFromStop < stepDist) {
+                            this.orbitPauseCurDuration = this.orbitPauseDuration;
+                            this.orbitPauseCurStop += 1;
+                            if (this.orbitPauseCurStop >= this.orbitPauseNumStops) {
+                                this.orbitPauseCurStop = 0;
+                            }
+                            this.orbitPauseWaiting = true;
+                        }
+                    }
+                }
+            }
+
+            if (!this.orbitPauseWaiting) {
+                theta -= this.orbitSpeed * deltaTime;
+                const x = Math.cos(theta) * dist;
+                const y = Math.sin(theta) * dist;
+                if (axis == 0) {
+                    this.position[1] = this.orbitPt[1] + y;
+                    this.position[2] = this.orbitPt[2] + x;
+                } else if (axis == 1) {
+                    this.position[0] = this.orbitPt[0] + y;
+                    this.position[2] = this.orbitPt[2] + x;
+                } else {
+                    this.position[0] = this.orbitPt[0] + y;
+                    this.position[1] = this.orbitPt[1] + x;
+                }
+            }
+        }
+    }
+
     public updateActorModelMatrix() {
         if (this.actor === null) {
             return;
@@ -248,7 +324,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         // quat.mul(this.rotation, axisRotationToQuaternion([0,1,0], this.eulers[1]), this.rotation);
         // quat.mul(this.rotation, axisRotationToQuaternion([0,0,1], Math.PI + this.eulers[0]), this.rotation);
         // quat.mul(this.rotation, axisRotationToQuaternion([1,0,0], this.eulers[2]), this.rotation);
-        quat.fromEuler(this.rotation, this.eulers[0] * 180 / Math.PI, this.eulers[1] * 180 / Math.PI, this.eulers[2] * 180 / Math.PI);
+        quat.fromEuler(this.rotation,
+            this.eulers[0] * 180 / Math.PI,
+            this.eulers[1] * 180 / Math.PI,
+            this.eulers[2] * 180 / Math.PI);
 
         let finalPosition = this.position;
         let finalRotation = this.rotation;
@@ -360,37 +439,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             }
         }
 
-        for (let axis = 0; axis < 3; axis += 1) {
-            if (!this.orbitEnabled[axis]) {
-                continue;
-            }
-            vec3.sub(this.scratchVec3, this.position, this.orbitPt);
-            let dist = 0;
-            let theta = 0;
-            if (axis == 0) {
-                theta = Math.atan2(this.scratchVec3[1],this.scratchVec3[2]);
-                dist = Math.sqrt(Math.pow(this.scratchVec3[1],2) + Math.pow(this.scratchVec3[2],2));
-            } else if (axis == 1) {
-                theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[2]);
-                dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[2],2));
-            } else {
-                theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[1]);
-                dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[1],2));
-            }
-            theta -= this.orbitSpeed * deltaTime;
-            const x = Math.cos(theta) * dist;
-            const y = Math.sin(theta) * dist;
-            if (axis == 0) {
-                this.position[1] = this.orbitPt[1] + y;
-                this.position[2] = this.orbitPt[2] + x;
-            } else if (axis == 1) {
-                this.position[0] = this.orbitPt[0] + y;
-                this.position[2] = this.orbitPt[2] + x;
-            } else {
-                this.position[0] = this.orbitPt[0] + y;
-                this.position[1] = this.orbitPt[1] + x;
-            }
-        }
+        this.advanceOrbit(deltaTime);
 
         // TODO: add deceleration
         vec3.add(this.position, this.position, this.velocity);
@@ -556,6 +605,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     public flipbooks: GloverFlipbookRenderer[] = [];
 
     public miscParticleEmitters: GenericRenderable[] = [];
+    public weather: GloverWeatherRenderer | null = null;
     public mrtips: GloverMrTip[] = [];
     public shadows: Shadows.Shadow[] = [];
     public platforms: GloverPlatform[] = [];
@@ -664,8 +714,15 @@ class GloverRenderer implements Viewer.SceneGfx {
                 }
             }
         };
-
         renderHacksPanel.contents.appendChild(showHiddenCheckbox.elem);
+
+        const hideWeatherCheckbox = new UI.Checkbox('Disable weather effects', false);
+        hideWeatherCheckbox.onchanged = () => {
+            if (this.weather !== null) {
+                this.weather.visible = !hideWeatherCheckbox.checked;
+            }
+        };
+        renderHacksPanel.contents.appendChild(hideWeatherCheckbox.elem);
 
         const enableDebugInfoCheckbox = new UI.Checkbox('Show debug information', false);
         enableDebugInfoCheckbox.onchanged = () => {
@@ -713,6 +770,9 @@ class GloverRenderer implements Viewer.SceneGfx {
         }
         for (let renderer of this.miscParticleEmitters) {
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
+        if (this.weather !== null) {
+            this.weather.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -764,17 +824,40 @@ class GloverRenderer implements Viewer.SceneGfx {
         for (let renderer of this.mrtips) {
             renderer.destroy(device);
         }
+        if (this.weather !== null) {
+            this.weather.destroy(device);
+        }
         this.textureHolder.destroy(device);
     }
 }
-
 
 interface GloverSceneBankDescriptor {
     landscape: string,
     object_banks: string[],
     texture_banks: string[],
-    backdrop_primitive_color?: number[]
+    backdrop_primitive_color?: number[],
+    weather?: WeatherParams
 };
+
+const prehistoric_snow: WeatherParams = {
+    type: WeatherType.Snow,
+    iterations_per_frame: 0x40,
+    particles_per_iteration: 1,
+    lifetime: 0xFFFF,
+    alphas: [0xDC, 0x96, 0x50],
+    velocity: [0, 248],
+    particle_lifetime_min: 100
+}
+
+const fortress_rain: WeatherParams = {
+    type: WeatherType.Rain,
+    iterations_per_frame: 0x40,
+    particles_per_iteration: 5,
+    lifetime: 0xFFFF,
+    alphas: [0x78, 0x50, 0x3C],
+    velocity: [248, 226],
+    particle_lifetime_min: 7
+}
 
 // Level ID to bank information
 // TODO: move this into an external ts file
@@ -919,9 +1002,10 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["19", {
         landscape: "25.PH1Aln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L1A.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"],
+        weather: prehistoric_snow
     }],
-    ["1a", { // TODO: lava should have water animation
+    ["1a", {
         landscape: "26.PH2Aln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_L2A.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
@@ -934,7 +1018,8 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["1c", {
         landscape: "28.PHBOSS.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PREHISTORIC_SHARED.obj.fla", "PREHISTORIC_BOSS.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "PREHISTORIC_TEX_BANK.tex.fla"],
+        weather: prehistoric_snow
     }],
     ["1d", {
         landscape: "29.PHBONUS.n64.lev",
@@ -945,7 +1030,8 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["1e", {
         landscape: "30.FF1Aln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_L1A.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"],
+        weather: fortress_rain
     }],
     ["1f", {
         landscape: "31.FF2Aln.n64.lev",
@@ -955,7 +1041,8 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["20", {
         landscape: "32.FF3Bln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "FORTRESS_SHARED.obj.fla", "FORTRESS_L3B.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"]
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FORTRESS_TEX_BANK.tex.fla"],
+        weather: fortress_rain
     }],
     ["21", {
         landscape: "33.FFBOSS.n64.lev",
@@ -1231,6 +1318,13 @@ class SceneDesc implements Viewer.SceneDesc {
                     currentPlatform.setOrbitAroundPoint(cmd.params.axis, [cmd.params.x, cmd.params.y, cmd.params.z], cmd.params.speed);
                     break;
                 }
+                case 'PlatOrbitPause': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setOrbitPause(cmd.params.numFrames, cmd.params.numPauses);
+                    break;
+                }
                 case 'PlatScale': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
@@ -1412,6 +1506,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
         for (let platform of sceneRenderer.platforms) {
             platform.updateActorModelMatrix();
+        }
+
+        if (bankDescriptor.weather !== undefined) {
+            sceneRenderer.weather = new GloverWeatherRenderer(device, cache, textureHolder, bankDescriptor.weather);
         }
 
         const shadowTerrain = sceneRenderer.actors; // TODO: figure out actual list

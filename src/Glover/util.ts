@@ -11,6 +11,21 @@ export function subtractAngles(a: number, b: number): number {
     }
 }
 
+export function angularDistance(a: number, b: number): number {
+  let diff = a - b;
+  if (Math.abs(diff) > Math.PI) {
+    if (b < a) {
+      diff = b - a;
+    }
+    diff += 2*Math.PI;
+  } else {
+    if (diff <= 0.0) {
+      diff = -diff;
+    }
+  }
+  return diff;
+}
+
 export function radianModulo(theta: number): number {
     if (theta > 2*Math.PI) {
         theta -=  2*Math.PI;

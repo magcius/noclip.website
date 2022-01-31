@@ -87,7 +87,7 @@ function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.Affin
 }
 
 class ActorMeshNode {
-    private static rendererCache: Map<number, GloverMeshRenderer> = new Map<number, GloverMeshRenderer>();
+    private static rendererCache = new Map<[number, number], GloverMeshRenderer>();
 
     public renderer: GloverMeshRenderer;
 
@@ -102,18 +102,19 @@ class ActorMeshNode {
         textures: Textures.GloverTextureHolder,
         sceneLights: Render.SceneLighting,
         overlay: boolean,
+        private actorId: number,
         public mesh: GloverObjbank.Mesh)
     {
-        if (ActorMeshNode.rendererCache.get(mesh.id) === undefined) {
+        if (ActorMeshNode.rendererCache.get([actorId, mesh.id]) === undefined) {
             this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, overlay, mesh);
-            ActorMeshNode.rendererCache.set(mesh.id, this.renderer);
+            ActorMeshNode.rendererCache.set([actorId, mesh.id], this.renderer);
         } else {
-            this.renderer = ActorMeshNode.rendererCache.get(mesh.id)!;
+            this.renderer = ActorMeshNode.rendererCache.get([actorId, mesh.id])!;
         }
 
         let current_child = mesh.child;
         while (current_child !== undefined) {
-            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, current_child));
+            this.children.push(new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorId, current_child));
             current_child = current_child.sibling;
         }
     }
@@ -129,6 +130,13 @@ class ActorMeshNode {
         this.renderer.setVertexColorsEnabled(enabled);
         for (let child of this.children) {
             child.setVertexColorsEnabled(enabled);
+        }
+    }
+
+    public forEachMesh(callback: (node: ActorMeshNode)=>void): void {
+        callback(this);
+        for (let child of this.children) {
+            child.forEachMesh(callback);
         }
     }
 
@@ -211,8 +219,8 @@ class ActorMeshNode {
     }
 
     public destroy(device: GfxDevice): void {
-        if (ActorMeshNode.rendererCache.has(this.renderer.id)) {
-            ActorMeshNode.rendererCache.delete(this.renderer.id);
+        if (ActorMeshNode.rendererCache.has([this.actorId, this.renderer.id])) {
+            ActorMeshNode.rendererCache.delete([this.actorId, this.renderer.id]);
             this.renderer.destroy(device);
         }
         for (let child of this.children) {
@@ -243,6 +251,8 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     public rootMesh: ActorMeshNode;
 
     // Render state
+
+    private allocateLightingBuffer: boolean;
 
     public modelMatrix: mat4 = mat4.create();
 
@@ -287,7 +297,14 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         const overlay = (this.actorObject.mesh.renderMode & 0x80) != 0;
         const xlu = (this.actorObject.mesh.renderMode & 0x2) != 0;
 
-        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.mesh)
+        this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.objId, actorObject.mesh)
+
+        this.allocateLightingBuffer = false;
+        this.rootMesh.forEachMesh((node) => {
+            if ((node.mesh.renderMode & 0x8) == 0) {
+                this.allocateLightingBuffer = true;
+            }
+        })
 
         if (overlay) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OVERLAY);
@@ -350,37 +367,38 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         let closestFace = null;
         let closestIntersectionDist = Infinity;
 
-        // TODO: iterate over child node meshes
-        const geo = this.rootMesh.renderer.meshData.geometry;
-        if (geo === undefined || geo.numFaces === 0) {
-            return null;
-        }
-        for (let faceIdx = 0; faceIdx < geo.faces.length; faceIdx++) {
-            const face = geo.faces[faceIdx];
-            // TODO: don't reallocate every tri
-            const v0 = geo.vertices[face.v0];
-            const v1 = geo.vertices[face.v1];
-            const v2 = geo.vertices[face.v2];
-            const triangle = [
-                vec3.fromValues(v0.x, v0.y, v0.z),
-                vec3.fromValues(v1.x, v1.y, v1.z),
-                vec3.fromValues(v2.x, v2.y, v2.z)
-            ]
-            vec3.transformMat4(triangle[0], triangle[0], this.modelMatrix);
-            vec3.transformMat4(triangle[1], triangle[1], this.modelMatrix);
-            vec3.transformMat4(triangle[2], triangle[2], this.modelMatrix);
-            const intersection = Shadows.rayTriangleIntersection(rayOrigin, rayVector, triangle);
-            if (intersection === null) {
-                continue;
-            } else {
-                const dist = vec3.dist(intersection, rayOrigin);
-                if (dist < closestIntersectionDist) {
-                    closestIntersection = intersection;
-                    closestIntersectionDist = dist;
-                    closestFace = triangle;
+        this.rootMesh.forEachMesh((node) => {
+            const geo = node.mesh.geometry;
+            if (geo === undefined || geo.numFaces === 0) {
+                return;
+            }
+            for (let faceIdx = 0; faceIdx < geo.faces.length; faceIdx++) {
+                const face = geo.faces[faceIdx];
+                // TODO: don't reallocate every tri
+                const v0 = geo.vertices[face.v0];
+                const v1 = geo.vertices[face.v1];
+                const v2 = geo.vertices[face.v2];
+                const triangle = [
+                    vec3.fromValues(v0.x, v0.y, v0.z),
+                    vec3.fromValues(v1.x, v1.y, v1.z),
+                    vec3.fromValues(v2.x, v2.y, v2.z)
+                ]
+                vec3.transformMat4(triangle[0], triangle[0], this.modelMatrix);
+                vec3.transformMat4(triangle[1], triangle[1], this.modelMatrix);
+                vec3.transformMat4(triangle[2], triangle[2], this.modelMatrix);
+                const intersection = Shadows.rayTriangleIntersection(rayOrigin, rayVector, triangle);
+                if (intersection === null) {
+                    continue;
+                } else {
+                    const dist = vec3.dist(intersection, rayOrigin);
+                    if (dist < closestIntersectionDist) {
+                        closestIntersection = intersection;
+                        closestIntersectionDist = dist;
+                        closestFace = triangle;
+                    }
                 }
             }
-        }
+        });
  
         if (closestIntersection !== null && closestFace !== null) {
             const v1 = vec3.sub(closestFace[1], closestFace[1], closestFace[0]);
@@ -434,8 +452,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         }
 
 
-        if ((this.actorObject.mesh.renderMode & 0x8) == 0) {
-            // TODO: make sure lighting is enabled for all children if this runs
+        if (this.allocateLightingBuffer) {
             const n_lights = this.sceneLights.diffuseColor.length;
             const sceneParamsSize = 16 + n_lights * 8 + 4;
             let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);

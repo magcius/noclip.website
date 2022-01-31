@@ -27,11 +27,12 @@ import { GloverObjbank, GloverTexbank } from './parsers';
 
 export const enum GloverRendererLayer {
     OPAQUE,
-    OPAQUE_BILLBOARD, // TODO: use correct render modes
+    OPAQUE_BILLBOARD,
     XLU,
-    XLU_BILLBOARD, // TODO: use correct render modes
+    XLU_BILLBOARD,
     OVERLAY,
     FOOTPRINTS,
+    WEATHER,
 }
 
 // Stray RDP defines
