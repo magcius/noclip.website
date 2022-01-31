@@ -545,11 +545,20 @@ class GloverMeshRenderer {
                 const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
                 rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
 
+                // Hard-code fixes for broken display lists which expect a
+                // texture to be loaded before executing
+                let initialTexture: number | null = null;
                 if (meshData.id === 0x522ac7b) {
-                    // Hard-code fix for a broken display list in Atlantis 3,
-                    // which expects this texture to be loaded before executing
+                    initialTexture = 0x6988203b; // monolith in atlantis 3
+                } else if (meshData.id === 0x557aedbb) {
+                    initialTexture = 0x7845b646; // hydraulic press in ootw 2
+                } else if (meshData.id === 0xa6d60dd) {
+                    initialTexture = 0xA64446E2; // platform in ootw 2
+                }
+
+                if (initialTexture !== null) {
                     rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTLUT, 2, 0x8000); // G_TT_RGBA16
-                    rspState.gDPSetTextureImage(0, 2, 0, 0x6988203b);
+                    rspState.gDPSetTextureImage(0, 2, 0, initialTexture);
                     rspState.gDPSetTile(0, 2, 0, 256, 7, 0, 0, 6, 0, 0, 6, 0);
                     rspState.gDPLoadTLUT(7, 15);
                     rspState.gDPSetTile(0, 2, 0, 0, 7, 0, 0, 6, 0, 0, 6, 0);
@@ -564,7 +573,7 @@ class GloverMeshRenderer {
                 this.rspOutput = null;
             }
         } catch (exc) {
-            console.log(meshData.id)
+            console.error("Failed to render mesh 0x" + meshData.id.toString(16))
             console.error(exc);
             this.rspOutput = null;
         }
