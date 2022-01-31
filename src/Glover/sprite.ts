@@ -539,7 +539,7 @@ export enum WeatherType {
 export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
     protected isOrtho = true;
     protected isBillboard = false;
-    protected primColor: Color = {r: 1, g: 1, b: 1, a: 1};
+    public primColor: Color = {r: 1, g: 1, b: 1, a: 1};
 
     constructor(
         device: GfxDevice,
@@ -581,8 +581,10 @@ export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, alpha: number): void {
-        this.primColor.a = alpha / 0xFF;
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, alpha: number | null = null): void {
+        if (alpha !== null) {
+            this.primColor.a = alpha / 0xFF;
+        }
         super.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, 0, this.primColor);
     }
 }
@@ -611,7 +613,12 @@ class Debris {
 }
 
 export class GloverWeatherRenderer {
+    // TODO: not sure why the speeds direct-from-engine need
+    //  to be so radically hand-tweaked to look right.
+    //  Investigate more into this.
+
     private spriteRenderer: GloverUISpriteRenderer;
+    private lightningRenderer: GloverUISpriteRenderer;
     
     public visible: boolean = true;
 
@@ -628,6 +635,9 @@ export class GloverWeatherRenderer {
     private lastYaw: number = 0;
     private lastCamPos: vec3 = vec3.create();
 
+    private lightningFrame: number = 0
+    private lightningColor: Color = {r: 0, g: 0, b: 0, a: 0};
+
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
@@ -638,12 +648,31 @@ export class GloverWeatherRenderer {
             this.device, this.cache, this.textures,
             (params.type === WeatherType.Rain) ? 0xCB588DD9 : 0x1AF9F784; // raindrop.bmp / ai_snow.bmp
         );
+        this.lightningRenderer = new GloverUISpriteRenderer(
+            this.device, this.cache, this.textures,
+            0xC4B329C3  
+        );
+
         for (let x=0; x<40; x++) {
             this.debris.push(new Debris());
         }
+        for (let i=0; i<3; i++) {
+            this.generateWeatherParticles(true);
+        }
     }
 
-    private generateWeatherParticles(viewerInput: Viewer.ViewerRenderInput) {
+    private generateWeatherParticles(random_y: boolean = false) {
+        if (this.params.type === WeatherType.Rain && this.lightningFrame === 0) {
+            // TODO: these are the in-game odds for a lightning strike,
+            //       but they don't happen often enough with non-engine RNG:
+            // const strike = Math.floor(Math.random()*2000) < 5;
+            const strike = Math.floor(Math.random()*200) < 5;
+            if (strike) {
+                this.lightningFrame = (5 + Math.floor(Math.random()*5)) * 2;
+                console.log("BANG")
+            }
+        }
+
         for (this.curIterCount += this.params.iterations_per_frame; this.curIterCount > 0x40; this.curIterCount -= 0x40) {
             for (let particleCount = 0; particleCount < this.params.particles_per_iteration; particleCount += 1) {
                 let found = false;
@@ -654,7 +683,10 @@ export class GloverWeatherRenderer {
                     found = true;
                     
                     singleDebris.active = true;
-                    singleDebris.pos = [Math.floor(Math.random()*viewerInput.backbufferWidth*4), 0];
+                    singleDebris.pos = [Math.floor(Math.random()*640), 0];
+                    if (random_y) {
+                        singleDebris.pos[1] = Math.floor(Math.random()*480);
+                    }
                     singleDebris.vel = [this.params.velocity[0], this.params.velocity[1]];
                     singleDebris.countdownToFadeout = 0xf;
                     if (this.curParticleCycle == 0) {
@@ -692,11 +724,34 @@ export class GloverWeatherRenderer {
     private advanceActiveParticles(viewerInput: Viewer.ViewerRenderInput) {
         // Advance state
         const view = viewerInput.camera.viewMatrix;
+        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
         const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
         const camPosition = lookatScratch;
         mat4.getTranslation(lookatScratch, view);
 
-        const scaleFactor = 1200;
+        if (this.lightningFrame > 0) {
+            this.lightningFrame -= 1;
+            if ((this.lightningFrame & 1) == 0) {
+                if ((Math.floor(Math.random()*10) & 1)==0) {
+                    this.lightningColor.r = 0;
+                    this.lightningColor.g = 0;
+                    this.lightningColor.b = 0;
+                    this.lightningColor.a = 0.9;
+                } else {
+                    this.lightningColor.r = 0.863;
+                    this.lightningColor.g = 0.863;
+                    this.lightningColor.b = 1;
+                    this.lightningColor.a = 0.9;
+                }
+            }
+        }
+
+        if (this.lightningColor.a > 0) {
+            this.lightningColor.a -= this.lightningColor.a / 6;
+            if (this.lightningColor.a < .1) {
+                this.lightningColor.a = 0;
+            }            
+        }
 
         let camVelocity = [camPosition[0]-this.lastCamPos[0], camPosition[2]-this.lastCamPos[2]];
 
@@ -716,38 +771,40 @@ export class GloverWeatherRenderer {
             let angleDiff = subtractAngles(this.lastYaw, yaw);
             singleDebris.pos[0] += angleDiff * Math.pow(singleDebris.curParallaxEffect,2) / -3000;
 
-            if (singleDebris.pos[0] > viewerInput.backbufferWidth - 40) {
-                singleDebris.pos[0] -= viewerInput.backbufferWidth;
-            } else if (singleDebris.pos[0] < -40) {
-                singleDebris.pos[0] += viewerInput.backbufferWidth;
+            if (singleDebris.pos[0] > 640) {
+                singleDebris.pos[0] -= 640;
+            } else if (singleDebris.pos[0] < 0) {
+                singleDebris.pos[0] += 640;
             }
 
             if (this.params.type === WeatherType.Snow) {
-                // TODO: rain looks fine but snow looks way off
                 const drift = Math.sin(singleDebris.lifetimeCounter/10);
-                singleDebris.vel[0] = drift * singleDebris.curParallaxEffect / 256;
+                singleDebris.vel[0] = drift * -40 * singleDebris.curParallaxEffect / 256;
  
                 tmp_vec = [-tmp_vec[1], -tmp_vec[0]];
 
                 singleDebris.targetParallaxEffect += (tmp_vec[0] * camVelocity[0] + tmp_vec[1] * camVelocity[1]) * -3;
-                if (singleDebris.targetParallaxEffect > scaleFactor || singleDebris.targetParallaxEffect < 100) {
-                    singleDebris.targetParallaxEffect = scaleFactor;
+                if (singleDebris.targetParallaxEffect > 1200 || singleDebris.targetParallaxEffect < 100) {
+                    singleDebris.targetParallaxEffect = 1200;
                 }
 
                 singleDebris.curParallaxEffect = singleDebris.targetParallaxEffect;
 
                 const a = Math.floor(this.params.alphas[2]/2);
-                singleDebris.targetAlpha = a + (0xff - a) * singleDebris.curParallaxEffect / scaleFactor;
+                singleDebris.targetAlpha = a + (0xff - a) * singleDebris.curParallaxEffect / 1200;
                 singleDebris.curAlpha = singleDebris.targetAlpha;
 
-                singleDebris.vel[1] = this.params.velocity[1] * (0.25 + singleDebris.curParallaxEffect / scaleFactor);
+                singleDebris.vel[1] = this.params.velocity[1] * (0.25 + singleDebris.curParallaxEffect / 1200);
+
+                singleDebris.vel[0] /= 10;
+                singleDebris.vel[1] /= 10;
             }
 
-            singleDebris.pos[0] -= singleDebris.vel[0]/4;
-            singleDebris.pos[1] += singleDebris.vel[1]/4;
+            singleDebris.pos[0] -= singleDebris.vel[0];
+            singleDebris.pos[1] += singleDebris.vel[1];
             singleDebris.lifetimeCounter -= 1;
 
-            if (singleDebris.lifetimeCounter == 0 || singleDebris.pos[1] > viewerInput.backbufferHeight * 4) {
+            if (singleDebris.pos[1] > 640 / aspect) {
                 singleDebris.active = false;
             }
         }
@@ -761,13 +818,12 @@ export class GloverWeatherRenderer {
             return;
         }
 
-        // const scaleFactor = (1024*480)/viewerInput.backbufferHeight;
-        const scaleFactor = 1024;
+        const screenWidth = 640;
 
         this.lastFrameAdvance += viewerInput.deltaTime;
         if(this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
             this.advanceActiveParticles(viewerInput);
-            this.generateWeatherParticles(viewerInput);
+            this.generateWeatherParticles();
             this.lastFrameAdvance = 0;
         }
 
@@ -776,15 +832,24 @@ export class GloverWeatherRenderer {
                 continue;
             }
             mat4.fromTranslation(this.drawMatrixScratch,
-                [singleDebris.pos[0]/4, singleDebris.pos[1]/4, 0]);
+                [singleDebris.pos[0], singleDebris.pos[1], 0]);
             mat4.scale(this.drawMatrixScratch, this.drawMatrixScratch,
-                [singleDebris.scale[0]*4/scaleFactor, -singleDebris.scale[1]*4/scaleFactor, 1]);
+                [singleDebris.scale[0]/screenWidth, -singleDebris.scale[1]/screenWidth, 1]);
             this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, singleDebris.curAlpha);
+        }
+
+        if (this.lightningColor.a > 0) {
+            mat4.fromTranslation(this.drawMatrixScratch, [0, 0, 0]);
+            mat4.scale(this.drawMatrixScratch, this.drawMatrixScratch, [640, 480, 1]);
+            this.lightningRenderer.primColor = this.lightningColor
+            this.lightningRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch);
+
         }
 
     }
 
     public destroy(device: GfxDevice): void {
         this.spriteRenderer.destroy(device);
+        this.lightningRenderer.destroy(device);
     }
 }
