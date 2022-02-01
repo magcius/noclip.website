@@ -37,7 +37,7 @@ export class Shadow {
     
     private static ray: vec3 = vec3.fromValues(0, -1, 0);
 
-    private static renderer: GloverShadowRenderer;
+    private static renderer: GloverShadowRenderer | null = null;
 
     public visible: boolean = true;
 
@@ -77,13 +77,20 @@ export class Shadow {
     }
 
     public static initializeRenderer(device: GfxDevice, cache: GfxRenderCache, textures: Textures.GloverTextureHolder) {
-        if (Shadow.renderer === undefined) {
+        if (Shadow.renderer === null) {
             Shadow.renderer = new GloverShadowRenderer(device, cache, textures);
         }
     }
 
+    public static destroyRenderer(device: GfxDevice) {
+        if (Shadow.renderer !== null) {
+            Shadow.renderer.destroy(device);
+            Shadow.renderer = null;
+        }
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (Shadow.renderer === undefined || this.position === null) {
+        if (Shadow.renderer === null || this.position === null) {
             return;
         }        
 

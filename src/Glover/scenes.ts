@@ -143,6 +143,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     public pathMaxVel : number = NaN;
     private lastPathAdvance: number = 0;
 
+    private lastPosition = vec3.fromValues(0,0,0);
+    private nextPosition = vec3.fromValues(0,0,0);
+
     // Conveyor
 
     private conveyorVel : vec3 | null = null;
@@ -166,6 +169,8 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         this.path.push(point);
         if (this.path.length == 1) {
             this.setPosition(point.pos[0], point.pos[1], point.pos[2]);
+            vec3.copy(this.lastPosition, this.position);
+            vec3.copy(this.nextPosition, this.position);
             this.pathTimeLeft = point.duration;
             this.pathPaused = point.duration < 0;
             this.updateActorModelMatrix();
@@ -393,58 +398,63 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
         let curSpeed = vec3.length(this.velocity);
 
-        if (this.lastPathAdvance >= SRC_FRAME_TO_MS) {
-            if (this.path.length > 0 && !this.pathPaused) {
-                const dstPt = this.path[this.pathCurPt].pos;
-                const journeyVector = this.scratchVec3;
-                vec3.sub(journeyVector, dstPt, this.position);
-                const distRemaining = vec3.length(journeyVector);
-                vec3.normalize(journeyVector, journeyVector);
+        if (this.path.length > 0 && this.pathMaxVel > 0) {
+            if (this.lastPathAdvance >= SRC_FRAME_TO_MS) {
+                if (!this.pathPaused) {
+                    const dstPt = this.path[this.pathCurPt].pos;
+                    const journeyVector = this.scratchVec3;
+                    vec3.sub(journeyVector, dstPt, this.lastPosition);
+                    const distRemaining = vec3.length(journeyVector);
+                    vec3.normalize(journeyVector, journeyVector);
 
-                let effectiveAccel = this.pathAccel;
-                const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
-                if (speedCutoff > distRemaining) {
-                    // This is more accurate than the active version of this code block,
-                    // but IMO looks worse:
-                    // if (curSpeed > distRemaining) {
-                    //     vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
-                    // }
-                    vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
-                } else {
-                    vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, effectiveAccel);
+                    let effectiveAccel = this.pathAccel;
+                    const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
+                    if (speedCutoff > distRemaining) {
+                        // This is more accurate than the active version of this code block,
+                        // but IMO looks worse:
+                        // if (curSpeed > distRemaining) {
+                        //     vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+                        // }
+                        vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+                    } else {
+                        vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, effectiveAccel);
+                    }
+
+                    if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
+                        const damping = this.pathMaxVel / curSpeed;
+                        this.velocity[0] *= damping;
+                        this.velocity[1] *= damping;
+                        this.velocity[2] *= damping;
+                    }
+
+                    if (this.pathTimeLeft > 0) {
+                        this.pathTimeLeft -= 1;
+                    } else {
+                        if (distRemaining < curSpeed + 0.01) {
+                            this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
+                            this.pathTimeLeft = this.path[this.pathCurPt].duration;
+                            this.pathPaused = this.path[this.pathCurPt].duration < 0;
+                            vec3.copy(this.lastPosition, dstPt);
+                            vec3.zero(this.velocity);
+                            curSpeed = 0;
+                        }                
+                    }
                 }
 
-                if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
-                    const damping = this.pathMaxVel / curSpeed;
-                    this.velocity[0] *= damping;
-                    this.velocity[1] *= damping;
-                    this.velocity[2] *= damping;
-                }
+                vec3.copy(this.scratchVec3, this.nextPosition);
+                vec3.add(this.nextPosition, this.lastPosition, this.velocity);
+                vec3.copy(this.lastPosition, this.scratchVec3);
 
-                if (this.pathTimeLeft > 0) {
-                    this.pathTimeLeft -= 1;
-                } else {
-                    if (distRemaining < curSpeed + 0.01) {
-                        this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
-                        this.pathTimeLeft = this.path[this.pathCurPt].duration;
-                        this.pathPaused = this.path[this.pathCurPt].duration < 0;
-                        vec3.copy(this.position, dstPt);
-                        vec3.zero(this.velocity);
-                        curSpeed = 0;
-                    }                
-                }
+                this.lastPathAdvance = 0;
+            } else {
+                this.lastPathAdvance += deltaTime;
             }
-    
-            // TODO: add deceleration
-            vec3.add(this.position, this.position, this.velocity);
 
-            this.lastPathAdvance = 0;
+            vec3.lerp(this.position, this.lastPosition, this.nextPosition, this.lastPathAdvance/(SRC_FRAME_TO_MS*1.1));
+
         } else {
-            this.lastPathAdvance += deltaTime;
+            this.advanceOrbit(deltaTime);
         }
-
-        this.advanceOrbit(deltaTime);
-
 
         if (this.rockingDeceleration > 0.0) {
             this.advanceRocking(deltaTime);
@@ -810,6 +820,8 @@ class GloverRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+
+        Shadows.Shadow.destroyRenderer(device);
 
         for (let renderer of this.actors) {
             renderer.destroy(device);
