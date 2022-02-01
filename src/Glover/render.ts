@@ -550,6 +550,8 @@ export class DrawCallInstance {
         this.createProgram();
     }
 
+    // TODO: destroy?
+
     public reloadTextureMappings() {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {

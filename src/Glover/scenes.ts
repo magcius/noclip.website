@@ -133,7 +133,6 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 
     // Path
-    // TODO: use time deltas instead of frames for this
     
     private path : PlatformPathPoint[] = [];
     private pathDirection : number = 1;
@@ -142,6 +141,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private pathPaused : boolean = false;
     public pathAccel : number = 0;
     public pathMaxVel : number = NaN;
+    private lastPathAdvance: number = 0;
 
     // Conveyor
 
@@ -393,56 +393,58 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
         let curSpeed = vec3.length(this.velocity);
 
-        if (this.path.length > 0 && !this.pathPaused) {
-            const dstPt = this.path[this.pathCurPt].pos;
-            const journeyVector = this.scratchVec3;
-            vec3.sub(journeyVector, dstPt, this.position);
-            const distRemaining = vec3.length(journeyVector);
-            vec3.normalize(journeyVector, journeyVector);
+        if (this.lastPathAdvance >= SRC_FRAME_TO_MS) {
+            if (this.path.length > 0 && !this.pathPaused) {
+                const dstPt = this.path[this.pathCurPt].pos;
+                const journeyVector = this.scratchVec3;
+                vec3.sub(journeyVector, dstPt, this.position);
+                const distRemaining = vec3.length(journeyVector);
+                vec3.normalize(journeyVector, journeyVector);
 
-            // TODO: remove
-            // if (viewerInput !== null) {
-            //     drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.position, '' + this.path, 0, White, { outline: 6 });
-            // }
+                let effectiveAccel = this.pathAccel;
+                const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
+                if (speedCutoff > distRemaining) {
+                    // This is more accurate than the active version of this code block,
+                    // but IMO looks worse:
+                    // if (curSpeed > distRemaining) {
+                    //     vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+                    // }
+                    vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+                } else {
+                    vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, effectiveAccel);
+                }
 
-            let effectiveAccel = this.pathAccel;
-            const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
-            if (speedCutoff > distRemaining) {
-                // This is more accurate than the active version of this code block,
-                // but IMO looks worse:
-                // if (curSpeed > distRemaining) {
-                //     vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
-                // }
-                vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
-            } else {
-                vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, effectiveAccel);
+                if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
+                    const damping = this.pathMaxVel / curSpeed;
+                    this.velocity[0] *= damping;
+                    this.velocity[1] *= damping;
+                    this.velocity[2] *= damping;
+                }
+
+                if (this.pathTimeLeft > 0) {
+                    this.pathTimeLeft -= 1;
+                } else {
+                    if (distRemaining < curSpeed + 0.01) {
+                        this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
+                        this.pathTimeLeft = this.path[this.pathCurPt].duration;
+                        this.pathPaused = this.path[this.pathCurPt].duration < 0;
+                        vec3.copy(this.position, dstPt);
+                        vec3.zero(this.velocity);
+                        curSpeed = 0;
+                    }                
+                }
             }
+    
+            // TODO: add deceleration
+            vec3.add(this.position, this.position, this.velocity);
 
-            if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
-                const damping = this.pathMaxVel / curSpeed;
-                this.velocity[0] *= damping;
-                this.velocity[1] *= damping;
-                this.velocity[2] *= damping;
-            }
-
-            if (this.pathTimeLeft > 0) {
-                this.pathTimeLeft -= deltaTime;
-            } else {
-                if (distRemaining < curSpeed + 0.01) {
-                    this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
-                    this.pathTimeLeft = this.path[this.pathCurPt].duration;
-                    this.pathPaused = this.path[this.pathCurPt].duration < 0;
-                    vec3.copy(this.position, dstPt);
-                    vec3.zero(this.velocity);
-                    curSpeed = 0;
-                }                
-            }
+            this.lastPathAdvance = 0;
+        } else {
+            this.lastPathAdvance += deltaTime;
         }
 
         this.advanceOrbit(deltaTime);
 
-        // TODO: add deceleration
-        vec3.add(this.position, this.position, this.velocity);
 
         if (this.rockingDeceleration > 0.0) {
             this.advanceRocking(deltaTime);
@@ -1347,7 +1349,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
-                    const duration = (cmd.params.duration == 0) ? SRC_FRAME_TO_MS : cmd.params.duration * SRC_FRAME_TO_MS;
+                    const duration = (cmd.params.duration == 0) ? 1 : cmd.params.duration;
                     currentPlatform.pushPathPoint(new PlatformPathPoint(
                         vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z), duration))
                     break;
@@ -1356,14 +1358,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
-                    currentPlatform.pathAccel = cmd.params.acceleration * CONVERT_FRAMERATE;
+                    currentPlatform.pathAccel = cmd.params.acceleration;
                     break;
                 }
                 case 'PlatMaxVelocity': {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
-                    currentPlatform.pathMaxVel = cmd.params.velocity * CONVERT_FRAMERATE;
+                    currentPlatform.pathMaxVel = cmd.params.velocity;
                     break;
                 }
                 case 'PlatSetParent': {
