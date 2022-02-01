@@ -528,7 +528,7 @@ export class GloverShadowRenderer extends GloverSpriteRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0);
+        super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0, {r: 0, g: 0, b: 0, a: 1});
     }
 }
 

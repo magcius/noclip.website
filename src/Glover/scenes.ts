@@ -1258,7 +1258,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentActor === null) {
                         throw `No active actor for ${cmd.params.__type}!`;
                     }
-                    mat4.scale(currentActor.modelMatrix, currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    // X and Z are swapped, as per Carnival 1 slot machine
+                    mat4.scale(currentActor.modelMatrix, currentActor.modelMatrix, [cmd.params.z, cmd.params.y, cmd.params.x]);
                     break;
                 }
                 case 'SetObjectSparkle': {
