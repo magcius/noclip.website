@@ -1183,6 +1183,41 @@ class SceneDesc implements Viewer.SceneDesc {
 
         let shadowCasters: Shadows.ShadowCaster[] = [];
 
+        // Do a first pass to set up scene lights
+        for (let cmd of landscape.body) {
+            if (cmd.params === undefined) {
+                continue;
+            }
+            switch (cmd.params.__type) {
+                case 'FogConfiguration': {
+                    skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
+                    break;
+                }
+                case 'AmbientLight': {
+                    sceneRenderer.sceneLights.ambientColor[0] = cmd.params.r/255;
+                    sceneRenderer.sceneLights.ambientColor[1] = cmd.params.g/255;
+                    sceneRenderer.sceneLights.ambientColor[2] = cmd.params.b/255;
+                    break;
+                }
+                case 'DiffuseLight': {
+                    // TODO: dbl check this doesn't depend on camera position
+                    // TODO: figure out wtf the engine does with those angles
+                    sceneRenderer.sceneLights.diffuseColor.push([
+                        cmd.params.r/255,
+                        cmd.params.g/255,
+                        cmd.params.b/255
+                    ]);
+                    const direction = vec3.fromValues(0, 0, 127);
+                    vec3.rotateX(direction, direction, [0,0,0], cmd.params.thetaX);
+                    vec3.rotateY(direction, direction, [0,0,0], cmd.params.thetaY);
+                    vec3.normalize(direction, direction);
+                    sceneRenderer.sceneLights.diffuseDirection.push(direction);
+                    break;
+                }
+            }
+        }
+
+        // Now load the actual level
         for (let cmd of landscape.body) {
             if (cmd.params === undefined) {
                 continue;
@@ -1239,31 +1274,6 @@ class SceneDesc implements Viewer.SceneDesc {
                         sceneRenderer.miscParticleEmitters.push(new MeshSparkle(
                             device, cache, textureHolder, sparkleActor, cmd.params.period));
                     }
-                    break;
-                }
-                case 'FogConfiguration': {
-                    skyboxClearColor = [cmd.params.r/255, cmd.params.g/255, cmd.params.b/255];
-                    break;
-                }
-                case 'AmbientLight': {
-                    sceneRenderer.sceneLights.ambientColor[0] = cmd.params.r/255;
-                    sceneRenderer.sceneLights.ambientColor[1] = cmd.params.g/255;
-                    sceneRenderer.sceneLights.ambientColor[2] = cmd.params.b/255;
-                    break;
-                }
-                case 'DiffuseLight': {
-                    // TODO: dbl check this doesn't depend on camera position
-                    // TODO: figure out wtf the engine does with those angles
-                    sceneRenderer.sceneLights.diffuseColor.push([
-                        cmd.params.r/255,
-                        cmd.params.g/255,
-                        cmd.params.b/255
-                    ]);
-                    const direction = vec3.fromValues(0, 0, 127);
-                    vec3.rotateX(direction, direction, [0,0,0], cmd.params.thetaX);
-                    vec3.rotateY(direction, direction, [0,0,0], cmd.params.thetaY);
-                    vec3.normalize(direction, direction);
-                    sceneRenderer.sceneLights.diffuseDirection.push(direction);
                     break;
                 }
                 case 'Platform': {

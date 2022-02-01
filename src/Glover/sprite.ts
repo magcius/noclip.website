@@ -44,6 +44,7 @@ interface SpriteRect {
 class GloverBaseSpriteRenderer {
     protected drawCall: Render.DrawCall;
     protected textureCache: RDP.TextureCache;
+    protected drawCallInstance: Render.DrawCallInstance;
 
     protected megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
@@ -175,6 +176,7 @@ class GloverBaseSpriteRenderer {
         drawCall.renderData = new Render.DrawCallRenderData(this.device, this.cache, rspState.textureCache, rspState.segmentBuffers, drawCall);
         this.drawCall = drawCall;
         this.textureCache = rspState.textureCache;
+        this.drawCallInstance = new Render.DrawCallInstance(this.drawCall, this.textureCache);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, frame: number, prim_color: Color | null = null): void {
@@ -217,8 +219,8 @@ class GloverBaseSpriteRenderer {
             this.drawCall.DP_PrimColor = prim_color;
         }
 
-        const drawCallInstance = new Render.DrawCallInstance(this.drawCall, drawMatrix, this.textureCache);
-        drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, this.isOrtho, this.isBillboard);
+        this.drawCallInstance.reloadTextureMappings();
+        this.drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, this.isOrtho, this.isBillboard);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -666,7 +668,7 @@ export class GloverWeatherRenderer {
             // TODO: these are the in-game odds for a lightning strike,
             //       but they don't happen often enough with non-engine RNG:
             // const strike = Math.floor(Math.random()*2000) < 5;
-            const strike = Math.floor(Math.random()*200) < 5;
+            const strike = Math.floor(Math.random()*600) < 5;
             if (strike) {
                 this.lightningFrame = (5 + Math.floor(Math.random()*5)) * 2;
                 console.log("BANG")

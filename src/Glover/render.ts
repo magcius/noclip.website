@@ -542,19 +542,23 @@ export class DrawCallInstance {
     public envAlpha = 1;
     public visible = true;
 
-    constructor(private drawCall: DrawCall, private drawMatrix: mat4, textureCache: RDP.TextureCache, private sceneLights: SceneLighting | null = null) {
+    constructor(private drawCall: DrawCall, private textureCache: RDP.TextureCache, private sceneLights: SceneLighting | null = null) {
         assert(drawCall.renderData !== null);
+        this.reloadTextureMappings();
+        this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
+        this.setBackfaceCullingEnabled(false);
+        this.createProgram();
+    }
+
+    public reloadTextureMappings() {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
-                this.textureEntry[i] = textureCache.textures[idx];
+                this.textureEntry[i] = this.textureCache.textures[idx];
                 this.textureMappings[i].gfxTexture = this.drawCall.renderData!.textures[idx];
                 this.textureMappings[i].gfxSampler = this.drawCall.renderData!.samplers[idx];
             }
         }
-        this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
-        this.setBackfaceCullingEnabled(false);
-        this.createProgram();
     }
 
     private createProgram(): void {
@@ -630,7 +634,7 @@ export class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean = false, isBillboard: boolean = false): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, isSkybox: boolean = false, isBillboard: boolean = false): void {
         if (!this.visible)
             return;
 
@@ -654,7 +658,7 @@ export class DrawCallInstance {
             mat4.identity(DrawCallInstance.viewMatrixScratch), viewerInput.camera);
         }
 
-        mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, this.drawMatrix);
+        mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, drawMatrix);
         if (isBillboard) {
             calcBillboardMatrix(DrawCallInstance.modelViewScratch, DrawCallInstance.modelViewScratch, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         }

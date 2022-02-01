@@ -493,6 +493,7 @@ class GloverMeshRenderer {
     private rspOutput: Render.GloverRSPOutput | null;
     private vertexColorsEnabled = true;
     private backfaceCullingEnabled = false;
+    private drawCallInstances: Render.DrawCallInstance[] = [];
 
     // UV animation
     private lastRender: number = 0;
@@ -581,6 +582,7 @@ class GloverMeshRenderer {
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
                 drawCall.renderData = new Render.DrawCallRenderData(device, cache, this.rspOutput.textureCache, this.segments, drawCall);
+                this.drawCallInstances.push(new Render.DrawCallInstance(drawCall, this.rspOutput.textureCache, this.sceneLights);)
             }
         }
     }
@@ -732,25 +734,23 @@ class GloverMeshRenderer {
         this.lastRender = viewerInput.time;
 
         if (this.rspOutput !== null) {
-            for (let drawCall of this.rspOutput.drawCalls) {
+            for (let drawCallIdx = 0; drawCallIdx < this.rspOutput.drawCalls.length; drawCallIdx += 1) {
+                const drawCall = this.rspOutput.drawCalls[drawCallIdx];
+                const drawCallInstance = this.drawCallInstances[drawCallIdx];
+
                 if (drawCall.dynamicTextures.size > 0) {
                     if (drawCall.lastTextureUpdate < this.textures.lastAnimationTick) {
                         drawCall.lastTextureUpdate = viewerInput.time;
                         drawCall.renderData!.updateTextures();
                     }
                 }
-                // TODO: remove
-                // if (this.meshData.id ==  0x52DFE077) {
-                //     console.log(drawCall.vertices);
-                // },
-                const drawCallInstance = new Render.DrawCallInstance(drawCall, drawMatrix, this.rspOutput.textureCache, this.sceneLights);
                 if (this.backfaceCullingEnabled) {
                     drawCallInstance.setBackfaceCullingEnabled(true);
                 }
                 if (!this.vertexColorsEnabled) {
                     drawCallInstance.setVertexColorsEnabled(false);
                 }
-                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, false);
+                drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, false);
             }
         }
 
