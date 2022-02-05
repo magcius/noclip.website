@@ -263,6 +263,7 @@ class Main {
     public sceneTimeScale = 1.0;
     public isEmbedMode = false;
     private isFrameStep = false;
+    private pixelSize = 1;
 
     // Link to debugJunk so we can reference it from the DevTools.
     private debugJunk = debugJunk;
@@ -278,6 +279,7 @@ class Main {
         document.body.appendChild(this.toplevel);
 
         this.canvas = document.createElement('canvas');
+        this.canvas.style.imageRendering = 'pixelated';
 
         this.toplevel.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
@@ -501,7 +503,7 @@ class Main {
     }
 
     private _onResize() {
-        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio);
+        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio / this.pixelSize);
     }
 
     private _saveStateTmp = new Uint8Array(512);

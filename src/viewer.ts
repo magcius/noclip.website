@@ -78,7 +78,8 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     if (canvas.width === nw && canvas.height === nh)
         return;
 
-    canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
     canvas.width = nw;
     canvas.height = nh;
 }
