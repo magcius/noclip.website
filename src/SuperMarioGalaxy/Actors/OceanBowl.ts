@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexInputLocation } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
+import { MaterialParams, DrawParams, ColorKind } from "../../gx/gx_render";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderInstManager";
 import { DrawType, NameObj, MovementType } from "../NameObj";
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
@@ -63,7 +63,7 @@ class OceanBowlBloomDrawer extends NameObj {
 
 const scratchVec3 = vec3.create();
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 export class OceanBowl extends LiveActor {
     private points: OceanBowlPoint[] = [];
     private animationController = new AnimationController(60);
@@ -395,8 +395,8 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -428,8 +428,8 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelperBloom.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
+        this.materialHelperBloom.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

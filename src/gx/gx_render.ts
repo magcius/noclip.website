@@ -62,7 +62,7 @@ export class MaterialParams {
     }
 }
 
-export class PacketParams {
+export class DrawParams {
     public u_PosMtx: mat4[] = nArray(10, () => mat4.create());
 
     public clear(): void {
@@ -140,14 +140,14 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
     assert(d.length >= offs);
 }
 
-function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, packetParams: PacketParams): void {
+function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, drawParams: DrawParams): void {
     let offs = bOffs;
 
     if (GX_Material.materialUsePnMtxIdx(material))
         for (let i = 0; i < 10; i++)
-            offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
+            offs += fillMatrix4x3(d, offs, drawParams.u_PosMtx[i]);
     else
-        offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[0]);
+        offs += fillMatrix4x3(d, offs, drawParams.u_PosMtx[0]);
 
     assert(d.length >= offs);
 }
@@ -496,7 +496,7 @@ export class GXMaterialHelperGfx {
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
-    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, drawParams: PacketParams): void {
+    public allocatedrawParamsDataOnInst(renderInst: GfxRenderInst, drawParams: DrawParams): void {
         const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_DrawParams, this.drawParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_DrawParams);
         fillDrawParamsDataWithOptimizations(this.material, d, offs, drawParams);

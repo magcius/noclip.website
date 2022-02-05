@@ -357,7 +357,6 @@ ${materialHasDynamicAlphaTest(material) ? `
 };
 
 // Expected to change with each shape draw.
-// TODO(jstpierre): Rename from ub_DrawParams.
 layout(std140) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
     Mat4x3 u_PosMtx[10];

@@ -14,7 +14,7 @@ import { nArray, assertExists, assert, hexzero0x } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, White, Green } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from "../gx/gx_render";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
@@ -1472,7 +1472,7 @@ class daSeaFightGame_info_c {
 
 // TODO(jstpierre): This is a hack to put it in 3D.
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 // Simple quad shape & input.
 export class dDlst_2DStatic_c {
@@ -1548,8 +1548,8 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1598,10 +1598,10 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
 
             vec3.set(scratchVec3a, x, 0, 0);
             mat4.translate(scratchMat4a, this.modelMatrix, scratchVec3a);
-            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+            mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
             x -= this.spacing * 2;
 
-            this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
 
             // No more digits.
@@ -2330,8 +2330,8 @@ class dCloth_packet_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2822,8 +2822,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;

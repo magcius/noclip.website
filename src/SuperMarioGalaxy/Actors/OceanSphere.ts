@@ -14,7 +14,7 @@ import { isEqualStageName } from "./MiscActor";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from '../../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../../gx/gx_render';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../../Color';
 import { WaterAreaHolder, WaterInfo } from '../MiscMap';
@@ -151,7 +151,7 @@ class OceanSpherePlaneEdge {
 const enum OceanSphereNrv { Wait }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 export class OceanSphere extends LiveActor<OceanSphereNrv> {
     private pointCount: number;
@@ -465,8 +465,8 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         const device = sceneObjHolder.modelCache.device;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelperEnvBack.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialHelperEnvBack.allocatedrawParamsDataOnInst(template, drawParams);
 
         if (this.isStartPosCamera && !this.isCameraInside) {
             // TODO(jstpierre)

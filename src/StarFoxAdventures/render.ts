@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Viewer from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
+import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render';
 import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CameraController } from '../Camera';
@@ -45,18 +45,18 @@ export interface SFARenderLists {
 
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
-const scratchPacketParams = new PacketParams();
+const scratchdrawParams = new DrawParams();
 const scratchMaterialParams = new MaterialParams();
 
-export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
+export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 }
 
-export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
-    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, packetParams);
+export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
+    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, drawParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -199,8 +199,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         };
         this.heatShimmerMaterial!.setOnMaterialParams(scratchMaterialParams, matCtx);
 
-        scratchPacketParams.clear();
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
+        scratchdrawParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchdrawParams);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 

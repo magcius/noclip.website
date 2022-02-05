@@ -23,7 +23,7 @@ import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVert
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
-import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
+import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
@@ -918,14 +918,14 @@ export class JPAEmitterWorkData {
     public forceTexMtxIdentity: boolean = false;
 
     public materialParams = new MaterialParams();
-    public packetParams = new PacketParams();
+    public drawParams = new DrawParams();
 
     public fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
         const materialHelper = this.baseEmitter.resData.materialHelper;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         const materialParams = this.materialParams;
-        const packetParams = this.packetParams;
+        const drawParams = this.drawParams;
 
         // These should be one allocation.
         let materialOffs = renderInst.allocateUniformBuffer(GX_Program.ub_MaterialParams, materialHelper.materialParamsBufferSize);
@@ -965,7 +965,7 @@ export class JPAEmitterWorkData {
 
         materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
 
-        packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
+        packetOffs += fillMatrix4x3(d, packetOffs, drawParams.u_PosMtx[0]);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
@@ -2048,7 +2048,7 @@ export class JPABaseEmitter {
         // mpDrawEmitterFuncList
 
         const materialParams = workData.materialParams;
-        const packetParams = workData.packetParams;
+        const drawParams = workData.drawParams;
 
         if (bsp1.texIdxAnimData === null)
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], bsp1.texIdx);
@@ -2079,7 +2079,7 @@ export class JPABaseEmitter {
             colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
             colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-            mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
+            mat4.copy(drawParams.u_PosMtx[0], workData.posCamMtx);
     
             if (!calcTexCrdMtxPrj(materialParams.u_TexMtx[0], workData, workData.posCamMtx, materialParams.m_TextureMapping[0].flipY)) {
                 if (bsp1.isEnableTexScrollAnm)
@@ -3201,7 +3201,7 @@ export class JPABaseParticle {
         const shapeType = sp1.shapeType;
 
         const materialParams = workData.materialParams;
-        const packetParams = workData.packetParams;
+        const drawParams = workData.drawParams;
 
         const scaleX = workData.globalScale2D[0] * this.particleScale[0];
         const scaleY = workData.globalScale2D[1] * this.particleScale[1];
@@ -3219,7 +3219,7 @@ export class JPABaseParticle {
             transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3c);
             vec3.scale(scratchVec3a, scratchVec3a, -0.5);
 
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
 
             dst[0] = -scratchVec3a[1] * scaleX;
             dst[1] = scratchVec3a[0] * scaleX;
@@ -3252,12 +3252,12 @@ export class JPABaseParticle {
             const rotateAngle = isRot ? this.rotateAngle : 0;
 
             transformVec3Mat4w1(scratchVec3a, workData.posCamMtx, this.position);
-            computeModelMatrixSRT(packetParams.u_PosMtx[0],
+            computeModelMatrixSRT(drawParams.u_PosMtx[0],
                 scaleX, scaleY, 1,
                 0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
-            this.applyPivot(packetParams.u_PosMtx[0], workData);
-            this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, packetParams.u_PosMtx[0]);
+            this.applyPivot(drawParams.u_PosMtx[0], workData);
+            this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, drawParams.u_PosMtx[0]);
 
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             renderInst.drawIndexes(6, 0);
@@ -3271,7 +3271,7 @@ export class JPABaseParticle {
             vec3.cross(this.axis, scratchVec3a, scratchVec3b);
             vec3.normalize(this.axis, this.axis);
 
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
             dst[0] = this.axis[0];
             dst[1] = this.axis[1];
             dst[2] = this.axis[2];
@@ -3307,7 +3307,7 @@ export class JPABaseParticle {
             else
                 renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross) {
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
             this.applyRot(dst, this.rotateAngle, sp1.rotType);
 
             this.applyPlane(dst, sp1.planeType, scaleX, scaleY);
@@ -3333,7 +3333,7 @@ export class JPABaseParticle {
             transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3a);
             transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
 
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
             dst[0] = scratchVec3a[0] * scaleX;
             dst[1] = scratchVec3a[1] * scaleX;
             dst[2] = 0;
@@ -3359,7 +3359,7 @@ export class JPABaseParticle {
             vec3.normalize(scratchVec3a, scratchVec3a);
 
             transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
 
             if (isRot) {
                 const sin = Math.sin(this.rotateAngle), cos = Math.cos(this.rotateAngle);

@@ -11,7 +11,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { DrawParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
@@ -108,7 +108,7 @@ class PlaneShape {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class SunshineWaterModel {
     private seaMaterialInstance: MaterialInstance;
     private shapeInstanceState = new ShapeInstanceState();
@@ -195,10 +195,10 @@ class SunshineWaterModel {
         this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
 
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
-        mat4.mul(packetParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
-        this.seaMaterialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
+        this.seaMaterialInstance.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, viewerInput.viewport, drawParams);
 
         this.plane.prepareToRender(renderHelper);
 

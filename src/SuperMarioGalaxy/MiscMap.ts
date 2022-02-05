@@ -16,7 +16,7 @@ import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
@@ -227,7 +227,7 @@ function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: num
     dst[13] = y + -x * sin - y * cos;
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 const enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
 export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
@@ -372,8 +372,8 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         renderInst.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.identity(drawParams.u_PosMtx[0]);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

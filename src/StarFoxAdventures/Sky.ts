@@ -6,7 +6,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render';
+import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render';
 import { getMatrixAxisZ } from '../MathHelpers';
 
 import { ObjectRenderContext } from './objects';
@@ -18,7 +18,7 @@ import { createDirectionalLight, Light, LightType } from './WorldLights';
 import { colorCopy, colorNewCopy, colorScale, White } from '../Color';
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
 
@@ -99,8 +99,8 @@ export class Sky {
 
         const renderInst = this.skyddraw.makeRenderInst(renderInstManager);
 
-        packetParams.clear();
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.materialHelperSky, materialParams, packetParams);
+        drawParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.materialHelperSky, materialParams, drawParams);
 
         this.skyddraw.endAndUpload(renderInstManager);
 

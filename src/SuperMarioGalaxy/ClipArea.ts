@@ -2,7 +2,7 @@
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from "../gx/gx_render";
 
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
@@ -37,7 +37,7 @@ import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOv
 import { TDDraw } from "./DDraw";
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
@@ -56,9 +56,9 @@ abstract class ClipAreaShape {
 
     public drawVolumeShape(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, mtx: ReadonlyMat4, scale: ReadonlyVec3, camera: Camera): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        this.calcVolumeMatrix(packetParams.u_PosMtx[0], mtx, scale);
-        mat4.mul(packetParams.u_PosMtx[0], camera.viewMatrix, packetParams.u_PosMtx[0]);
-        sceneObjHolder.clipAreaHolder!.materialFront.allocatePacketParamsDataOnInst(template, packetParams);
+        this.calcVolumeMatrix(drawParams.u_PosMtx[0], mtx, scale);
+        mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, drawParams.u_PosMtx[0]);
+        sceneObjHolder.clipAreaHolder!.materialFront.allocatedrawParamsDataOnInst(template, drawParams);
         drawSimpleModel(renderInstManager, this.modelData!);
         renderInstManager.popTemplateRenderInst();
     }
@@ -472,8 +472,8 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x0040F080);
         this.materialLaser.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialLaser.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialLaser.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

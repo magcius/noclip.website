@@ -24,7 +24,7 @@ import { Spine } from "./Spine";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch";
 import * as GX from '../gx/gx_enum';
 import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeDisplayFlags, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { MaterialParams, PacketParams } from "../gx/gx_render";
+import { MaterialParams, DrawParams } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
 
@@ -255,7 +255,7 @@ function patchBMD(bmd: BMD): void {
 }
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -283,7 +283,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
         // Fill texture memory with normal matrices.
         for (let i = 0; i < 10; i++) {
             const m = materialParams.u_TexMtx[i];
-            computeNormalMatrix(m, packetParams.u_PosMtx[i], true);
+            computeNormalMatrix(m, drawParams.u_PosMtx[i], true);
         }
     }
 }

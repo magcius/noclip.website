@@ -4,7 +4,7 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { MaterialParams, DrawParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
@@ -36,7 +36,7 @@ class Command_Material {
 
 const bboxScratch = new AABB();
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class Command_Batch {
     private shapeHelper: GXShapeHelperGfx;
 
@@ -62,8 +62,8 @@ class Command_Batch {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialCommand.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialCommand.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera);
-        this.materialCommand.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        this.computeModelView(drawParams.u_PosMtx[0], viewerInput.camera);
+        this.materialCommand.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

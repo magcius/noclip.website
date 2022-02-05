@@ -3,7 +3,7 @@ import { vec3, mat4, ReadonlyMat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray, assert } from '../util';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind } from '../gx/gx_render';
+import { MaterialParams, DrawParams, GXTextureHolder, ColorKind } from '../gx/gx_render';
 
 import { MREA, Material, Surface, UVAnimationType, MaterialSet, AreaLight } from './mrea';
 import * as Viewer from '../viewer';
@@ -112,7 +112,7 @@ class SurfaceData {
 class SurfaceInstance {
     private materialTextureKey: number;
     private visible = true;
-    public packetParams = new PacketParams();
+    public drawParams = new DrawParams();
 
     constructor(public surfaceData: SurfaceData, public materialInstance: MaterialInstance, public materialGroupInstance: MaterialGroupInstance, public modelMatrix: mat4) {
         this.materialTextureKey = materialInstance.textureKey;
@@ -141,8 +141,8 @@ class SurfaceInstance {
         this.surfaceData.shapeHelper.setOnRenderInst(renderInst);
         this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
 
-        mat4.mul(this.packetParams.u_PosMtx[0], viewMatrix, modelMatrixScratch);
-        this.materialGroupInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
+        mat4.mul(this.drawParams.u_PosMtx[0], viewMatrix, modelMatrixScratch);
+        this.materialGroupInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, this.drawParams);
         renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, this.materialTextureKey);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.materialInstance.textureMappings);

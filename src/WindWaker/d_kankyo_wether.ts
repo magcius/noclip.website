@@ -18,7 +18,7 @@ import { Camera, divideByW } from "../Camera";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
 import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
@@ -159,14 +159,14 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
-function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, packetParams_ = packetParams): void {
+function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, drawParams_ = drawParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams_);
+    mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
 

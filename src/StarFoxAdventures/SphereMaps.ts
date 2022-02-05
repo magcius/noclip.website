@@ -7,7 +7,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRend
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { ColorKind, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
+import { ColorKind, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render';
 import { projectionMatrixForCuboid } from '../MathHelpers';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { TextureMapping } from '../TextureHolder';
@@ -21,7 +21,7 @@ import { World } from './world';
 import { LightType } from './WorldLights';
 
 const scratchMaterialParams = new MaterialParams();
-const scratchPacketParams = new PacketParams();
+const scratchdrawParams = new DrawParams();
 const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
@@ -294,7 +294,7 @@ export class SphereMapManager {
 
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
 
-        scratchPacketParams.clear();
+        scratchdrawParams.clear();
         scratchMaterialParams.clear();
 
         const ambParams = this.params[mapIdx]; // TODO: selectable per object
@@ -304,7 +304,7 @@ export class SphereMapManager {
         else // SphereMapType.ReflectiveProbe
             material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
         
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchdrawParams);
 
         this.ddraw.endAndUpload(renderInstManager);
 

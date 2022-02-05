@@ -4,7 +4,7 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
-import { PacketParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
+import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
@@ -83,7 +83,7 @@ export class ShapeData {
 }
 
 export class MaterialData {
-    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
     }
@@ -94,7 +94,7 @@ class JointTreeNode {
     }
 }
 
-export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceState: ShapeInstanceState, shape: Shape, mtxGroup: MtxGroup): boolean {
+export function prepareShapeMtxGroup(drawParams: DrawParams, shapeInstanceState: ShapeInstanceState, shape: Shape, mtxGroup: MtxGroup): boolean {
     let instVisible = false;
 
     for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
@@ -105,7 +105,7 @@ export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceSt
             continue;
 
         const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
-        const dst = packetParams.u_PosMtx[i];
+        const dst = drawParams.u_PosMtx[i];
 
         if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
             calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
@@ -122,7 +122,7 @@ export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceSt
 }
 
 const scratchModelViewMatrix = mat4.create();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 export class ShapeInstance {
     public visible: boolean = true;
 
@@ -138,7 +138,7 @@ export class ShapeInstance {
         const materialJointIndex = modelData.materialJointIndices[materialIndex];
         const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialJointIndex];
 
-        packetParams.clear();
+        drawParams.clear();
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = materialInstance.sortKey;
@@ -149,18 +149,18 @@ export class ShapeInstance {
 
         const multi = shape.displayFlags === ShapeDisplayFlags.MULTI;
         if (!multi)
-            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
+            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, drawParams);
 
         for (let i = 0; i < shape.mtxGroups.length; i++) {
-            if (!prepareShapeMtxGroup(packetParams, shapeInstanceState, shape, shape.mtxGroups[i]))
+            if (!prepareShapeMtxGroup(drawParams, shapeInstanceState, shape, shape.mtxGroups[i]))
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[i]);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
             if (multi)
-                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
+                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, drawParams);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -619,7 +619,7 @@ export class MaterialInstance {
         }
     }
 
-    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
+    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0],   ColorRegType.S10);
@@ -682,11 +682,11 @@ export class MaterialInstance {
         materialParams.u_FogBlock.copy(this.fogBlock);
 
         if (this.materialData.fillMaterialParamsCallback !== null)
-            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);
+            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, drawParams);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
-        this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, packetParams, viewMatrix);
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams): void {
+        this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, drawParams, viewMatrix);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }

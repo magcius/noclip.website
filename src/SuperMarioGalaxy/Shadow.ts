@@ -1,6 +1,6 @@
 
 import * as GX from "../gx/gx_enum";
-import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
+import { DrawParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
 
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
@@ -298,7 +298,7 @@ abstract class ShadowDrawer extends NameObj {
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 abstract class ShadowSurfaceDrawer extends ShadowDrawer {
     protected material: GXMaterialHelperGfx;
@@ -369,8 +369,8 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.material.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.material.allocatedrawParamsDataOnInst(template, drawParams);
 
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
@@ -428,7 +428,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         return this.controller.isDraw();
     }
 
-    protected abstract loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void;
+    protected abstract loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void;
     protected abstract drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void;
 
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -441,8 +441,8 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        this.loadDrawModelMtx(packetParams, viewerInput);
-        this.materialFront.allocatePacketParamsDataOnInst(template, packetParams);
+        this.loadDrawModelMtx(drawParams, viewerInput);
+        this.materialFront.allocatedrawParamsDataOnInst(template, drawParams);
 
         this.drawShapes(sceneObjHolder, renderInstManager);
         renderInstManager.popTemplateRenderInst();
@@ -497,16 +497,16 @@ class ShadowVolumeSphere extends ShadowVolumeModel {
         return this.controller.isProjected && super.isDraw();
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         let scale = this.radius / 100.0;
         if (this.controller.followHostScale)
             scale *= this.controller.host.scale[0];
 
-        computeModelMatrixS(packetParams.u_PosMtx[0], scale);
+        computeModelMatrixS(drawParams.u_PosMtx[0], scale);
         const projectionPos = this.controller.getProjectionPos();
-        setMatrixTranslation(packetParams.u_PosMtx[0], projectionPos);
+        setMatrixTranslation(drawParams.u_PosMtx[0], projectionPos);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, drawParams.u_PosMtx[0]);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
@@ -526,7 +526,7 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         return this.controller.isProjected && super.isDraw();
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         vec3.scale(scratchVec3a, this.size, 1 / 100.0);
         scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
         scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
@@ -556,7 +556,7 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
         setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
@@ -572,7 +572,7 @@ class ShadowVolumeOvalPole extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         vec3.scale(scratchVec3a, this.size, 1 / 100.0);
         scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
         scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
@@ -607,7 +607,7 @@ class ShadowVolumeOvalPole extends ShadowVolumeModel {
         vec3.scale(scratchVec3b, scratchVec3b, baseDropLength / 100.0);
         setMatrixAxis(scratchMat4a, null, scratchVec3b, null);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
@@ -623,7 +623,7 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         this.calcBaseDropPosition(scratchVec3a);
         vec3.negate(scratchVec3b, this.controller.getDropDir());
 
@@ -636,7 +636,7 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
         const scaleY = this.calcBaseDropLength() / 100.0;
 
         scaleMatrix(scratchMat4a, scratchMat4a, scaleXZ, scaleY, scaleXZ);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
@@ -831,8 +831,8 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         renderInstManager.submitRenderInst(back);
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
 
     public override destroy(device: GfxDevice): void {
@@ -933,8 +933,8 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         renderInstManager.submitRenderInst(back);
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
 
     public override destroy(device: GfxDevice): void {
@@ -1002,11 +1002,11 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
         }
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         vec3.scale(scratchVec3a, this.controller.getDropDir(), this.calcBaseDropLength());
 
-        const rootMtx = packetParams.u_PosMtx[this.rootJointPosNrmMtxIndex];
-        const dropMtx = packetParams.u_PosMtx[this.dropJointPosNrmMtxIndex];
+        const rootMtx = drawParams.u_PosMtx[this.rootJointPosNrmMtxIndex];
+        const dropMtx = drawParams.u_PosMtx[this.dropJointPosNrmMtxIndex];
 
         this.calcRootJoint(rootMtx, scratchVec3a);
         if (this.controller.followHostScale)
@@ -1096,8 +1096,8 @@ class AlphaShadow extends NameObj {
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.orthoQuad.setOnRenderInst(renderInst);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.identity(drawParams.u_PosMtx[0]);
+        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

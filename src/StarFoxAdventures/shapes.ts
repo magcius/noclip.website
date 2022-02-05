@@ -10,7 +10,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
 import { GXMaterial } from '../gx/gx_material';
-import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
+import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../gx/gx_render';
 import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
 
@@ -82,10 +82,10 @@ class MyShapeHelper {
             device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        if (packet !== null)
-            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        if (draw !== null)
+            renderInst.drawIndexes(draw.indexCount, draw.indexOffset);
         else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
     }
@@ -111,7 +111,7 @@ export class ShapeGeometry {
     private loadedVertexData: LoadedVertexData;
 
     private shapeHelper: MyShapeHelper | null = null;
-    private packetParams = new PacketParams();
+    private drawParams = new DrawParams();
     private verticesDirty = true;
 
     public aabb?: AABB;
@@ -167,7 +167,7 @@ export class ShapeGeometry {
 
         this.shapeHelper.setOnRenderInst(renderInst);
 
-        this.packetParams.clear();
+        this.drawParams.clear();
 
         const worldToViewMtx = scratchMtx0;
         computeViewMatrix(worldToViewMtx, camera);
@@ -201,18 +201,18 @@ export class ShapeGeometry {
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
-        for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
+        for (let i = 0; i < this.drawParams.u_PosMtx.length; i++) {
             // If fine-skinning is enabled, matrix 9 is overridden with the model-view matrix,
             // and vertices marked with matrix 9 are skinned by software.
             if (this.hasFineSkinning && i === 9)
-                mat4.copy(this.packetParams.u_PosMtx[i], modelToViewMtx);
+                mat4.copy(this.drawParams.u_PosMtx[i], modelToViewMtx);
             else
-                mat4.mul(this.packetParams.u_PosMtx[i], modelToViewMtx, matrixPalette[this.pnMatrixMap[i]]);
+                mat4.mul(this.drawParams.u_PosMtx[i], modelToViewMtx, matrixPalette[this.pnMatrixMap[i]]);
         }
     }
 
-    public getPacketParams() {
-        return this.packetParams;
+    public getdrawParams() {
+        return this.drawParams;
     }
     
     public destroy(device: GfxDevice) {
@@ -314,26 +314,26 @@ export class Shape {
         this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
         this.material.setOnMaterialParams(scratchMaterialParams, this.geom, modelToWorldMtx, modelCtx, matOptions);
 
-        const packetParams = this.geom.getPacketParams();
+        const drawParams = this.geom.getdrawParams();
 
         // For environment mapping
         if (this.geom.hasSkinning && modelCtx.object !== undefined) {
             const descaleMtx = mat4.create();
             const invScale = 1.0 / modelCtx.object.scale;
             mat4.fromScaling(descaleMtx, [invScale, invScale, invScale])
-            for (let i = 0; i < packetParams.u_PosMtx.length; i++) {
+            for (let i = 0; i < drawParams.u_PosMtx.length; i++) {
                 // XXX: this is the game's peculiar way of creating normal matrices
-                mat4.copy(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
+                mat4.copy(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
                 mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
                 mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
                 // The following line causes glitches due to an issue related to computeNormalMatrix's method of detecting uniform scaling.
-                // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], packetParams.u_PosMtx[i]);
+                // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
             }
         }
         
         const materialHelper = this.material.getGXMaterialHelper();
 
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, packetParams);
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, drawParams);
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
