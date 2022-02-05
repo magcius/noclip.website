@@ -1,3 +1,5 @@
+import { vec3 } from 'gl-matrix';
+
 export function subtractAngles(a: number, b: number): number {
     let diff = a - b;
     if (a <= -Math.PI || Math.PI < diff) {
@@ -44,4 +46,17 @@ export function axisRotationToQuaternion(axis: [number, number, number], theta: 
     axis[1] * sinHalfTheta,
     axis[2] * sinHalfTheta,
   ];
+}
+
+export function radianLerp(dst: vec3, start: vec3, end: vec3, t: number) {
+    for (let axis = 0; axis < 3; axis += 1) {
+        let a = start[axis];
+        let b = end[axis];
+        if (b - a > Math.PI) {
+            a += 2*Math.PI;
+        } else if (a - b > Math.PI) {
+            b += 2*Math.PI;
+        }
+        dst[axis] = a * (1-t) + b * t;
+    }
 }

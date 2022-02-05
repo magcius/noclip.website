@@ -150,6 +150,7 @@ class ActorMeshNode {
                 translation: Math.min(this.keyframeState.translation + 1, this.mesh.numTranslation - 1),
                 rotation: Math.min(this.keyframeState.rotation + 1, this.mesh.numRotation - 1),
             };
+            let startIdx = this.keyframeState.scale;
             while (!(curAnimTime >= this.mesh.scale[this.keyframeState.scale].t && curAnimTime <= this.mesh.scale[nextKeyframes.scale].t)) {
                 this.keyframeState.scale += 1;
                 if (this.keyframeState.scale >= this.mesh.numScale) {
@@ -159,7 +160,12 @@ class ActorMeshNode {
                 if (nextKeyframes.scale >= this.mesh.numScale) {
                     nextKeyframes.scale = this.keyframeState.scale;
                 }
+                if (this.keyframeState.scale == startIdx) {
+                    console.error("WARNING: Couldn't find keyframe covering time " + curAnimTime);
+                    break;
+                }
             }
+            startIdx = this.keyframeState.translation;
             while (!(curAnimTime >= this.mesh.translation[this.keyframeState.translation].t && curAnimTime <= this.mesh.translation[nextKeyframes.translation].t)) {
                 this.keyframeState.translation += 1;
                 if (this.keyframeState.translation >= this.mesh.numTranslation) {
@@ -169,7 +175,12 @@ class ActorMeshNode {
                 if (nextKeyframes.translation >= this.mesh.numTranslation) {
                     nextKeyframes.translation = this.keyframeState.translation;
                 }
+                if (this.keyframeState.translation == startIdx) {
+                    console.error("WARNING: Couldn't find keyframe covering time " + curAnimTime);
+                    break;
+                }
             }
+            startIdx = this.keyframeState.rotation;
             while (!(curAnimTime >= this.mesh.rotation[this.keyframeState.rotation].t && curAnimTime <= this.mesh.rotation[nextKeyframes.rotation].t)) {
                 this.keyframeState.rotation += 1;
                 if (this.keyframeState.rotation >= this.mesh.numRotation) {
@@ -178,6 +189,10 @@ class ActorMeshNode {
                 nextKeyframes.rotation = this.keyframeState.rotation + 1;
                 if (nextKeyframes.rotation >= this.mesh.numRotation) {
                     nextKeyframes.rotation = this.keyframeState.rotation;
+                }
+                if (this.keyframeState.rotation == startIdx) {
+                    console.error("WARNING: Couldn't find keyframe covering time " + curAnimTime);
+                    break;
                 }
             }
             var scale = keyframeLerp(
@@ -419,17 +434,21 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         }
 
         if (this.currentAnim !== null) {
-            const reversePlay = this.currentPlaybackSpeed < 0;
-            this.currentAnimTime += (viewerInput.deltaTime / SRC_FRAME_TO_MS) * this.currentPlaybackSpeed;
-            if ((reversePlay && this.currentAnimTime < this.currentAnim.startTime) || 
-                (!reversePlay && this.currentAnimTime > this.currentAnim.endTime)) {
-                if (this.animQueue.length > 0) {
-                    const nextAnim = this.animQueue.shift();
-                    this.currentAnim = nextAnim!.anim;
-                    this.currentPlaybackSpeed = nextAnim!.playbackSpeed;
-                    this.isPlaying = nextAnim!.startPlaying;
+            if (this.isPlaying) {
+                const reversePlay = this.currentPlaybackSpeed < 0;
+                this.currentAnimTime += (viewerInput.deltaTime / SRC_FRAME_TO_MS) * this.currentPlaybackSpeed;
+                if ((reversePlay && this.currentAnimTime < this.currentAnim.startTime) || 
+                    (!reversePlay && this.currentAnimTime > this.currentAnim.endTime)) {
+                    if (this.animQueue.length > 0) {
+                        const nextAnim = this.animQueue.shift();
+                        this.currentAnim = nextAnim!.anim;
+                        this.currentPlaybackSpeed = nextAnim!.playbackSpeed;
+                        this.isPlaying = nextAnim!.startPlaying;
+                    } else {
+                        this.isPlaying = false;
+                    }
+                    this.currentAnimTime = reversePlay ? this.currentAnim.endTime : this.currentAnim.startTime;
                 }
-                this.currentAnimTime = reversePlay ? this.currentAnim.endTime : this.currentAnim.startTime;
             }
         }
 

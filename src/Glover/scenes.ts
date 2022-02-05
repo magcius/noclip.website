@@ -37,7 +37,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
-import { radianModulo, subtractAngles, angularDistance, axisRotationToQuaternion } from './util';
+import { radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion } from './util';
 import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
 
 
@@ -89,10 +89,18 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
     // Spin
 
+    private initialEulers = vec3.fromValues(0,0,0);
     private spinSpeed = vec3.fromValues(0,0,0);
     private spinEnabled = [false, false, false];
     private rockingDeceleration = 0.0;
     private lastRockingAdvance: number = 0;
+    private nextEulers = vec3.fromValues(0,0,0);
+    private lastEulers = vec3.fromValues(0,0,0);
+
+    private spinFlip = false;
+    private spinFlipTheta = 0;
+    private spinFlipCooldownReset = 0;
+    private spinFlipCooldownTimer = 0;
 
     public copySpinFromParent = false;
 
@@ -115,6 +123,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private position = vec3.fromValues(0,0,0);
     private velocity = vec3.fromValues(0,0,0);
     private scale = vec3.fromValues(1,1,1);
+
+    private globalRotation = quat.create();
+    private globalPosition = vec3.fromValues(0,0,0);
 
     public parent: GloverPlatform | undefined = undefined;
 
@@ -173,7 +184,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             vec3.copy(this.nextPosition, this.position);
             this.pathTimeLeft = point.duration;
             this.pathPaused = point.duration < 0;
-            this.updateActorModelMatrix();
+            this.updateModelMatrix();
         }
     }
 
@@ -209,13 +220,29 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
     public setConstantSpin(axis: number, initial_theta: number, speed: number) {
         this.eulers[axis] = initial_theta;
+        this.initialEulers[axis] = initial_theta;
         this.spinSpeed[axis] = -speed / SRC_FRAME_TO_MS;
         this.rockingDeceleration = 0.0;
         this.spinEnabled[axis] = true;
     }
 
+    public setSpinFlip(theta: number, cooldownTimer: number) {
+        if (cooldownTimer == 0) {
+            cooldownTimer = 5;
+        }
+        this.spinFlip = true;
+        this.spinFlipTheta = theta;
+        for (let axis = 0; axis < 3; axis += 1) {
+            this.eulers[axis] -= Math.PI;
+            this.eulers[axis] = radianModulo(this.eulers[axis]);
+        }
+        this.spinFlipCooldownReset = cooldownTimer * SRC_FRAME_TO_MS;
+    }
+
     public setRocking(axis: number, max_theta: number, decel_factor: number) {
-        this.eulers[axis] = max_theta;
+        this.lastEulers[axis] = max_theta;
+        this.nextEulers[axis] = max_theta;
+        this.initialEulers[axis] = max_theta;
         this.spinSpeed[axis] = 0;
         this.rockingDeceleration = decel_factor;
         this.spinEnabled[axis] = true;
@@ -240,9 +267,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                     continue;
                 }
                 if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
-                    this.spinSpeed[axis] -= subtractAngles(this.eulers[axis], 0) / this.rockingDeceleration;
-                    this.eulers[axis] += this.spinSpeed[axis];
-                    this.eulers[axis] = radianModulo(this.eulers[axis]);
+                    this.lastEulers[axis] = this.nextEulers[axis];
+                    this.spinSpeed[axis] -= subtractAngles(this.nextEulers[axis], 0) / this.rockingDeceleration;
+                    this.nextEulers[axis] += this.spinSpeed[axis];
+                    this.nextEulers[axis] = radianModulo(this.nextEulers[axis]);
                     if (Math.abs(this.spinSpeed[axis]) <= .0005) {
                         this.spinSpeed[axis] = 0.0;
                     }
@@ -251,6 +279,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
                 this.lastRockingAdvance -= SRC_FRAME_TO_MS;
             }
+            radianLerp(this.eulers, this.lastEulers, this.nextEulers, Math.max(0,Math.min(this.lastRockingAdvance/(SRC_FRAME_TO_MS*1.1),1)));
         }
     }    
 
@@ -319,11 +348,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         }
     }
 
-    public updateActorModelMatrix() {
-        if (this.actor === null) {
-            return;
-        }
-
+    public updateModelMatrix() {
         // // In-game algorithm, rather than quat.fromEuler:
         // quat.identity(this.rotation);
         // quat.mul(this.rotation, axisRotationToQuaternion([0,1,0], this.eulers[1]), this.rotation);
@@ -334,27 +359,34 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             this.eulers[1] * 180 / Math.PI,
             this.eulers[2] * 180 / Math.PI);
 
-        let finalPosition = this.position;
-        let finalRotation = this.rotation;
+        vec3.copy(this.globalPosition, this.position);
+        quat.copy(this.globalRotation, this.rotation);
         if (this.parent !== undefined) {
-            this.parent.updateActorModelMatrix();
+            this.parent.updateModelMatrix();
 
             if (this.copySpinFromParent) {
-                finalRotation = this.scratchQuat;
-                quat.mul(finalRotation, this.parent.rotation, this.rotation);
+                quat.mul(this.globalRotation, this.parent.globalRotation, this.globalRotation);
             }
-            
-            finalPosition = this.scratchVec3
-            vec3.transformQuat(finalPosition, this.position, this.parent.rotation);
-            vec3.add(finalPosition, finalPosition, this.parent.position);
+
+            // TODO: ck2 flags can't have this line active,
+            //       yet almost everything else needs it:
+            //       wtf?
+            vec3.transformQuat(this.globalPosition, this.globalPosition, this.parent.globalRotation);
+
+            vec3.add(this.globalPosition, this.globalPosition, this.parent.globalPosition);
         }
-        mat4.fromRotationTranslationScale(this.actor.modelMatrix, finalRotation, finalPosition, this.scale);
+
+        if (this.actor === null) {
+            return;
+        }
+        mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.globalRotation, this.globalPosition, this.scale);
     }
 
     public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
         if (deltaTime == 0) {
             return;
         }
+        deltaTime = Math.min(deltaTime, SRC_FRAME_TO_MS);
 
         if (this.exitSparkle && this.actor !== null) {
             // Only emit exit particles after scene load
@@ -407,38 +439,36 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                     const distRemaining = vec3.length(journeyVector);
                     vec3.normalize(journeyVector, journeyVector);
 
-                    let effectiveAccel = this.pathAccel;
                     const speedCutoff = ((this.pathAccel + curSpeed) * curSpeed) / (2*this.pathAccel);
                     if (speedCutoff > distRemaining) {
-                        // This is more accurate than the active version of this code block,
-                        // but IMO looks worse:
-                        // if (curSpeed > distRemaining) {
-                        //     vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
-                        // }
-                        vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -effectiveAccel);
+                        vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, -this.pathAccel);
                     } else {
-                        vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, effectiveAccel);
+                        vec3.scaleAndAdd(this.velocity, this.velocity, journeyVector, this.pathAccel);
                     }
 
                     if (!isNaN(this.pathMaxVel) && curSpeed > this.pathMaxVel) {
-                        const damping = this.pathMaxVel / curSpeed;
-                        this.velocity[0] *= damping;
-                        this.velocity[1] *= damping;
-                        this.velocity[2] *= damping;
+                        vec3.scale(this.velocity, this.velocity, this.pathMaxVel / curSpeed);
                     }
+                    curSpeed = vec3.length(this.velocity);
 
                     if (this.pathTimeLeft > 0) {
                         this.pathTimeLeft -= 1;
-                    } else {
-                        if (distRemaining < curSpeed + 0.01) {
+                    }
+
+                    if (distRemaining < curSpeed + 0.01) {
+                        if (this.pathTimeLeft == 0) {
                             this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
                             this.pathTimeLeft = this.path[this.pathCurPt].duration;
                             this.pathPaused = this.path[this.pathCurPt].duration < 0;
-                            vec3.copy(this.lastPosition, dstPt);
-                            vec3.zero(this.velocity);
-                            curSpeed = 0;
-                        }                
-                    }
+                            // TODO: remove:
+                            // if (this.actor!.actorObject.mesh.name.slice(0,6) === "pi2fly") {
+                            //     console.log(this.pathCurPt, this.path[this.pathCurPt]);
+                            // }
+                        }
+                        vec3.copy(this.lastPosition, dstPt);
+                        vec3.zero(this.velocity);
+                        curSpeed = 0;
+                    }                
                 }
 
                 vec3.copy(this.scratchVec3, this.nextPosition);
@@ -450,7 +480,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                 this.lastPathAdvance += deltaTime;
             }
 
-            vec3.lerp(this.position, this.lastPosition, this.nextPosition, this.lastPathAdvance/(SRC_FRAME_TO_MS*1.1));
+            vec3.lerp(this.position, this.lastPosition, this.nextPosition, Math.min(1.0, this.lastPathAdvance/(SRC_FRAME_TO_MS*1.1)));
 
         } else {
             this.advanceOrbit(deltaTime);
@@ -459,6 +489,33 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         if (this.rockingDeceleration > 0.0) {
             this.advanceRocking(deltaTime);
         } else {
+            if (this.spinFlip) {
+                if (this.spinFlipCooldownTimer <= 0) {
+                    for (let axis = 0; axis < 3; axis += 1) {
+                        if (!this.spinEnabled[axis]) continue;
+
+                        let travelDist = this.initialEulers[axis] - this.eulers[axis];
+                        if (this.spinSpeed[axis] < 0) {
+                            travelDist *= -1;
+                        }
+                        travelDist = radianModulo(Math.PI - travelDist);
+
+                        const frameTravelDist = Math.abs(this.spinSpeed[axis] * deltaTime);
+                        // console.log(travelDist*180/Math.PI, this.spinFlipTheta*180/Math.PI, angularDistance(travelDist, this.spinFlipTheta)*180/Math.PI, angularDistance(Math.PI*2 - this.spinFlipTheta, travelDist)*180/Math.PI, frameTravelDist*180/Math.PI)
+                        if (angularDistance(travelDist, this.spinFlipTheta) <= frameTravelDist ||
+                            angularDistance(Math.PI*2 - this.spinFlipTheta, travelDist) <= frameTravelDist)
+                        {
+                            // const r2d = 180/Math.PI
+                            // console.log(travelDist * r2d, angularDistance(travelDist, this.spinFlipTheta) * r2d, angularDistance(Math.PI*2 - this.spinFlipTheta, travelDist) * r2d);
+                            this.spinSpeed[axis] *= -1;
+                            this.spinFlipCooldownTimer = this.spinFlipCooldownReset;
+                        }
+                        break;
+                    }
+                } else {
+                    this.spinFlipCooldownTimer -= deltaTime;
+                }
+            }
             this.eulers[0] += this.spinSpeed[0] * deltaTime;
             this.eulers[1] += this.spinSpeed[1] * deltaTime;
             this.eulers[2] += this.spinSpeed[2] * deltaTime;
@@ -467,7 +524,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             this.eulers[2] = radianModulo(this.eulers[2]);
         }
 
-        this.updateActorModelMatrix()
+        this.updateModelMatrix()
     }
 }
 
@@ -1246,12 +1303,16 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'LandActor':
-                case 'BackgroundActor0xbc':
-                case 'BackgroundActor0x91': {
+                case 'AnimatedBackgroundActor':
+                case 'BackgroundActor': {
                     currentActor = loadActor(cmd.params.objectId);
                     sceneRenderer.actors.push(currentActor)
                     currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    if (cmd.params.__type === 'AnimatedBackgroundActor') {
+                        const startPaused = this.id === '2e' || this.id === '2f' || this.id === '12';
+                        currentActor.playSkeletalAnimation(0, !startPaused, false, 1.0);
+                    }
                     break;
                 }
                 case 'SetActorRotation': {
@@ -1323,6 +1384,13 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     currentPlatform.setConstantSpin(cmd.params.axis, cmd.params.initialTheta, cmd.params.speed);
+                    break;
+                }
+                case 'PlatSpinFlip': {
+                    if (currentPlatform === null) {
+                        throw `No active platform for ${cmd.params.__type}!`;
+                    }
+                    currentPlatform.setSpinFlip(cmd.params.theta, cmd.params.cooldownTimer);
                     break;
                 }
                 case 'PlatRocking': {
@@ -1530,7 +1598,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         for (let platform of sceneRenderer.platforms) {
-            platform.updateActorModelMatrix();
+            platform.updateModelMatrix();
         }
 
         if (bankDescriptor.weather !== undefined) {
