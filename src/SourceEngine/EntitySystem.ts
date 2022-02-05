@@ -1469,6 +1469,7 @@ class math_counter extends BaseEntity {
     private maxEdgeState: boolean = false;
 
     private output_outValue = new EntityOutput();
+    private output_outGetValue = new EntityOutput();
     private output_onHitMin = new EntityOutput();
     private output_onHitMax = new EntityOutput();
 
@@ -1476,12 +1477,14 @@ class math_counter extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.output_outValue.parse(this.entity.outvalue);
+        this.output_outGetValue.parse(this.entity.outgetvalue);
         this.output_onHitMin.parse(this.entity.onhitmin);
         this.output_onHitMax.parse(this.entity.onhitmax);
         this.registerInput('add', this.input_add.bind(this));
         this.registerInput('subtract', this.input_subtract.bind(this));
         this.registerInput('setvalue', this.input_setvalue.bind(this));
         this.registerInput('setvaluenofire', this.input_setvaluenofire.bind(this));
+        this.registerInput('getvalue', this.input_getvalue.bind(this));
 
         this.value = Number(fallbackUndefined(this.entity.startvalue, '0'));
         this.min = Number(fallbackUndefined(this.entity.min, '0'));
@@ -1508,6 +1511,10 @@ class math_counter extends BaseEntity {
         if (this.min !== 0 || this.max !== 0)
             num = clamp(num, this.min, this.max);
         this.value = num;
+    }
+
+    private input_getvalue(entitySystem: EntitySystem): void {
+        this.output_outGetValue.fire(entitySystem, this, '' + this.value);
     }
 
     private updateValue(entitySystem: EntitySystem, v: number): void {
@@ -1865,8 +1872,9 @@ class env_fog_controller extends BaseEntity {
 
         this.fogEnabled = !!Number(this.entity.fogenable);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
-        vmtParseColor(this.fogColor2, this.entity.fogcolor2);
-        this.fogDirection = vmtParseVector(this.entity.fogdir);
+        if (this.entity.fogcolor2)
+            vmtParseColor(this.fogColor2, this.entity.fogcolor2);
+        this.fogDirection = this.entity.fogdir ? vmtParseVector(this.entity.fogdir) : [0, 0, 0];
         this.farZ = Number(this.entity.farz);
         this.fogStart = Number(this.entity.fogstart);
         this.fogEnd = Number(this.entity.fogend);
@@ -1949,6 +1957,38 @@ function findMaterialOnEntity(entity: BaseEntity, materialName: string): BaseMat
     return null;
 }
 
+class AnimControl {
+    public valueStart = -1;
+    public valueEnd = -1;
+    public timeStart = -1;
+    public timeEnd = -1;
+    public loop = false;
+
+    public setDuration(currentTime: number, duration: number): void {
+        this.timeStart = currentTime;
+        this.timeEnd = currentTime + duration;
+    }
+
+    public update(currentTime: number): number | null {
+        if (this.timeStart < 0)
+            return null;
+
+        let time = invlerp(this.timeStart, this.timeEnd, currentTime);
+
+        if (time > 1.0) {
+            if (this.loop) {
+                time = time % 1.0;
+            } else {
+                time = 1.0;
+                this.timeStart = -1;
+            }
+        }
+
+        const value = lerp(this.valueStart, this.valueEnd, time);
+        return value;
+    }
+}
+
 class material_modify_control extends BaseEntity {
     public static classname = `material_modify_control`;
 
@@ -1956,11 +1996,8 @@ class material_modify_control extends BaseEntity {
     private materialvar: ParameterReference;
     private value: number | null = null;
 
-    private lerpValid = false;
-    private lerpStartValue = -1;
-    private lerpEndValue = -1;
-    private lerpStartTime = -1;
-    private lerpEndTime = -1;
+    private lerp: AnimControl | null = null;
+    private textureAnim: AnimControl | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -1970,6 +2007,7 @@ class material_modify_control extends BaseEntity {
 
         this.registerInput('setmaterialvar', this.input_setmaterialvar.bind(this));
         this.registerInput('startfloatlerp', this.input_startfloatlerp.bind(this));
+        this.registerInput('startanimsequence', this.input_startanimsequence.bind(this));
     }
 
     private input_setmaterialvar(entitySystem: EntitySystem, value: string): void {
@@ -1979,22 +2017,45 @@ class material_modify_control extends BaseEntity {
     private input_startfloatlerp(entitySystem: EntitySystem, value: string): void {
         const [startValue, endValue, duration, loop] = value.split(' ');
 
-        this.lerpValid = true;
-        this.lerpStartValue = Number(startValue);
-        this.lerpEndValue = Number(endValue);
-        this.lerpStartTime = entitySystem.currentTime;
-        this.lerpEndTime = this.lerpStartTime + Number(duration);
+        this.lerp = new AnimControl();
+        this.lerp.valueStart = Number(startValue);
+        this.lerp.valueEnd = Number(endValue);
+        this.lerp.setDuration(entitySystem.currentTime, Number(duration));
+        this.lerp.loop = Boolean(loop);
+    }
+
+    private input_startanimsequence(entitySystem: EntitySystem, value: string): void {
+        const [startFrame, endFrame, frameRate, loop] = value.split(' ');
+
+        this.textureAnim = new AnimControl();
+        this.textureAnim.valueStart = Number(startFrame);
+        this.textureAnim.valueEnd = Number(endFrame);
+
+        if (this.textureAnim.valueEnd < 0) {
+            const materialInstance = this.getMaterialInstance();
+            this.textureAnim.valueEnd = materialInstance !== null ? materialInstance.getNumFrames() : 0;
+        }
+
+        const numFrames = Math.abs(this.textureAnim.valueEnd - this.textureAnim.valueStart);
+        const duration = numFrames / Math.max(Number(frameRate), 1);
+        this.textureAnim.setDuration(entitySystem.currentTime, duration);
+
+        this.textureAnim.loop = Boolean(loop);
+    }
+
+    private getMaterialInstance(): BaseMaterial | null {
+        const target = this.parentEntity;
+        if (target === null)
+            return null;
+
+        return findMaterialOnEntity(target, this.materialname);
     }
 
     private syncValue(): void {
         if (this.value === null)
             return;
 
-        const target = this.parentEntity;
-        if (target === null)
-            return;
-
-        const materialInstance = findMaterialOnEntity(target, this.materialname);
+        const materialInstance = this.getMaterialInstance();
         if (materialInstance === null)
             return;
 
@@ -2005,15 +2066,20 @@ class material_modify_control extends BaseEntity {
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
-        if (this.lerpValid) {
-            let time = invlerp(this.lerpStartTime, this.lerpEndTime, entitySystem.currentTime);
+        if (this.lerp !== null) {
+            const lerpValue = this.lerp.update(entitySystem.currentTime);
+            if (lerpValue !== null)
+                this.value = lerpValue;
+            else
+                this.lerp = null;
+        }
 
-            if (time > 1.0) {
-                time = 1.0;
-                this.lerpValid = false;
-            }
-
-            this.value = lerp(this.lerpStartValue, this.lerpEndValue, time);
+        if (this.textureAnim !== null) {
+            const textureAnimValue = this.textureAnim.update(entitySystem.currentTime);
+            if (textureAnimValue !== null && this.materialParams !== null)
+                this.materialParams.textureFrameIndex = textureAnimValue;
+            else
+                this.textureAnim = null;
         }
 
         this.syncValue();
@@ -2203,39 +2269,14 @@ class point_template extends BaseEntity {
 
     public templateEntities: BaseEntity[] = [];
 
-    public override spawn(entitySystem: EntitySystem): void {
-        super.spawn(entitySystem);
-
-        for (let i = 1; i <= 16; i++) {
-            const templateKeyName = `template${leftPad('' + i, 2)}`;
-            const templateEntityName = this.entity[templateKeyName];
-            if (templateEntityName === undefined)
-                continue;
-
-            const entity = entitySystem.findEntityByTargetName(templateEntityName);
-            if (entity === null)
-                continue;
-
-            this.templateEntities.push(entity);
-        }
-    }
-}
-
-class env_entity_maker extends BaseEntity {
-    public static classname = 'env_entity_maker';
-
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.registerInput('forcespawn', this.input_forcespawn.bind(this));
     }
 
-    private spawnEntities(entitySystem: EntitySystem): void {
-        const template = entitySystem.findEntityByTargetName(this.entity.entitytemplate) as point_template;
-        if (template === null)
-            return;
-
-        const mapDatas = template.templateEntities.map((entity) => entity.cloneMapData());
+    public createInstance(entitySystem: EntitySystem, modelMatrix: ReadonlyMat4): void {
+        const mapDatas = this.templateEntities.map((entity) => entity.cloneMapData());
         const targetMapDatas: BSPEntity[] = [];
 
         // Pick new target names.
@@ -2280,8 +2321,8 @@ class env_entity_maker extends BaseEntity {
 
         // Have our new map datas. Spawn them, and then move them relative to our matrix.
 
-        const worldFromThis = this.updateModelMatrix();
-        const worldFromTemplate = template.updateModelMatrix();
+        const worldFromThis = modelMatrix;
+        const worldFromTemplate = this.updateModelMatrix();
 
         for (let i = 0; i < mapDatas.length; i++) {
             const entity = entitySystem.createEntity(mapDatas[i]);
@@ -2294,6 +2335,45 @@ class env_entity_maker extends BaseEntity {
             computePosQAngleModelMatrix(scratchVec3a, scratchVec3b, scratchMat4a);
             entity.setAbsOriginAndAngles(scratchVec3a, scratchVec3b);
         }
+    }
+
+    public override spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        for (let i = 1; i <= 16; i++) {
+            const templateKeyName = `template${leftPad('' + i, 2)}`;
+            const templateEntityName = this.entity[templateKeyName];
+            if (templateEntityName === undefined)
+                continue;
+
+            const entity = entitySystem.findEntityByTargetName(templateEntityName);
+            if (entity === null)
+                continue;
+
+            this.templateEntities.push(entity);
+        }
+    }
+
+    private input_forcespawn(entitySystem: EntitySystem): void {
+        this.createInstance(entitySystem, this.updateModelMatrix());
+    }
+}
+
+class env_entity_maker extends BaseEntity {
+    public static classname = 'env_entity_maker';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('forcespawn', this.input_forcespawn.bind(this));
+    }
+
+    private spawnEntities(entitySystem: EntitySystem): void {
+        const template = entitySystem.findEntityByTargetName(this.entity.entitytemplate) as point_template;
+        if (template === null)
+            return;
+
+        template.createInstance(entitySystem, this.updateModelMatrix());
     }
 
     private input_forcespawn(entitySystem: EntitySystem): void {
