@@ -76,6 +76,14 @@ const enum SpawnState {
     Spawned,
 }
 
+function shouldHideEntityFallback(classname: string): boolean {
+    if (classname === 'func_clip_vphysics')
+        return true;
+    if (classname.startsWith('func_nav_'))
+        return true;
+    return false;
+}
+
 // Some part of this is definitely BaseAnimating, maybe split at some point?
 export class BaseEntity {
     public modelBSP: BSPModelRenderer | null = null;
@@ -169,8 +177,7 @@ export class BaseEntity {
         this.registerInput('setanimation', this.input_setanimation.bind(this));
         this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
 
-        // Set up some defaults.
-        if (this.entity.classname.startsWith('func_nav_'))
+        if (shouldHideEntityFallback(this.entity.classname))
             this.visible = false;
     }
 
