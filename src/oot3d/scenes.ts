@@ -260,7 +260,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
             if (this.isFileSupported(file))
                 return { type: UI.ScrollSelectItemType.Selectable, name: file.name };
             else
-                return { type: UI.ScrollSelectItemType.Header, html: file.name };
+                return { type: UI.ScrollSelectItemType.Header, name: file.name };
         });
 
         select.setItems(files);

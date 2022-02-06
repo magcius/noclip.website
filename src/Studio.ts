@@ -795,7 +795,7 @@ export class StudioPanel extends FloatingPanel {
             this.elem.style.opacity = '0.8';
         };
 
-        this.setWidth(650);
+        this.setWidth('650px');
         this.elem.id = 'studioPanel';
         this.elem.style.display = 'none';
         this.elem.style.zIndex = '1';

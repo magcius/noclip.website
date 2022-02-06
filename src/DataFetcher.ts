@@ -16,6 +16,9 @@ function getDataStorageBaseURL(isDevelopment: boolean): string {
 }
 
 export function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT): string {
+    if (url.startsWith('https://') || url.startsWith('http://'))
+        return url;
+
     assert(!url.startsWith(`data/`));
     return `${getDataStorageBaseURL(isDevelopment)}/${url}`;
 }

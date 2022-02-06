@@ -143,7 +143,7 @@ export class JMapInfoIter {
     public popDebug(): void {
         const ui: UI = window.main.ui;
         const debugFloater = ui.debugFloaterHolder.makeFloatingPanel(fallback(this.filename, 'BCSV'));
-        debugFloater.setWidth(1000);
+        debugFloater.setWidth('1000px');
         debugFloater.contents.style.overflow = 'auto';
 
         const table = makeTable(this.bcsv);

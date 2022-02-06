@@ -256,7 +256,7 @@ export class Explorer implements SceneGfx {
     private createUI(): void {
         const panel = new FloatingPanel();
         panel.setTitle(LAYER_ICON, `Particle Explorer`);
-        panel.setWidth(600);
+        panel.setWidth('600px');
         this.uiContainer.appendChild(panel.elem);
 
         const effectIndexList = makeDataList(this.jpac.effects.map((r, i) => '' + i));

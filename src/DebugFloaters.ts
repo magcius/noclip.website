@@ -26,11 +26,11 @@ export class FloatingPanel implements Widget {
     protected svgIcon: SVGSVGElement;
     protected minimizeButton: HTMLElement;
     protected minimized = false;
-    protected closeButton: HTMLElement;
 
     private toplevel: HTMLElement;
     public mainPanel: HTMLElement;
     public contents: HTMLElement;
+    public closeButton: HTMLElement;
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -114,24 +114,14 @@ export class FloatingPanel implements Widget {
         this.contents.style.overflow = 'auto';
         this.mainPanel.appendChild(this.contents);
 
-        this.setWidth(400);
+        this.setWidth(`400px`);
 
         this.elem = this.toplevel;
-
-        /*
-        this.elem.onmouseover = () => {
-            this.elem.style.opacity = '1';
-        };
-        this.elem.onmouseout = () => {
-            this.elem.style.opacity = '0.2';
-        };
-        this.elem.style.opacity = '0.2';
-        */
     }
 
-    public setWidth(v: number): void {
-        this.header.style.width = `${v}px`;
-        this.contents.style.width = `${v}px`;
+    public setWidth(v: string): void {
+        this.header.style.width = v;
+        this.contents.style.width = v;
     }
 
     public close(): void {
@@ -359,7 +349,7 @@ export class DebugFloaterHolder {
 
     public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
         const panel = new FloatingPanel();
-        panel.setWidth(600);
+        panel.setWidth(`600px`);
         panel.setTitle(icon, title);
         panel.onclose = () => {
             if (this.debugFloater === panel)
