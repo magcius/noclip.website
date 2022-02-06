@@ -34,6 +34,7 @@ import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import InputManager from "../InputManager";
+import { dfRange, dfShow } from "../DebugFloaters";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -993,9 +994,18 @@ export class ProjectedLightRenderer {
 class Flashlight {
     public projectedLightRenderer = new ProjectedLightRenderer();
     public enabled = false;
+    @dfShow()
+    @dfRange(30, 170)
     private fovY = 90;
+    @dfShow()
+    @dfRange(0, 10)
     private nearZ = 5;
+    @dfShow()
+    @dfRange(-100, 100)
     private offset = vec3.fromValues(0, 0, -10);
+    @dfShow()
+    @dfRange(0.1, 10.0)
+    private aspect = 1.0;
 
     constructor(renderContext: SourceRenderContext) {
         this.fetchTexture(renderContext, 'effects/flashlight001');
@@ -1021,8 +1031,7 @@ class Flashlight {
         mat4.translate(frustumView.worldFromViewMatrix, worldFromViewMatrix, this.offset);
         mat4.invert(frustumView.viewFromWorldMatrix, frustumView.worldFromViewMatrix);
 
-        const aspect = 1.0;
-        calcFrustumViewProjection(frustumView, renderContext, this.fovY, aspect, this.nearZ, this.projectedLightRenderer.light.farZ);
+        calcFrustumViewProjection(frustumView, renderContext, this.fovY, this.aspect, this.nearZ, this.projectedLightRenderer.light.farZ);
     }
 
     public movement(renderContext: SourceRenderContext): void {

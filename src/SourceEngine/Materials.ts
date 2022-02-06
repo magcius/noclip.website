@@ -153,6 +153,10 @@ float CalcFresnelTerm5(float t_DotProduct) {
     return pow(1.0 - max(0.0, t_DotProduct), 5.0);
 }
 
+float CalcFresnelTerm4(float t_DotProduct) {
+    return pow(1.0 - max(0.0, t_DotProduct), 4.0);
+}
+
 float CalcFresnelTerm2(float t_DotProduct) {
     return pow(1.0 - max(0.0, t_DotProduct), 2.0);
 }
@@ -1251,7 +1255,13 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
     return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
 }
 
-#ifdef USE_DYNAMIC_LIGHTING
+struct DiffuseLightInput {
+    vec3 PositionWorld;
+    vec3 NormalWorld;
+    vec4 LightAttenuation;
+    bool HalfLambert;
+};
+
 float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
     int t_LightType = int(t_WorldLight.Position.w);
 
@@ -1297,13 +1307,6 @@ vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld
     return vec3(0.0);
 }
 
-vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
-    vec4 t_FinalAtten = vec4(0.0);
-    for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
-        t_FinalAtten[i] = WorldLightCalcAttenuation(u_WorldLights[i], t_PositionWorld);
-    return t_FinalAtten;
-}
-
 float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
     vec3 t_LightDirectionWorld = WorldLightCalcDirection(t_WorldLight, t_PositionWorld);
 
@@ -1331,12 +1334,13 @@ vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool 
     return t_WorldLight.Color.rgb * t_Attenuation * t_Visibility;
 }
 
-struct DiffuseLightInput {
-    vec3 PositionWorld;
-    vec3 NormalWorld;
-    vec4 LightAttenuation;
-    bool HalfLambert;
-};
+#ifdef USE_DYNAMIC_LIGHTING
+vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
+    vec4 t_FinalAtten = vec4(0.0);
+    for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
+        t_FinalAtten[i] = WorldLightCalcAttenuation(u_WorldLights[i], t_PositionWorld);
+    return t_FinalAtten;
+}
 
 vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
 #ifdef DEBUG_FULLBRIGHT
@@ -1519,7 +1523,6 @@ const vec3 g_RNBasis0 = vec3( 0.8660254037844386,  0.0000000000000000, 0.5773502
 const vec3 g_RNBasis1 = vec3(-0.4082482904638631,  0.7071067811865475, 0.5773502691896258); // -sqrt1/6, sqrt1/2,  sqrt1/3
 const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502691896258); // -sqrt1/6, -sqrt1/2, sqrt1/3
 
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
 struct SpecularLightResult {
     vec3 SpecularLight;
     vec3 RimLight;
@@ -1550,7 +1553,6 @@ SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in Wor
     vec3 t_Reflect = CalcReflection(t_Input.NormalWorld, t_Input.WorldDirectionToEye);
     vec3 t_LightDirectionWorld = WorldLightCalcDirection(t_WorldLight, t_Input.PositionWorld);
 
-    const bool t_HalfLambert = false;
     float t_NoL = saturate(dot(t_Input.NormalWorld, t_LightDirectionWorld));
     float t_RoL = saturate(dot(t_Reflect, t_LightDirectionWorld));
 
@@ -1570,12 +1572,12 @@ SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in Wor
 
 SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
     SpecularLightResult t_FinalLight = SpecularLightResult_New();
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
     for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
         SpecularLightResult_Sum(t_FinalLight, WorldLightCalcSpecular(t_Input, u_WorldLights[i]));
+#endif
     return t_FinalLight;
 }
-
-#endif
 
 vec4 DebugColorTexture(in vec4 t_TextureSample) {
 #ifdef DEBUG_DIFFUSEONLY
@@ -1697,10 +1699,12 @@ void mainPS() {
 
     // TODO(jstpierre): It seems like $bumptransform might not even be respected in lightmappedgeneric shaders?
     vec2 t_BumpmapTexCoord = ${ifDefineBool(variantSettings, `USE_BUMPMAP`, `Mul(u_BumpmapTransform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
-    vec4 t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), t_BumpmapTexCoord.xy));
+    vec4 t_BumpmapSample = vec4(0.0);
     vec3 t_BumpmapNormal;
 
     if (use_bumpmap) {
+        t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), t_BumpmapTexCoord.xy));
+
         bool use_bumpmap2 = ${getDefineBool(variantSettings, `USE_BUMPMAP2`)};
         if (use_bumpmap2) {
             vec2 t_Bumpmap2TexCoord = ${ifDefineBool(variantSettings, `USE_BUMPMAP2`, `Mul(u_Bumpmap2Transform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
@@ -1740,10 +1744,12 @@ void mainPS() {
     }
 
     vec3 t_DiffuseLighting = vec3(0.0);
+    vec3 t_SpecularLighting = vec3(0.0);
 
     bool use_lightmap = ${getDefineBool(variantSettings, `USE_LIGHTMAP`)};
     bool use_diffuse_bumpmap = ${getDefineBool(variantSettings, `USE_DIFFUSE_BUMPMAP`)};
 
+    // Lightmap Diffuse
     if (use_lightmap) {
         vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
 
@@ -1809,6 +1815,7 @@ void mainPS() {
     bool use_phong = ${getDefineBool(variantSettings, `USE_PHONG`)};
 
 #ifdef USE_DYNAMIC_PIXEL_LIGHTING
+    // World Diffuse
     bool t_HalfLambert = use_half_lambert;
 
     if (use_phong) {
@@ -1825,7 +1832,94 @@ void mainPS() {
     t_DiffuseLighting.rgb *= WorldLightCalcAllDiffuse(t_DiffuseLightInput);
 #endif
 
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
+
+    float t_FresnelDot = dot(t_NormalWorld, t_WorldDirectionToEye);
+
+    float t_Fresnel;
+#ifdef USE_PHONG
+    t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecBoost.xyz);
+#else
+    t_Fresnel = CalcFresnelTerm2(t_FresnelDot);
+#endif
+
+    bool use_base_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_ENVMAP_MASK`)};
+
+#ifdef USE_ENVMAP
+    t_EnvmapFactor *= u_EnvmapTint.rgb;
+
+    bool use_envmap_mask = ${getDefineBool(variantSettings, `USE_ENVMAP_MASK`)};
+    if (use_envmap_mask) {
+        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(variantSettings, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
+        t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), t_EnvmapMaskTexCoord).rgb;
+    }
+
+    if (use_base_alpha_envmap_mask)
+        t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
+
+    vec3 t_Reflection = CalcReflection(t_NormalWorld, t_WorldDirectionToEye);
+    vec3 t_EnvmapColor = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgb * g_EnvmapScale;
+    t_EnvmapColor *= t_EnvmapFactor;
+
+    // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
+
+    t_EnvmapColor = mix(t_EnvmapColor, t_EnvmapColor*t_EnvmapColor, u_EnvmapContrastSaturationFresnel.x);
+    t_EnvmapColor = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_EnvmapColor)), t_EnvmapColor, u_EnvmapContrastSaturationFresnel.y);
+    t_EnvmapColor *= mix(t_Fresnel, 1.0, u_EnvmapContrastSaturationFresnel.z);
+
+    t_SpecularLighting.rgb += t_EnvmapColor.rgb;
+#endif
+
+    // World Specular
+    SpecularLightInput t_SpecularLightInput;
+    t_SpecularLightInput.PositionWorld = v_PositionWorld.xyz;
+    t_SpecularLightInput.NormalWorld = t_NormalWorld;
+    t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
+    t_SpecularLightInput.Fresnel = t_Fresnel;
+    t_SpecularLightInput.RimExponent = 4.0;
+
+    vec4 t_SpecularMapSample = vec4(0.0);
+
+    if (use_phong) {
+        bool use_phong_exponent_texture = ${getDefineBool(variantSettings, `USE_PHONG_EXPONENT_TEXTURE`)};
+        if (use_phong_exponent_texture) {
+            t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
+            t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
+        } else {
+            t_SpecularLightInput.SpecularExponent = u_SpecExponentFactor;
+        }
+    }
+
+#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+    if (use_phong) {
+        // Specular mask is either in base map or normal map alpha.
+        float t_SpecularMask;
+        bool use_base_alpha_phong_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_PHONG_MASK`)};
+        if (use_base_alpha_phong_mask) {
+            t_SpecularMask = t_BaseTexture.a;
+        } else if (use_bumpmap) {
+            t_SpecularMask = t_BumpmapSample.a;
+        } else {
+            t_SpecularMask = 1.0;
+        }
+
+        bool use_phong_mask_invert = ${getDefineBool(variantSettings, `USE_PHONG_MASK_INVERT`)};
+        if (use_phong_mask_invert)
+            t_SpecularMask = 1.0 - t_SpecularMask;
+
+        SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
+        t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight;
+
+        // TODO(jstpierre): $phongtint, $phongalbedotint
+        t_SpecularLighting.rgb *= t_SpecularMask * u_FresnelRangeSpecBoost.w;
+
+        // TODO(jstpierre): $rimlight, $rimlightexponent, $rimlightboost, $rimmask
+    }
+#endif // USE_DYNAMIC_PIXEL_LIGHTING
+
 #ifdef USE_PROJECTED_LIGHT
+    // Projected Light (Flashlight, env_projected_texture)
     vec4 t_ProjectedLightCoord = Mul(u_ProjectedLightFromWorldMatrix, vec4(v_PositionWorld.xyz, 1.0));
     t_ProjectedLightCoord.xyz /= t_ProjectedLightCoord.www;
 
@@ -1849,18 +1943,24 @@ void mainPS() {
 
         if (all(greaterThan(t_ProjectedLightColor.rgb, vec3(0.0)))) {
             float t_ShadowVisibility = 1.0 - CalcShadowPCF(PP_SAMPLER_2DShadow(u_TextureProjectedLightDepth), t_ProjectedLightCoord.xyz, 0.01);
-            t_DiffuseLighting.rgb += t_ProjectedLightColor.rgb * t_ShadowVisibility;
+            t_ProjectedLightColor.rgb *= t_ShadowVisibility;
+
+            t_DiffuseLighting.rgb += t_ProjectedLightColor.rgb;
+
+            bool t_CalcSpecularFlashlight = use_phong;
+            if (t_CalcSpecularFlashlight) {
+                vec3 t_Reflect = CalcReflection(t_SpecularLightInput.NormalWorld, t_SpecularLightInput.WorldDirectionToEye);
+                float t_RoL = saturate(dot(t_Reflect, t_WorldDirectionToProjectedLight));
+
+                // TODO(jstpierre): $phongwarptexture
+                t_SpecularLighting.rgb += t_ProjectedLightColor.rgb * pow(t_RoL, t_SpecularLightInput.SpecularExponent);
+            }
         }
     }
 #endif
 
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
     t_FinalDiffuse = CalcDetailPostLighting(t_FinalDiffuse, t_DetailTexture.rgb);
-
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-
-    float t_FresnelDot = dot(t_NormalWorld, t_WorldDirectionToEye);
 
 #ifdef USE_SELFILLUM
     vec3 t_SelfIllumMask;
@@ -1891,82 +1991,6 @@ void mainPS() {
 #endif
 
     t_FinalColor.rgb += t_FinalDiffuse;
-
-    vec3 t_SpecularLighting = vec3(0.0);
-
-    float t_Fresnel;
-#ifdef USE_PHONG
-    t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecBoost.xyz);
-#else
-    t_Fresnel = CalcFresnelTerm5(t_FresnelDot);
-#endif
-
-    bool use_base_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_ENVMAP_MASK`)};
-
-#ifdef USE_ENVMAP
-    t_EnvmapFactor *= u_EnvmapTint.rgb;
-
-    bool use_envmap_mask = ${getDefineBool(variantSettings, `USE_ENVMAP_MASK`)};
-    if (use_envmap_mask) {
-        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(variantSettings, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
-        t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), t_EnvmapMaskTexCoord).rgb;
-    }
-
-    if (use_base_alpha_envmap_mask)
-        t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
-
-    vec3 t_Reflection = CalcReflection(t_NormalWorld, t_WorldDirectionToEye);
-    vec3 t_EnvmapColor = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection).rgb * g_EnvmapScale;
-    t_EnvmapColor *= t_EnvmapFactor;
-
-    // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
-
-    t_EnvmapColor = mix(t_EnvmapColor, t_EnvmapColor*t_EnvmapColor, u_EnvmapContrastSaturationFresnel.x);
-    t_EnvmapColor = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_EnvmapColor)), t_EnvmapColor, u_EnvmapContrastSaturationFresnel.y);
-    t_EnvmapColor *= mix(t_Fresnel, 1.0, u_EnvmapContrastSaturationFresnel.z);
-
-    t_SpecularLighting.rgb += t_EnvmapColor.rgb;
-#endif
-
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
-    if (use_phong) {
-        SpecularLightInput t_SpecularLightInput;
-        t_SpecularLightInput.PositionWorld = v_PositionWorld.xyz;
-        t_SpecularLightInput.NormalWorld = t_NormalWorld;
-        t_SpecularLightInput.WorldDirectionToEye = t_WorldDirectionToEye;
-        t_SpecularLightInput.Fresnel = t_Fresnel;
-
-        bool use_phong_exponent_texture = ${getDefineBool(variantSettings, `USE_PHONG_EXPONENT_TEXTURE`)};
-        if (use_phong_exponent_texture) {
-            vec4 t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
-            t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
-        } else {
-            t_SpecularLightInput.SpecularExponent = u_SpecExponentFactor;
-        }
-
-        t_SpecularLightInput.RimExponent = 4.0;
-
-        // Specular mask is either in base map or normal map alpha.
-        float t_SpecularMask;
-        bool use_base_alpha_phong_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_PHONG_MASK`)};
-        if (use_base_alpha_phong_mask) {
-            t_SpecularMask = t_BaseTexture.a;
-        } else {
-#ifdef USE_BUMPMAP
-            t_SpecularMask = t_BumpmapSample.a;
-#else
-            t_SpecularMask = 1.0;
-#endif
-        }
-
-        bool use_phong_mask_invert = ${getDefineBool(variantSettings, `USE_PHONG_MASK_INVERT`)};
-        if (use_phong_mask_invert)
-            t_SpecularMask = 1.0 - t_SpecularMask;
-
-        SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
-        t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight * t_SpecularMask * u_FresnelRangeSpecBoost.w;
-    }
-#endif // USE_DYNAMIC_PIXEL_LIGHTING
 
     t_FinalColor.rgb += t_SpecularLighting.rgb;
 

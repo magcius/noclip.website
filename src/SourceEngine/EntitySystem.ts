@@ -49,7 +49,7 @@ function parseEntityOutputAction(S: string): EntityOutputAction {
     return { targetName, inputName, parameterOverride, delay, timesToFire };
 }
 
-class EntityOutput {
+export class EntityOutput {
     public actions: EntityOutputAction[] = [];
 
     public parse(S: string | string[] | undefined): void {
@@ -59,9 +59,17 @@ class EntityOutput {
             this.actions.push(parseEntityOutputAction(S));
     }
 
+    public getNumActions(): number {
+        return this.actions.length;
+    }
+
+    public hasAnyActions(): boolean {
+        return this.actions.length > 0;
+    }
+
     public fire(entitySystem: EntitySystem, activator: BaseEntity, value: EntityMessageValue = ''): void {
         for (let i = 0; i < this.actions.length; i++)
-            entitySystem.queueEntityOutputAction(this.actions[i], activator, value);
+            entitySystem.queueOutputEvent(this.actions[i], activator, value);
     }
 }
 
@@ -212,6 +220,10 @@ export class BaseEntity {
         this.seqtime = 0;
     }
 
+    public resetSequence(label: string): void {
+        this.playseqindex(this.findSequenceLabel(label));
+    }
+
     public spawn(entitySystem: EntitySystem): void {
         if (this.entity.parentname)
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
@@ -350,6 +362,8 @@ export class BaseEntity {
         } else {
             vec3.copy(this.localOrigin, origin);
         }
+
+        this.updateModelMatrix();
     }
 
     public setAbsOriginAndAngles(origin: ReadonlyVec3, angles: ReadonlyVec3): void {
@@ -362,6 +376,8 @@ export class BaseEntity {
             vec3.copy(this.localOrigin, origin);
             vec3.copy(this.localAngles, angles);
         }
+
+        this.updateModelMatrix();
     }
 
     public getAbsOrigin(dstOrigin: vec3): void {
@@ -1270,24 +1286,61 @@ class logic_relay extends BaseEntity {
     private output_onTrigger = new EntityOutput();
     private output_onSpawn = new EntityOutput();
 
+    private removeOnFire = false;
+    private allowFastRetrigger = false;
+    private waitingForEnableRefire = false;
+
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
+
+        const enum SpawnFlags {
+            RemoveOnFire = 0x01,
+            AllowFastRetrigger = 0x02,
+        };
+        const spawnflags: SpawnFlags = Number(this.entity.spawnflags);
+        this.removeOnFire = !!(spawnflags & SpawnFlags.RemoveOnFire);
+        this.allowFastRetrigger = !!(spawnflags & SpawnFlags.AllowFastRetrigger);
 
         this.output_onTrigger.parse(this.entity.ontrigger);
         this.output_onSpawn.parse(this.entity.onspawn);
         this.registerInput('trigger', this.input_trigger.bind(this));
+        this.registerInput('cancelpending', this.input_cancelpending.bind(this));
+        this.registerInput('enablerefire', this.input_enablerefire.bind(this));
     }
 
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
+
         this.output_onSpawn.fire(entitySystem, this);
+
+        if (this.output_onSpawn.hasAnyActions() && this.removeOnFire)
+            this.remove();
     }
 
     private input_trigger(entitySystem: EntitySystem): void {
         if (!this.enabled)
             return;
 
+        if (this.waitingForEnableRefire)
+            return;
+
         this.output_onTrigger.fire(entitySystem, this);
+        if (this.removeOnFire)
+            this.remove();
+
+        if (!this.allowFastRetrigger) {
+            const targetName = assertExists(this.targetName);
+            entitySystem.queueOutputEvent({ targetName, inputName: 'enablerefire', parameterOverride: '', delay: 0.001, timesToFire: 1 }, this, '');
+            this.waitingForEnableRefire = true;
+        }
+    }
+
+    private input_enablerefire(entitySystem: EntitySystem): void {
+        this.waitingForEnableRefire = false;
+    }
+
+    private input_cancelpending(entitySystem: EntitySystem): void {
+        entitySystem.cancelOutputEventsForSender(this);
     }
 }
 
@@ -1672,9 +1725,10 @@ class math_colorblend extends BaseEntity {
     }
 }
 
-class trigger_multiple extends BaseEntity {
+export class trigger_multiple extends BaseEntity {
     public static classname = `trigger_multiple`;
 
+    private triggerAABB: AABB | null = null;
     private isPlayerTouching = false;
 
     private output_onTrigger = new EntityOutput();
@@ -1701,12 +1755,18 @@ class trigger_multiple extends BaseEntity {
     }
 
     private getAABB(): AABB | null {
+        if (this.triggerAABB !== null)
+            return this.triggerAABB;
         if (this.modelBSP !== null)
             return this.modelBSP.model.bbox;
         else if (this.modelStudio !== null)
             return this.modelStudio.modelData.viewBB;
         else
             return null;
+    }
+
+    public setSize(aabb: AABB | null): void {
+        this.triggerAABB = aabb !== null ? aabb.clone() : null;
     }
 
     private input_touchtest(entitySystem: EntitySystem): void {
@@ -3044,13 +3104,19 @@ export class EntitySystem {
         return false;
     }
 
-    public queueEntityOutputAction(action: EntityOutputAction, sender: BaseEntity, value: EntityMessageValue): void {
+    public queueOutputEvent(action: EntityOutputAction, sender: BaseEntity, value: EntityMessageValue): void {
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
         const triggerTime = this.currentTime + action.delay;
         const activator = this.currentActivator;
         this.outputQueue.push({ sender, activator, action, triggerTime, value });
+    }
+
+    public cancelOutputEventsForSender(sender: BaseEntity): void {
+        for (let i = 0; i < this.outputQueue.length; i++)
+            if (this.outputQueue[i].sender === sender)
+                this.outputQueue.splice(i--, 1);
     }
 
     // For console debugging.
@@ -3067,7 +3133,7 @@ export class EntitySystem {
     // For console debugging.
     private queueOutputAction(S: string, value: EntityMessageValue): void {
         const action = parseEntityOutputAction(S);
-        this.queueEntityOutputAction(action, this.getLocalPlayer(), value);
+        this.queueOutputEvent(action, this.getLocalPlayer(), value);
     }
 
     public findEntityByType<T extends BaseEntity>(type: EntityFactory<T>, start: T | null = null): T | null {

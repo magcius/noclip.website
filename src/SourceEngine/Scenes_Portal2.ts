@@ -1,16 +1,32 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { vec3 } from "gl-matrix";
 import { DataFetcher } from "../DataFetcher";
+import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { EmptyScene } from "../Scenes_Test";
 import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
 import { decodeString } from "../util";
 import { SceneGfx } from "../viewer";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
+import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
 import { BSPRenderer, SourceFileSystem, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
 import { BSPEntity } from "./VMT";
+
+class trigger_portal_button extends trigger_multiple {
+    public static override classname = `trigger_portal_button`;
+    public button: BaseFloorButton | null = null;
+
+    protected override onStartTouch(entitySystem: EntitySystem): void {
+        super.onStartTouch(entitySystem);
+        this.button!.press(entitySystem);
+    }
+
+    protected override onEndTouch(entitySystem: EntitySystem): void {
+        super.onEndTouch(entitySystem);
+        this.button!.unpress(entitySystem);
+    }
+}
 
 class prop_button extends BaseEntity {
     public static classname = 'prop_button';
@@ -22,33 +38,94 @@ class prop_button extends BaseEntity {
     }
 }
 
-class prop_floor_button extends BaseEntity {
+const enum BaseFloorButtonSkin {
+    Up = 0, Down = 1,
+}
+
+class BaseFloorButton extends BaseEntity {
+    private output_onPressed = new EntityOutput();
+    private output_onUnPressed = new EntityOutput();
+
+    public pressed = false;
+    protected trigger: trigger_portal_button;
+
+    protected upSequence = 'up';
+    protected downSequence = 'down';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onPressed.parse(this.entity.onpressed);
+        this.output_onUnPressed.parse(this.entity.onunpressed);
+        this.registerInput('pressin', this.input_pressin.bind(this));
+        this.registerInput('pressout', this.input_pressout.bind(this));
+
+        this.createTriggers(entitySystem);
+    }
+
+    private createTriggers(entitySystem: EntitySystem): void {
+        const origin = vec3.create();
+        const size = vec3.create();
+        this.getAbsOriginAndAngles(origin, size);
+
+        this.trigger = entitySystem.createEntity({ classname: `trigger_portal_button` }) as trigger_portal_button;
+        this.trigger.setAbsOriginAndAngles(origin, size);
+        this.trigger.button = this;
+    }
+
+    public press(entitySystem: EntitySystem): void {
+        this.resetSequence(this.downSequence);
+        this.pressed = true;
+        this.modelStudio!.setSkin(entitySystem.renderContext, BaseFloorButtonSkin.Down);
+        this.output_onPressed.fire(entitySystem, this);
+    }
+
+    public unpress(entitySystem: EntitySystem): void {
+        this.resetSequence(this.upSequence);
+        this.pressed = false;
+        this.modelStudio!.setSkin(entitySystem.renderContext, BaseFloorButtonSkin.Up);
+        this.output_onUnPressed.fire(entitySystem, this);
+    }
+
+    private input_pressin(entitySystem: EntitySystem): void {
+        this.press(entitySystem);
+    }
+
+    private input_pressout(entitySystem: EntitySystem): void {
+        this.unpress(entitySystem);
+    }
+}
+
+class prop_floor_button extends BaseFloorButton {
     public static classname = 'prop_floor_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         if (entity.model === undefined)
             entity.model = 'models/props/portal_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
+        this.trigger.setSize(new AABB(-20, -20, 0, 20, 20, 14));
     }
 }
 
-class prop_floor_cube_button extends BaseEntity {
+class prop_floor_cube_button extends BaseFloorButton {
     public static classname = 'prop_floor_cube_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         if (entity.model === undefined)
             entity.model = 'models/props/box_socket.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
+        this.trigger.setSize(new AABB(-20, -20, 0, 20, 20, 14));
     }
 }
 
-class prop_floor_ball_button extends BaseEntity {
+class prop_floor_ball_button extends BaseFloorButton {
     public static classname = 'prop_floor_ball_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         if (entity.model === undefined)
             entity.model = 'models/props/ball_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
+        this.trigger.setSize(new AABB(-5, -5, 0, 5, 5, 14));
     }
 }
 
@@ -62,13 +139,16 @@ class prop_under_button extends BaseEntity {
     }
 }
 
-class prop_under_floor_button extends BaseEntity {
+class prop_under_floor_button extends BaseFloorButton {
     public static classname = 'prop_under_floor_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         if (entity.model === undefined)
             entity.model = 'models/props_underground/underground_floor_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
+        this.upSequence = 'release';
+        this.downSequence = 'press';
+        this.trigger.setSize(new AABB(-30, -30, 0, 30, 30, 17));
     }
 }
 
@@ -84,6 +164,7 @@ class prop_testchamber_door extends BaseEntity {
 
 async function createPortal2SourceRenderContext(context: SceneContext): Promise<SourceRenderContext> {
     function registerEntityFactories(registry: EntityFactoryRegistry): void {
+        registry.registerFactory(trigger_portal_button);
         registry.registerFactory(prop_button);
         registry.registerFactory(prop_floor_button);
         registry.registerFactory(prop_floor_cube_button);
