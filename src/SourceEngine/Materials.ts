@@ -1126,6 +1126,10 @@ function getDefineBool(defines: Map<string, string>, name: string): boolean {
     return str !== null;
 }
 
+function ifDefineBool(defines: Map<string, string>, name: string, t: string, f: string) {
+    return getDefineBool(defines, name) ? t : f;
+}
+
 class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
@@ -1204,12 +1208,10 @@ layout(std140) uniform ub_ObjectParams {
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
-// Base, Blend Modulate
+// Base, Raw Coords
 varying vec4 v_TexCoord0;
-// Lightmap (0), Envmap Mask
-varying vec4 v_TexCoord1;
-// Bumpmap, Bumpmap 2
-varying vec4 v_TexCoord2;
+// Lightmap
+varying vec2 v_TexCoord1;
 
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
@@ -1439,20 +1441,9 @@ void mainVS() {
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
-#ifdef USE_BLEND_MODULATE
-    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_BlendModulateScaleBias);
-#endif
+    v_TexCoord0.zw = a_TexCoord.xy;
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
-#endif
-#ifdef USE_ENVMAP_MASK
-    v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
-#endif
-#ifdef USE_BUMPMAP
-    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
-#endif
-#ifdef USE_BUMPMAP2
-    v_TexCoord2.zw = Mul(u_Bumpmap2Transform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 }
 #endif
@@ -1673,7 +1664,8 @@ void mainPS() {
 
     bool use_blend_modulate = ${getDefineBool(variantSettings, `USE_BLEND_MODULATE`)};
     if (use_blend_modulate) {
-        vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), v_TexCoord0.zw);
+        vec2 t_BlendModulateTexCoord = ${ifDefineBool(variantSettings, `USE_BLEND_MODULATE`, `CalcScaleBias(v_TexCoord0.zw, u_BlendModulateScaleBias)`, `vec2(0.0)`)};
+        vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), t_BlendModulateTexCoord);
         float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
         float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
         t_BlendFactorWorld = smoothstep(t_BlendModulateMin, t_BlendModulateMax, t_BlendFactorWorld);
@@ -1700,47 +1692,52 @@ void mainPS() {
     vec3 t_NormalWorld;
 
     vec3 t_EnvmapFactor = vec3(1.0);
-#ifdef USE_BUMPMAP
+    bool use_bumpmap = ${getDefineBool(variantSettings, `USE_BUMPMAP`)};
+    bool use_ssbump = ${getDefineBool(variantSettings, `USE_SSBUMP`)};
+
     // TODO(jstpierre): It seems like $bumptransform might not even be respected in lightmappedgeneric shaders?
-    vec4 t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), v_TexCoord2.xy));
-
-    bool use_bumpmap2 = ${getDefineBool(variantSettings, `USE_BUMPMAP2`)};
-    if (use_bumpmap2) {
-        vec4 t_Bumpmap2Sample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap2), v_TexCoord2.zw));
-
-        bool use_bumpmask = ${getDefineBool(variantSettings, `USE_BUMPMASK`)};
-        if (use_bumpmask) {
-            vec4 t_BumpMaskSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureBumpMask), v_TexCoord0.xy));
-            t_BumpmapSample.rgb = normalize(t_BumpmapSample.rgb + t_Bumpmap2Sample.rgb);
-            t_BumpmapSample.rgb = mix(t_BumpMaskSample.rgb, t_BumpmapSample.rgb, t_BumpMaskSample.a);
-            // Envmap factor from bump mask is multiplied in regardless of whether we have use_normalmap_alpha_envmap_mask set.
-            t_EnvmapFactor *= t_BumpMaskSample.a;
-        } else {
-            // TODO(jstpierre): $addbumpmaps
-            t_BumpmapSample.rgb = mix(t_BumpmapSample.rgb, t_Bumpmap2Sample.rgb, t_BlendFactorWorld);
-        }
-    }
-
-    bool use_normalmap_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
-    if (use_normalmap_alpha_envmap_mask)
-        t_EnvmapFactor *= t_BumpmapSample.a;
-
+    vec2 t_BumpmapTexCoord = ${ifDefineBool(variantSettings, `USE_BUMPMAP`, `Mul(u_BumpmapTransform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
+    vec4 t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), t_BumpmapTexCoord.xy));
     vec3 t_BumpmapNormal;
 
-    bool use_ssbump = ${getDefineBool(variantSettings, `USE_SSBUMP`)};
-    if (use_ssbump) {
-        // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
-        t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
-    } else {
-        // In non-SSBUMP, this is a traditional normal map with signed offsets.
-        t_BumpmapNormal = t_BumpmapSample.rgb;
-    }
+    if (use_bumpmap) {
+        bool use_bumpmap2 = ${getDefineBool(variantSettings, `USE_BUMPMAP2`)};
+        if (use_bumpmap2) {
+            vec2 t_Bumpmap2TexCoord = ${ifDefineBool(variantSettings, `USE_BUMPMAP2`, `Mul(u_Bumpmap2Transform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
+            vec4 t_Bumpmap2Sample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap2), t_Bumpmap2TexCoord));
 
-    // Transform from tangent space into world-space.
-    t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
-#else
-    t_NormalWorld = v_TangentSpaceBasis2;
+            bool use_bumpmask = ${getDefineBool(variantSettings, `USE_BUMPMASK`)};
+            if (use_bumpmask) {
+                vec4 t_BumpMaskSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureBumpMask), v_TexCoord0.xy));
+                t_BumpmapSample.rgb = normalize(t_BumpmapSample.rgb + t_Bumpmap2Sample.rgb);
+                t_BumpmapSample.rgb = mix(t_BumpMaskSample.rgb, t_BumpmapSample.rgb, t_BumpMaskSample.a);
+                // Envmap factor from bump mask is multiplied in regardless of whether we have use_normalmap_alpha_envmap_mask set.
+                t_EnvmapFactor *= t_BumpMaskSample.a;
+            } else {
+                // TODO(jstpierre): $addbumpmaps
+                t_BumpmapSample.rgb = mix(t_BumpmapSample.rgb, t_Bumpmap2Sample.rgb, t_BlendFactorWorld);
+            }
+        }
+
+        bool use_normalmap_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
+        if (use_normalmap_alpha_envmap_mask)
+            t_EnvmapFactor *= t_BumpmapSample.a;
+
+        if (use_ssbump) {
+            // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
+            t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
+        } else {
+            // In non-SSBUMP, this is a traditional normal map with signed offsets.
+            t_BumpmapNormal = t_BumpmapSample.rgb;
+        }
+
+        // Transform from tangent space into world-space.
+#ifdef HAS_FULL_TANGENTSPACE
+        t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 #endif
+    } else {
+        t_NormalWorld = v_TangentSpaceBasis2;
+    }
 
     vec3 t_DiffuseLighting = vec3(0.0);
 
@@ -1752,7 +1749,6 @@ void mainPS() {
 
         vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
 
-#ifdef USE_BUMPMAP
         if (use_diffuse_bumpmap) {
             vec3 t_LightmapColor1 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 1.0)));
             vec3 t_LightmapColor2 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 2.0)));
@@ -1788,9 +1784,7 @@ void mainPS() {
             t_DiffuseLighting += t_LightmapColor1 * t_Influence.x;
             t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
             t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
-        } else
-#endif
-        {
+        } else {
             t_DiffuseLighting.rgb = t_LightmapColor0;
         }
 
@@ -1870,9 +1864,10 @@ void mainPS() {
     bool use_selfillum_envmapmask_alpha = ${getDefineBool(variantSettings, `USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
     bool use_selfillum_mask = ${getDefineBool(variantSettings, `USE_SELFILLUM_MASK`)};
     if (use_selfillum_envmapmask_alpha) {
-        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).aaa;
+        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(variantSettings, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
+        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), t_EnvmapMaskTexCoord).aaa;
     } else if (use_selfillum_mask) {
-        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllumMask), v_TexCoord1.xy).rgb;
+        t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllumMask), v_TexCoord0.xy).rgb;
     } else {
         t_SelfIllumMask = t_BaseTexture.aaa;
     }
@@ -1883,7 +1878,7 @@ void mainPS() {
     float t_SelfIllumFresnelMin = u_SelfIllumFresnel.r;
     float t_SelfIllumFresnelMax = u_SelfIllumFresnel.g;
     float t_SelfIllumFresnelExp = u_SelfIllumFresnel.b;
-    
+
     float t_SelfIllumFresnel = saturate(mix(t_SelfIllumFresnelMin, t_SelfIllumFresnelMax, pow(saturate(t_FresnelDot), t_SelfIllumFresnelExp)));
     t_SelfIllumMask.rgb *= t_SelfIllumFresnel;
 #endif
@@ -1908,8 +1903,10 @@ void mainPS() {
     t_EnvmapFactor *= u_EnvmapTint.rgb;
 
     bool use_envmap_mask = ${getDefineBool(variantSettings, `USE_ENVMAP_MASK`)};
-    if (use_envmap_mask)
-        t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), v_TexCoord1.zw).rgb;
+    if (use_envmap_mask) {
+        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(variantSettings, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
+        t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), t_EnvmapMaskTexCoord).rgb;
+    }
 
     if (use_base_alpha_envmap_mask)
         t_EnvmapFactor *= 1.0 - t_BaseTexture.a;
