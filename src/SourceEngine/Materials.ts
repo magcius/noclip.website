@@ -779,26 +779,23 @@ export abstract class BaseMaterial {
         return vtf.lateBinding !== null;
     }
 
-    protected paramFillScaleBias(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true): number {
+    protected paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
         assert(m[1] === 0.0 && m[2] === 0.0);
-        let scaleS = m[0];
-        let scaleT = m[5];
-        if (useMappingTransform) {
-            scaleS *= this.texCoord0Scale[0];
-            scaleT *= this.texCoord0Scale[1];
-        }
+        let scaleS = m[0] * this.texCoord0Scale[0];
+        let scaleT = m[5] * this.texCoord0Scale[1];
         const transS = m[12];
         const transT = m[13];
         return fillVec4(d, offs, scaleS, scaleT, transS, transT);
     }
 
-    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, useMappingTransform: boolean = true, flipY: boolean = false): number {
+    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string, flipY: boolean = false, extraScale: number = 1.0): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         mat4.copy(scratchMat4a, m);
-        if (useMappingTransform)
-            scaleMatrix(scratchMat4a, m, this.texCoord0Scale[0], this.texCoord0Scale[1]);
+        if (extraScale !== 1.0)
+            scaleMatrix(scratchMat4a, scratchMat4a, extraScale);
+        scaleMatrix(scratchMat4a, scratchMat4a, this.texCoord0Scale[0], this.texCoord0Scale[1]);
         if (flipY) {
             scratchMat4a[5] *= -1;
             scratchMat4a[13] += 2;
@@ -943,6 +940,7 @@ export abstract class BaseMaterial {
         p['$nocull']                       = new ParameterBoolean(false, false);
         p['$nofog']                        = new ParameterBoolean(false, false);
         p['$decal']                        = new ParameterBoolean(false, false);
+        p['$model']                        = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture(true);
@@ -2106,11 +2104,6 @@ class Material_Generic extends BaseMaterial {
         // Sprite
         p['$spriteorientation']            = new ParameterString('parallel_upright');
         p['$spriteorigin']                 = new ParameterVector(2, [0.5, 0.5]);
-
-        // SolidEnergy (doesn't make sense on this..., basically only to get Portal 2 to load...)
-        p['$flow_color_intensity']         = new ParameterNumber(0.0);
-        p['$detail1texturetransform']      = new ParameterMatrix();
-        p['$detail2texturetransform']      = new ParameterMatrix();
     }
 
     private recacheProgram(cache: GfxRenderCache): void {
@@ -2392,7 +2385,7 @@ class Material_Generic extends BaseMaterial {
             offs += lightCache.fillWorldLights(d, offs, renderContext.worldLightingState);
         }
 
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$basetexture'));
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
@@ -2576,7 +2569,8 @@ class Material_Modulate extends BaseMaterial {
 
         let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Modulate.ub_ObjectParams, 8);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Modulate.ub_ObjectParams);
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
+
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$basetexture'));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -2683,7 +2677,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 
         let offs = renderInst.allocateUniformBuffer(ShaderTemplate_UnlitTwoTexture.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_UnlitTwoTexture.ub_ObjectParams);
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', true, this.paramGetFlipY(renderContext, '$basetexture'));
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$basetexture'));
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', this.paramGetNumber('$alpha'));
 
@@ -2696,6 +2690,29 @@ class Material_UnlitTwoTexture extends BaseMaterial {
 //#endregion
 
 //#region Water
+const SampleFlowMap = `
+vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp) {
+    float t_ScrollTime1 = fract(t_FlowTimeInIntervals + 0.0);
+    float t_ScrollTime2 = fract(t_FlowTimeInIntervals + 0.5);
+    float t_ScrollPhase1 = floor(t_FlowTimeInIntervals) * 0.311;
+    float t_ScrollPhase2 = floor(t_FlowTimeInIntervals + 0.5) * 0.311 + 0.5;
+
+    vec2 t_FlowMapTexCoordDisp = t_TexCoordScrollDistance * t_FlowVectorTangent.xy;
+    vec2 t_FlowMapTexCoord1 = t_TexCoordBase + t_ScrollPhase1 + (t_ScrollTime1 * t_FlowMapTexCoordDisp.xy);
+    vec2 t_FlowMapTexCoord2 = t_TexCoordBase + t_ScrollPhase2 + (t_ScrollTime2 * t_FlowMapTexCoordDisp.xy);
+
+    vec4 t_FlowMapSample1 = texture(PU_SAMPLER_2D(t_FlowMapTexture), t_FlowMapTexCoord1.xy);
+    vec4 t_FlowMapSample2 = texture(PU_SAMPLER_2D(t_FlowMapTexture), t_FlowMapTexCoord2.xy);
+    float t_FlowMapWeight1 = pow(abs(t_ScrollTime2 * 2.0 - 1.0), t_LerpExp);
+    float t_FlowMapWeight2 = pow(abs(t_ScrollTime1 * 2.0 - 1.0), t_LerpExp);
+    vec4 t_FlowMapSample = vec4(0.0);
+    t_FlowMapSample.rgba += t_FlowMapSample1.rgba * t_FlowMapWeight1;
+    t_FlowMapSample.rgba += t_FlowMapSample2.rgba * t_FlowMapWeight2;
+
+    return t_FlowMapSample;
+}
+`;
+
 class ShaderTemplate_Water extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
@@ -2835,26 +2852,7 @@ float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord, float t_DepthSample) {
     return t_FogAmount;
 }
 
-vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t_FlowTimeInIntervals, float t_TexCoordScrollDistance, vec2 t_FlowVectorTangent, float t_LerpExp) {
-    float t_ScrollTime1 = fract(t_FlowTimeInIntervals + 0.0);
-    float t_ScrollTime2 = fract(t_FlowTimeInIntervals + 0.5);
-    float t_ScrollPhase1 = floor(t_FlowTimeInIntervals) * 0.311;
-    float t_ScrollPhase2 = floor(t_FlowTimeInIntervals + 0.5) * 0.311 + 0.5;
-
-    vec2 t_FlowMapTexCoordDisp = t_TexCoordScrollDistance * t_FlowVectorTangent.xy;
-    vec2 t_FlowMapTexCoord1 = t_TexCoordBase + t_ScrollPhase1 + (t_ScrollTime1 * t_FlowMapTexCoordDisp.xy);
-    vec2 t_FlowMapTexCoord2 = t_TexCoordBase + t_ScrollPhase2 + (t_ScrollTime2 * t_FlowMapTexCoordDisp.xy);
-
-    vec4 t_FlowMapSample1 = texture(PU_SAMPLER_2D(t_FlowMapTexture), t_FlowMapTexCoord1.xy);
-    vec4 t_FlowMapSample2 = texture(PU_SAMPLER_2D(t_FlowMapTexture), t_FlowMapTexCoord2.xy);
-    float t_FlowMapWeight1 = pow(abs(t_ScrollTime2 * 2.0 - 1.0), t_LerpExp);
-    float t_FlowMapWeight2 = pow(abs(t_ScrollTime1 * 2.0 - 1.0), t_LerpExp);
-    vec4 t_FlowMapSample = vec4(0.0);
-    t_FlowMapSample.rgba += t_FlowMapSample1.rgba * t_FlowMapWeight1;
-    t_FlowMapSample.rgba += t_FlowMapSample2.rgba * t_FlowMapWeight2;
-
-    return t_FlowMapSample;
-}
+${SampleFlowMap}
 
 vec3 ReconstructNormal(in vec2 t_NormalXY) {
     float t_NormalZ = sqrt(saturate(1.0 - dot(t_NormalXY.xy, t_NormalXY.xy)));
@@ -3482,6 +3480,305 @@ class Material_Refract extends BaseMaterial {
 }
 //#endregion
 
+//#region SolidEnergy
+class ShaderTemplate_SolidEnergy extends MaterialShaderTemplateBase {
+    public static ub_ObjectParams = 2;
+
+    public override program = `
+precision mediump float;
+
+${MaterialShaderTemplateBase.Common}
+
+layout(std140) uniform ub_ObjectParams {
+    Mat4x2 u_BaseTextureTransform;
+#ifdef USE_DETAIL
+    Mat4x2 u_Detail1TextureTransform;
+    Mat4x2 u_Detail2TextureTransform;
+#endif
+#ifdef USE_FLOWMAP
+    vec4 u_Misc[3];
+#endif
+};
+
+#define u_FlowWorldTexCoordScale           (u_Misc[0].x)
+#define u_FlowNormalTexCoordScale          (u_Misc[0].y)
+#define u_FlowNoiseTexCoordScale           (u_Misc[0].z)
+#define u_FlowOutputIntensity              (u_Misc[0].w)
+
+#define u_FlowColor                        (u_Misc[1].xyz)
+#define u_FlowIntensity                    (u_Misc[1].w)
+
+#define u_FlowTimeInInvervals              (u_Misc[2].x)
+#define u_FlowNormalTexCoordScrollDistance (u_Misc[2].y)
+#define u_FlowLerpExp                      (u_Misc[2].z)
+
+varying vec4 v_TexCoord0;
+varying vec4 v_TexCoord1;
+varying vec3 v_PositionWorld;
+
+layout(binding = 0) uniform sampler2D u_TextureBase;
+layout(binding = 1) uniform sampler2D u_TextureDetail1;
+layout(binding = 2) uniform sampler2D u_TextureDetail2;
+layout(binding = 3) uniform sampler2D u_TextureFlowmap;
+layout(binding = 4) uniform sampler2D u_TextureFlowNoise;
+layout(binding = 5) uniform sampler2D u_TextureFlowBounds;
+
+#ifdef VERT
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    v_PositionWorld.xyz = t_PositionWorld;
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+
+    vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
+
+    vec3 t_TangentSWorld = Mul(t_WorldFromLocalMatrix, vec4(a_TangentS.xyz, 0.0));
+    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
+
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+    v_TexCoord0.zw = vec2(0.0);
+
+    v_TexCoord1.xyzw = vec4(0.0);
+
+#ifdef USE_DETAIL
+    v_TexCoord1.xy = Mul(u_Detail1TextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+    v_TexCoord1.zw = Mul(u_Detail2TextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
+#endif
+
+#ifdef USE_FLOWMAP
+    vec2 t_FlowUV = vec2(0.0);
+
+#ifdef MODEL
+    t_FlowUV.xy = a_TexCoord.xy;
+#else
+    t_FlowUV.x = dot(t_TangentSWorld.xyz, v_PositionWorld.xyz);
+    t_FlowUV.y = dot(t_TangentTWorld.xyz, v_PositionWorld.xyz);
+#endif
+
+    v_TexCoord0.zw = t_FlowUV.xy;
+#endif
+}
+#endif
+
+${SampleFlowMap}
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_BaseTexture = vec4(0.0, 0.0, 0.0, 1.0);
+    bool t_UseBaseAlpha = true;
+
+#ifdef USE_FLOWMAP
+    vec4 t_FlowBoundsSample = texture(SAMPLER_2D(u_TextureFlowBounds), v_TexCoord0.xy);
+    vec4 t_FlowSample = texture(SAMPLER_2D(u_TextureFlowmap), v_TexCoord0.zw * u_FlowWorldTexCoordScale);
+    vec2 t_FlowVectorTangent = UnpackUnsignedNormalMap(t_FlowSample).rg;
+    t_FlowVectorTangent.xy *= t_FlowBoundsSample.r;
+
+    // No vortex.
+
+    vec2 t_FlowNoiseTexCoord = v_TexCoord0.zw * u_FlowNoiseTexCoordScale;
+    vec4 t_FlowNoiseSample = texture(SAMPLER_2D(u_TextureFlowNoise), t_FlowNoiseTexCoord.xy);
+    vec2 t_FlowTexCoordBase = v_TexCoord0.zw * u_FlowNormalTexCoordScale;
+    float t_FlowTimeInIntervals = u_FlowTimeInInvervals + t_FlowNoiseSample.g;
+    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureBase), t_FlowTexCoordBase, t_FlowTimeInIntervals, u_FlowNormalTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowLerpExp);
+
+    float t_Alpha = t_FlowColorSample.a;
+
+    // TODO(jstpierre): Power-up?
+    t_Alpha += t_FlowBoundsSample.g;
+
+    t_BaseTexture.rgb = u_FlowColor.rgb * t_Alpha;
+    t_BaseTexture.rgb *= t_FlowBoundsSample.b * u_FlowIntensity;
+
+    t_UseBaseAlpha = false;
+#else
+    t_BaseTexture.rgba = texture(SAMPLER_2D(u_TextureBase), v_TexCoord0.xy).rgba;
+#endif
+
+    vec4 t_FinalColor = t_BaseTexture;
+    t_FinalColor.a = 1.0;
+
+#ifdef USE_DETAIL1
+    vec4 t_Detail1 = texture(SAMPLER_2D(u_TextureDetail1), v_TexCoord1.xy);
+    int t_Detail1BlendMode = DETAIL1_BLENDMODE;
+
+    if (t_Detail1BlendMode == 0) {
+        t_FinalColor.rgb *= t_Detail1.rgb * 2.0;
+    } else {
+        t_FinalColor.rgb = mix(t_FinalColor.rgb * t_Detail1.rgb, t_FinalColor.rgb, t_BaseTexture.a);
+    }
+
+    if (t_Detail1BlendMode == 1)
+        t_UseBaseAlpha = false;
+#endif
+
+#ifdef USE_DETAIL2
+    vec4 t_Detail2 = texture(SAMPLER_2D(u_TextureDetail2), v_TexCoord1.zw);
+    int t_Detail2BlendMode = DETAIL2_BLENDMODE;
+
+    if (t_Detail2BlendMode == 0) {
+#ifdef USE_DETAIL1
+        t_Detail2.rgb *= t_Detail1.rgb;
+#endif
+        t_FinalColor.rgb += t_Detail2.rgb;
+    } else {
+        t_FinalColor.rgb *= t_Detail2.rgb;
+    }
+#endif
+
+    if (t_UseBaseAlpha)
+        t_FinalColor.a *= t_BaseTexture.a;
+
+#ifdef ADDITIVE
+    t_FinalColor.rgb *= (1.0 + t_FinalColor.a);
+    t_FinalColor.a = 1.0;
+#endif
+
+    CalcFog(t_FinalColor, v_PositionWorld.xyz);
+    OutputLinearColor(t_FinalColor);
+}
+#endif
+`;
+}
+
+class Material_SolidEnergy extends BaseMaterial {
+    private shaderInstance: UberShaderInstanceBasic;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+
+    private wantsDetail = false;
+    private wantsFlowmap = false;
+
+    protected override initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$detail1']                     = new ParameterTexture(true);
+        p['$detail1scale']                = new ParameterNumber(1.0);
+        p['$detail1frame']                = new ParameterNumber(0);
+        p['$detail1blendmode']            = new ParameterNumber(0, false);
+        p['$detail1texturetransform']     = new ParameterMatrix();
+
+        p['$detail2']                     = new ParameterTexture(true);
+        p['$detail2scale']                = new ParameterNumber(1.0);
+        p['$detail2frame']                = new ParameterNumber(0);
+        p['$detail2blendmode']            = new ParameterNumber(0, false);
+        p['$detail2texturetransform']     = new ParameterMatrix();
+
+        p['$flowmap']                     = new ParameterTexture(false);
+        p['$flowmapframe']                = new ParameterNumber(0);
+        p['$flowmapscrollrate']           = new ParameterVector(2);
+        p['$flowbounds']                  = new ParameterTexture(false);
+        p['$flow_noise_texture']          = new ParameterTexture(false);
+        p['$flow_noise_scale']            = new ParameterNumber(1.0);
+        p['$flow_lerpexp']                = new ParameterNumber(1.0);
+        p['$flow_timeintervalinseconds']  = new ParameterNumber(0.4);
+        p['$flow_worlduvscale']           = new ParameterNumber(1.0);
+        p['$flow_normaluvscale']          = new ParameterNumber(1.0);
+        p['$flow_uvscrolldistance']       = new ParameterNumber(0.2);
+        p['$flow_color']                  = new ParameterColor(0);
+        p['$flow_color_intensity']        = new ParameterNumber(1.0);
+
+        p['$outputintensity']             = new ParameterNumber(1.0);
+    }
+
+    protected override initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
+
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.SolidEnergy);
+
+        const isTranslucent = this.paramGetBoolean('$translucent');
+        this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
+        this.setCullMode(this.megaStateFlags);
+
+        if (this.paramGetVTF('$detail1') !== null) {
+            this.shaderInstance.setDefineBool('USE_DETAIL', true);
+            this.shaderInstance.setDefineBool('USE_DETAIL1', true);
+            this.shaderInstance.setDefineString('DETAIL1_BLENDMODE', '' + this.paramGetNumber('$detail1blendmode'));
+            this.wantsDetail = true;
+        }
+
+        if (this.paramGetVTF('$detail2') !== null) {
+            this.shaderInstance.setDefineBool('USE_DETAIL', true);
+            this.shaderInstance.setDefineBool('USE_DETAIL2', true);
+            this.shaderInstance.setDefineString('DETAIL2_BLENDMODE', '' + this.paramGetNumber('$detail2blendmode'));
+            this.wantsDetail = true;
+        }
+
+        if (this.paramGetVTF('$flowmap') !== null) {
+            this.shaderInstance.setDefineBool('USE_FLOWMAP', true);
+            this.wantsFlowmap = true;
+        }
+
+        this.shaderInstance.setDefineBool('ADDITIVE', this.isAdditive);
+        this.shaderInstance.setDefineBool('MODEL', this.paramGetBoolean('$model'));
+
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(dst: TextureMapping[]): void {
+        resetTextureMappings(dst);
+        this.paramGetTexture('$basetexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'));
+
+        if (this.wantsDetail) {
+            this.paramGetTexture('$detail1').fillTextureMapping(dst[1], this.paramGetInt('$detail1frame'));
+            this.paramGetTexture('$detail2').fillTextureMapping(dst[2], this.paramGetInt('$detail2frame'));
+        }
+
+        if (this.wantsFlowmap) {
+            this.paramGetTexture('$flowmap').fillTextureMapping(dst[3], this.paramGetInt('$flowmapframe'));
+            this.paramGetTexture('$flow_noise_texture').fillTextureMapping(dst[4], 0);
+            this.paramGetTexture('$flowbounds').fillTextureMapping(dst[5], 0);
+        }
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings(textureMappings);
+
+        this.setupOverrideSceneParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_SolidEnergy.ub_ObjectParams, 24);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_SolidEnergy.ub_ObjectParams);
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$basetexture'));
+
+        if (this.wantsDetail) {
+            offs += this.paramFillTextureMatrix(d, offs, '$detail1texturetransform', false, this.paramGetNumber('$detail1scale'));
+            offs += this.paramFillTextureMatrix(d, offs, '$detail2texturetransform', false, this.paramGetNumber('$detail2scale'));
+        }
+
+        if (this.wantsFlowmap) {
+            offs += fillVec4(d, offs,
+                1.0 / this.paramGetNumber('$flow_worlduvscale'),
+                1.0 / this.paramGetNumber('$flow_normaluvscale'),
+                this.paramGetNumber('$flow_noise_scale'),
+                this.paramGetNumber('$outputintensity'));
+
+            offs += this.paramFillColor(d, offs, '$flow_color', this.paramGetNumber('$flow_color_intensity'));
+
+            // Compute local time.
+            const timeInIntervals = (renderContext.globalTime) / (this.paramGetNumber('$flow_timeintervalinseconds') * 2.0);
+            offs += fillVec4(d, offs,
+                timeInIntervals,
+                this.paramGetNumber('$flow_uvscrolldistance'),
+                this.paramGetNumber('$flow_lerpexp'));
+        }
+
+        renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
+    }
+}
+//#endregion
+
 //#region Material Cache
 class StaticResources {
     public whiteTexture2D: GfxTexture;
@@ -3552,6 +3849,7 @@ class ShaderTemplates {
     public UnlitTwoTexture = new ShaderTemplate_UnlitTwoTexture();
     public Water = new ShaderTemplate_Water();
     public Refract = new ShaderTemplate_Refract();
+    public SolidEnergy = new ShaderTemplate_SolidEnergy();
 
     public destroy(device: GfxDevice): void {
         this.Generic.destroy(device);
@@ -3559,6 +3857,7 @@ class ShaderTemplates {
         this.UnlitTwoTexture.destroy(device);
         this.Water.destroy(device);
         this.Refract.destroy(device);
+        this.SolidEnergy.destroy(device);
     }
 }
 
@@ -3630,6 +3929,8 @@ export class MaterialCache {
             return new Material_UnlitTwoTexture(vmt);
         else if (shaderType === 'refract')
             return new Material_Refract(vmt);
+        else if (shaderType === 'solidenergy')
+            return new Material_SolidEnergy(vmt);
         else
             return new Material_Generic(vmt);
     }

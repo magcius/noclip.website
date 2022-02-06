@@ -1,7 +1,6 @@
 
 import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";
-import { assert } from "../util";
 import { BSPFile } from "./BSPFile";
 import { BSPRenderer, SkyboxRenderer, SourceFileSystem, SourceRenderContext, SourceRenderer } from "./Main";
 
@@ -14,6 +13,8 @@ export async function createKitchenSinkSourceFilesytem(dataFetcher: DataFetcher)
         filesystem.createVPKMount(`TeamFortress2/tf/tf2_textures`),
         filesystem.createVPKMount(`TeamFortress2/tf/tf2_misc`),
         filesystem.createVPKMount(`Portal2/portal2/pak01`),
+        filesystem.createVPKMount(`Portal2/portal2_dlc1/pak01`),
+        filesystem.createVPKMount(`Portal2/portal2_dlc2/pak01`),
         filesystem.createVPKMount(`Portal/portal_pak`),
         filesystem.createVPKMount(`GarrysMod/garrysmod`),
         filesystem.createVPKMount(`HalfLife2Ep1/ep1_pak`),
