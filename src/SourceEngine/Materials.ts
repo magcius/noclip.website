@@ -1102,8 +1102,10 @@ export abstract class BaseMaterial {
         // Choose the right list.
         if (this.isIndirect)
             return view.indirectList;
-
-        return view.mainList;
+        else if (this.isTranslucent || this.isAdditive)
+            return view.translucentList;
+        else
+            return view.mainList;
     }
 }
 //#endregion

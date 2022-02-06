@@ -2,7 +2,7 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray } from "../util";
+import { readString, assertExists, assert, nArray, decodeString } from "../util";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
@@ -924,7 +924,7 @@ export class BSPFile {
             this.visibility = new BSPVisibility(visibilityData);
 
         // Parse out entities.
-        this.entitiesStr = new TextDecoder('utf8').decode(getLumpData(LumpType.ENTITIES).createTypedArray(Uint8Array));
+        this.entitiesStr = decodeString(getLumpData(LumpType.ENTITIES));
         this.entities = parseEntitiesLump(this.entitiesStr);
 
         function readVec4(view: DataView, offs: number): vec4 {

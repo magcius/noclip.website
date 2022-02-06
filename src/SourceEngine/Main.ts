@@ -561,6 +561,7 @@ export class SourceEngineView {
 
     public mainList = new GfxRenderInstList();
     public indirectList = new GfxRenderInstList(null);
+    public translucentList = new GfxRenderInstList();
 
     public fogParams = new FogParams();
     public useExpensiveWater = false;
@@ -595,6 +596,7 @@ export class SourceEngineView {
     public reset(): void {
         this.mainList.reset();
         this.indirectList.reset();
+        this.translucentList.reset();
     }
 
     public calcPVS(bsp: BSPFile, fallback: boolean, parentView: SourceEngineView | null = null): boolean {
@@ -1216,21 +1218,24 @@ export class SourceWorldViewRenderer {
 
             pass.exec((passRenderer) => {
                 renderer.executeOnPass(passRenderer, this.skyboxView.mainList);
+                renderer.executeOnPass(passRenderer, this.skyboxView.translucentList);
             });
         });
 
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, `${this.name} - Main Depth`);
+
+        const pointCamera = renderer.renderContext.currentPointCamera;
+        let cameraResolveTextureID: GfxrResolveTextureID | null = null;
+        if (pointCamera !== null && pointCamera.viewRenderer.outputColorTargetID !== null)
+            cameraResolveTextureID = builder.resolveRenderTarget(pointCamera.viewRenderer.outputColorTargetID);
+
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            const pointCamera = renderer.renderContext.currentPointCamera;
-            let cameraResolveTextureID: GfxrResolveTextureID | null = null;
-            if (pointCamera !== null && pointCamera.viewRenderer.outputColorTargetID !== null) {
-                cameraResolveTextureID = builder.resolveRenderTarget(pointCamera.viewRenderer.outputColorTargetID);
+            if (cameraResolveTextureID !== null)
                 pass.attachResolveTexture(cameraResolveTextureID);
-            }
 
             pass.exec((passRenderer, scope) => {
                 if (cameraResolveTextureID !== null)
@@ -1238,8 +1243,6 @@ export class SourceWorldViewRenderer {
 
                 renderer.executeOnPass(passRenderer, this.mainView.mainList);
             });
-
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
         if (this.drawIndirect && this.mainView.indirectList.renderInsts.length > 0) {
@@ -1268,6 +1271,24 @@ export class SourceWorldViewRenderer {
                     renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, staticResources.linearClampSampler);
 
                     renderer.executeOnPass(passRenderer, this.mainView.indirectList);
+                });
+            });
+        }
+
+        if (this.mainView.translucentList.renderInsts.length > 0) {
+            builder.pushPass((pass) => {
+                pass.setDebugName('Translucent');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+    
+                if (cameraResolveTextureID !== null)
+                    pass.attachResolveTexture(cameraResolveTextureID);
+    
+                pass.exec((passRenderer, scope) => {
+                    if (cameraResolveTextureID !== null)
+                        renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(cameraResolveTextureID), staticResources.linearRepeatSampler);
+    
+                    renderer.executeOnPass(passRenderer, this.mainView.translucentList);
                 });
             });
         }
@@ -1526,6 +1547,19 @@ export class SourceRenderer implements SceneGfx {
         this.mainViewRenderer.reset();
         this.reflectViewRenderer.reset();
     }
+
+    /*
+    public getDefaultWorldMatrix(dst: mat4): void {
+        mat4.identity(dst);
+
+        if (this.bspRenderers.length === 1) {
+            const player_start = this.bspRenderers[0].entitySystem.findEntityByType(info_player_start);
+            if (player_start !== null) {
+                mat4.mul(dst, noclipSpaceFromSourceEngineSpace, player_start.updateModelMatrix());
+            }
+        }
+    }
+    */
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(1/20);

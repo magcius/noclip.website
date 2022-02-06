@@ -2929,6 +2929,10 @@ class info_camera_link extends BaseMonitor {
     public static classname = `info_camera_link`;
 }
 
+export class info_player_start extends BaseEntity {
+    public static classname = `info_player_start`;
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -2990,6 +2994,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(point_camera);
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);
+        this.registerFactory(info_player_start);
     }
 
     public registerFactory(factory: EntityFactory): void {
