@@ -16,8 +16,9 @@ class prop_button extends BaseEntity {
     public static classname = 'prop_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/switch001.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/switch001.mdl');
     }
 }
 
@@ -25,8 +26,9 @@ class prop_floor_button extends BaseEntity {
     public static classname = 'prop_floor_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/portal_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/portal_button.mdl');
     }
 }
 
@@ -34,8 +36,9 @@ class prop_floor_cube_button extends BaseEntity {
     public static classname = 'prop_floor_cube_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/box_socket.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/box_socket.mdl');
     }
 }
 
@@ -43,8 +46,9 @@ class prop_floor_ball_button extends BaseEntity {
     public static classname = 'prop_floor_ball_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/ball_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/ball_button.mdl');
     }
 }
 
@@ -52,8 +56,9 @@ class prop_under_button extends BaseEntity {
     public static classname = 'prop_under_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props_underground/underground_testchamber_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props_underground/underground_testchamber_button.mdl');
     }
 }
 
@@ -61,8 +66,9 @@ class prop_under_floor_button extends BaseEntity {
     public static classname = 'prop_under_floor_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props_underground/underground_floor_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props_underground/underground_floor_button.mdl');
     }
 }
 
@@ -70,8 +76,9 @@ class prop_testchamber_door extends BaseEntity {
     public static classname = 'prop_testchamber_door';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/portal_door_combined.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/portal_door_combined.mdl');
     }
 }
 
