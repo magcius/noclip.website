@@ -1745,8 +1745,6 @@ void mainPS() {
     bool use_diffuse_bumpmap = ${getDefineBool(variantSettings, `USE_DIFFUSE_BUMPMAP`)};
 
     if (use_lightmap) {
-        vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
-
         vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
 
         if (use_diffuse_bumpmap) {
@@ -1756,6 +1754,8 @@ void mainPS() {
 
             vec3 t_Influence;
 
+            bool t_NormalizeInfluence = true;
+
             if (use_ssbump) {
                 // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
                 t_Influence = t_BumpmapSample.rgb;
@@ -1764,6 +1764,10 @@ void mainPS() {
                     t_Influence.xyz *= mix(vec3(1.0), 2.0 * t_DetailTexture.rgb, t_BaseTexture.a);
                     t_Albedo.a = 1.0; // Reset alpha
                 }
+
+                // TODO(jstpierre): I believe games pre-Portal 2 should not normalize influence; it
+                // doesn't appear to be in the Source SDK 2013 shaders posted to GitHub, but Portal 2
+                // definitely needs it.
             } else {
                 t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
                 t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
@@ -1772,13 +1776,13 @@ void mainPS() {
                 if (DETAIL_COMBINE_MODE == COMBINE_MODE_SSBUMP_BUMP) {
                     t_Influence.xyz *= t_DetailTexture.rgb * 2.0;
                 }
-
-                // According to https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_EfficientSelfShadowedRadiosityNormalMapping.pdf
-                // even without SSBUMP, the engine squares and re-normalizes the results. Not sure why, and why it doesn't match the original
-                // Radiosity Normal Mapping text.
-                t_Influence *= t_Influence;
-                t_DiffuseLightingScale /= dot(t_Influence, vec3(1.0));
             }
+
+            // The lightmap is constructed assuming that the three basis tap weights sum to 1, however,
+            // a flat vector projected against our three HL2 basis vectors would sum to sqrt(3).
+            // Renormalize so that the weights sum to 1.
+            if (t_NormalizeInfluence)
+                t_Influence.xyz *= 0.5773502691896258; // 1/sqrt(3)
 
             t_DiffuseLighting = vec3(0.0);
             t_DiffuseLighting += t_LightmapColor1 * t_Influence.x;
@@ -1788,7 +1792,7 @@ void mainPS() {
             t_DiffuseLighting.rgb = t_LightmapColor0;
         }
 
-        t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * t_DiffuseLightingScale;
+        t_DiffuseLighting.rgb = t_DiffuseLighting.rgb * u_ModulationColor.xyz;
     } else {
         // When not using a lightmap, diffuse lighting comes from vertex shader.
         t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
