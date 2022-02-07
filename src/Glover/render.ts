@@ -175,8 +175,6 @@ export class DrawCallRenderData {
 
     public updateBuffers(): void {
         assert(this.drawCall.dynamicGeometry);
-        // TODO: just patch the UVs in the old buffer, rather
-        //       than making a whole new one
         this.vertexBufferData = makeVertexBufferData(this.drawCall.vertices);
         this.device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
     }

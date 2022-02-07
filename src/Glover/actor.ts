@@ -9,7 +9,7 @@ import * as RDPRenderModes from './rdp_render_modes';
 
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3, vec4, ReadonlyVec3 } from "gl-matrix";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
@@ -379,7 +379,11 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         this.showDebugInfo = enabled; 
     }
 
-    public collides(rayOrigin: vec3, rayVector: vec3): Shadows.Collision | null {
+    public isSelf(obj: Object) {
+        return obj as GloverActorRenderer === this;
+    }
+
+    public collides(rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3): Shadows.Collision | null {
         let closestIntersection = null;
         let closestFace = null;
         let closestIntersectionDist = Infinity;
@@ -1004,4 +1008,3 @@ export class GloverBlurRenderer {
     }
 
 }
-

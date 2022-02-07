@@ -3,7 +3,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
-import { vec3, quat, mat4 } from "gl-matrix";
+import { ReadonlyVec3, vec3, quat, mat4 } from "gl-matrix";
 
 import { GloverShadowRenderer } from './sprite';
 import * as Textures from './textures';
@@ -27,15 +27,14 @@ export interface Collision {
 
 export interface Collidable {
     // TODO: bbox coordinates
-    collides: (rayOrigin: vec3, rayVector: vec3) => Collision | null;
+    collides: (rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3) => Collision | null;
+    isSelf: (obj: Object) => boolean;
 }
 
 export class Shadow {
     private position: vec3 | null = null;
     private normal: vec3;
     private static scratchQuat: quat = quat.create();
-    
-    private static ray: vec3 = vec3.fromValues(0, -1, 0);
 
     private static renderer: GloverShadowRenderer | null = null;
 
@@ -52,28 +51,15 @@ export class Shadow {
     }
 
     public updatePosition(): void {
-        this.position = null;
-        let closestIntersectionDist = Infinity;
-        const sourcePos = this.source.getPosition();
-        for (let terrainPiece of this.terrain) {
-            // TODO: only do this on the bounding box which is both
-            //       overlapping in x+z, and also has the smallest
-            //       positive y distance between the bottom of the
-            //       shadow-caster bbox and top of the shadow-surface
-            //       bbox
-            const collision = terrainPiece.collides(sourcePos, Shadow.ray);
-            if (collision === null) {
-                continue;
-            } else {
-                const dist = vec3.dist(collision.position, sourcePos);
-                if (dist < closestIntersectionDist) {
-                    this.position = collision.position;
-                    closestIntersectionDist = dist;
-                    this.normal = collision.normal;
-                    vec3.scaleAndAdd(this.position, this.position, this.normal, 1.5);
-                }
-            }
-        } 
+        // TODO: get minRadius programmatically somehow
+        let collision = projectOntoTerrain(this.source.getPosition(), this.source, this.terrain);
+        if (collision !== null) {
+            this.position = collision.position;
+            this.normal = collision.normal;
+            vec3.scaleAndAdd(this.position, this.position, this.normal, 1.5);
+        } else {
+            this.position = null;
+        }
     }
 
     public static initializeRenderer(device: GfxDevice, cache: GfxRenderCache, textures: Textures.GloverTextureHolder) {
@@ -129,7 +115,7 @@ const edge2 = vec3.create();
 const h = vec3.create();
 const s = vec3.create();
 const q = vec3.create();
-export function rayTriangleIntersection (rayOrigin: vec3, rayVector: vec3,
+export function rayTriangleIntersection (rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3,
     triangle: vec3[]): vec3 | null
 {
     const EPSILON = 0.0000001;
@@ -165,4 +151,33 @@ export function rayTriangleIntersection (rayOrigin: vec3, rayVector: vec3,
 }
 //
 ///////////////////////////////////////////////////////
+
+const downwardRay: ReadonlyVec3 = vec3.fromValues(0, -1, 0);
+
+export function projectOntoTerrain(sourcePos: vec3, sourceObj: Object | null, terrain: Collidable[]) : Collision | null {
+    let closestIntersectionDist = Infinity;
+    let closestCollision: Collision | null = null;
+    for (let terrainPiece of terrain) {
+        // TODO: only do this on the bounding box which is both
+        //       overlapping in x+z, and also has the smallest
+        //       positive y distance between the bottom of the
+        //       shadow-caster bbox and top of the shadow-surface
+        //       bbox
+        if (sourceObj !== null && terrainPiece.isSelf(sourceObj)) {
+            continue;
+        }
+        const collision = terrainPiece.collides(sourcePos, downwardRay);
+        if (collision === null) {
+            continue;
+        } else {
+            const dist = vec3.dist(collision.position, sourcePos);
+            if (dist < closestIntersectionDist) {
+                closestIntersectionDist = dist;
+                closestCollision = collision
+            }
+        }
+    } 
+    return closestCollision;
+}
+
 

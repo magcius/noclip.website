@@ -297,7 +297,6 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             }
             if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
                 if (this.blur !== null) {
-                    // TODO: offset from camera
                     const pt1 = this.scratchVec3;
                     const pt2 = this.scratchVec3_2;
                     vec3.set(pt1, 0, -this.blurExtent, 0);
@@ -510,14 +509,14 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                             // }
                         }
                         vec3.copy(this.lastPosition, dstPt);
+                        vec3.copy(this.nextPosition, dstPt);
                         vec3.zero(this.velocity);
                         curSpeed = 0;
                     }                
                 }
 
-                vec3.copy(this.scratchVec3, this.nextPosition);
-                vec3.add(this.nextPosition, this.lastPosition, this.velocity);
-                vec3.copy(this.lastPosition, this.scratchVec3);
+                vec3.copy(this.lastPosition, this.nextPosition);
+                vec3.add(this.nextPosition, this.nextPosition, this.velocity);
 
                 this.lastPathAdvance = 0;
             } else {
@@ -1297,6 +1296,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let skyboxClearColor = [0,0,0];
 
         let shadowCasters: Shadows.ShadowCaster[] = [];
+        let ballActors: GloverActorRenderer[] = [];
 
         // Do a first pass to set up scene lights
         for (let cmd of landscape.body) {
@@ -1401,7 +1401,11 @@ class SceneDesc implements Viewer.SceneDesc {
                     sceneRenderer.actors.push(ballActor)
                     mat4.fromTranslation(ballActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     mat4.scale(ballActor.modelMatrix, ballActor.modelMatrix, [0.05, 0.05, 0.05]);
-                    shadowCasters.push(ballActor);
+                    if (cmd.params.type != 1) {
+                        ballActor.shadowSize = 5;
+                        shadowCasters.push(ballActor);
+                        ballActors.push(ballActor);
+                    }
                     break;
                 }
                 case 'Platform': {
@@ -1665,6 +1669,21 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         const shadowTerrain = sceneRenderer.actors; // TODO: figure out actual list
+
+        // Reproject ball onto closest surface
+        for (let ballActor of ballActors) {
+            // TODO: get radius from mesh itself:
+            const radius = 10;
+            const ballPos = ballActor.getPosition();
+            ballPos[1] += radius;
+            let collision = Shadows.projectOntoTerrain(ballPos, ballActor, shadowTerrain);
+            if (collision != null) {
+                const dist = collision.position[1] - (ballPos[1] - 2*radius);
+                ballActor.modelMatrix[13] += dist;
+            }
+        }
+
+        // Project shadows
         for (let shadowCaster of shadowCasters) {
             const shadow = new Shadows.Shadow(shadowCaster, shadowTerrain);
             sceneRenderer.shadows.push(shadow);
