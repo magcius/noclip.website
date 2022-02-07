@@ -289,7 +289,7 @@ export function vmtParseColor(dst: Color, S: string): void {
 export function vmtParseNumber(S: string | undefined, fallback: number): number {
     if (S !== undefined) {
         const v = vmtParseVector(S);
-        if (v[0] !== undefined)
+        if (v[0] !== undefined && !Number.isNaN(v[0]))
             return v[0];
     }
     return fallback;
