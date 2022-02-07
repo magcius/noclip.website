@@ -1,4 +1,5 @@
-import { vec3 } from 'gl-matrix';
+import * as Viewer from '../viewer';
+import { vec3, mat4 } from 'gl-matrix';
 
 export function subtractAngles(a: number, b: number): number {
     let diff = a - b;
@@ -59,4 +60,12 @@ export function radianLerp(dst: vec3, start: vec3, end: vec3, t: number) {
         }
         dst[axis] = a * (1-t) + b * t;
     }
+}
+
+let lookatScratch = vec3.create();
+export function pushAlongLookatVector(dst: vec3, src: vec3, dist: number, viewerInput: Viewer.ViewerRenderInput) {
+    mat4.getTranslation(lookatScratch, viewerInput.camera.worldMatrix);
+    vec3.sub(lookatScratch, src, lookatScratch);
+    vec3.normalize(lookatScratch, lookatScratch);
+    vec3.scaleAndAdd(dst, src, lookatScratch, dist);
 }

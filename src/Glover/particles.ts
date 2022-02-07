@@ -13,6 +13,7 @@ import { Color, colorNewFromRGBA } from "../Color";
 import { GenericRenderable } from './render';
 import { GloverFlipbookRenderer } from './sprite';
 import { GloverActorRenderer } from './actor';
+import { pushAlongLookatVector } from './util';
 
 const identityRotation: quat = quat.create();
 
@@ -740,10 +741,13 @@ export class MeshSparkle implements GenericRenderable {
                 vec3.set(origin, vert.x, vert.y, vert.z);
                 vec3.transformMat4(origin, origin, this.actor.modelMatrix)
 
-                mat4.getTranslation(lookat, viewerInput.camera.worldMatrix);
-                vec3.sub(lookat, origin, lookat);
-                vec3.normalize(lookat, lookat);
-                vec3.scaleAndAdd(origin, origin, lookat, -6);
+                // TODO: remove now that this was decomposed into pushAlongLookatVector
+                // mat4.getTranslation(lookat, viewerInput.camera.worldMatrix);
+                // vec3.sub(lookat, origin, lookat);
+                // vec3.normalize(lookat, lookat);
+                // vec3.scaleAndAdd(origin, origin, lookat, -6);
+
+                pushAlongLookatVector(origin, origin, -6, viewerInput);
 
                 const particle = this.particles.spawn(origin, MeshSparkle.velocity);
                 particle.setLifetime(-1);

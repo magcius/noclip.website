@@ -168,7 +168,7 @@ class GloverBaseSpriteRenderer {
             v.c0 = 0xFF;
             v.c1 = 0xFF;
             v.c2 = 0xFF;
-            v.a = 0xFF;
+            v.a = 1.0;
             drawCall.vertexCount += 1;
             drawCall.vertices.push(v)
         }
@@ -671,7 +671,6 @@ export class GloverWeatherRenderer {
             const strike = Math.floor(Math.random()*600) < 5;
             if (strike) {
                 this.lightningFrame = (5 + Math.floor(Math.random()*5)) * 2;
-                console.log("BANG")
             }
         }
 
@@ -797,13 +796,10 @@ export class GloverWeatherRenderer {
                 singleDebris.curAlpha = singleDebris.targetAlpha;
 
                 singleDebris.vel[1] = this.params.velocity[1] * (0.25 + singleDebris.curParallaxEffect / 1200);
-
-                singleDebris.vel[0] /= 10;
-                singleDebris.vel[1] /= 10;
             }
 
-            singleDebris.pos[0] -= singleDebris.vel[0];
-            singleDebris.pos[1] += singleDebris.vel[1];
+            singleDebris.pos[0] -= singleDebris.vel[0] / 10;
+            singleDebris.pos[1] += singleDebris.vel[1] / 10;
             singleDebris.lifetimeCounter -= 1;
 
             if (singleDebris.pos[1] > 640 / aspect) {

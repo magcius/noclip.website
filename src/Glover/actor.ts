@@ -5,6 +5,7 @@ import * as RSP from '../Common/N64/RSP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as Shadows from './shadows';
 import * as Render from './render';
+import * as RDPRenderModes from './rdp_render_modes';
 
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
@@ -134,6 +135,7 @@ class ActorMeshNode {
     }
 
     public forEachMesh(callback: (node: ActorMeshNode)=>void): void {
+        // TODO: provide draw matrix for node
         callback(this);
         for (let child of this.children) {
             child.forEachMesh(callback);
@@ -444,8 +446,6 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
                         this.currentAnim = nextAnim!.anim;
                         this.currentPlaybackSpeed = nextAnim!.playbackSpeed;
                         this.isPlaying = nextAnim!.startPlaying;
-                    } else {
-                        this.isPlaying = false;
                     }
                     this.currentAnimTime = reversePlay ? this.currentAnim.endTime : this.currentAnim.startTime;
                 }
@@ -546,7 +546,7 @@ class GloverMeshRenderer {
         Render.initializeRenderState(rspState);
 
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        Render.setRenderMode(rspState, decals, xlu, overlay meshData.alpha/255);
+        Render.setRenderMode(rspState, decals, xlu, overlay, meshData.alpha/255);
 
         if ((this.meshData.renderMode & 0x8) == 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
@@ -669,6 +669,8 @@ class GloverMeshRenderer {
                 // In the asm this minus is actually a + ? Audit the asm by hand maybe.
                 vertex.ty += Math.sin((frameCount + Math.floor((coordSum - (coordSum < 0 ? 1 : 0)) / 2.0))/ 20.0) * 8;
             }
+            // TODO: just patch the UVs in the old buffer, rather
+            //       than making a whole new one
             drawCall.renderData.updateBuffers();
         }
     }
@@ -785,3 +787,221 @@ class GloverMeshRenderer {
     }
 
 }
+
+
+export class GloverBlurRenderer {
+
+    public visible = true;
+
+    // General rendering attributes
+    private vertexColorsEnabled = true;
+    private backfaceCullingEnabled = false;
+
+    private drawCall: Render.DrawCall;
+    private drawCallInstance: Render.DrawCallInstance;
+
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+
+    private drawMatrix = mat4.create();
+
+    private lastFrameAdvance: number = 0;
+
+    private sortKey: number;
+
+    private vertexPool: F3DEX.Vertex[] = [];
+    private vertexPoolWritePtr = 0;
+
+    private bottomAlpha = 1.0;
+    private topAlpha = 0;
+    private bottomAlphaDecay = 0x14/0xFF;
+    private topAlphaDecay = 0x14/0xFF;
+
+
+    constructor(
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder)
+    {
+        const segments = textures.textureSegments();
+
+        this.megaStateFlags = {};
+
+        this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.XLU);
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+
+        const rspState = new Render.GloverRSPState(segments, textures);
+
+        Render.initializeRenderState(rspState);
+        // rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+        // Render.setRenderMode(rspState, false, true, false, 1.0);
+    
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+        // rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
+        rspState.gDPSetCombine(0xfcffffff, 0xfffe793c); // G_CC_SHADE, G_CC_SHADE
+        rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
+        rspState.gSPTexture(false, 0, 0, 0, 0);
+    
+        rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
+        rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_CULL_BACK);
+
+        this.drawCall = rspState._newDrawCall();
+        this.drawCall.dynamicGeometry = true;
+
+        // const sX = 100;
+        // const sY = 100;
+        // const sZ = 100;
+        // const sW = 100;
+        // const sH = 100;
+        // const coords = [
+        //     [sX, sY + sH, sZ, .5],
+        //     [sX, sY, sZ, .5],
+        //     [sX + sW, sY + sH, sZ, .5],
+
+        //     [sX, sY, sZ, .5],
+        //     [sX + sW, sY, sZ, .5],
+        //     [sX + sW, sY + sH, sZ, .4],
+        // ];
+
+        // for (let coord of coords) {
+        //     const v = new F3DEX.Vertex();
+        //     v.x = coord[0];
+        //     v.y = coord[1];
+        //     v.z = coord[2];
+        //     v.tx = 0;
+        //     v.ty = 0;
+        //     v.c0 = 0xFF;
+        //     v.c1 = 0xFF;
+        //     v.c2 = 0x00;
+        //     v.a = coord[3];
+        //     this.drawCall.vertexCount += 1;
+        //     this.drawCall.vertices.push(v)
+        // }
+        for (let x = 0; x < 30*2; x+= 1) {
+            let v = new F3DEX.Vertex();
+            v.c0 = 0xC8;
+            v.c1 = 0xC8;
+            v.c2 = 0xC8;
+            v.a = ((x & 1) == 0) ? this.bottomAlpha : this.topAlpha;
+            this.vertexPool.push(v);
+        }
+
+
+        this.rebuildDrawCallGeometry(true);
+
+        this.drawCall.renderData = new Render.DrawCallRenderData(device, cache, rspState.textureCache, segments, this.drawCall);
+        this.drawCallInstance = new Render.DrawCallInstance(this.drawCall, rspState.textureCache, null);
+    }
+
+    public pushNewPoint(bottom: vec3, top: vec3) {
+        let v = this.vertexPool[this.vertexPoolWritePtr];
+        v.x = bottom[0];
+        v.y = bottom[1];
+        v.z = bottom[2];
+        v.a = this.bottomAlpha;
+
+        v = this.vertexPool[this.vertexPoolWritePtr+1];
+        v.x = top[0];
+        v.y = top[1];
+        v.z = top[2];
+        v.a = this.topAlpha;
+
+        this.vertexPoolWritePtr = (this.vertexPoolWritePtr + 2) % this.vertexPool.length;
+
+        // TODO: camera offset?
+    }
+
+    private decayVertices() {
+        for (let idx = 0; idx < this.vertexPool.length; idx += 1) {
+            const decay = ((idx & 1) == 0) ? this.bottomAlphaDecay : this.topAlphaDecay;
+            const vertex = this.vertexPool[idx];
+            if (vertex.a < .008) {
+                vertex.a = 0;
+            } else{
+                if (decay < vertex.a) {
+                    vertex.a -= decay;
+                } else {
+                    vertex.a = .004;
+                }
+            }
+        }
+    }
+
+    private rebuildDrawCallGeometry(all: boolean = false) {
+        this.drawCall.vertexCount = 0;
+        this.drawCall.vertices = [];
+
+        const len = this.vertexPool.length;
+        let cursor = (this.vertexPoolWritePtr + 2) % len;
+        while (cursor != this.vertexPoolWritePtr) {
+
+            if (!all) {
+                if (this.vertexPool[(cursor+2)%len].a < 0.008 &&
+                    this.vertexPool[(cursor+3)%len].a < 0.008) {
+                    cursor += 2;
+                    cursor = cursor % len;
+                    continue;
+                }
+            }
+
+            this.drawCall.vertices.push(this.vertexPool[cursor]);
+            this.drawCall.vertices.push(this.vertexPool[(cursor+1)%len]);
+            this.drawCall.vertices.push(this.vertexPool[(cursor+2)%len]);
+
+            this.drawCall.vertices.push(this.vertexPool[(cursor+1)%len]);
+            this.drawCall.vertices.push(this.vertexPool[(cursor+2)%len]);
+            this.drawCall.vertices.push(this.vertexPool[(cursor+3)%len]);
+
+            this.drawCall.vertexCount += 6;
+
+            cursor += 2;
+            cursor = cursor % len;
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            this.decayVertices()
+            this.rebuildDrawCallGeometry();
+            this.drawCall.renderData!.updateBuffers();
+            this.lastFrameAdvance = 0;
+        }
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(Render.bindingLayouts);
+        template.setMegaStateFlags(this.megaStateFlags);
+
+        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(lookatScratch, this.drawMatrix);
+
+        template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+
+        const sceneParamsSize = 16;
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);            
+
+        this.drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix);
+
+        renderInstManager.popTemplateRenderInst();
+
+    }
+
+
+    public destroy(device: GfxDevice): void {
+        this.drawCall.destroy(device);
+    }
+
+}
+

@@ -12,7 +12,7 @@ import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT
 
 
 import { GenericRenderable, SceneLighting } from './render';
-import { GloverActorRenderer } from './actor';
+import { GloverActorRenderer, GloverBlurRenderer } from './actor';
 import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -37,7 +37,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
-import { radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion } from './util';
+import { radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion, pushAlongLookatVector } from './util';
 import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
 
 
@@ -76,6 +76,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private scratchQuat = quat.create();
     private scratchMatrix = mat4.create();
     private scratchVec3 = vec3.create();
+    private scratchVec3_2 = vec3.create();
 
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number | Shadows.ConstantShadowSize = 0;
@@ -103,6 +104,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private spinFlipCooldownTimer = 0;
 
     public copySpinFromParent = false;
+
+    private blur: GloverBlurRenderer | null = null;
+    private blurWidth: number = 0;
+    private blurExtent:number = 0;
 
     // Orbit
 
@@ -248,6 +253,19 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         this.spinEnabled[axis] = true;
     }
 
+    public setBlur(renderer: GloverBlurRenderer, width: number) {
+        assert(this.actor !== null);
+        this.blurWidth = width;
+        this.blur = renderer;
+        this.blurExtent = 0;
+        let geo = this.actor.rootMesh.mesh.geometry;
+        for (let vertex of geo.vertices) {
+            if (Math.abs(vertex.y) > this.blurExtent) {
+                this.blurExtent = Math.abs(vertex.y);
+            }
+        }
+    }
+
     public setOrbitAroundPoint(axis: number, point: [number, number, number], speed: number) {
         this.orbitEnabled[axis] = true;
         this.orbitSpeed = speed / SRC_FRAME_TO_MS;
@@ -259,7 +277,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         this.orbitPauseDuration = frames * SRC_FRAME_TO_MS;
     }
 
-    public advanceRocking(deltaTime: number) {
+    public advanceRocking(deltaTime: number, viewerInput: Viewer.ViewerRenderInput | null = null) {
         if (this.rockingDeceleration > 0) {
             this.lastRockingAdvance += deltaTime;
             for (let axis = 0; axis < 3; axis += 1) {
@@ -274,13 +292,39 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                     if (Math.abs(this.spinSpeed[axis]) <= .0005) {
                         this.spinSpeed[axis] = 0.0;
                     }
+                    break;
                 }
             }
             if (this.lastRockingAdvance >= SRC_FRAME_TO_MS) {
+                if (this.blur !== null) {
+                    // TODO: offset from camera
+                    const pt1 = this.scratchVec3;
+                    const pt2 = this.scratchVec3_2;
+                    vec3.set(pt1, 0, -this.blurExtent, 0);
+                    if (this.spinEnabled[0]) {
+                        vec3.rotateX(pt1, pt1, [0,0,0], this.eulers[0]);
+                    } else if (this.spinEnabled[1]) {
+                        vec3.rotateY(pt1, pt1, [0,0,0], this.eulers[1]);
+                    } else if (this.spinEnabled[2]) {
+                        vec3.rotateZ(pt1, pt1, [0,0,0], this.eulers[2]);
+                    }
+                    vec3.scale(pt2, pt1, this.blurWidth);
+
+                    vec3.add(pt1, pt1, this.globalPosition);
+                    vec3.add(pt2, pt2, this.globalPosition);
+
+                    if (viewerInput !== null) {
+                        pushAlongLookatVector(pt1, pt1, 2, viewerInput);
+                        pushAlongLookatVector(pt2, pt2, 2, viewerInput);
+                    }
+
+                    this.blur.pushNewPoint(pt1, pt2);
+                }
                 this.lastRockingAdvance -= SRC_FRAME_TO_MS;
             }
             radianLerp(this.eulers, this.lastEulers, this.nextEulers, Math.max(0,Math.min(this.lastRockingAdvance/(SRC_FRAME_TO_MS*1.1),1)));
         }
+
     }    
 
     public advanceOrbit(deltaTime: number) {
@@ -487,7 +531,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         }
 
         if (this.rockingDeceleration > 0.0) {
-            this.advanceRocking(deltaTime);
+            this.advanceRocking(deltaTime, viewerInput);
         } else {
             if (this.spinFlip) {
                 if (this.spinFlipCooldownTimer <= 0) {
@@ -673,7 +717,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     public backdrops: GloverBackdropRenderer[] = [];
     public flipbooks: GloverFlipbookRenderer[] = [];
 
-    public miscParticleEmitters: GenericRenderable[] = [];
+    public miscRenderers: GenericRenderable[] = [];
     public weather: GloverWeatherRenderer | null = null;
     public mrtips: GloverMrTip[] = [];
     public shadows: Shadows.Shadow[] = [];
@@ -762,7 +806,7 @@ class GloverRenderer implements Viewer.SceneGfx {
                     this.originalVisibility.set(renderer, renderer.visible);
                     renderer.visible = true;
                 }
-                for (let renderer of this.miscParticleEmitters) {
+                for (let renderer of this.miscRenderers) {
                     this.originalVisibility.set(renderer, renderer.visible);
                     renderer.visible = true;
                 }
@@ -778,7 +822,7 @@ class GloverRenderer implements Viewer.SceneGfx {
                 for (let renderer of this.shadows) {
                     renderer.visible = this.originalVisibility.get(renderer)!;
                 }
-                for (let renderer of this.miscParticleEmitters) {
+                for (let renderer of this.miscRenderers) {
                     renderer.visible = this.originalVisibility.get(renderer)!;
                 }
             }
@@ -837,7 +881,7 @@ class GloverRenderer implements Viewer.SceneGfx {
         for (let renderer of this.mrtips) {
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
-        for (let renderer of this.miscParticleEmitters) {
+        for (let renderer of this.miscRenderers) {
             renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
         if (this.weather !== null) {
@@ -889,7 +933,7 @@ class GloverRenderer implements Viewer.SceneGfx {
         for (let renderer of this.flipbooks) {
             renderer.destroy(device);
         }
-        for (let renderer of this.miscParticleEmitters) {
+        for (let renderer of this.miscRenderers) {
             renderer.destroy(device);
         }
         for (let renderer of this.mrtips) {
@@ -926,7 +970,7 @@ const fortress_rain: WeatherParams = {
     particles_per_iteration: 5,
     lifetime: 0xFFFF,
     alphas: [0x78, 0x50, 0x3C],
-    velocity: [248, 226],
+    velocity: [226, 248],
     particle_lifetime_min: 7
 }
 
@@ -1347,9 +1391,17 @@ class SceneDesc implements Viewer.SceneDesc {
                         sparkleActor = currentObject;
                     }
                     if (sparkleActor !== null) {
-                        sceneRenderer.miscParticleEmitters.push(new MeshSparkle(
+                        sceneRenderer.miscRenderers.push(new MeshSparkle(
                             device, cache, textureHolder, sparkleActor, cmd.params.period));
                     }
+                    break;
+                }
+                case 'BallSpawnPoint': {
+                    const ballActor = loadActor(0x8E4DDE49); // gball.ndo
+                    sceneRenderer.actors.push(ballActor)
+                    mat4.fromTranslation(ballActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
+                    mat4.scale(ballActor.modelMatrix, ballActor.modelMatrix, [0.05, 0.05, 0.05]);
+                    shadowCasters.push(ballActor);
                     break;
                 }
                 case 'Platform': {
@@ -1398,7 +1450,14 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     currentPlatform.setRocking(cmd.params.axis, cmd.params.theta, cmd.params.deceleration);
-                    // TODO: blur
+                    if (cmd.params.blurHeight > 0) {
+                        if (currentPlatform.actor === null) {
+                            throw `No actor for ${cmd.params.__type}!`;
+                        }
+                        const blur = new GloverBlurRenderer(device, cache, textureHolder);
+                        currentPlatform.setBlur(blur, cmd.params.blurHeight);
+                        sceneRenderer.miscRenderers.push(blur);
+                    }
                     for (let i = 0; i < cmd.params.frameAdvance; i++) {
                         currentPlatform.advanceRocking(SRC_FRAME_TO_MS);
                     }
@@ -1514,7 +1573,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     if (cmd.params.type == 1 || cmd.params.type == 3 || this.id == "09") {
                         const emitter = currentPlatform.initExitSparkle();
-                        sceneRenderer.miscParticleEmitters.push(emitter);
+                        sceneRenderer.miscRenderers.push(emitter);
                     }
                     if (!cmd.params.visible) {
                         if (currentPlatform.actor !== null) {
@@ -1545,7 +1604,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (cmd.params.type == 2) {
                         // Extra lives are sparkly
                         const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife);
-                        sceneRenderer.miscParticleEmitters.push(emitter);
+                        sceneRenderer.miscRenderers.push(emitter);
                         emitter.visible = (currentGaribState !== 0);
                     }
                     break;
@@ -1562,7 +1621,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         actor.shadowSize = 10;
                         actor.playSkeletalAnimation(0, true, false);
                         shadowCasters.push(actor);
-                        sceneRenderer.miscParticleEmitters.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
+                        sceneRenderer.miscRenderers.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
                     }
                     break;
                 }
