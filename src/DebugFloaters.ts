@@ -176,6 +176,10 @@ export class FloatingPanel implements Widget {
         let value = obj[paramName];
         assert(typeof value === "boolean");
 
+        let labelNameMetadata = Reflect.getMetadata('df:label', obj, paramName);
+        if (labelNameMetadata !== undefined)
+            labelName = labelNameMetadata;
+
         const cb = new Checkbox(labelName, value);
         cb.onchanged = () => {
             obj[paramName] = cb.checked;
