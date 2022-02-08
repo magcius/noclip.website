@@ -1139,7 +1139,7 @@ class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
 
     public static MaxDynamicWorldLights = 4;
 
-    public override generateProgramString(variantSettings: Map<string, string>): string {
+    public override generateProgramString(m: Map<string, string>): string {
         return `
 precision mediump float;
 precision mediump sampler2DArray;
@@ -1465,11 +1465,11 @@ void mainVS() {
 #define COMBINE_MODE_SSBUMP_BUMP                             (10)
 
 vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
-    bool use_detail = ${getDefineBool(variantSettings, 'USE_DETAIL')};
+    bool use_detail = ${getDefineBool(m, 'USE_DETAIL')};
     if (!use_detail)
         return t_BaseTexture;
 
-    int t_CombineMode = ${getDefineString(variantSettings, 'DETAIL_COMBINE_MODE')};
+    int t_CombineMode = ${getDefineString(m, 'DETAIL_COMBINE_MODE')};
     float t_BlendFactor = u_DetailBlendFactor;
 
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
@@ -1494,11 +1494,11 @@ vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
 }
 
 vec3 CalcDetailPostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture) {
-    bool use_detail = ${getDefineBool(variantSettings, 'USE_DETAIL')};
+    bool use_detail = ${getDefineBool(m, 'USE_DETAIL')};
     if (!use_detail)
         return t_DiffuseColor;
 
-    int t_CombineMode = ${getDefineString(variantSettings, 'DETAIL_COMBINE_MODE')};
+    int t_CombineMode = ${getDefineString(m, 'DETAIL_COMBINE_MODE')};
     float t_BlendFactor = u_DetailBlendFactor;
 
     if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM) {
@@ -1596,14 +1596,14 @@ vec3 SampleLightmapTexture(in vec4 t_TextureSample) {
 }
 
 vec4 UnpackNormalMap(vec4 t_Sample) {
-    bool use_ssbump = ${getDefineBool(variantSettings, `USE_SSBUMP`)};
+    bool use_ssbump = ${getDefineBool(m, `USE_SSBUMP`)};
     if (!use_ssbump)
         t_Sample = UnpackUnsignedNormalMap(t_Sample);
     return t_Sample;
 }
 
 vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
-    bool use_seamless = ${getDefineBool(variantSettings, `USE_SEAMLESS`)};
+    bool use_seamless = ${getDefineBool(m, `USE_SEAMLESS`)};
     if (use_seamless) {
         // Seamless ignores the base texture coordinate, and instead blends three copies
         // of the same texture based on world position (similar to tri-planar).
@@ -1660,13 +1660,13 @@ void mainPS() {
 
     vec4 t_BaseTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
 
-    bool use_basetexture2 = ${getDefineBool(variantSettings, `USE_BASETEXTURE2`)};
+    bool use_basetexture2 = ${getDefineBool(m, `USE_BASETEXTURE2`)};
 
     float t_BlendFactorWorld = v_PositionWorld.w;
 
-    bool use_blend_modulate = ${getDefineBool(variantSettings, `USE_BLEND_MODULATE`)};
+    bool use_blend_modulate = ${getDefineBool(m, `USE_BLEND_MODULATE`)};
     if (use_blend_modulate) {
-        vec2 t_BlendModulateTexCoord = ${ifDefineBool(variantSettings, `USE_BLEND_MODULATE`, `CalcScaleBias(v_TexCoord0.zw, u_BlendModulateScaleBias)`, `vec2(0.0)`)};
+        vec2 t_BlendModulateTexCoord = ${ifDefineBool(m, `USE_BLEND_MODULATE`, `CalcScaleBias(v_TexCoord0.zw, u_BlendModulateScaleBias)`, `vec2(0.0)`)};
         vec4 t_BlendModulateSample = texture(SAMPLER_2D(u_TextureBlendModulate), t_BlendModulateTexCoord);
         float t_BlendModulateMin = t_BlendModulateSample.g - t_BlendModulateSample.r;
         float t_BlendModulateMax = t_BlendModulateSample.g + t_BlendModulateSample.r;
@@ -1694,23 +1694,23 @@ void mainPS() {
     vec3 t_NormalWorld;
 
     vec3 t_EnvmapFactor = vec3(1.0);
-    bool use_bumpmap = ${getDefineBool(variantSettings, `USE_BUMPMAP`)};
-    bool use_ssbump = ${getDefineBool(variantSettings, `USE_SSBUMP`)};
+    bool use_bumpmap = ${getDefineBool(m, `USE_BUMPMAP`)};
+    bool use_ssbump = ${getDefineBool(m, `USE_SSBUMP`)};
 
     // TODO(jstpierre): It seems like $bumptransform might not even be respected in lightmappedgeneric shaders?
-    vec2 t_BumpmapTexCoord = ${ifDefineBool(variantSettings, `USE_BUMPMAP`, `Mul(u_BumpmapTransform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
+    vec2 t_BumpmapTexCoord = ${ifDefineBool(m, `USE_BUMPMAP`, `Mul(u_BumpmapTransform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
     vec4 t_BumpmapSample = vec4(0.0);
     vec3 t_BumpmapNormal;
 
     if (use_bumpmap) {
         t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), t_BumpmapTexCoord.xy));
 
-        bool use_bumpmap2 = ${getDefineBool(variantSettings, `USE_BUMPMAP2`)};
+        bool use_bumpmap2 = ${getDefineBool(m, `USE_BUMPMAP2`)};
         if (use_bumpmap2) {
-            vec2 t_Bumpmap2TexCoord = ${ifDefineBool(variantSettings, `USE_BUMPMAP2`, `Mul(u_Bumpmap2Transform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
+            vec2 t_Bumpmap2TexCoord = ${ifDefineBool(m, `USE_BUMPMAP2`, `Mul(u_Bumpmap2Transform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
             vec4 t_Bumpmap2Sample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap2), t_Bumpmap2TexCoord));
 
-            bool use_bumpmask = ${getDefineBool(variantSettings, `USE_BUMPMASK`)};
+            bool use_bumpmask = ${getDefineBool(m, `USE_BUMPMASK`)};
             if (use_bumpmask) {
                 vec4 t_BumpMaskSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureBumpMask), v_TexCoord0.xy));
                 t_BumpmapSample.rgb = normalize(t_BumpmapSample.rgb + t_Bumpmap2Sample.rgb);
@@ -1723,7 +1723,7 @@ void mainPS() {
             }
         }
 
-        bool use_normalmap_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
+        bool use_normalmap_alpha_envmap_mask = ${getDefineBool(m, `USE_NORMALMAP_ALPHA_ENVMAP_MASK`)};
         if (use_normalmap_alpha_envmap_mask)
             t_EnvmapFactor *= t_BumpmapSample.a;
 
@@ -1746,8 +1746,8 @@ void mainPS() {
     vec3 t_DiffuseLighting = vec3(0.0);
     vec3 t_SpecularLighting = vec3(0.0);
 
-    bool use_lightmap = ${getDefineBool(variantSettings, `USE_LIGHTMAP`)};
-    bool use_diffuse_bumpmap = ${getDefineBool(variantSettings, `USE_DIFFUSE_BUMPMAP`)};
+    bool use_lightmap = ${getDefineBool(m, `USE_LIGHTMAP`)};
+    bool use_diffuse_bumpmap = ${getDefineBool(m, `USE_DIFFUSE_BUMPMAP`)};
 
     // Lightmap Diffuse
     if (use_lightmap) {
@@ -1811,8 +1811,8 @@ void mainPS() {
         discard;
 #endif
 
-    bool use_half_lambert = ${getDefineBool(variantSettings, `USE_HALF_LAMBERT`)};
-    bool use_phong = ${getDefineBool(variantSettings, `USE_PHONG`)};
+    bool use_half_lambert = ${getDefineBool(m, `USE_HALF_LAMBERT`)};
+    bool use_phong = ${getDefineBool(m, `USE_PHONG`)};
 
 #ifdef USE_DYNAMIC_PIXEL_LIGHTING
     // World Diffuse
@@ -1844,14 +1844,14 @@ void mainPS() {
     t_Fresnel = CalcFresnelTerm2(t_FresnelDot);
 #endif
 
-    bool use_base_alpha_envmap_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_ENVMAP_MASK`)};
+    bool use_base_alpha_envmap_mask = ${getDefineBool(m, `USE_BASE_ALPHA_ENVMAP_MASK`)};
 
 #ifdef USE_ENVMAP
     t_EnvmapFactor *= u_EnvmapTint.rgb;
 
-    bool use_envmap_mask = ${getDefineBool(variantSettings, `USE_ENVMAP_MASK`)};
+    bool use_envmap_mask = ${getDefineBool(m, `USE_ENVMAP_MASK`)};
     if (use_envmap_mask) {
-        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(variantSettings, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
+        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(m, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
         t_EnvmapFactor *= texture(SAMPLER_2D(u_TextureEnvmapMask), t_EnvmapMaskTexCoord).rgb;
     }
 
@@ -1882,7 +1882,7 @@ void mainPS() {
     vec4 t_SpecularMapSample = vec4(0.0);
 
     if (use_phong) {
-        bool use_phong_exponent_texture = ${getDefineBool(variantSettings, `USE_PHONG_EXPONENT_TEXTURE`)};
+        bool use_phong_exponent_texture = ${getDefineBool(m, `USE_PHONG_EXPONENT_TEXTURE`)};
         if (use_phong_exponent_texture) {
             t_SpecularMapSample = texture(SAMPLER_2D(u_TextureSpecularExponent), v_TexCoord0.xy);
             t_SpecularLightInput.SpecularExponent = 1.0 + u_SpecExponentFactor * t_SpecularMapSample.r;
@@ -1895,7 +1895,7 @@ void mainPS() {
     if (use_phong) {
         // Specular mask is either in base map or normal map alpha.
         float t_SpecularMask;
-        bool use_base_alpha_phong_mask = ${getDefineBool(variantSettings, `USE_BASE_ALPHA_PHONG_MASK`)};
+        bool use_base_alpha_phong_mask = ${getDefineBool(m, `USE_BASE_ALPHA_PHONG_MASK`)};
         if (use_base_alpha_phong_mask) {
             t_SpecularMask = t_BaseTexture.a;
         } else if (use_bumpmap) {
@@ -1904,7 +1904,7 @@ void mainPS() {
             t_SpecularMask = 1.0;
         }
 
-        bool use_phong_mask_invert = ${getDefineBool(variantSettings, `USE_PHONG_MASK_INVERT`)};
+        bool use_phong_mask_invert = ${getDefineBool(m, `USE_PHONG_MASK_INVERT`)};
         if (use_phong_mask_invert)
             t_SpecularMask = 1.0 - t_SpecularMask;
 
@@ -1965,10 +1965,10 @@ void mainPS() {
 #ifdef USE_SELFILLUM
     vec3 t_SelfIllumMask;
 
-    bool use_selfillum_envmapmask_alpha = ${getDefineBool(variantSettings, `USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
-    bool use_selfillum_mask = ${getDefineBool(variantSettings, `USE_SELFILLUM_MASK`)};
+    bool use_selfillum_envmapmask_alpha = ${getDefineBool(m, `USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
+    bool use_selfillum_mask = ${getDefineBool(m, `USE_SELFILLUM_MASK`)};
     if (use_selfillum_envmapmask_alpha) {
-        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(variantSettings, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
+        vec2 t_EnvmapMaskTexCoord = ${ifDefineBool(m, `USE_ENVMAP_MASK`, `CalcScaleBias(v_TexCoord0.zw, u_EnvmapMaskScaleBias)`, `vec2(0.0)`)};
         t_SelfIllumMask = texture(SAMPLER_2D(u_TextureEnvmapMask), t_EnvmapMaskTexCoord).aaa;
     } else if (use_selfillum_mask) {
         t_SelfIllumMask = texture(SAMPLER_2D(u_TextureSelfIllumMask), v_TexCoord0.xy).rgb;
@@ -2743,7 +2743,8 @@ vec4 SampleFlowMap(PD_SAMPLER_2D(t_FlowMapTexture), vec2 t_TexCoordBase, float t
 class ShaderTemplate_Water extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
-    public override program = `
+    public override generateProgramString(m: Map<string, string>): string {
+        return `
 precision mediump float;
 precision mediump sampler2DArray;
 
@@ -2887,6 +2888,7 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
 }
 
 void mainPS() {
+    bool use_flowmap = ${getDefineBool(m, `USE_FLOWMAP`)};
 
 #ifdef USE_FLOWMAP
 
@@ -2942,11 +2944,13 @@ void mainPS() {
     // Compute reflection and refraction colors.
 
     vec3 t_DiffuseLight = vec3(1.0);
-#ifdef USE_LIGHTMAP_WATER_FOG
-    vec3 t_LightmapColor = texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb;
-    t_LightmapColor.rgb *= g_LightmapScale;
-    t_DiffuseLight.rgb *= t_LightmapColor;
-#endif
+
+    bool use_lightmap_water_fog = ${getDefineBool(m, `USE_LIGHTMAP_WATER_FOG`)};
+    if (use_lightmap_water_fog) {
+        vec3 t_LightmapColor = texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb;
+        t_LightmapColor.rgb *= g_LightmapScale;
+        t_DiffuseLight.rgb *= t_LightmapColor;
+    }
     vec3 t_WaterFogColor = u_WaterFogColor.rgb * t_DiffuseLight.rgb;
 
     // Compute a 2D offset vector in view space.
@@ -2954,33 +2958,34 @@ void mainPS() {
     vec2 t_TexCoordBumpOffset = t_BumpmapNormal.xy * t_BumpmapStrength;
 
     vec3 t_RefractColor;
-#ifdef USE_REFRACT
-    vec3 t_RefractPosWorld = CalcPosWorldFromScreen(t_ProjTexCoord, SampleFramebufferDepth(SampleFramebufferCoord(t_ProjTexCoord)));
-    float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(SampleFramebufferCoord(t_ProjTexCoord)));
-    float t_RefractStrength = u_RefractAmount * t_RefractFogBendAmount;
-    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractStrength);
+    bool use_refract = ${getDefineBool(m, `USE_REFRACT`)};
+    if (use_refract) {
+        vec3 t_RefractPosWorld = CalcPosWorldFromScreen(t_ProjTexCoord, SampleFramebufferDepth(SampleFramebufferCoord(t_ProjTexCoord)));
+        float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(SampleFramebufferCoord(t_ProjTexCoord)));
+        float t_RefractStrength = u_RefractAmount * t_RefractFogBendAmount;
+        vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractStrength);
 
-    float t_RefractFogAmount;
-    float t_RefractDepthSample = SampleFramebufferDepth(SampleFramebufferCoord(t_RefractTexCoord));
-    if (IsSomethingInFront(t_RefractDepthSample)) {
-        // Something's in front, just use the original...
-        t_RefractTexCoord = t_ProjTexCoord;
-        t_RefractFogAmount = t_RefractFogBendAmount;
+        float t_RefractFogAmount;
+        float t_RefractDepthSample = SampleFramebufferDepth(SampleFramebufferCoord(t_RefractTexCoord));
+        if (IsSomethingInFront(t_RefractDepthSample)) {
+            // Something's in front, just use the original...
+            t_RefractTexCoord = t_ProjTexCoord;
+            t_RefractFogAmount = t_RefractFogBendAmount;
+        } else {
+            t_RefractFogAmount = CalcFogAmountFromScreenPos(t_RefractTexCoord, t_RefractDepthSample);
+        }
+
+        vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract), SampleFramebufferCoord(t_RefractTexCoord));
+
+        // Our refraction framebuffer has been tone-mapped. Divide back out to get linear.
+        t_RefractSample.rgb /= u_ToneMapScale;
+
+        t_RefractColor.rgb = t_RefractSample.rgb * u_RefractTint.rgb;
+
+        t_RefractColor.rgb = mix(t_RefractColor.rgb, t_WaterFogColor.rgb, t_RefractFogAmount);
     } else {
-        t_RefractFogAmount = CalcFogAmountFromScreenPos(t_RefractTexCoord, t_RefractDepthSample);
+        t_RefractColor.rgb = t_WaterFogColor.rgb;
     }
-
-    vec4 t_RefractSample = texture(SAMPLER_2D(u_TextureRefract), SampleFramebufferCoord(t_RefractTexCoord));
-
-    // Our refraction framebuffer has been tone-mapped. Divide back out to get linear.
-    t_RefractSample.rgb /= u_ToneMapScale;
-
-    t_RefractColor.rgb = t_RefractSample.rgb * u_RefractTint.rgb;
-
-    t_RefractColor.rgb = mix(t_RefractColor.rgb, t_WaterFogColor.rgb, t_RefractFogAmount);
-#else
-    t_RefractColor.rgb = t_WaterFogColor.rgb;
-#endif
 
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_WorldDirectionToEye);
 
@@ -2988,11 +2993,11 @@ void mainPS() {
 
     float t_ReflectAmount = u_ReflectAmount;
     if (t_ReflectAmount > 0.0) {
-#ifndef USE_FLOWMAP
-        // not sure why, but it's super distorted otherwise... see d2_coast_01
-        // guessing something about my distortion math isn't 100%
-        t_ReflectAmount *= 0.25;
-#endif
+        if (!use_flowmap) {
+            // not sure why, but it's super distorted otherwise... see d2_coast_01
+            // guessing something about my distortion math isn't 100%
+            t_ReflectAmount *= 0.25;
+        }
 
         vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
 
@@ -3005,33 +3010,36 @@ void mainPS() {
         t_ReflectSample.rgb /= u_ToneMapScale;
 
         t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
-    } else {
+    } else if (t_ReflectAmount < 0.0) {
         vec4 t_ReflectSample = texture(SAMPLER_Cube(u_TextureEnvmap), t_Reflection) * g_EnvmapScale;
         t_ReflectColor = t_ReflectSample.rgb * u_ReflectTint.rgb;
     }
 
     vec4 t_FinalColor;
 
-#ifdef USE_FLOWMAP_BASETEXTURE
-    // Parallax scum layer
-    float t_ParallaxStrength = t_FlowNormalSample.a * u_FlowColorDisplacementStrength;
-    vec3 t_InteriorDirection = t_ParallaxStrength * (t_WorldDirectionToEye.xyz - t_NormalWorld.xyz);
-    vec2 t_FlowColorTexCoordBase = t_TexCoordWorldBase.xy * u_FlowColorTexCoordScale + t_InteriorDirection.xy;
-    float t_FlowColorTimeInIntervals = u_FlowColorTimeInIntervals + t_FlowNoiseSample.g;
-    vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureBase), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
+#ifdef USE_FLOWMAP
+    bool use_flowmap_basetexture = ${getDefineBool(m, `USE_FLOWMAP_BASETEXTURE`)};
+    if (use_flowmap_basetexture) {
+        // Parallax scum layer
+        float t_ParallaxStrength = t_FlowNormalSample.a * u_FlowColorDisplacementStrength;
+        vec3 t_InteriorDirection = t_ParallaxStrength * (t_WorldDirectionToEye.xyz - t_NormalWorld.xyz);
+        vec2 t_FlowColorTexCoordBase = t_TexCoordWorldBase.xy * u_FlowColorTexCoordScale + t_InteriorDirection.xy;
+        float t_FlowColorTimeInIntervals = u_FlowColorTimeInIntervals + t_FlowNoiseSample.g;
+        vec4 t_FlowColorSample = SampleFlowMap(PP_SAMPLER_2D(u_TextureBase), t_FlowColorTexCoordBase, t_FlowColorTimeInIntervals, u_FlowColorTexCoordScrollDistance, t_FlowVectorTangent.xy, u_FlowColorLerpExp);
 
-    vec4 t_FlowColor = t_FlowColorSample.rgba;
+        vec4 t_FlowColor = t_FlowColorSample.rgba;
 
-    // Mask by flowmap alpha and apply light
-    t_FlowColor.rgba *= t_FlowSample.a;
-    t_FlowColor.rgb *= t_DiffuseLight.rgb;
+        // Mask by flowmap alpha and apply light
+        t_FlowColor.rgba *= t_FlowSample.a;
+        t_FlowColor.rgb *= t_DiffuseLight.rgb;
 
-    // Sludge can either be below or on top of the water, according to base texture alpha.
-    //   0.0 - 0.5 = translucency, and 0.5 - 1.0 = above water
-    t_RefractColor.rgb = mix(t_RefractColor.rgb, t_FlowColor.rgb, saturate(invlerp(0.0, 0.5, t_FlowColor.a)));
+        // Sludge can either be below or on top of the water, according to base texture alpha.
+        //   0.0 - 0.5 = translucency, and 0.5 - 1.0 = above water
+        t_RefractColor.rgb = mix(t_RefractColor.rgb, t_FlowColor.rgb, saturate(invlerp(0.0, 0.5, t_FlowColor.a)));
 
-    float t_AboveWater = 1.0 - smoothstep(0.5, 0.7, t_FlowColor.a);
-    t_Fresnel = saturate(t_Fresnel * t_AboveWater);
+        float t_AboveWater = 1.0 - smoothstep(0.5, 0.7, t_FlowColor.a);
+        t_Fresnel = saturate(t_Fresnel * t_AboveWater);
+    }
 #endif
 
     t_FinalColor.rgb = t_RefractColor.rgb + (t_ReflectColor.rgb * t_Fresnel);
@@ -3045,6 +3053,7 @@ void mainPS() {
 }
 #endif
 `;
+    }
 }
 
 class Material_Water extends BaseMaterial {
@@ -3190,7 +3199,7 @@ class Material_Water extends BaseMaterial {
 
         let reflectAmount = this.paramGetNumber('$reflectamount');
         if (!useExpensiveReflect)
-            reflectAmount = 0.0;
+            reflectAmount = -1.0;
 
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
         offs += this.paramFillGammaColor(d, offs, '$reflecttint', reflectAmount);
