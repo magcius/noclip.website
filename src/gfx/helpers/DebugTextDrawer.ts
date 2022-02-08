@@ -75,6 +75,8 @@ export class DebugTextDrawer {
     }
 
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
+        vec3.zero(this.charWriter.origin);
+        vec3.copy(this.charWriter.cursor, this.charWriter.origin);
         this.charWriter.calcRect(scratchVec4, str);
 
         // Center align
