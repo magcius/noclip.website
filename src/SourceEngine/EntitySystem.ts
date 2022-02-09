@@ -128,6 +128,7 @@ export class BaseEntity {
     private seqindex = 0;
     private seqtime = 0;
     private seqplay: boolean = false;
+    private seqrate = 1;
     private holdAnimation: boolean = false;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
@@ -184,6 +185,7 @@ export class BaseEntity {
         // TODO(jstpierre): This should be on baseanimation / prop_dynamic
         this.registerInput('setanimation', this.input_setanimation.bind(this));
         this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
+        this.registerInput('setplaybackrate', this.input_setplaybackrate.bind(this));
 
         if (shouldHideEntityFallback(this.entity.classname))
             this.visible = false;
@@ -478,7 +480,10 @@ export class BaseEntity {
             // Update animation state machine.
             if (this.seqplay) {
                 const oldSeqTime = this.seqtime;
-                this.seqtime += renderContext.globalDeltaTime;
+                this.seqtime += renderContext.globalDeltaTime * this.seqrate;
+
+                if (this.seqtime < 0)
+                    this.seqtime = 0;
 
                 // Pass to default animation if we're through.
                 if (this.seqdefaultindex >= 0 && this.modelStudio.sequenceIsFinished(this.seqindex, this.seqtime) && !this.holdAnimation)
@@ -583,6 +588,10 @@ export class BaseEntity {
             return;
 
         this.seqdefaultindex = this.findSequenceLabel(value);
+    }
+
+    private input_setplaybackrate(entitySystem: EntitySystem, value: string): void {
+        this.seqrate = Number(value);
     }
 }
 
@@ -1515,6 +1524,64 @@ class logic_timer extends BaseEntity {
 
         if (entitySystem.currentTime >= this.nextFireTime)
             this.fireTimer(entitySystem);
+    }
+}
+
+class logic_compare extends BaseEntity {
+    public static classname = `logic_compare`;
+
+    private compareValue: number = -1;
+    private value: number = -1;
+
+    private output_onEqualTo = new EntityOutput();
+    private output_onNotEqualTo = new EntityOutput();
+    private output_onGreaterThan = new EntityOutput();
+    private output_onLessThan = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.value = vmtParseNumber(this.entity.initialvalue, -1);
+        this.compareValue = vmtParseNumber(this.entity.comparevalue, -1);
+
+        this.output_onEqualTo.parse(this.entity.onequalto);
+        this.output_onNotEqualTo.parse(this.entity.onnotequalto);
+        this.output_onGreaterThan.parse(this.entity.ongreaterthan);
+        this.output_onLessThan.parse(this.entity.onlessthan);
+
+        this.registerInput('setvalue', this.input_setvalue.bind(this));
+        this.registerInput('setvaluecompare', this.input_setvaluecompare.bind(this));
+        this.registerInput('setcomparevalue', this.input_setcomparevalue.bind(this));
+        this.registerInput('compare', this.input_compare.bind(this));
+    }
+
+    private compare(entitySystem: EntitySystem): void {
+        if (this.value === this.compareValue) {
+            this.output_onEqualTo.fire(entitySystem, this);
+        } else {
+            this.output_onNotEqualTo.fire(entitySystem, this);
+            if (this.value > this.compareValue)
+                this.output_onGreaterThan.fire(entitySystem, this);
+            else
+                this.output_onLessThan.fire(entitySystem, this);
+        }
+    }
+
+    private input_setvalue(entitySystem: EntitySystem, value: string): void {
+        this.value = Number(value);
+    }
+
+    private input_setvaluecompare(entitySystem: EntitySystem, value: string): void {
+        this.value = Number(value);
+        this.compare(entitySystem);
+    }
+
+    private input_setcomparevalue(entitySystem: EntitySystem, value: string): void {
+        this.compareValue = Number(value);
+    }
+
+    private input_compare(entitySystem: EntitySystem, value: string): void {
+        this.compare(entitySystem);
     }
 }
 
@@ -2691,6 +2758,7 @@ class env_sprite extends BaseEntity {
         this.registerInput('hidesprite', this.input_hidesprite.bind(this));
         this.registerInput('togglesprite', this.input_togglesprite.bind(this));
         this.registerInput('setscale', this.input_setscale.bind(this));
+        this.registerInput('color', this.input_color.bind(this));
         this.registerInput('colorredvalue', this.input_colorredvalue.bind(this));
         this.registerInput('colorgreenvalue', this.input_colorgreenvalue.bind(this));
         this.registerInput('colorbluevalue', this.input_colorbluevalue.bind(this));
@@ -2745,6 +2813,10 @@ class env_sprite extends BaseEntity {
 
     private input_setscale(entitySystem: EntitySystem, value: string): void {
         this.scale = Number(value);
+    }
+
+    private input_color(entitySystem: EntitySystem, value: string): void {
+        vmtParseColor(this.rendercolor, value);
     }
 
     private input_colorredvalue(entitySystem: EntitySystem, value: string): void {
@@ -3028,6 +3100,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(logic_branch);
         this.registerFactory(logic_case);
         this.registerFactory(logic_timer);
+        this.registerFactory(logic_compare);
         this.registerFactory(math_counter);
         this.registerFactory(math_remap);
         this.registerFactory(math_colorblend);
