@@ -7,7 +7,7 @@ import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
 import * as BNTX from '../fres_nx/bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from '../fres_nx/tegra_texture';
-import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2 } from '../fres_nx/bfres';
+import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2, FMAT_ShaderAssign } from '../fres_nx/bfres';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum';
 import { nArray, assert, assertExists, fallbackUndefined } from '../util';
@@ -489,8 +489,10 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         t_Sample.rgb = saturate(t_Sample.rgb + SampleMultiTextureA().rgb + SampleMultiTextureB().rgb);
     } else if (multi_tex_calc_type_color == 14) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, t_Sample.rgb, t_Sample.a);
+    } else if (multi_tex_calc_type_color == 17) {
+        t_Sample.rgb = mix(SampleMultiTextureA().rgb * u_MultiTexReg[0].rgb, t_Sample.rgb, u_MultiTexReg[0].a);
     } else if (multi_tex_calc_type_color == 19) {
-        t_Sample.rgb = t_Sample.rgb * saturate(+ SampleMultiTextureA().rgb + u_MultiTexReg[0].rgb);
+        t_Sample.rgb = t_Sample.rgb * saturate(SampleMultiTextureA().rgb + u_MultiTexReg[0].rgb);
     } else if (multi_tex_calc_type_color == 21) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, (t_Sample.r + t_Sample.g + t_Sample.b) / 3.0);
     } else if (multi_tex_calc_type_color == 30) {
@@ -917,10 +919,18 @@ class TexSRT {
     }
 }
 
+function createShaderProgram(fmat: FMAT): DeviceProgram {
+    const shaderAssign = fmat.shaderAssign;
+    if (shaderAssign.shadingModelName === 'turbo_uber' || shaderAssign.shadingModelName === 'turbo_uber_xlu')
+        return new TurboUBER(fmat);
+    else
+        throw "whoops";
+}
+
 class FMATInstance {
     public gfxSamplers: GfxSampler[] = [];
     public textureMapping: TextureMapping[] = [];
-    private program: TurboUBER;
+    private program: DeviceProgram;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
@@ -943,7 +953,7 @@ class FMATInstance {
     private sortKey: number = 0;
 
     constructor(cache: GfxRenderCache, textureHolder: BRTITextureHolder, public fmat: FMAT) {
-        this.program = new TurboUBER(fmat);
+        this.program = createShaderProgram(fmat);
 
         // Fill in our texture mappings.
         assert(fmat.samplerInfo.length === fmat.textureName.length);
