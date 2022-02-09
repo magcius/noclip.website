@@ -53,7 +53,7 @@ export interface ModelRenderContext {
     ambienceIdx: number;
     outdoorAmbientColor: Color;
     object?: ObjectInstance;
-    setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
+    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
     mapLights?: MapLight[];
 }
 

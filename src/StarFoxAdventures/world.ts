@@ -27,6 +27,7 @@ import { LightType, WorldLights } from './WorldLights';
 import { SFATextureFetcher } from './textures';
 import { SphereMapManager } from './SphereMaps';
 import { computeViewMatrix } from '../Camera';
+import { nArray } from '../util';
 
 const scratchVec0 = vec3.create();
 const scratchMtx0 = mat4.create();
@@ -327,8 +328,10 @@ class WorldRenderer extends SFARenderer {
             showDevGeometry: this.showDevGeometry,
             ambienceIdx: 0,
             outdoorAmbientColor: scratchColor0,
-            setupLights: undefined!,
+            setupPointLights: undefined!,
         };
+
+        const lights = nArray(8, () => new GX_Material.Light());
 
         if (this.showObjects) {
             for (let i = 0; i < this.world.objectInstances.length; i++) {
@@ -338,11 +341,15 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    modelCtx.setupLights = (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => {
-                        this.setupLightsForObject(lights, obj, sceneCtx, typeMask);
+                    this.setupLightsForObject(lights, obj, sceneCtx, LightType.POINT);
+
+                    modelCtx.setupPointLights = (dst: GX_Material.Light[], sceneCtx: SceneRenderContext) => {
+                        for (let i = 0; i < dst.length; i++)
+                            dst[i].copy(lights[i]);
                     };
+
                     obj.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
-        
+
                     const drawLabels = false;
                     if (drawLabels) {
                         obj.getPosition(scratchVec0);
@@ -351,7 +358,7 @@ class WorldRenderer extends SFARenderer {
                 }
             }
         }
-        
+
         if (this.world.mapInstance !== null)
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 

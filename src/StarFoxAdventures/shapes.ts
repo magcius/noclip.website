@@ -265,7 +265,7 @@ export class ShapeMaterial {
         mat4.mul(this.matCtx.modelToViewMtx, this.matCtx.worldToViewMtx, modelToWorldMtx);
         mat4.invert(this.matCtx.viewToModelMtx, this.matCtx.modelToViewMtx);
 
-        modelCtx.setupLights(params.u_Lights, modelCtx.sceneCtx, LightType.POINT);
+        modelCtx.setupPointLights(params.u_Lights, modelCtx.sceneCtx);
 
         modelCtx.mapLights = [];
         if (modelCtx.sceneCtx.world !== undefined && geom.aabb !== undefined && this.material instanceof StandardMapMaterial) {
@@ -330,7 +330,7 @@ export class Shape {
                 // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
             }
         }
-        
+
         const materialHelper = this.material.getGXMaterialHelper();
 
         setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, drawParams);

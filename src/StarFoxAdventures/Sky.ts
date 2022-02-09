@@ -127,7 +127,7 @@ export class Sky {
             const objectCtx: ObjectRenderContext = {
                 sceneCtx,
                 showDevGeometry: false,
-                setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+                setupPointLights: () => {}, // Lights are not used when rendering skyscape objects (?)
             }
 
             const eyePos = scratchVec0;

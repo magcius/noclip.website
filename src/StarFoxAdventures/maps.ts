@@ -244,7 +244,7 @@ class MapSceneRenderer extends SFARenderer {
             showDevGeometry: false,
             ambienceIdx: 0,
             outdoorAmbientColor: White,
-            setupLights: () => {},
+            setupPointLights: () => {},
         };
 
         this.map.addRenderInsts(device, renderInstManager, renderLists, modelCtx);

@@ -19,7 +19,7 @@ import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUin
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
-import { getMatrixTranslation } from '../MathHelpers';
+import { computeMatrixWithoutScale, getMatrixTranslation } from '../MathHelpers';
 import { LightType } from './WorldLights';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
@@ -104,7 +104,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext, typeMask: LightType) => void;
+    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
 }
 
 export interface Light {
@@ -125,6 +125,7 @@ export class ObjectInstance {
     public roll: number = 0;
     public scale: number = 1.0;
     private srtMatrix: mat4 = mat4.create();
+    private srtMatrixChild: mat4 = mat4.create();
     private srtDirty: boolean = true;
     public cullRadius: number = 10;
 
@@ -185,9 +186,12 @@ export class ObjectInstance {
             console.log(`attaching this object (${this.objType.name}) to parent ${parent?.objType.name}`);
     }
 
-    public getLocalSRT(): mat4 {
+    private updateSRT(): mat4 {
         if (this.srtDirty) {
             mat4FromSRT(this.srtMatrix, this.scale, this.scale, this.scale,
+                this.yaw, this.pitch, this.roll,
+                this.position[0], this.position[1], this.position[2]);
+            mat4FromSRT(this.srtMatrixChild, 1, 1, 1,
                 this.yaw, this.pitch, this.roll,
                 this.position[0], this.position[1], this.position[2]);
             this.srtDirty = false;
@@ -196,21 +200,21 @@ export class ObjectInstance {
         return this.srtMatrix;
     }
 
-    public getSRTForChildren(dst: mat4) {
-        mat4.fromTranslation(dst, this.position);
-        // mat4.scale(dst, dst, [this.scale, this.scale, this.scale]);
-        mat4.rotateY(dst, dst, this.yaw);
-        mat4.rotateX(dst, dst, this.pitch);
-        mat4.rotateZ(dst, dst, this.roll);
+    public getLocalSRT(): mat4 {
+        this.updateSRT();
+        return this.srtMatrix;
+    }
+
+    public getSRTForChildren(): mat4 {
+        this.updateSRT();
+        return this.srtMatrixChild;
     }
 
     public getWorldSRT(out: mat4) {
         const localSrt = this.getLocalSRT();
-        if (this.parent !== null) {
-            const mtx = mat4.create();
-            this.parent.getSRTForChildren(mtx);
-            mat4.mul(out, mtx, localSrt);
-        } else
+        if (this.parent !== null)
+            mat4.mul(out, this.parent.getSRTForChildren(), localSrt);
+        else
             mat4.copy(out, localSrt);
     }
 
@@ -228,10 +232,11 @@ export class ObjectInstance {
 
     public getPosition(dst: vec3) {
         if (this.parent !== null) {
-            this.getWorldSRT(scratchMtx0);
-            getMatrixTranslation(dst, scratchMtx0);
-        } else
+            this.parent.getPosition(dst);
+            vec3.add(dst, dst, this.position);
+        } else {
             vec3.copy(dst, this.position);
+        }
     }
 
     public setPosition(pos: vec3) {
