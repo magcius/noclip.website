@@ -273,7 +273,7 @@ export class ShapeMaterial {
             scratchBox0.transform(scratchBox0, modelToWorldMtx);
             const worldView = scratchMtx0;
             computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
-            const probedLights = modelCtx.sceneCtx.world.worldLights.probeLightsOnMapBox(scratchBox0, LightType.POINT);
+            const probedLights = modelCtx.sceneCtx.world.worldLights.probeLightsOnMapBox(scratchBox0, LightType.POINT, 8);
             // XXX: actually, it seems there is a maximum of 2 map-affecting lights per shape in the original game.
             for (let i = 0; i < probedLights.length && i < 8; i++) {
                 const viewPosition = scratchVec0;
