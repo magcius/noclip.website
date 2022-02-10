@@ -69,3 +69,21 @@ export function pushAlongLookatVector(dst: vec3, src: vec3, dist: number, viewer
     vec3.normalize(lookatScratch, lookatScratch);
     vec3.scaleAndAdd(dst, src, lookatScratch, dist);
 }
+
+let rng_reg = 0x6151f;
+export function random(max: number): number {
+  if (max == 0) {
+    return 0;
+  } else {
+    rng_reg ^= rng_reg << 1;
+    if ((rng_reg & 0x80000000) != 0) {
+        if (rng_reg === 0x80000000) {
+            rng_reg = 0;
+        }
+    } else {
+        rng_reg += 1;
+    }
+    return rng_reg % max;
+  }
+}
+

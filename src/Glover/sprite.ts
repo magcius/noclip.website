@@ -345,6 +345,8 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
     public startAlpha: number;
     public endAlpha: number;
 
+    public manualScale: [number, number, number] = [1, 1, 1];
+
     private lifetime: number = -1;
     private timeRemaining: number = 0;
 
@@ -493,7 +495,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         }
 
         if (this.visible) {
-            mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size, size, size]);
+            mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size * this.manualScale[0], size * this.manualScale[1], size * this.manualScale[2]]);
             this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, this.curFrame, this.primColor);
         }
     }
@@ -798,8 +800,8 @@ export class GloverWeatherRenderer {
                 singleDebris.vel[1] = this.params.velocity[1] * (0.25 + singleDebris.curParallaxEffect / 1200);
             }
 
-            singleDebris.pos[0] -= singleDebris.vel[0] / 10;
-            singleDebris.pos[1] += singleDebris.vel[1] / 10;
+            singleDebris.pos[0] -= singleDebris.vel[0] / 8;
+            singleDebris.pos[1] += singleDebris.vel[1] / 8;
             singleDebris.lifetimeCounter -= 1;
 
             if (singleDebris.pos[1] > 640 / aspect) {

@@ -11,6 +11,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { Color, colorNewFromRGBA } from "../Color";
 
 import { GenericRenderable } from './render';
+import { GloverWaterVolume } from './scenes';
 import { GloverFlipbookRenderer } from './sprite';
 import { GloverActorRenderer } from './actor';
 import { pushAlongLookatVector } from './util';
@@ -119,7 +120,7 @@ export var collectibleFlipbooks = [
 ]
 
 export var particleFlipbooks: Flipbook[] = [
-    {
+    { // 0
         frameset: framesets["smoke"],
         frameDelay: 0x0,
         type: 0x5,
@@ -129,7 +130,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x40,
         flags: 0x10000,
     },
-    {
+    { // 1
         frameset: framesets["smk"],
         frameDelay: 0x20,
         type: 0x2,
@@ -139,7 +140,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x60,
         flags: 0x10000,
     },
-    {
+    { // 2
         frameset: framesets["plat"],
         frameDelay: 0x0,
         type: 0x1,
@@ -149,7 +150,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x20,
         flags: 0x0,
     },
-    {
+    { // 3
         frameset: framesets["ai_spl"],
         frameDelay: 0x0,
         type: 0x5,
@@ -159,7 +160,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x20,
         flags: 0x10000,
     },
-    {
+    { // 4
         frameset: [],
         frameDelay: 0x0,
         type: 0x0,
@@ -169,7 +170,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x0,
         flags: 0x0
     },
-    {
+    { // 5
         frameset: framesets["bstar"],
         frameDelay: 0x0,
         type: 0x2,
@@ -179,7 +180,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x60,
         flags: 0x10000,
     },
-    {
+    { // 6
         frameset: framesets["glow"],
         frameDelay: 0x10,
         type: 0x1,
@@ -189,7 +190,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x60,
         flags: 0x10000,
     },
-    {
+    { // 7
         frameset: framesets["newisp"],
         frameDelay: 0x10,
         type: 0x2,
@@ -199,7 +200,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x40,
         flags: 0x10000,
     },
-    {
+    { // 8
         frameset: framesets["photon"],
         frameDelay: 0x0,
         type: 0x4,
@@ -209,7 +210,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x20,
         flags: 0x10000,
     },
-    {
+    { // 9
         frameset: framesets["sfair"],
         frameDelay: 0x0,
         type: 0x3,
@@ -219,7 +220,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x80,
         flags: 0x10000,
     },
-    {
+    { // 10
         frameset: framesets["fardus"],
         frameDelay: 0x20,
         type: 0x2,
@@ -236,7 +237,7 @@ export var particleFlipbooks: Flipbook[] = [
         // endSize: 0x40,
         // flags: 0x10000,
     },
-    {
+    { // 11
         frameset: framesets["fardus.4"],
         frameDelay: 0x0,
         type: 0x2,
@@ -246,7 +247,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x60,
         flags: 0x10000,
     },
-    {
+    { // 12
         frameset: framesets["sfair"],
         frameDelay: 0x0,
         type: 0x5,
@@ -256,7 +257,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x40,
         flags: 0x10000,
     },
-    {
+    { // 13
         frameset: framesets["traj"],
         frameDelay: 0x0,
         type: 0x7,
@@ -266,7 +267,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x20,
         flags: 0x10000,
     },
-    {
+    { // 14
         frameset: framesets["popa"],
         frameDelay: 0x0,
         type: 0x5,
@@ -276,7 +277,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x64,
         flags: 0x0,
     },
-    {
+    { // 15
         frameset: framesets["popb"],
         frameDelay: 0x0,
         type: 0x5,
@@ -286,7 +287,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0xc8,
         flags: 0x10000,
     },
-    {
+    { // 16
         frameset: framesets["p"],
         frameDelay: 0x0,
         type: 0x4,
@@ -296,7 +297,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x40,
         flags: 0x10000,
     },
-    {
+    { // 17
         frameset: framesets["splat"],
         frameDelay: 0x10,
         type: 0x2,
@@ -306,7 +307,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x40,
         flags: 0x0,
     },
-    {
+    { // 18
         frameset: framesets["heart"],
         frameDelay: 0x10,
         type: 0x5,
@@ -316,7 +317,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x80,
         flags: 0x10000,
     },
-    {
+    { // 19
         frameset: framesets["star"],
         frameDelay: 0x0,
         type: 0x5,
@@ -326,7 +327,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x10,
         flags: 0x10000,
     },
-    {
+    { // 20
         frameset: framesets["bubble"],
         frameDelay: 0x0,
         type: 0x0,
@@ -336,7 +337,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x20,
         flags: 0x10000,
     },
-    {
+    { // 21
         frameset: framesets["puff"],
         frameDelay: 0x0,
         type: 0x5,
@@ -346,7 +347,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x0,
         flags: 0x10000,
     },
-    {
+    { // 22
         frameset: framesets["traj"],
         frameDelay: 0x0,
         type: 0x5,
@@ -356,7 +357,7 @@ export var particleFlipbooks: Flipbook[] = [
         endSize: 0x20,
         flags: 0x10000,
     },
-    {
+    { // 23
         frameset: framesets["score"],
         frameDelay: 0x0,
         type: 0x5,
@@ -374,201 +375,201 @@ export interface ParticleParams {
     lifetimeJitter: number;
     bboxHeight: number;
     friction: number;
-    unknown: number;
+    childParticleType: number;
 }
 
 export var particleParameters: ParticleParams[] = [
-    {
+    { // 0
         actorFlags: 0, // smoke
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.70,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 1
         actorFlags: 0, // smk
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.90,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 2
         actorFlags: 0x1, // plat
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 3
         actorFlags: 0x1, // ai_spl
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 4
         actorFlags: 0x1, // ???
         lifetimeMin: 13,
         lifetimeJitter: 6,
         bboxHeight: 5,
         friction: 0.87,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 5
         actorFlags: 0x800000, // bstar
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.70,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 6
         actorFlags: 0, // glow
         lifetimeMin: 30,
         lifetimeJitter: 8,
         bboxHeight: 5,
         friction: 0.70,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 7
         actorFlags: 0, // newisp
         lifetimeMin: 18,
         lifetimeJitter: 8,
         bboxHeight: 5,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 8
         actorFlags: 0x40000091, // photon
         lifetimeMin: 30,
         lifetimeJitter: 10,
         bboxHeight: 7,
         friction: 0.80,
-        unknown: 5
+        childParticleType: 5
     },
-    {
+    { // 9/
         actorFlags: 0, // sfair
         lifetimeMin: 12,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 10
         actorFlags: 0, // fardus
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 11
         actorFlags: 0, // fardus
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 12
         actorFlags: 0x800000, // sfair
         lifetimeMin: 6,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 13
         actorFlags: 0x40000010, // traj
         lifetimeMin: 60,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 1,
-        unknown: 5
+        childParticleType: 5
     },
-    {
+    { // 14
         actorFlags: 0, // popa
         lifetimeMin: 3,
         lifetimeJitter: 0,
         bboxHeight: 0,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 15
         actorFlags: 0, // popb
         lifetimeMin: 4,
         lifetimeJitter: 0,
         bboxHeight: 0,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 16
         actorFlags: 0x1000000, // p
         lifetimeMin: 20,
         lifetimeJitter: 0,
         bboxHeight: 0,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 17
         actorFlags: 0x800000, // splat
         lifetimeMin: 0,
         lifetimeJitter: 0,
         bboxHeight: 0,
         friction: 0,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 18
         actorFlags: 0, // heart
         lifetimeMin: 14,
         lifetimeJitter: 10,
         bboxHeight: 0,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 19
         actorFlags: 0x800000, // star
         lifetimeMin: 8,
         lifetimeJitter: 0,
         bboxHeight: 0,
         friction: 0,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 20
         actorFlags: 0, // bubble
         lifetimeMin: 1000,
         lifetimeJitter: 5,
         bboxHeight: 0,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 21
         actorFlags: 0, // puff
         lifetimeMin: 10,
         lifetimeJitter: 5,
         bboxHeight: 0,
         friction: 0.70,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 22
         actorFlags: 0, // traj
         lifetimeMin: 12,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 0.80,
-        unknown: 24
+        childParticleType: 24
     },
-    {
+    { // 23
         actorFlags: 0, // score
         lifetimeMin: 40,
         lifetimeJitter: 0,
         bboxHeight: 5,
         friction: 1,
-        unknown: 24
+        childParticleType: 24
     }
 ]
 
@@ -580,26 +581,17 @@ export class Particle {
     private position: vec3 = vec3.create();
     private velocity: vec3 = vec3.create();
 
-    private scale: vec3 = vec3.create();
+    public scale: vec3 = vec3.create();
 
     private lastFrameAdvance: number = 0;
+    private frameCount: number = 0;
+    private lifetime: number = 0;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private particleType: number) {
+    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[]) {
         // TODO: use one renderer for all particles of
         //       same time, possibly even with same renderInst template
         this.flipbook = new GloverFlipbookRenderer(
             device, cache, textureHolder, particleFlipbooks[particleType]);
-        // this.scale = [ // TODO: not sure this is right
-        //     3/particleParameters[particleType].bboxHeight,
-        //     3/particleParameters[particleType].bboxHeight,
-        //     3/particleParameters[particleType].bboxHeight
-        // ];
-        this.scale = [
-            1,
-            1,
-            1
-        ];
-
     } 
 
     public spawn(origin: vec3 | number[], velocity: vec3 | number[]) {
@@ -609,6 +601,29 @@ export class Particle {
         this.active = true;
         this.flipbook.reset();
         this.setLifetime(params.lifetimeMin + Math.floor(Math.random() * params.lifetimeJitter))
+        this.frameCount = 0;
+        this.scale = vec3.fromValues(1, 1, 1);
+    }
+
+    private advanceWaterParticle() {
+        const wobble = Math.sin((this.lifetime*6)/10);
+        this.flipbook.manualScale = [
+            (32 + wobble * 7)/(3*8),
+            (32 - wobble * 7)/(3*8),
+            1];
+        if (Math.floor(Math.random()*3) === 1) {
+            this.velocity[0] *= 0.5;
+            this.velocity[2] *= 0.5;
+            this.velocity[0] += Math.cos(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
+            this.velocity[2] += Math.sin(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
+        }
+        for (let waterVolume of this.waterVolumes) {
+            if (waterVolume.inBbox(this.position) && this.position[1] >= waterVolume.surface_y) {
+                waterVolume.surfaceRipple(this.position);
+                this.active = false;
+            }
+        }
+
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -617,9 +632,16 @@ export class Particle {
         this.lastFrameAdvance += viewerInput.deltaTime;
 
         vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
-        for (let x = this.lastFrameAdvance; x > 50; x -= 50) {
+        for (let x = this.lastFrameAdvance; x > SRC_FRAME_TO_MS; x -= SRC_FRAME_TO_MS) {
             this.lastFrameAdvance = 0;
+            this.frameCount += 1;
+            this.lifetime -= 1;
             vec3.scale(this.velocity, this.velocity, params.friction);
+
+            if (this.particleType === 0x14) {
+                this.advanceWaterParticle();
+            }
+
         }
         
         mat4.fromRotationTranslationScale(this.flipbook.drawMatrix, identityRotation, this.position, this.scale);
@@ -632,6 +654,7 @@ export class Particle {
 
     public setLifetime(frames: number): void {
         this.flipbook.setLifetime(frames * SRC_FRAME_TO_MS);
+        this.lifetime = frames;
     }
 
     public destroy(device: GfxDevice): void {
@@ -644,7 +667,7 @@ export class ParticlePool implements GenericRenderable {
 
     public visible: boolean = true;
 
-    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private particleType: number) {
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[]) {
     }
 
     public spawn(origin: vec3 | number[], velocity: vec3 | number[]): Particle {
@@ -656,7 +679,7 @@ export class ParticlePool implements GenericRenderable {
             }
         }
         if (newParticle === null) {
-            newParticle = new Particle(this.device, this.cache, this.textureHolder, this.particleType);
+            newParticle = new Particle(this.device, this.cache, this.textureHolder, this.particleType, this.waterVolumes);
             this.particles.push(newParticle);
         }
         newParticle.spawn(origin, velocity);
@@ -714,9 +737,9 @@ export class MeshSparkle implements GenericRenderable {
 
     public visible: boolean = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private actor: GloverActorRenderer, private period: number) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private actor: GloverActorRenderer, private period: number, waterVolumes: GloverWaterVolume[]) {
         this.geo = actor.rootMesh.mesh.geometry;
-        this.particles = new ParticlePool(device, cache, textureHolder, 10);
+        this.particles = new ParticlePool(device, cache, textureHolder, 10, waterVolumes);
     }
 
     public destroy(device: GfxDevice): void {

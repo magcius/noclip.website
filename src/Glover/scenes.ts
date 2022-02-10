@@ -63,6 +63,83 @@ const powerup_objects = [
     0xAB3EA4DB, // vanish.ndo
 ];
 
+export class GloverWaterVolume {
+    constructor (public lft: vec3, public wdh: vec3, public surface_y: number) {
+        lft[1] = Math.min(lft[1], surface_y - 25.0);
+        wdh[1] = Math.max(wdh[1], surface_y + 25.0 - lft[1]);
+    }
+
+    public inBbox(pt: vec3) : boolean {
+        return (pt[0] > this.lft[0] && pt[0] <= this.lft[0] + this.wdh[0] &&
+                pt[1] > this.lft[1] && pt[1] <= this.lft[1] + this.wdh[1] &&
+                pt[2] > this.lft[2] && pt[2] <= this.lft[2] + this.wdh[2];
+    }
+
+    public surfaceRipple(position: vec3) {
+        // TODO
+    }
+}
+
+class GloverVent implements GenericRenderable {
+
+    private particles: ParticlePool | null = null;
+
+    private lastFrameAdvance: number = 0;
+
+    public visible: boolean = true;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private velocity: vec3, private type: number, waterVolumes: GloverWaterVolume[]) {
+        vec3.scale(this.velocity, this.velocity, 1/SRC_FRAME_TO_MS);
+        if (type === 8) {
+            // TODO: these bubble particles should be on the OVERLAY layer and rendermode, eg:
+            //      rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2);
+            //      rspState.gDPSetCombine(0xFC121624, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA, G_CC_MODULATEIA)
+            //      rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, alpha * 255);
+
+            this.particles = new ParticlePool(device, cache, textureHolder, 0x14, waterVolumes);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.particles !== null) {
+            this.particles.destroy(device);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > SRC_FRAME_TO_MS) {
+            this.lastFrameAdvance = 0;
+
+
+            if (this.type === 8) {
+                // Accurate to engine, but waaaay too much for
+                // browser RNG:
+                // if (Math.floor(Math.random()*10) < 5) {
+                if (Math.floor(Math.random()*50) < 2) {
+                    let particleOrigin = this.position.slice();
+                    let particleVelocity = this.velocity.slice();
+                    particleVelocity[1] += 1/SRC_FRAME_TO_MS;
+                    particleOrigin[0] += Math.floor(Math.random()*10) - 5;
+                    particleOrigin[1] += Math.floor(Math.random()*10) - 5;
+                    particleOrigin[2] += Math.floor(Math.random()*10) - 5;
+                    this.particles!.spawn(particleOrigin, particleVelocity);
+                }
+            }
+
+        }
+
+        if (this.particles !== null) {
+            this.particles.prepareToRender(device, renderInstManager, viewerInput);
+        }
+    }
+
+}
+
 class PlatformPathPoint {
     constructor(public pos: vec3, public duration: number) {}
 
@@ -172,12 +249,12 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         public actor: GloverActorRenderer | null)
     { }
 
-    public initExitSparkle(): ParticlePool {
+    public initExitSparkle(waterVolumes: GloverWaterVolume[]): ParticlePool {
         assert(this.actor !== null);
         assert(this.exitSparkle == false);
         this.exitSparkle = true;
         this.exitSparkleParticles = new ParticlePool(
-            this.actor.device, this.actor.cache, this.actor.textures, 0x15);
+            this.actor.device, this.actor.cache, this.actor.textures, 0x15, waterVolumes);
         return this.exitSparkleParticles;
     }
 
@@ -586,8 +663,8 @@ export class CollectibleSparkle implements GenericRenderable {
 
     public visible: boolean = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private type: CollectibleSparkleType) {
-        this.particles = new ParticlePool(device, cache, textureHolder, 6);
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private type: CollectibleSparkleType, waterVolumes: GloverWaterVolume[]) {
+        this.particles = new ParticlePool(device, cache, textureHolder, 6, waterVolumes);
     }
 
     public destroy(device: GfxDevice): void {
@@ -595,6 +672,10 @@ export class CollectibleSparkle implements GenericRenderable {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+
         this.lastFrameAdvance += viewerInput.deltaTime;
         if (this.lastFrameAdvance > 50) {
             this.lastFrameAdvance = 0;
@@ -614,14 +695,69 @@ export class CollectibleSparkle implements GenericRenderable {
             particle.setLifetime(10);
         }
 
+        this.particles.prepareToRender(device, renderInstManager, viewerInput);
+    }
+}
+
+export class GloverWind implements GenericRenderable {
+
+    private particles: ParticlePool;
+
+    private lastFrameAdvance: number = 0;
+
+    public visible: boolean = true;
+
+    private scratchOrigin: vec3 = vec3.create();
+    private scratchVelocity: vec3 = vec3.create();
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, waterVolumes: GloverWaterVolume[],
+        private ltf: vec3, private whd: vec3, private velocity: vec3, private turbulence: number) {
+        this.particles = new ParticlePool(device, cache, textureHolder, 0x10, waterVolumes);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.particles.destroy(device);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible) {
             return;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > SRC_FRAME_TO_MS * 2) {
+            this.lastFrameAdvance = 0;
+
+            for (let i = 0; i < this.turbulence; i++) {
+                const jitter = this.turbulence * (Math.floor(Math.random()*10)/4 + 12);
+                let lifetime = 0;
+                for (let axis = 0; axis < 3; axis++) {
+                    if (this.scratchVelocity[axis] == 0) {
+                        this.scratchOrigin[axis] = Math.floor(Math.random() * this.whd[axis]);
+                    } else {
+                        lifetime = Math.max(lifetime, this.whd[axis] / jitter);
+                        if (this.scratchVelocity[axis] < 0) {
+                            this.scratchOrigin[axis] = this.whd[axis]
+                        } else {
+                            this.scratchOrigin[axis] = 0;
+                        }
+                    }
+                }
+                vec3.add(this.scratchOrigin, this.scratchOrigin, this.ltf);
+                vec3.scale(this.scratchVelocity, this.velocity, jitter)
+                const particle = this.particles.spawn(this.scratchOrigin, this.scratchVelocity);
+                particle.setLifetime(lifetime);
+                if (Math.random() <= 0.5) {
+                    particle.scale[0] = -1;
+                }
+            }
         }
 
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
     }
 
 }
+
 
 const identityRotation: quat = quat.create();
 
@@ -649,11 +785,11 @@ export class GloverMrTip implements Shadows.ShadowCaster {
 
     private static primColor = {r: 1, g: 1, b: 1, a: 0.94};
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, waterVolumes: GloverWaterVolume[]) {
         this.mainBillboard = new GloverSpriteRenderer(device, cache, textureHolder,
             [0x6D419194, 0x8C641CE9], true);
         this.yOffset = Math.floor(Math.random()*5000);
-        this.particles = new ParticlePool(device, cache, textureHolder, 7);
+        this.particles = new ParticlePool(device, cache, textureHolder, 7, waterVolumes);
         mat4.fromTranslation(this.drawMatrix, this.position);
     }
 
@@ -722,6 +858,8 @@ class GloverRenderer implements Viewer.SceneGfx {
     public shadows: Shadows.Shadow[] = [];
     public platforms: GloverPlatform[] = [];
     public platformByTag = new Map<number, GloverPlatform>();
+
+    public waterVolumes: GloverWaterVolume[] = [];
 
     public sceneLights: SceneLighting = new SceneLighting();
 
@@ -1281,7 +1419,8 @@ class SceneDesc implements Viewer.SceneDesc {
         let scratchMatrix = mat4.create();
         let currentActor: GloverActorRenderer | null = null; 
         let currentPlatform: GloverPlatform | null = null; 
-        let currentObject: GloverActorRenderer | GloverPlatform | null = null;
+        let currentObject: GloverActorRenderer | GloverPlatform | GloverVent | null = null;
+        let currentVent: GloverVent | null = null;
         let currentGaribState: number = 0;
 
         function loadActor(id : number) : GloverActorRenderer {
@@ -1344,6 +1483,11 @@ class SceneDesc implements Viewer.SceneDesc {
                     currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     currentActor.setRenderMode(0x20, 0x20);
+                    sceneRenderer.waterVolumes.push(new GloverWaterVolume(
+                        [cmd.params.left, cmd.params.top, cmd.params.front],
+                        [cmd.params.width, cmd.params.bottom, cmd.params.depth],
+                        cmd.params.surfaceY;
+                    ))
                     break;
                 }
                 case 'LandActor':
@@ -1392,7 +1536,19 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     if (sparkleActor !== null) {
                         sceneRenderer.miscRenderers.push(new MeshSparkle(
-                            device, cache, textureHolder, sparkleActor, cmd.params.period));
+                            device, cache, textureHolder, sparkleActor, cmd.params.period, sceneRenderer.waterVolumes));
+                    }
+                    break;
+                }
+                case 'Wind': {
+                    const wind = new GloverWind(device, cache, textureHolder, sceneRenderer.waterVolumes,
+                        [cmd.params.left, cmd.params.top, cmd.params.front],
+                        [cmd.params.width, cmd.params.height, cmd.params.depth],
+                        [cmd.params.velX / SRC_FRAME_TO_MS, cmd.params.velY / SRC_FRAME_TO_MS, cmd.params.velZ / SRC_FRAME_TO_MS],
+                        cmd.params.turbulence);
+                    sceneRenderer.miscRenderers.push(wind);
+                    if (cmd.params.active === 0) {
+                        wind.visible = false;
                     }
                     break;
                 }
@@ -1406,6 +1562,18 @@ class SceneDesc implements Viewer.SceneDesc {
                         shadowCasters.push(ballActor);
                         ballActors.push(ballActor);
                     }
+                    break;
+                }
+                case 'Vent': {
+                    console.log("vent:", cmd.params);
+                    currentVent = new GloverVent(
+                        device, cache, textureHolder,
+                        [cmd.params.originX, cmd.params.originY, cmd.params.originZ],
+                        [cmd.params.particleVelocityX, cmd.params.particleVelocityY, cmd.params.particleVelocityZ],
+                        cmd.params.type,
+                        sceneRenderer.waterVolumes);
+                    currentObject = currentVent;
+                    sceneRenderer.miscRenderers.push(currentVent);
                     break;
                 }
                 case 'Platform': {
@@ -1576,7 +1744,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     if (cmd.params.type == 1 || cmd.params.type == 3 || this.id == "09") {
-                        const emitter = currentPlatform.initExitSparkle();
+                        const emitter = currentPlatform.initExitSparkle(sceneRenderer.waterVolumes);
                         sceneRenderer.miscRenderers.push(emitter);
                     }
                     if (!cmd.params.visible) {
@@ -1607,7 +1775,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     flipbook.visible = (currentGaribState !== 0);
                     if (cmd.params.type == 2) {
                         // Extra lives are sparkly
-                        const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife);
+                        const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife, sceneRenderer.waterVolumes);
                         sceneRenderer.miscRenderers.push(emitter);
                         emitter.visible = (currentGaribState !== 0);
                     }
@@ -1625,14 +1793,15 @@ class SceneDesc implements Viewer.SceneDesc {
                         actor.shadowSize = 10;
                         actor.playSkeletalAnimation(0, true, false);
                         shadowCasters.push(actor);
-                        sceneRenderer.miscRenderers.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
+                        sceneRenderer.miscRenderers.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup, sceneRenderer.waterVolumes));
                     }
                     break;
                 }
                 case 'MrTip': {
                     let tip = new GloverMrTip(
                         device, cache, textureHolder,
-                        vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z));
+                        vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z),
+                        sceneRenderer.waterVolumes);
                     sceneRenderer.mrtips.push(tip);
                     shadowCasters.push(tip);
                     break;
