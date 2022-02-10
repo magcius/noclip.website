@@ -121,7 +121,7 @@ export const defaultMegaState: GfxMegaStateDescriptor = {
     blendConstant: colorNewCopy(TransparentBlack),
     depthWrite: true,
     depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual),
-    stencilCompare: GfxCompareMode.Never,
+    stencilCompare: GfxCompareMode.Always,
     stencilWrite: false,
     stencilPassOp: GfxStencilOp.Keep,
     cullMode: GfxCullMode.None,

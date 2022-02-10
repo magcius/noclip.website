@@ -537,8 +537,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentMegaState.depthWrite = false;
         this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.AllChannels;
 
-        // We always have depth test enabled.
+        // We always have depth & stencil test enabled.
         gl.enable(gl.DEPTH_TEST);
+        gl.enable(gl.STENCIL_TEST);
 
         this._checkLimits();
         this._checkForBugQuirks();
@@ -2179,6 +2180,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public setStencilRef(value: number): void {
+        if (this._currentStencilRef === value)
+            return;
         this._currentStencilRef = value;
         this._applyStencil();
     }

@@ -516,7 +516,6 @@ export class GfxRenderInst {
         }
 
         passRenderer.setPipeline(gfxPipeline);
-
         passRenderer.setInputState(this._inputState);
 
         for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
