@@ -188,8 +188,6 @@ export class BaseEntity {
         this.registerInput('setanimation', this.input_setanimation.bind(this));
         this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
         this.registerInput('setplaybackrate', this.input_setplaybackrate.bind(this));
-        this.registerInput('turnon', this.input_turnon.bind(this));
-        this.registerInput('turnoff', this.input_turnoff.bind(this));
 
         if (shouldHideEntityFallback(this.entity.classname))
             this.visible = false;
@@ -604,14 +602,6 @@ export class BaseEntity {
 
     private input_setplaybackrate(entitySystem: EntitySystem, value: string): void {
         this.seqrate = Number(value);
-    }
-
-    private input_turnon(): void {
-        this.visible = true;
-    }
-
-    private input_turnoff(): void {
-        this.visible = false;
     }
 }
 

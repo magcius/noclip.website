@@ -283,7 +283,7 @@ export function vmtParseColor(dst: Color, S: string): void {
     dst.r = v[0] / 255.0;
     dst.g = v[1] / 255.0;
     dst.b = v[2] / 255.0;
-    dst.a = 1.0;
+    dst.a = (v[3] !== undefined) ? (v[3] / 255.0) : 1.0;
 }
 
 export function vmtParseNumber(S: string | undefined, fallback: number): number {

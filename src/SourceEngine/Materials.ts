@@ -2465,7 +2465,7 @@ class Material_Generic extends BaseMaterial {
             const projectedLight = this.projectedLight!;
             // We only need rows for X, Y and W (skip Z).
             offs += fillMatrix4x4(d, offs, projectedLight.frustumView.clipFromWorldMatrix);
-            colorScale(scratchColor, projectedLight.lightColor, projectedLight.brightnessScale * 0.25);
+            colorScale(scratchColor, projectedLight.lightColor, projectedLight.lightColor.a * projectedLight.brightnessScale * 0.25);
             offs += fillColor(d, offs, scratchColor);
             offs += fillVec3v(d, offs, projectedLight.frustumView.cameraPos, projectedLight.farZ);
         }
