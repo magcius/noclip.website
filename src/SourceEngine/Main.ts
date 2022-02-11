@@ -659,7 +659,7 @@ export class BSPRenderer {
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         this.entitySystem = new EntitySystem(renderContext, this);
 
-        renderContext.materialCache.setUsingHDR(this.bsp.usingHDR);
+        renderContext.materialCache.setRenderConfig(this.bsp.usingHDR, this.bsp.version);
         this.startLightmapPageIndex = renderContext.lightmapManager.appendPackerPages(this.bsp.lightmapPacker);
 
         const device = renderContext.device, cache = renderContext.renderCache;

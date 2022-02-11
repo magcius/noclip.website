@@ -1247,13 +1247,13 @@ export class BMD {
 
     private assocHierarchy(): void {
         const view = this.inf1.hierarchyData.createDataView();
-    
+
         let offs = 0x00;
         let currentMaterialIndex = -1;
         while (true) {
             const type: HierarchyNodeType = view.getUint16(offs + 0x00);
             const value = view.getUint16(offs + 0x02);
-    
+
             if (type === HierarchyNodeType.End) {
                 break;
             } else if (type === HierarchyNodeType.Material) {
@@ -1264,14 +1264,14 @@ export class BMD {
                 assert(shape.materialIndex === -1);
                 shape.materialIndex = currentMaterialIndex;
             }
-    
+
             offs += 0x04;
         }
-    
+
         // Double-check that we have everything done.
         for (let i = 0; i < this.shp1.shapes.length; i++)
             assert(this.shp1.shapes[i].materialIndex !== -1);
-    
+
         // Go through and auto-optimize materials which don't use MULTI
         for (let i = 0; i < this.mat3.materialEntries.length; i++) {
             let multiCount = 0;
@@ -1279,11 +1279,11 @@ export class BMD {
                 const shp1 = this.shp1.shapes[j];
                 if (shp1.materialIndex !== i)
                     continue;
-    
+
                 if (this.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
                     ++multiCount;
             }
-    
+
             if (multiCount === 0)
                 this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
         }

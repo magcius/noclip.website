@@ -1774,6 +1774,9 @@ void mainPS() {
                 // TODO(jstpierre): I believe games pre-Portal 2 should not normalize influence; it
                 // doesn't appear to be in the Source SDK 2013 shaders posted to GitHub, but Portal 2
                 // definitely needs it.
+
+                bool use_ssbump_normalize = ${getDefineBool(m, `USE_SSBUMP_NORMALIZE`)};
+                t_NormalizeInfluence = use_ssbump_normalize;
             } else {
                 t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
                 t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
@@ -2327,6 +2330,8 @@ class Material_Generic extends BaseMaterial {
 
             this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
         }
+
+        this.shaderInstance.setDefineBool(`USE_SSBUMP_NORMALIZE`, materialCache.ssbumpNormalize);
 
         this.setSkinningMode(this.shaderInstance);
         this.setFogMode(this.shaderInstance);
@@ -3902,6 +3907,7 @@ export class MaterialCache {
     private texturePromiseCache = new Map<string, Promise<VTF>>();
     private materialPromiseCache = new Map<string, Promise<VMT>>();
     private usingHDR: boolean = false;
+    public ssbumpNormalize = false;
     public staticResources: StaticResources;
     public materialDefines: string[] = [];
     public deviceNeedsFlipY: boolean;
@@ -3922,7 +3928,14 @@ export class MaterialCache {
         this.deviceNeedsFlipY = gfxDeviceNeedsFlipY(device);
     }
 
-    public setUsingHDR(hdr: boolean): void {
+    public setRenderConfig(hdr: boolean, bspVersion: number): void {
+        this.setUsingHDR(hdr);
+
+        // Portal 2 has a fix for ssbump materials being too bright.
+        this.ssbumpNormalize = (bspVersion >= 21);
+    }
+
+    private setUsingHDR(hdr: boolean): void {
         this.usingHDR = hdr;
 
         this.materialDefines = [`gpu>=1`, `gpu>=2`, `gpu>=3`, `>=dx90_20b`, `>=dx90`, `>dx90`, `srgb`, `srgb_pc`, `dx9`];
