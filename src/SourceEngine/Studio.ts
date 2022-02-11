@@ -1294,10 +1294,22 @@ export class StudioModelData {
                         const vtxStripGroupHeaderOffset = vtxView.getUint32(vtxMeshIdx + 0x04, true);
                         const vtxMeshFlags = vtxView.getUint8(vtxMeshIdx + 0x08);
 
+                        // It seems that Valve extended the .vtx format at some point without
+                        // changing the major version for that version, but it can be detected
+                        // through the mdl version... this is for subd.
+                        const hasTopologyData = mdlVersion >= 49;
+
+                        let vtxStripGroupStride = 0x19;
+                        let vtxStripStride = 0x1B;
+                        if (hasTopologyData) {
+                            vtxStripGroupStride += 0x08;
+                            vtxStripStride += 0x08;
+                        }
+
                         let meshNumVertices = 0;
                         let meshNumIndices = 0;
                         let vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
-                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += 0x19) {
+                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += vtxStripGroupStride) {
                             const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
                             const numIndices = vtxView.getUint32(vtxStripGroupIdx + 0x08, true);
                             meshNumVertices += numVerts;
@@ -1317,7 +1329,7 @@ export class StudioModelData {
                         const stripGroupDatas: StudioModelStripGroupData[] = [];
 
                         vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
-                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += 0x19) {
+                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += vtxStripGroupStride) {
                             const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
                             const vertOffset = vtxView.getUint32(vtxStripGroupIdx + 0x04, true);
 
@@ -1330,11 +1342,7 @@ export class StudioModelData {
                             const stripGroupFlags: OptimizeStripGroupFlags = vtxView.getUint8(vtxStripGroupIdx + 0x18);
                             const isHWSkin = !!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED);
 
-                            const hasTopologyData = mdlVersion >= 49;
                             if (hasTopologyData) {
-                                // It seems that Valve extended the .vtx format at some point without
-                                // changing the major version for that version, but it can be detected
-                                // through the mdl version... this is for subd.
                                 const numTopologyIndices = vtxView.getUint32(vtxStripGroupIdx + 0x18, true);
                                 const topologyOffset = vtxView.getUint32(vtxStripGroupIdx + 0x1C, true);
                             }
@@ -1482,7 +1490,7 @@ export class StudioModelData {
                             }
 
                             let vtxStripIdx = vtxStripGroupIdx + stripOffset;
-                            for (let s = 0; s < numStrips; s++) {
+                            for (let s = 0; s < numStrips; s++, vtxStripIdx += vtxStripStride) {
                                 const stripNumIndices = vtxView.getUint32(vtxStripIdx + 0x00, true);
                                 const stripIndexOffset = vtxView.getUint32(vtxStripIdx + 0x04, true);
                                 // assert(stripNumIndices === numIndices);
@@ -1506,7 +1514,6 @@ export class StudioModelData {
                                 if (hasTopologyData) {
                                     const numTopologyIndices = vtxView.getUint32(vtxStripIdx + 0x1B, true);
                                     const topologyOffset = vtxView.getUint32(vtxStripIdx + 0x1F, true);
-                                    vtxStripIdx += 0x08;
                                 }
 
                                 for (let i = 0; i < numBoneStateChanges; i++) {
@@ -1520,8 +1527,6 @@ export class StudioModelData {
                                     assert(numBoneStateChanges === 0);
 
                                 stripGroupData.stripData.push(new StudioModelStripData(meshFirstIdx + stripIndexOffset, stripNumIndices, hardwareBoneTable.slice()));
-
-                                vtxStripIdx += 0x1B;
                             }
 
                             meshFirstIdx += numIndices;

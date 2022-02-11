@@ -164,6 +164,8 @@ export class BaseEntity {
 
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
+        this.registerInput('enabledraw', this.input_enabledraw.bind(this));
+        this.registerInput('disabledraw', this.input_disabledraw.bind(this));
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
         this.registerInput('use', this.input_use.bind(this));
@@ -186,6 +188,8 @@ export class BaseEntity {
         this.registerInput('setanimation', this.input_setanimation.bind(this));
         this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
         this.registerInput('setplaybackrate', this.input_setplaybackrate.bind(this));
+        this.registerInput('turnon', this.input_turnon.bind(this));
+        this.registerInput('turnoff', this.input_turnoff.bind(this));
 
         if (shouldHideEntityFallback(this.entity.classname))
             this.visible = false;
@@ -530,6 +534,14 @@ export class BaseEntity {
         this.enabled = false;
     }
 
+    private input_enabledraw(): void {
+        this.visible = true;
+    }
+
+    private input_disabledraw(): void {
+        this.visible = false;
+    }
+
     private input_kill(): void {
         this.remove();
     }
@@ -592,6 +604,14 @@ export class BaseEntity {
 
     private input_setplaybackrate(entitySystem: EntitySystem, value: string): void {
         this.seqrate = Number(value);
+    }
+
+    private input_turnon(): void {
+        this.visible = true;
+    }
+
+    private input_turnoff(): void {
+        this.visible = false;
     }
 }
 
