@@ -215,7 +215,6 @@ export class BaseEntity {
 
     private playseqindex(index: number): void {
         if (index < 0) {
-            debugger;
             index = 0;
         }
 

@@ -2,9 +2,9 @@
 import { SourceFileSystem, SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext } from "./Main";
 import { SceneContext } from "../SceneBase";
 import { BSPFile } from "./BSPFile";
-import { assert } from "../util";
+import { assertExists } from "../util";
 
-export async function createScene(context: SceneContext, filesystem: SourceFileSystem, mapId: string, mapPath: string, renderContext: SourceRenderContext | null = null): Promise<SourceRenderer> {
+export async function createScene(context: SceneContext, filesystem: SourceFileSystem, mapId: string, mapPath: string, loadMapFromVpk: boolean = false, renderContext: SourceRenderContext | null = null): Promise<SourceRenderer> {
     // Clear out old filesystem pakfile.
     filesystem.pakfiles.length = 0;
 
@@ -13,7 +13,7 @@ export async function createScene(context: SceneContext, filesystem: SourceFileS
     const renderer = new SourceRenderer(context, renderContext);
 
     const bspFile = await context.dataShare.ensureObject(`SourceEngine/${mapPath}`, async () => {
-        const bsp = await context.dataFetcher.fetchData(mapPath);
+        const bsp = loadMapFromVpk ? assertExists(await filesystem.fetchFileData(mapPath)) : await context.dataFetcher.fetchData(mapPath);
         return new BSPFile(bsp, mapId);
     });
 
