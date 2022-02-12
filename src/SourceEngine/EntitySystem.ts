@@ -419,6 +419,9 @@ export class BaseEntity {
         if (this.parentEntity === null)
             return;
 
+        if (this.parentEntity.modelStudio === null)
+            return;
+
         const parentAttachment = this.parentEntity.getAttachmentIndex(attachmentName);
         this.setParentEntity(this.parentEntity, parentAttachment);
 
@@ -430,7 +433,7 @@ export class BaseEntity {
 
     public getAttachmentIndex(attachmentName: string): number | null {
         if (this.modelStudio === null)
-            throw "whoops";
+            return null;
 
         const attachmentIndex = this.modelStudio.modelData.attachment.findIndex((attachment) => attachment.name === attachmentName);
         if (attachmentIndex < 0)

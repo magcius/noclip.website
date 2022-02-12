@@ -1185,7 +1185,7 @@ layout(std140) uniform ub_ObjectParams {
 #endif
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
-    vec4 u_EnvmapContrastSaturationFresnel;
+    vec4 u_EnvmapContrastSaturationFresnelLightScale;
 #endif
 #ifdef USE_SELFILLUM
     vec4 u_SelfIllumTint;
@@ -1867,9 +1867,13 @@ void mainPS() {
 
     // TODO(jstpierre): Double-check all of this with Phong. I don't think it's 100% right...
 
-    t_EnvmapColor = mix(t_EnvmapColor, t_EnvmapColor*t_EnvmapColor, u_EnvmapContrastSaturationFresnel.x);
-    t_EnvmapColor = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_EnvmapColor)), t_EnvmapColor, u_EnvmapContrastSaturationFresnel.y);
-    t_EnvmapColor *= mix(t_Fresnel, 1.0, u_EnvmapContrastSaturationFresnel.z);
+    // TODO(jstpierre): $envmaplightscaleminmax
+    vec3 t_EnvmapDiffuseLightScale = saturate(t_DiffuseLighting.rgb);
+    t_EnvmapColor.rgb *= mix(vec3(1.0), t_EnvmapDiffuseLightScale.rgb, u_EnvmapContrastSaturationFresnelLightScale.w);
+
+    t_EnvmapColor = mix(t_EnvmapColor, t_EnvmapColor*t_EnvmapColor, u_EnvmapContrastSaturationFresnelLightScale.x);
+    t_EnvmapColor = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_EnvmapColor)), t_EnvmapColor, u_EnvmapContrastSaturationFresnelLightScale.y);
+    t_EnvmapColor *= mix(t_Fresnel, 1.0, u_EnvmapContrastSaturationFresnelLightScale.z);
 
     t_SpecularLighting.rgb += t_EnvmapColor.rgb;
 #endif
@@ -2090,6 +2094,7 @@ class Material_Generic extends BaseMaterial {
         p['$envmaptint']                   = new ParameterColor(1, 1, 1);
         p['$envmapcontrast']               = new ParameterNumber(0);
         p['$envmapsaturation']             = new ParameterNumber(1);
+        p['$envmaplightscale']             = new ParameterNumber(0);
         p['$fresnelreflection']            = new ParameterNumber(1);
         p['$detail']                       = new ParameterTexture();
         p['$detailframe']                  = new ParameterNumber(0);
@@ -2443,7 +2448,8 @@ class Material_Generic extends BaseMaterial {
             const envmapContrast = this.paramGetNumber('$envmapcontrast');
             const envmapSaturation = this.paramGetNumber('$envmapsaturation');
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');
-            offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
+            const envmapLightScale = this.paramGetNumber('$envmaplightscale');
+            offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection, envmapLightScale);
         }
 
         if (this.wantsSelfIllum)
@@ -2948,15 +2954,15 @@ void mainPS() {
 
     // Compute reflection and refraction colors.
 
-    vec3 t_DiffuseLight = vec3(1.0);
+    vec3 t_DiffuseLighting = vec3(1.0);
 
     bool use_lightmap_water_fog = ${getDefineBool(m, `USE_LIGHTMAP_WATER_FOG`)};
     if (use_lightmap_water_fog) {
         vec3 t_LightmapColor = texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb;
         t_LightmapColor.rgb *= g_LightmapScale;
-        t_DiffuseLight.rgb *= t_LightmapColor;
+        t_DiffuseLighting.rgb *= t_LightmapColor;
     }
-    vec3 t_WaterFogColor = u_WaterFogColor.rgb * t_DiffuseLight.rgb;
+    vec3 t_WaterFogColor = u_WaterFogColor.rgb * t_DiffuseLighting.rgb;
 
     // Compute a 2D offset vector in view space.
     // TODO(jstpierre): Rotate bumpmap normal to be in camera space.
@@ -3036,7 +3042,7 @@ void mainPS() {
 
         // Mask by flowmap alpha and apply light
         t_FlowColor.rgba *= t_FlowSample.a;
-        t_FlowColor.rgb *= t_DiffuseLight.rgb;
+        t_FlowColor.rgb *= t_DiffuseLighting.rgb;
 
         // Sludge can either be below or on top of the water, according to base texture alpha.
         //   0.0 - 0.5 = translucency, and 0.5 - 1.0 = above water
@@ -3372,7 +3378,7 @@ void mainPS() {
     vec4 t_BlurAccum = vec4(0);
     int g_BlurAmount = BLUR_AMOUNT;
     int g_BlurWidth = g_BlurAmount * 2 + 1;
-    float g_BlurWeight = 1.0 / float(g_BlurWidth * g_BlurWidth);
+    float g_BlurWeight = 1.0 / (float(g_BlurWidth * g_BlurWidth) * u_ToneMapScale);
 
     vec2 t_FramebufferSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_BlurSampleOffset = vec2(1.0) / t_FramebufferSize;
@@ -3506,7 +3512,7 @@ class Material_Refract extends BaseMaterial {
         offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
 
         if (this.wantsEnvmap) {
-            offs += this.paramFillColor(d, offs, '$envmaptint');
+            offs += this.paramFillGammaColor(d, offs, '$envmaptint');
             const envmapContrast = this.paramGetNumber('$envmapcontrast');
             const envmapSaturation = this.paramGetNumber('$envmapsaturation');
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');

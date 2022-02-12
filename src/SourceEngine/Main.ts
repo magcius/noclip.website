@@ -1594,6 +1594,8 @@ export class SourceRenderer implements SceneGfx {
         enableAutoExposure.onchanged = () => {
             const v = enableAutoExposure.checked;
             this.renderContext.enableAutoExposure = v;
+            if (!v)
+                this.renderContext.toneMapParams.toneMapScale = 1.0;
         };
         renderHacksPanel.contents.appendChild(enableAutoExposure.elem);
         const enableColorCorrection = new UI.Checkbox('Enable Color Correction', true);
@@ -1887,8 +1889,6 @@ export class SourceRenderer implements SceneGfx {
         if (this.renderContext.enableAutoExposure) {
             this.luminanceHistogram.pushPasses(renderInstManager, builder, mainColorTargetID);
             this.luminanceHistogram.updateToneMapParams(this.renderContext.toneMapParams, this.renderContext.globalDeltaTime);
-        } else {
-            this.renderContext.toneMapParams.toneMapScale = 1.0;
         }
 
         const bloomColorTargetID = this.pushBloomPasses(builder, mainColorTargetID);
