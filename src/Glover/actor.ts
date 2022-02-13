@@ -330,6 +330,12 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         } else {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OPAQUE);
         }
+
+        // Hardcoded fix:
+        // Force crystf in wayroom to render on top of crysbk
+        if (this.actorObject.objId == 0x97AF34B3) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OVERLAY); 
+        }
     }
 
     public playSkeletalAnimation(animIdx: number, startPlaying: boolean, queue: boolean, playbackSpeed: number | null = null) {

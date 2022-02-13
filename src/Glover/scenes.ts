@@ -1510,6 +1510,13 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
+        if (this.id === '08') {
+            // Hard-code fix: force ball textures to crystal in castle cave
+            //  newball2.bmp -> cball.bmp
+            const crystal_tex = textureHolder.idToTexture.get(0x6EA4636F);
+            textureHolder.idToTexture.set(0xB83D6D41, crystal_tex!)
+        }
+
         let loadedObjects = new Map<number, GloverObjbank.ObjectRoot>()
         for (let bank of object_banks) {
             if (bank) {
