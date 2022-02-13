@@ -1091,6 +1091,10 @@ export class SourceRenderContext {
         }
     }
 
+    public isUsingHDR(): boolean {
+        return this.materialCache.isUsingHDR();
+    }
+
     public destroy(device: GfxDevice): void {
         this.renderCache.destroy();
         this.lightmapManager.destroy(device);
@@ -1770,6 +1774,9 @@ export class SourceRenderer implements SceneGfx {
         if (!this.renderContext.enableBloom)
             return null;
 
+        if (!this.renderContext.isUsingHDR())
+            return null;
+
         const toneMapParams = this.renderContext.toneMapParams;
         let bloomScale = toneMapParams.bloomScale;
         if (bloomScale <= 0.0)
@@ -1886,9 +1893,10 @@ export class SourceRenderer implements SceneGfx {
 
         this.renderHelper.pushTemplateRenderInst();
 
-        if (this.renderContext.enableAutoExposure) {
+        if (this.renderContext.enableAutoExposure && this.renderContext.isUsingHDR()) {
             this.luminanceHistogram.pushPasses(renderInstManager, builder, mainColorTargetID);
             this.luminanceHistogram.updateToneMapParams(this.renderContext.toneMapParams, this.renderContext.globalDeltaTime);
+            this.luminanceHistogram.debugDraw(this.renderContext, this.renderContext.toneMapParams);
         }
 
         const bloomColorTargetID = this.pushBloomPasses(builder, mainColorTargetID);

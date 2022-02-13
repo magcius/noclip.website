@@ -15,6 +15,7 @@ import { clamp, invlerp, lerp, saturate } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
+import { SourceRenderContext } from "./Main";
 import { ToneMapParams } from "./Materials";
 
 const scratchVec4 = vec4.create();
@@ -229,7 +230,7 @@ export class LuminanceHistogram {
         dst.entryStart = (dst.locationStart / queriesPerFrame) | 0;
     }
 
-    private debugDraw(toneMapParams: ToneMapParams): void {
+    public debugDraw(renderContext: SourceRenderContext, toneMapParams: ToneMapParams): void {
         const ctx = getDebugOverlayCanvas2D();
 
         if (this.debugDrawHistogram) {
@@ -322,7 +323,7 @@ export class LuminanceHistogram {
             drawMarker(toneMapParams.toneMapScale, White);
 
             drawScreenSpaceText(ctx, x, tickBarY + 60, `Bloom Scale: ${toneMapParams.bloomScale}`, White, { outline: 2, align: 'left' });
-            if (!(window.main.scene as any).renderContext.materialCache.isUsingHDR())
+            if (!renderContext.isUsingHDR())
                 drawScreenSpaceText(ctx, x, tickBarY + 90, `Map does not have HDR samples!`, Red, { outline: 2 });
             ctx.restore();
         }
@@ -407,7 +408,6 @@ export class LuminanceHistogram {
             target = Math.max(target, toneMapParams.minAvgLum / locationOfAverage);
 
         this.updateToneMapScale(toneMapParams, target, deltaTime);
-        this.debugDraw(toneMapParams);
     }
 
     private calcGoalScale(): number {
