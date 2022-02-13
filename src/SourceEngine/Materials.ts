@@ -11,7 +11,7 @@ import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixT } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
@@ -2764,7 +2764,8 @@ ${MaterialShaderTemplateBase.Common}
 layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
 #ifdef USE_TEXSCROLL
-    vec4 u_TexScroll;
+    vec4 u_TexScroll0ScaleBias;
+    vec4 u_TexScroll1ScaleBias;
 #endif
     vec4 u_RefractTint;
     vec4 u_ReflectTint;
@@ -2829,8 +2830,7 @@ void mainVS() {
     vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
-    v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
-    v_TexCoord1.zw = a_TexCoord.zw;
+    v_TexCoord1.xyzw = a_TexCoord.xyzw;
 }
 #endif
 
@@ -2924,12 +2924,12 @@ void mainPS() {
 #else
 
     // Sample our normal map with scroll offsets.
-    vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
+    vec2 t_BumpmapCoord0 = CalcScaleBias(v_TexCoord1.xy, u_BumpScaleBias);
     vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0);
 #ifdef USE_TEXSCROLL
-    vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
+    vec2 t_BumpmapCoord1 = CalcScaleBias(vec2(v_TexCoord1.x + v_TexCoord1.y, -v_TexCoord1.x + v_TexCoord1.y) * 0.1, u_TexScroll0ScaleBias);
     vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord1);
-    vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
+    vec2 t_BumpmapCoord2 = CalcScaleBias(v_TexCoord1.yx * 0.45, u_TexScroll1ScaleBias);
     vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord2);
     vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
 #else
@@ -2971,9 +2971,8 @@ void mainPS() {
     vec3 t_RefractColor;
     bool use_refract = ${getDefineBool(m, `USE_REFRACT`)};
     if (use_refract) {
-        vec3 t_RefractPosWorld = CalcPosWorldFromScreen(t_ProjTexCoord, SampleFramebufferDepth(SampleFramebufferCoord(t_ProjTexCoord)));
         float t_RefractFogBendAmount = CalcFogAmountFromScreenPos(t_ProjTexCoord, SampleFramebufferDepth(SampleFramebufferCoord(t_ProjTexCoord)));
-        float t_RefractStrength = u_RefractAmount * t_RefractFogBendAmount;
+        float t_RefractStrength = u_RefractAmount * (1.0 - t_RefractFogBendAmount);
         vec2 t_RefractTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_RefractStrength);
 
         float t_RefractFogAmount;
@@ -3004,12 +3003,6 @@ void mainPS() {
 
     float t_ReflectAmount = u_ReflectAmount;
     if (t_ReflectAmount > 0.0) {
-        if (!use_flowmap) {
-            // not sure why, but it's super distorted otherwise... see d2_coast_01
-            // guessing something about my distortion math isn't 100%
-            t_ReflectAmount *= 0.25;
-        }
-
         vec2 t_ReflectTexCoord = t_ProjTexCoord + (t_TexCoordBumpOffset.xy * t_ReflectAmount);
 
         // Reflection texture is stored upside down
@@ -3197,11 +3190,18 @@ class Material_Water extends BaseMaterial {
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
         if (this.wantsTexScroll) {
-            const scroll1x = this.paramGetVector('$scroll1').get(0) * renderContext.globalTime;
-            const scroll1y = this.paramGetVector('$scroll1').get(1) * renderContext.globalTime;
-            const scroll2x = this.paramGetVector('$scroll2').get(0) * renderContext.globalTime;
-            const scroll2y = this.paramGetVector('$scroll2').get(1) * renderContext.globalTime;
-            offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
+            const m = scratchMat4a;
+            mat4.identity(m);
+            m[0] = this.texCoord0Scale[0];
+            m[5] = this.texCoord0Scale[1];
+
+            m[12] = this.paramGetVector('$scroll1').get(0) * renderContext.globalTime;
+            m[13] = this.paramGetVector('$scroll1').get(1) * renderContext.globalTime;
+            offs += fillScaleBias(d, offs, m);
+
+            m[12] = this.paramGetVector('$scroll2').get(0) * renderContext.globalTime;
+            m[13] = this.paramGetVector('$scroll2').get(1) * renderContext.globalTime;
+            offs += fillScaleBias(d, offs, m);
         }
 
         const forceEnvMap = this.paramGetBoolean('$forceenvmap');

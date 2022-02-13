@@ -12,7 +12,7 @@ import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/Gfx
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
-import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { assert, assertExists, fallback, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { SpriteInstance } from './Sprite';
@@ -2025,7 +2025,7 @@ class env_fog_controller extends BaseEntity {
         this.farZ = Number(this.entity.farz);
         this.fogStart = Number(this.entity.fogstart);
         this.fogEnd = Number(this.entity.fogend);
-        this.fogMaxDensity = Number(this.entity.fogmaxdensity);
+        this.fogMaxDensity = Number(fallbackUndefined(this.entity.fogmaxdensity, '1'));
 
         this.registerInput('setstartdist', this.input_setstartdist.bind(this));
         this.registerInput('setenddist', this.input_setenddist.bind(this));
