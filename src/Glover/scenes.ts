@@ -1667,6 +1667,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     currentBuzzer.reposition(
                         vec3.fromValues(cmd.params.end1X, cmd.params.end1Y, cmd.params.end1Z),
                         vec3.fromValues(cmd.params.end2X, cmd.params.end2Y, cmd.params.end2Z));
+                    if (cmd.params.drawFlags & 0x20) {
+                        // "Starts inactive" flag
+                        currentBuzzer.visible = false;
+                    }
                     buzzerConnections.push([currentBuzzer, cmd.params.platform1Tag, cmd.params.platform2Tag]);
                     sceneRenderer.miscRenderers.push(currentBuzzer);
                     break;

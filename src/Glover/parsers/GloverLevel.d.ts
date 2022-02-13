@@ -226,7 +226,7 @@ declare namespace GloverLevel {
     __type: 'Buzzer';
     _io: any;
 
-    unused: number;
+    tag: number;
     platform1Tag: number;
     platform2Tag: number;
     drawFlags: number;
@@ -244,7 +244,7 @@ declare namespace GloverLevel {
     drawThickness: number;
 
     _debug: {
-      unused: DebugPosition;
+      tag: DebugPosition;
       platform1Tag: DebugPosition;
       platform2Tag: DebugPosition;
       drawFlags: DebugPosition;

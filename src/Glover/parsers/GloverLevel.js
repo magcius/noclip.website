@@ -329,9 +329,9 @@ var GloverLevel = (function() {
       this._read();
     }
     Buzzer.prototype._read = function() {
-      this._debug.unused = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.unused = this._io.readU2be();
-      this._debug.unused.end = this._io.pos;
+      this._debug.tag = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.tag = this._io.readU2be();
+      this._debug.tag.end = this._io.pos;
       this._debug.platform1Tag = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.platform1Tag = this._io.readU2be();
       this._debug.platform1Tag.end = this._io.pos;
