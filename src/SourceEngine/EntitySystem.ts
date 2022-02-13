@@ -2935,6 +2935,8 @@ export class env_projectedtexture extends BaseEntity {
 
     private fovY: number;
     private nearZ: number;
+    private style: number = -1;
+    private brightnessScale: number = 8;
 
     public projectedLightRenderer = new ProjectedLightRenderer();
 
@@ -2945,7 +2947,8 @@ export class env_projectedtexture extends BaseEntity {
         this.nearZ = Number(entity.nearz);
         this.projectedLightRenderer.light.farZ = Number(entity.farz);
         vmtParseColor(this.projectedLightRenderer.light.lightColor, entity.lightcolor);
-        this.projectedLightRenderer.light.brightnessScale = Number(entity.brightnessscale);
+        this.brightnessScale = Number(entity.brightnessscale);
+        this.style = vmtParseNumber(entity.style, -1);
 
         const enum SpawnFlags {
             ENABLED = 0x01,
@@ -2957,6 +2960,10 @@ export class env_projectedtexture extends BaseEntity {
 
         this.registerInput('turnon', this.input_turnon.bind(this));
         this.registerInput('turnoff', this.input_turnoff.bind(this));
+        this.registerInput('setfov', this.input_setfov.bind(this));
+        this.registerInput('setlightcolor', this.input_setlightcolor.bind(this));
+        this.registerInput('setlightstyle', this.input_setlightstyle.bind(this));
+        this.registerInput('setpattern', this.input_setpattern.bind(this));
     }
 
     private updateFrustumView(renderContext: SourceRenderContext): void {
@@ -2970,25 +2977,44 @@ export class env_projectedtexture extends BaseEntity {
         this.projectedLightRenderer.light.texture = await materialCache.fetchVTF(textureName, true);
     }
 
-    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
-        super.movement(entitySystem, renderContext);
-
-        if (!this.shouldDraw())
-            return;
-
-        this.updateFrustumView(renderContext);
-    }
-
-    public override destroy(device: GfxDevice): void {
-        this.projectedLightRenderer.destroy(device);
-    }
-
     private input_turnon(): void {
         this.enabled = true;
     }
 
     private input_turnoff(): void {
         this.enabled = false;
+    }
+
+    private input_setfov(entitySystem: EntitySystem, value: string): void {
+        this.fovY = Number(value);
+    }
+
+    private input_setlightcolor(entitySystem: EntitySystem, value: string): void {
+        vmtParseColor(this.projectedLightRenderer.light.lightColor, value);
+    }
+
+    private input_setlightstyle(entitySystem: EntitySystem, value: string): void {
+        this.style = Number(value);
+    }
+
+    private input_setpattern(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.worldLightingState.stylePatterns[this.style] = value;
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.shouldDraw())
+            return;
+
+        const styleIntensity = this.style >= 0 ? renderContext.worldLightingState.styleIntensities[this.style] : 1.0;
+        this.projectedLightRenderer.light.brightnessScale = this.brightnessScale * styleIntensity;
+    
+        this.updateFrustumView(renderContext);
+    }
+
+    public override destroy(device: GfxDevice): void {
+        this.projectedLightRenderer.destroy(device);
     }
 }
 
