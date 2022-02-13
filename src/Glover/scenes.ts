@@ -152,6 +152,12 @@ class GloverBuzzer implements GenericRenderable {
 
     private lastFrameAdvance: number = 0;
 
+    private dutyCycles: number[] = [];
+    private dutyAdvance: number = 0;
+    private dutyNextIdx: number = 0;
+
+    private active = true;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder,
         thickness: number, diameter: number, flags: number, color: Color, colorJitter: number)
     {
@@ -173,6 +179,13 @@ class GloverBuzzer implements GenericRenderable {
                 device, cache, textureHolder, widthStyle, randStyle, thickness, diameter, color, colorJitter, flash, 13));
         }
     }
+
+    public pushDutyCycle(framesOff: number, framesOn: number) {
+        this.dutyCycles.push(framesOff * SRC_FRAME_TO_MS);
+        this.dutyCycles.push(framesOn * SRC_FRAME_TO_MS);
+        console.log(this.dutyCycles);
+    }
+
     public reposition(pt1: vec3 | GloverPlatform | null, pt2: vec3 | GloverPlatform | null) {
         if (pt1 !== null) {
             this.pt1 = pt1;
@@ -181,6 +194,7 @@ class GloverBuzzer implements GenericRenderable {
             this.pt2 = pt2;
         }
         this.updateGeometry();
+    }
 
     private updateGeometry() {
         let finalPt1 = this.pt1;
@@ -212,16 +226,27 @@ class GloverBuzzer implements GenericRenderable {
             return;
         }
 
+        if (this.dutyCycles.length > 0) {
+            this.dutyAdvance -= viewerInput.deltaTime;
+            if (this.dutyAdvance < 0) {
+                this.dutyAdvance = this.dutyCycles[this.dutyNextIdx];
+                this.active = (this.dutyNextIdx & 1) === 1;
+                this.dutyNextIdx = (this.dutyNextIdx + 1) % this.dutyCycles.length;
+            }
+        }
+
         this.lastFrameAdvance += viewerInput.deltaTime;
         if (this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
             this.lastFrameAdvance = 0;
             if (this.pt1 instanceof GloverPlatform || this.pt2 instanceof GloverPlatform) {
                 this.updateGeometry();
-            }
+            }                
         }
 
-        for (let renderer of this.arcRenderers) {
-            renderer.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.active) {
+            for (let renderer of this.arcRenderers) {
+                renderer.prepareToRender(device, renderInstManager, viewerInput);
+            }
         }
     }
 }
@@ -1013,7 +1038,6 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         const showHiddenCheckbox = new UI.Checkbox('Show hidden objects', false);
         showHiddenCheckbox.onchanged = () => {
-            // TODO: make uncheck hide
             if (showHiddenCheckbox.checked === true) {
                 for (let platform of this.platforms) {
                     if (platform.actor !== null) {
@@ -1502,6 +1526,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let currentPlatform: GloverPlatform | null = null; 
         let currentObject: GloverActorRenderer | GloverPlatform | GloverVent | null = null;
         let currentVent: GloverVent | null = null;
+        let currentBuzzer: GloverBuzzer | null = null;
         let currentGaribState: number = 0;
 
         function loadActor(id : number) : GloverActorRenderer {
@@ -1635,23 +1660,24 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Buzzer': {
-                    // TODO: implement BuzzerDutyCycle
-                    // - id: frames_off
-                    //   type: u2
-                    // - id: frames_on
-                    //   type: u2
-                    const buzzer = new GloverBuzzer(device, cache, textureHolder,
+                    currentBuzzer = new GloverBuzzer(device, cache, textureHolder,
                         cmd.params.drawThickness, cmd.params.drawDiameter, cmd.params.drawFlags,
                         colorNewFromRGBA(cmd.params.r / 0xFF, cmd.params.g / 0xFF, cmd.params.b / 0xFF, 1),
                         cmd.params.colorJitter / 0xFF);
-                    buzzer.reposition(
+                    currentBuzzer.reposition(
                         vec3.fromValues(cmd.params.end1X, cmd.params.end1Y, cmd.params.end1Z),
                         vec3.fromValues(cmd.params.end2X, cmd.params.end2Y, cmd.params.end2Z));
-                    buzzerConnections.push([buzzer, cmd.params.platform1Tag, cmd.params.platform2Tag]);
-                    sceneRenderer.miscRenderers.push(buzzer);
+                    buzzerConnections.push([currentBuzzer, cmd.params.platform1Tag, cmd.params.platform2Tag]);
+                    sceneRenderer.miscRenderers.push(currentBuzzer);
                     break;
                 }
-
+                case 'BuzzerDutyCycle': {
+                    if (currentBuzzer === null) {
+                        throw `No active buzzer for ${cmd.params.__type}!`;
+                    }
+                    currentBuzzer.pushDutyCycle(cmd.params.framesOff, cmd.params.framesOn);
+                    break;
+                }
                 case 'BallSpawnPoint': {
                     const ballActor = loadActor(0x8E4DDE49); // gball.ndo
                     sceneRenderer.actors.push(ballActor)
