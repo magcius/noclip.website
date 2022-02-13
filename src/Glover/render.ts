@@ -29,7 +29,7 @@ export const enum GloverRendererLayer {
     OPAQUE,
     OPAQUE_BILLBOARD,
     XLU,
-    XLU_BILLBOARD,
+    // XLU_BILLBOARD, // TODO: remove once sure it's not needed
     OVERLAY,
     FOOTPRINTS,
     WEATHER,

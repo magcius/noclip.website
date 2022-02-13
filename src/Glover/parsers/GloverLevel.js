@@ -363,19 +363,19 @@ var GloverLevel = (function() {
       this.end1Z = this._io.readF4be();
       this._debug.end1Z.end = this._io.pos;
       this._debug.end2X = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.end2X = this._io.readU4be();
+      this.end2X = this._io.readF4be();
       this._debug.end2X.end = this._io.pos;
       this._debug.end2Y = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.end2Y = this._io.readU4be();
+      this.end2Y = this._io.readF4be();
       this._debug.end2Y.end = this._io.pos;
       this._debug.end2Z = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.end2Z = this._io.readU4be();
+      this.end2Z = this._io.readF4be();
       this._debug.end2Z.end = this._io.pos;
       this._debug.drawDiameter = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.drawDiameter = this._io.readU4be();
+      this.drawDiameter = this._io.readF4be();
       this._debug.drawDiameter.end = this._io.pos;
       this._debug.drawThickness = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.drawThickness = this._io.readU4be();
+      this.drawThickness = this._io.readF4be();
       this._debug.drawThickness.end = this._io.pos;
     }
 

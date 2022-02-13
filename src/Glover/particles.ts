@@ -607,11 +607,12 @@ export class Particle {
 
     private advanceWaterParticle() {
         const wobble = Math.sin((this.lifetime*6)/10);
-        this.flipbook.manualScale = [
+        vec3.set(this.scale,
             (32 + wobble * 7)/(3*8),
             (32 - wobble * 7)/(3*8),
-            1];
-        if (Math.floor(Math.random()*3) === 1) {
+            1
+        );
+        if (Math.floor(Math.random()*2) === 1) {
             this.velocity[0] *= 0.5;
             this.velocity[2] *= 0.5;
             this.velocity[0] += Math.cos(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
@@ -631,6 +632,9 @@ export class Particle {
 
         this.lastFrameAdvance += viewerInput.deltaTime;
 
+        // TODO: this delta time implementation isn't always
+        //       playing nicely with things like, eg, bubbles.
+        //       Figure out a better way to handle this:
         vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
         for (let x = this.lastFrameAdvance; x > SRC_FRAME_TO_MS; x -= SRC_FRAME_TO_MS) {
             this.lastFrameAdvance = 0;

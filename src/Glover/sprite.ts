@@ -67,9 +67,8 @@ class GloverBaseSpriteRenderer {
         protected frameset: number[],
         protected xlu: boolean = false)
     {
-        // TODO: figre out billboard flags
         if (xlu) {
-            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.XLU_BILLBOARD);
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.XLU);
         } else {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OPAQUE_BILLBOARD);
         }
@@ -107,8 +106,6 @@ class GloverBaseSpriteRenderer {
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
         if (this.xlu) {
             rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
-            // TODO: figure out which of these gets used:
-            // rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_ZB_TEX_EDGE, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2); // 0xb900031d 0x00504b50
             rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         } else {
             rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIDECALA, G_CC_PASS2
@@ -345,8 +342,6 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
     public startAlpha: number;
     public endAlpha: number;
 
-    public manualScale: [number, number, number] = [1, 1, 1];
-
     private lifetime: number = -1;
     private timeRemaining: number = 0;
 
@@ -495,7 +490,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         }
 
         if (this.visible) {
-            mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size * this.manualScale[0], size * this.manualScale[1], size * this.manualScale[2]]);
+            mat4.scale(this.drawMatrixScratch, this.drawMatrix, [size, size, size]);
             this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, this.curFrame, this.primColor);
         }
     }

@@ -18,7 +18,7 @@ import { computeViewMatrixSkybox } from '../Camera';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { Color, colorNewFromRGBA, colorNewCopy, White } from "../Color";
+import { Color, colorNewFromRGBA, colorNewCopy, colorCopy, White } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 import { GloverObjbank, GloverTexbank } from './parsers';
@@ -798,8 +798,6 @@ export class GloverBlurRenderer {
     public visible = true;
 
     // General rendering attributes
-    private vertexColorsEnabled = true;
-    private backfaceCullingEnabled = false;
 
     private drawCall: Render.DrawCall;
     private drawCallInstance: Render.DrawCallInstance;
@@ -840,14 +838,10 @@ export class GloverBlurRenderer {
 
         const rspState = new Render.GloverRSPState(segments, textures);
 
-        Render.initializeRenderState(rspState);
-        // rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
-        // Render.setRenderMode(rspState, false, true, false, 1.0);
-    
+        Render.initializeRenderState(rspState);    
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
-        // rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
         rspState.gDPSetCombine(0xfcffffff, 0xfffe793c); // G_CC_SHADE, G_CC_SHADE
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
         rspState.gSPTexture(false, 0, 0, 0, 0);
@@ -858,35 +852,6 @@ export class GloverBlurRenderer {
         this.drawCall = rspState._newDrawCall();
         this.drawCall.dynamicGeometry = true;
 
-        // const sX = 100;
-        // const sY = 100;
-        // const sZ = 100;
-        // const sW = 100;
-        // const sH = 100;
-        // const coords = [
-        //     [sX, sY + sH, sZ, .5],
-        //     [sX, sY, sZ, .5],
-        //     [sX + sW, sY + sH, sZ, .5],
-
-        //     [sX, sY, sZ, .5],
-        //     [sX + sW, sY, sZ, .5],
-        //     [sX + sW, sY + sH, sZ, .4],
-        // ];
-
-        // for (let coord of coords) {
-        //     const v = new F3DEX.Vertex();
-        //     v.x = coord[0];
-        //     v.y = coord[1];
-        //     v.z = coord[2];
-        //     v.tx = 0;
-        //     v.ty = 0;
-        //     v.c0 = 0xFF;
-        //     v.c1 = 0xFF;
-        //     v.c2 = 0x00;
-        //     v.a = coord[3];
-        //     this.drawCall.vertexCount += 1;
-        //     this.drawCall.vertices.push(v)
-        // }
         for (let x = 0; x < 30*2; x+= 1) {
             let v = new F3DEX.Vertex();
             v.c0 = 0xC8;
@@ -917,8 +882,6 @@ export class GloverBlurRenderer {
         v.a = this.topAlpha;
 
         this.vertexPoolWritePtr = (this.vertexPoolWritePtr + 2) % this.vertexPool.length;
-
-        // TODO: camera offset?
     }
 
     private decayVertices() {
@@ -1008,3 +971,269 @@ export class GloverBlurRenderer {
     }
 
 }
+
+export enum ElectricityThicknessStyle {
+    Constant,
+    Linear,
+    Parabolic,
+}
+
+export enum ElectricityRandStyle {
+    Straight,
+    CurveUp,
+    CurveDown,
+}
+
+export class GloverElectricityRenderer implements Render.GenericRenderable {
+
+    public visible = true;
+
+    // General rendering attributes
+    private drawCall: Render.DrawCall;
+    private drawCallInstance: Render.DrawCallInstance;
+
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+
+    private drawMatrix = mat4.create();
+
+    private lastFrameAdvance: number = 0;
+
+    private sortKey: number;
+
+    private vertexPool: F3DEX.Vertex[] = [];
+
+    private pt1: vec3 = vec3.fromValues(0,0,0);
+    private pt2: vec3 = vec3.fromValues(0,0,0);
+    private numSegments: number = 0;
+
+    private vec3Scratch: vec3 = vec3.create();
+
+    constructor(
+        private device: GfxDevice,
+        private cache: GfxRenderCache,
+        private textures: Textures.GloverTextureHolder,
+        private thicknessStyle: ElectricityThicknessStyle,
+        private randStyle: ElectricityRandStyle,
+        private thickness: number,
+        private diameter: number,
+        private primColor: Color,
+        private colorJitter: number,
+        private colorFlash: boolean,
+        private maxSegments: number)
+    {
+        assert(this.colorJitter <= 1.0);
+
+        const segments = textures.textureSegments();
+
+        this.megaStateFlags = {};
+
+        this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.XLU);
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+
+        const rspState = new Render.GloverRSPState(segments, textures);
+
+        Render.initializeRenderState(rspState);    
+        Render.setRenderMode(rspState, false, false, true, 1.0);
+        rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM)
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
+        rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
+        rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_CULL_BACK);
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+
+        const textureId = 0x628C1B4B; // lightning.bmp
+
+        this.drawCall = rspState._newDrawCall();
+        this.drawCall.dynamicGeometry = true;
+
+        this.drawCall.textureIndices.push(Render.loadRspTexture(rspState, this.textures, textureId));
+
+        for (let x = 0; x < this.maxSegments*2; x+= 1) {
+            const v = new F3DEX.Vertex();
+            v.c0 = 0xFF;
+            v.c1 = 0xFF;
+            v.c2 = 0xFF;
+            v.a = 1;
+            v.tx = ((x & 1) === 0) ? 0 : 0x200;
+            v.ty = ((x & 2) === 0) ? 0 : 0x200;
+            this.vertexPool.push(v);
+        }
+
+        this.numSegments = this.maxSegments;
+        this.rebuildDrawCallGeometry(0);
+
+        this.drawCall.renderData = new Render.DrawCallRenderData(device, cache, rspState.textureCache, segments, this.drawCall);
+        this.drawCallInstance = new Render.DrawCallInstance(this.drawCall, rspState.textureCache, null);
+    }
+
+    public reposition(pt1: vec3, pt2: vec3, numSegments: number) {
+        vec3.copy(this.pt1, pt1);
+        vec3.copy(this.pt2, pt2);
+        this.numSegments = numSegments;
+    }
+
+    private rebuildDrawCallGeometry(cameraYaw: number) {
+        assert(this.numSegments <= this.maxSegments);
+
+        colorCopy(this.drawCall.DP_PrimColor, this.primColor);
+        if (this.colorJitter !== 0) {            
+            this.drawCall.DP_PrimColor.r += (Math.random() * this.colorJitter * 2) - this.colorJitter;
+            this.drawCall.DP_PrimColor.g += (Math.random() * this.colorJitter * 2) - this.colorJitter;
+            this.drawCall.DP_PrimColor.b += (Math.random() * this.colorJitter * 2) - this.colorJitter;
+            this.drawCall.DP_PrimColor.r = Math.max(Math.min(this.drawCall.DP_PrimColor.r, 1), 0);
+            this.drawCall.DP_PrimColor.g = Math.max(Math.min(this.drawCall.DP_PrimColor.g, 1), 0);
+            this.drawCall.DP_PrimColor.b = Math.max(Math.min(this.drawCall.DP_PrimColor.b, 1), 0);
+        }
+        if (this.colorFlash === true) {
+            if (Math.random()*10 <= 2.0) {
+                this.drawCall.DP_PrimColor.r = 1;
+                this.drawCall.DP_PrimColor.g = 1;
+                this.drawCall.DP_PrimColor.b = 1;
+            }
+        }
+
+        this.drawCall.vertexCount = 0;
+        this.drawCall.vertices = [];
+
+        const segDelta = this.vec3Scratch;
+        vec3.subtract(segDelta, this.pt2, this.pt1);
+        vec3.scale(segDelta, segDelta, 1/(this.numSegments-1));
+
+        this.vertexPool[0].x = this.pt1[0];
+        this.vertexPool[0].y = this.pt1[1];
+        this.vertexPool[0].z = this.pt1[2];
+
+        const setOuterPoint = (outerPoint: F3DEX.Vertex, innerPoint: F3DEX.Vertex, segIdx: number) => {
+            let extent = this.thickness;
+            if (this.thicknessStyle === ElectricityThicknessStyle.Constant) {
+                extent *= 8;
+            } else if (this.thicknessStyle === ElectricityThicknessStyle.Linear) {
+                extent *= segIdx * (5/this.numSegments) + 3;
+            } else if (this.thicknessStyle === ElectricityThicknessStyle.Parabolic) {
+                if (segIdx < Math.ceil(this.numSegments/2)) {
+                    extent *= segIdx * (10.0 / this.numSegments) + 3.0;
+                } else {
+                    extent *= (this.numSegments - segIdx) * (10.0 / this.numSegments) + 3.0;
+                }
+            }
+
+            outerPoint.x = innerPoint.x + Math.cos(-cameraYaw) * extent;
+            outerPoint.y = innerPoint.y;
+            outerPoint.z = innerPoint.z + Math.sin(-cameraYaw) * extent;
+        }
+
+        setOuterPoint(this.vertexPool[1], this.vertexPool[0], 0)
+
+
+        for (let x = 0; x < this.numSegments-1; x+= 1) {
+            let v0 = this.vertexPool[x*2];
+            let v1 = this.vertexPool[x*2+1];
+            let v2 = this.vertexPool[x*2+2];
+            let v3 = this.vertexPool[x*2+3];
+
+            v2.x = v0.x + segDelta[0];
+            v2.y = v0.y + segDelta[1];
+            v2.z = v0.z + segDelta[2];
+            setOuterPoint(v3, v2, x);
+        }
+
+        const rndMax = vec3.length(segDelta) * 1.4 * this.diameter;
+        const rndPoint = this.vec3Scratch;
+
+        for (let x = 1; x < this.numSegments-1; x+= 1) {
+            let v0 = this.vertexPool[x*2];
+            let v1 = this.vertexPool[x*2+1];
+
+            if (this.randStyle == ElectricityRandStyle.Straight) {
+                vec3.set(rndPoint,
+                    Math.floor(Math.random() * rndMax) - rndMax / 2,
+                    Math.floor(Math.random() * rndMax) - rndMax / 2,
+                    Math.floor(Math.random() * rndMax) - rndMax / 2);
+            } else if (this.randStyle == ElectricityRandStyle.CurveUp) {
+                vec3.set(rndPoint,
+                    Math.floor(Math.random() * rndMax),
+                    Math.floor(Math.random() * rndMax),
+                    Math.floor(Math.random() * rndMax));
+            } else if (this.randStyle == ElectricityRandStyle.CurveDown) {
+                vec3.set(rndPoint,
+                    Math.floor(Math.random() * rndMax),
+                    Math.floor(Math.random() * rndMax),
+                    Math.floor(Math.random() * rndMax));
+            }
+            if (x == 1 || x == this.numSegments - 2) {
+                rndPoint[0] *= 0.5;
+                rndPoint[1] *= 0.5;
+                rndPoint[2] *= 0.5;
+            }
+            v0.x += rndPoint[0];
+            v0.y += rndPoint[1];
+            v0.z += rndPoint[2];
+            v1.x += rndPoint[0];
+            v1.y += rndPoint[1];
+            v1.z += rndPoint[2];
+        }
+
+        for (let x = 0; x < this.numSegments-1; x+= 1) {
+            let v0 = this.vertexPool[x*2];
+            let v1 = this.vertexPool[x*2+1];
+            let v2 = this.vertexPool[x*2+2];
+            let v3 = this.vertexPool[x*2+3];
+
+            this.drawCall.vertices.push(v0);
+            this.drawCall.vertices.push(v1);
+            this.drawCall.vertices.push(v2);
+
+            this.drawCall.vertices.push(v1);
+            this.drawCall.vertices.push(v3);
+            this.drawCall.vertices.push(v2);
+
+            this.drawCall.vertexCount += 6;
+
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance > 50) {
+            const view = viewerInput.camera.viewMatrix;
+            const yaw = Math.atan2(-view[2], view[0]);
+            this.rebuildDrawCallGeometry(yaw);
+            this.drawCall.renderData!.updateBuffers();
+            this.lastFrameAdvance = 0;
+        }
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(Render.bindingLayouts);
+        template.setMegaStateFlags(this.megaStateFlags);
+
+        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(lookatScratch, this.drawMatrix);
+
+        template.sortKey = setSortKeyDepth(this.sortKey, vec3.distance(depthScratch, lookatScratch));
+
+        const sceneParamsSize = 16;
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);            
+
+        this.drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix);
+
+        renderInstManager.popTemplateRenderInst();
+
+    }
+
+
+    public destroy(device: GfxDevice): void {
+        this.drawCall.destroy(device);
+    }
+
+}
+

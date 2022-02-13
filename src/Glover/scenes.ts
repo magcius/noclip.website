@@ -12,7 +12,7 @@ import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT
 
 
 import { GenericRenderable, SceneLighting } from './render';
-import { GloverActorRenderer, GloverBlurRenderer } from './actor';
+import { GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer, ElectricityThicknessStyle, ElectricityRandStyle } from './actor';
 import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -26,7 +26,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants, scaleMatrix, computeMatrixWithoutScale } from '../MathHelpers';
-import { colorNewFromRGBA } from '../Color';
+import { Color, colorNewFromRGBA } from '../Color';
 
 import { Yellow, colorNewCopy, Magenta, White } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -138,6 +138,92 @@ class GloverVent implements GenericRenderable {
         }
     }
 
+}
+
+class GloverBuzzer implements GenericRenderable {
+    public visible: boolean = true;
+
+    private arcRenderers: GloverElectricityRenderer[] = [];
+
+    private pt1: vec3 | GloverPlatform = vec3.create();
+    private pt2: vec3 | GloverPlatform = vec3.create();
+
+    private scratchVec3 = vec3.create();
+
+    private lastFrameAdvance: number = 0;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder,
+        thickness: number, diameter: number, flags: number, color: Color, colorJitter: number)
+    {
+        switch (flags & 0x3) {
+            case 0x1: var widthStyle = ElectricityThicknessStyle.Linear; break;
+            case 0x2: var widthStyle = ElectricityThicknessStyle.Parabolic; break;
+            default: var widthStyle = ElectricityThicknessStyle.Constant; break;
+        }
+        switch (flags & 0xc) {
+            case 0x4: var randStyle = ElectricityRandStyle.Straight; break;
+            case 0x8: var randStyle = ElectricityRandStyle.CurveUp; break;
+            default: var randStyle = ElectricityRandStyle.CurveDown; break;
+        }
+
+        let flash = (flags & 0x10) !== 0;
+
+        for (let x = 0; x < 2; x++) {
+            this.arcRenderers.push(new GloverElectricityRenderer(
+                device, cache, textureHolder, widthStyle, randStyle, thickness, diameter, color, colorJitter, flash, 13));
+        }
+    }
+    public reposition(pt1: vec3 | GloverPlatform | null, pt2: vec3 | GloverPlatform | null) {
+        if (pt1 !== null) {
+            this.pt1 = pt1;
+        }
+        if (pt2 !== null) {
+            this.pt2 = pt2;
+        }
+        this.updateGeometry();
+
+    private updateGeometry() {
+        let finalPt1 = this.pt1;
+        let finalPt2 = this.pt2;
+        if (finalPt1 instanceof GloverPlatform) {
+            finalPt1 = finalPt1.getPosition();
+        }
+        if (finalPt2 instanceof GloverPlatform) {
+            finalPt2 = finalPt2.getPosition();
+        }
+        let numSegs = vec3.distance(finalPt2, finalPt1) / 10;
+        if (numSegs < 5) {
+            numSegs = 5;
+        } else if (numSegs > 13) {
+            numSegs = 13;
+        }
+        for (let renderer of this.arcRenderers) {
+            renderer.reposition(finalPt1, finalPt2, numSegs);
+        }
+    }
+    public destroy(device: GfxDevice): void {
+        for (let renderer of this.arcRenderers) {
+            renderer.destroy(device);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        if (this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
+            this.lastFrameAdvance = 0;
+            if (this.pt1 instanceof GloverPlatform || this.pt2 instanceof GloverPlatform) {
+                this.updateGeometry();
+            }
+        }
+
+        for (let renderer of this.arcRenderers) {
+            renderer.prepareToRender(device, renderInstManager, viewerInput);
+        }
+    }
 }
 
 class PlatformPathPoint {
@@ -277,7 +363,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 
     public getPosition(): vec3 {
-        return this.position;
+        return this.globalPosition;
     }
 
     public setScale(x: number, y: number, z: number) {
@@ -1112,7 +1198,6 @@ const fortress_rain: WeatherParams = {
 }
 
 // Level ID to bank information
-// TODO: move this into an external ts file
 const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["00", {
         landscape: "00.HUB1ln.n64.lev",
@@ -1164,10 +1249,6 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     }], //"Hub 8"),
 
     ["08", {
-        // TODO:
-        //      - not loading all crystal textures properly (likely)
-        //        has to do with non-indexed textures in dynamic models,
-        //        which i was winging -- double check them
         landscape: "08.CAVEln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "CAVE.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
@@ -1193,7 +1274,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
         landscape: "11.AT2lnd.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L2.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
-    ["0c", { // TODO: figure out why this is crashing
+    ["0c", {
         landscape: "12.AT3Aln.n64.lev",
         object_banks: ["GENERIC.obj.fla", "ATLANTIS_SHARED.obj.fla", "ATLANTIS_L3A.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "ATLANTIS_TEX_BANK.tex.fla"]}],
@@ -1225,7 +1306,7 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
     ["13", { // TODO: figure out cheat code/easter egg bank hackery
         landscape: "19.CKBONUS.n64.lev",
         object_banks: ["GENERIC.obj.fla", "CARNIVAL_SHARED.obj.fla", "CARNIVAL_BONUS.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla"]}],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "CARNIVAL_TEX_BANK.tex.fla", "CKBONUS_TEX_BANK.tex.fla"]}],
     ["14", {
         landscape: "20.PC1lnd.n64.lev",
         object_banks: ["GENERIC.obj.fla", "PIRATES_SHARED.obj.fla", "PIRATES_L1.obj.fla"],
@@ -1434,6 +1515,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         let skyboxClearColor = [0,0,0];
 
+        let buzzerConnections: [GloverBuzzer, number, number][] = [];
         let shadowCasters: Shadows.ShadowCaster[] = [];
         let ballActors: GloverActorRenderer[] = [];
 
@@ -1552,6 +1634,24 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     break;
                 }
+                case 'Buzzer': {
+                    // TODO: implement BuzzerDutyCycle
+                    // - id: frames_off
+                    //   type: u2
+                    // - id: frames_on
+                    //   type: u2
+                    const buzzer = new GloverBuzzer(device, cache, textureHolder,
+                        cmd.params.drawThickness, cmd.params.drawDiameter, cmd.params.drawFlags,
+                        colorNewFromRGBA(cmd.params.r / 0xFF, cmd.params.g / 0xFF, cmd.params.b / 0xFF, 1),
+                        cmd.params.colorJitter / 0xFF);
+                    buzzer.reposition(
+                        vec3.fromValues(cmd.params.end1X, cmd.params.end1Y, cmd.params.end1Z),
+                        vec3.fromValues(cmd.params.end2X, cmd.params.end2Y, cmd.params.end2Z));
+                    buzzerConnections.push([buzzer, cmd.params.platform1Tag, cmd.params.platform2Tag]);
+                    sceneRenderer.miscRenderers.push(buzzer);
+                    break;
+                }
+
                 case 'BallSpawnPoint': {
                     const ballActor = loadActor(0x8E4DDE49); // gball.ndo
                     sceneRenderer.actors.push(ballActor)
@@ -1831,6 +1931,18 @@ class SceneDesc implements Viewer.SceneDesc {
 
         for (let platform of sceneRenderer.platforms) {
             platform.updateModelMatrix();
+        }
+
+        for (let connection of buzzerConnections) {
+            if (connection[1] !== 0) {
+                assert(sceneRenderer.platformByTag.has(connection[1]));
+                connection[0].reposition(sceneRenderer.platformByTag.get(connection[1])!, null));
+            }
+            if (connection[2] !== 0) {
+                assert(sceneRenderer.platformByTag.has(connection[2]));
+                connection[0].reposition(null, sceneRenderer.platformByTag.get(connection[2])!);
+            }
+
         }
 
         if (bankDescriptor.weather !== undefined) {
