@@ -325,8 +325,10 @@ export class CharWriter {
     public calcRect(dst: vec4, str: string, tagProcessor: TagProcessor | null = null): void {
         let needsSpacing = false;
 
-        dst[0] = dst[1] = Infinity;
-        dst[2] = dst[3] = -Infinity;
+        dst[0] = this.cursor[0];
+        dst[1] = this.cursor[1];
+        dst[2] = this.cursor[0];
+        dst[3] = this.cursor[1];
 
         if (tagProcessor !== null)
             tagProcessor.reset(this, dst);
