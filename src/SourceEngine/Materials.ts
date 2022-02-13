@@ -5,8 +5,8 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, Gfx
 import { nArray, assert, assertExists, nullify } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
+import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -1175,7 +1175,7 @@ layout(std140) uniform ub_ObjectParams {
     Mat4x2 u_Bumpmap2Transform;
 #endif
 #ifdef USE_DETAIL
-    vec4 u_DetailScaleBias;
+    Mat4x2 u_DetailTextureTransform;
 #endif
 #ifdef USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
@@ -1462,7 +1462,10 @@ void mainVS() {
 #define COMBINE_MODE_RGB_ADDITIVE_SELFILLUM                  (5)
 #define COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE   (6)
 #define COMBINE_MODE_MOD2X_SELECT_TWO_PATTERNS               (7)
+#define COMBINE_MODE_MULTIPLY                                (8)
+#define COMBINE_MODE_MASK_BASE_BY_DETAIL_ALPHA               (9)
 #define COMBINE_MODE_SSBUMP_BUMP                             (10)
+#define COMBINE_MODE_SSBUMP_NOBUMP                           (11)
 
 vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
     bool use_detail = ${getDefineBool(m, 'USE_DETAIL')};
@@ -1476,8 +1479,14 @@ vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
     } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE) {
         return t_BaseTexture + t_DetailTexture * t_BlendFactor;
+    } else if (t_CombineMode == COMBINE_MODE_DETAIL_OVER_BASE) {
+        return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, t_BlendFactor * t_DetailTexture.a), t_BaseTexture.a);
+    } else if (t_CombineMode == COMBINE_MODE_FADE) {
+        return mix(t_BaseTexture, t_DetailTexture, t_BlendFactor);
     } else if (t_CombineMode == COMBINE_MODE_BASE_OVER_DETAIL) {
         return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, (t_BlendFactor * (1.0 - t_BaseTexture.a))), t_DetailTexture.a);
+    } else if (t_CombineMode == COMBINE_MODE_MULTIPLY) {
+        return mix(t_BaseTexture, t_BaseTexture * t_DetailTexture, t_BlendFactor);
     } else if (t_CombineMode == COMBINE_MODE_MOD2X_SELECT_TWO_PATTERNS) {
         vec4 t_DetailPattern = vec4(mix(t_DetailTexture.r, t_DetailTexture.a, t_BaseTexture.a));
         return t_BaseTexture * mix(vec4(1.0), t_DetailPattern * 2.0, t_BlendFactor);
@@ -1487,6 +1496,8 @@ vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
     } else if (t_CombineMode == COMBINE_MODE_SSBUMP_BUMP) {
         // Done as part of bumpmapping.
         return t_BaseTexture;
+    } else if (t_CombineMode == COMBINE_MODE_SSBUMP_NOBUMP) {
+        return vec4(t_BaseTexture.rgb * dot(t_DetailTexture.rgb, vec3(2.0 / 3.0)), t_BaseTexture.a);
     }
 
     // Unknown.
@@ -1684,7 +1695,7 @@ void mainPS() {
     vec4 t_DetailTexture = vec4(0.0);
 
 #ifdef USE_DETAIL
-    vec2 t_DetailTexCoord = CalcScaleBias(v_TexCoord0.xy, u_DetailScaleBias);
+    vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.xy, 1.0, 1.0));
     t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
     t_Albedo = CalcDetail(t_Albedo, t_DetailTexture);
 #endif
@@ -2409,7 +2420,7 @@ class Material_Generic extends BaseMaterial {
         this.setupOverrideSceneParams(renderContext, renderInst);
 
         // TODO(jstpierre): Carve down this allocation a bit.
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_ObjectParams, 152);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_ObjectParams, 156);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Generic.ub_ObjectParams);
 
         if (this.wantsAmbientCube) {
@@ -2434,7 +2445,7 @@ class Material_Generic extends BaseMaterial {
             const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
             const detailScale = this.paramGetNumber('$detailscale');
             scaleMatrix(scratchMat4a, detailTextureTransform, detailScale, detailScale);
-            offs += fillScaleBias(d, offs, scratchMat4a);
+            offs += fillMatrix4x2(d, offs, scratchMat4a);
         }
 
         if (this.wantsEnvmapMask)
@@ -3826,6 +3837,141 @@ class Material_SolidEnergy extends BaseMaterial {
 }
 //#endregion
 
+//#region Sky
+class ShaderTemplate_Sky extends MaterialShaderTemplateBase {
+    public static ub_ObjectParams = 2;
+
+    public override program = `
+precision mediump float;
+
+${MaterialShaderTemplateBase.Common}
+
+layout(std140) uniform ub_ObjectParams {
+    Mat4x2 u_BaseTextureTransform;
+    vec4 u_TextureSizeInfo;
+    vec4 u_ColorScale;
+};
+
+#define u_TexelXIncr               (u_TextureSizeInfo.x)
+#define u_TexelYIncr               (u_TextureSizeInfo.y)
+#define u_UToPixelCoordScale       (u_TextureSizeInfo.z)
+#define u_VToPixelCoordScale       (u_TextureSizeInfo.w)
+
+varying vec4 v_TexCoord0;
+varying vec4 v_TexCoord1;
+varying vec2 v_TexCoordInPixels;
+
+layout(binding = 0) uniform sampler2D u_TextureHdrCompressed;
+
+#ifdef VERT
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+
+    vec2 t_TexCoord = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 0.0, 1.0));
+
+    v_TexCoord0.xy = t_TexCoord + vec2(-u_TexelXIncr, -u_TexelYIncr);
+    v_TexCoord0.zw = t_TexCoord + vec2( u_TexelXIncr, -u_TexelYIncr);
+
+    v_TexCoord1.xy = t_TexCoord + vec2(-u_TexelXIncr,  u_TexelYIncr);
+    v_TexCoord1.zw = t_TexCoord + vec2( u_TexelXIncr,  u_TexelYIncr);
+
+    v_TexCoordInPixels = v_TexCoord0.xy * vec2(u_UToPixelCoordScale, u_VToPixelCoordScale);
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_S00 = texture(SAMPLER_2D(u_TextureHdrCompressed), v_TexCoord0.xy);
+    vec4 t_S01 = texture(SAMPLER_2D(u_TextureHdrCompressed), v_TexCoord0.zw);
+    vec4 t_S10 = texture(SAMPLER_2D(u_TextureHdrCompressed), v_TexCoord1.xy);
+    vec4 t_S11 = texture(SAMPLER_2D(u_TextureHdrCompressed), v_TexCoord1.zw);
+
+    vec2 t_FracCoord = fract(v_TexCoordInPixels);
+
+    t_S00.rgb *= t_S00.a;
+    t_S10.rgb *= t_S10.a;
+    t_S00.rgb = mix(t_S00.rgb, t_S10.rgb, t_FracCoord.x);
+
+    t_S01.rgb *= t_S01.a;
+    t_S11.rgb *= t_S11.a;
+    t_S01.rgb = mix(t_S01.rgb, t_S11.rgb, t_FracCoord.x);
+
+    vec3 t_FinalColor = mix(t_S00.rgb, t_S01.rgb, t_FracCoord.y);
+
+    OutputLinearColor(vec4(t_FinalColor * u_ColorScale.rgb, 1.0));
+}
+#endif
+`;
+}
+
+class Material_Sky extends BaseMaterial {
+    private shaderInstance: UberShaderInstanceBasic;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    private textureSizeInfo: vec4;
+
+    protected override initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$hdrcompressedtexture'] = new ParameterTexture(false);
+    }
+
+    protected override initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
+
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Sky);
+
+        this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.None);
+        this.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
+        this.setCullMode(this.megaStateFlags);
+
+        const texture = assertExists(this.paramGetVTF('$hdrcompressedtexture'));
+        const w = texture.width, h = texture.height;
+        const fudge = 0.01 / Math.max(w, h);
+        this.textureSizeInfo = vec4.fromValues(0.5 / w - fudge, 0.5 / h - fudge, w, h);
+
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(dst: TextureMapping[]): void {
+        resetTextureMappings(dst);
+        this.paramGetTexture('$hdrcompressedtexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'))
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings(textureMappings);
+
+        this.setupOverrideSceneParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Sky.ub_ObjectParams, 16);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_Sky.ub_ObjectParams);
+        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$hdrcompressedtexture'));
+        offs += fillVec4v(d, offs, this.textureSizeInfo);
+
+        this.paramGetVector('$color').fillColor(scratchColor, 1.0);
+        scratchColor.r *= 8.0;
+        scratchColor.g *= 8.0;
+        scratchColor.b *= 8.0;
+        offs += fillColor(d, offs, scratchColor);
+
+        renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
+    }
+}
+//#endregion
+
 //#region Material Cache
 class StaticResources {
     public whiteTexture2D: GfxTexture;
@@ -3897,6 +4043,7 @@ class ShaderTemplates {
     public Water = new ShaderTemplate_Water();
     public Refract = new ShaderTemplate_Refract();
     public SolidEnergy = new ShaderTemplate_SolidEnergy();
+    public Sky = new ShaderTemplate_Sky();
 
     public destroy(device: GfxDevice): void {
         this.Generic.destroy(device);
@@ -3905,6 +4052,7 @@ class ShaderTemplates {
         this.Water.destroy(device);
         this.Refract.destroy(device);
         this.SolidEnergy.destroy(device);
+        this.Sky.destroy(device);
     }
 }
 
@@ -3986,6 +4134,8 @@ export class MaterialCache {
             return new Material_Refract(vmt);
         else if (shaderType === 'solidenergy')
             return new Material_SolidEnergy(vmt);
+        else if (shaderType === 'sky')
+            return new Material_Sky(vmt);
         else
             return new Material_Generic(vmt);
     }

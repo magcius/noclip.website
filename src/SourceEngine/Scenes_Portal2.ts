@@ -196,7 +196,7 @@ class Portal2SceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext) {
         const renderContext = await createPortal2SourceRenderContext(context);
-        return createScene(context, renderContext.filesystem, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, renderContext);
+        return createScene(context, renderContext.filesystem, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, false, renderContext);
     }
 }
 
@@ -249,7 +249,7 @@ class Portal2WorkshopSceneDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext) {
         const renderContext = await createPortal2SourceRenderContext(context);
-        return createScene(context, renderContext.filesystem, this.id, this.url, renderContext);
+        return createScene(context, renderContext.filesystem, this.id, this.url, false, renderContext);
     }
 }
 

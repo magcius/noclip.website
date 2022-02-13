@@ -836,7 +836,7 @@ export class BSPFile {
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
-        assert(this.version === 19 || this.version === 20 || this.version === 21);
+        assert(this.version === 19 || this.version === 20 || this.version === 21  || this.version === 22);
 
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
@@ -1545,12 +1545,22 @@ export class BSPFile {
                 indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
                 const indexData = indexBuffer.addUint32(indexCount);
                 if (m_NumPrims !== 0) {
-                    const primOffs = firstPrimID * 0x0A;
-                    const primType = primitives.getUint8(primOffs + 0x00);
-                    const primFirstIndex = primitives.getUint16(primOffs + 0x02, true);
-                    const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
-                    const primFirstVert = primitives.getUint16(primOffs + 0x06, true);
-                    const primVertCount = primitives.getUint16(primOffs + 0x08, true);
+                    let primType, primFirstIndex, primIndexCount, primFirstVert, primVertCount;
+                    if (this.version === 22) {
+                        const primOffs = firstPrimID * 0x10;
+                        primType = primitives.getUint8(primOffs + 0x00);
+                        primFirstIndex = primitives.getUint32(primOffs + 0x04, true);
+                        primIndexCount = primitives.getUint32(primOffs + 0x08, true);
+                        primFirstVert = primitives.getUint16(primOffs + 0x0C, true);
+                        primVertCount = primitives.getUint16(primOffs + 0x0E, true);
+                    } else {
+                        const primOffs = firstPrimID * 0x0A;
+                        primType = primitives.getUint8(primOffs + 0x00);
+                        primFirstIndex = primitives.getUint16(primOffs + 0x02, true);
+                        primIndexCount = primitives.getUint16(primOffs + 0x04, true);
+                        primFirstVert = primitives.getUint16(primOffs + 0x06, true);
+                        primVertCount = primitives.getUint16(primOffs + 0x08, true);
+                    }
                     if (primVertCount !== 0) {
                         // Dynamic mesh. Skip for now.
                         continue;

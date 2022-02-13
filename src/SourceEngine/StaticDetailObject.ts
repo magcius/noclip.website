@@ -493,7 +493,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         // TF2's 7-10 seem to use this below, which is 8 bytes.
         // The version 10 that CS:GO and Portal 2 use (bspfile version 21) is very different.
 
-        if (bspVersion === 21) {
+        if (bspVersion === 21 || bspVersion === 22) {
             // CS:GO, Portal 2
 
             if (version >= 7) {

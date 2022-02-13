@@ -37,7 +37,7 @@ class PortalSceneDesc implements SceneDesc {
 
         const renderContext = new SourceRenderContext(context.device, filesystem);
         this.registerEntityFactories(renderContext.entityFactoryRegistry);
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`, renderContext);
+        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`, false, renderContext);
     }
 }
 
