@@ -1548,7 +1548,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let skyboxClearColor = [0,0,0];
 
         let buzzerConnections: [GloverBuzzer, number, number][] = [];
-        let shadowCasters: Shadows.ShadowCaster[] = [];
+        let shadowCasters: [Shadows.ShadowCaster, boolean][] = [];
         let ballActors: GloverActorRenderer[] = [];
 
         // Do a first pass to set up scene lights
@@ -1696,7 +1696,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     mat4.scale(ballActor.modelMatrix, ballActor.modelMatrix, [0.05, 0.05, 0.05]);
                     if (cmd.params.type != 1) {
                         ballActor.shadowSize = 5;
-                        shadowCasters.push(ballActor);
+                        shadowCasters.push([ballActor, false]);
                         ballActors.push(ballActor);
                     }
                     break;
@@ -1839,7 +1839,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     currentPlatform.shadowSize = new Shadows.ConstantShadowSize(20); // From engine
-                    shadowCasters.push(currentPlatform);
+                    shadowCasters.push([currentPlatform, false]);
                     break;
                 }
                 case 'PlatVentAdvanceFrames': {
@@ -1905,10 +1905,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
                     mat4.fromTranslation(flipbook.drawMatrix, pos);
                     sceneRenderer.flipbooks.push(flipbook);
-                    if (!cmd.params.dynamicShadow) {
-                        // TODO: handle dynamic shadow flag properly
-                        shadowCasters.push(flipbook);
-                    }
+                    shadowCasters.push([flipbook, cmd.params.dynamicShadow !== 0]);
                     flipbook.visible = (currentGaribState !== 0);
                     if (cmd.params.type == 2) {
                         // Extra lives are sparkly
@@ -1929,7 +1926,7 @@ class SceneDesc implements Viewer.SceneDesc {
                             [0.4, 0.4, 0.4]);
                         actor.shadowSize = 10;
                         actor.playSkeletalAnimation(0, true, false);
-                        shadowCasters.push(actor);
+                        shadowCasters.push([actor, false]);
                         sceneRenderer.miscRenderers.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup, sceneRenderer.waterVolumes));
                     }
                     break;
@@ -1940,7 +1937,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z),
                         sceneRenderer.waterVolumes);
                     sceneRenderer.mrtips.push(tip);
-                    shadowCasters.push(tip);
+                    shadowCasters.push([tip, false]);
                     break;
                 }
                 case 'Backdrop': {
@@ -2002,8 +1999,8 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         // Project shadows
-        for (let shadowCaster of shadowCasters) {
-            const shadow = new Shadows.Shadow(shadowCaster, shadowTerrain);
+        for (let [shadowCaster, dynamic] of shadowCasters) {
+            const shadow = new Shadows.Shadow(shadowCaster, shadowTerrain, dynamic);
             sceneRenderer.shadows.push(shadow);
             shadow.visible = shadowCaster.visible;
         }

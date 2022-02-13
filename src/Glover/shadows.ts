@@ -45,13 +45,12 @@ export class Shadow {
     //       when said object changes its draw matrix,
     //       it calls updatePosition() here
 
-    constructor(private source: ShadowCaster, public terrain: Collidable[]) {
+    constructor(private source: ShadowCaster, public terrain: Collidable[], public dynamic: boolean) {
         this.source.shadow = this;
         this.updatePosition();
     }
 
     public updatePosition(): void {
-        // TODO: get minRadius programmatically somehow
         let collision = projectOntoTerrain(this.source.getPosition(), this.source, this.terrain);
         if (collision !== null) {
             this.position = collision.position;
@@ -76,6 +75,10 @@ export class Shadow {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.dynamic) {
+            this.updatePosition();
+        }
+
         if (Shadow.renderer === null || this.position === null) {
             return;
         }        
@@ -83,6 +86,7 @@ export class Shadow {
         if (!this.visible) {
             return;
         }
+
 
         let scaleVal = 1/3;
         if (this.source.shadowSize instanceof ConstantShadowSize) {

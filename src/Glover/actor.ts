@@ -282,6 +282,8 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number = 1;
 
+    private greatestExtent: number = 0;
+
     // Animation state
     
     public isPlaying: boolean = false;
@@ -315,6 +317,16 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         const xlu = (this.actorObject.mesh.renderMode & 0x2) != 0;
 
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.objId, actorObject.mesh)
+
+        this.rootMesh.forEachMesh((node) => {
+            // TODO: this function is very inaccurate,
+            //       use skeletal matrices to position child
+            //       meshes properly
+            for (let vertex of node.mesh.geometry.vertices) {
+                const extent = Math.sqrt(vertex.x*vertex.x + vertex.y*vertex.y + vertex.z*vertex.z);
+                this.greatestExtent = Math.max(this.greatestExtent, extent);
+            }
+        });
 
         this.allocateLightingBuffer = false;
         this.rootMesh.forEachMesh((node) => {
@@ -394,6 +406,14 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         let closestFace = null;
         let closestIntersectionDist = Infinity;
 
+        // Bounding sphere check
+        mat4.getTranslation(this.vec3Scratch, this.modelMatrix);
+        vec3.subtract(this.vec3Scratch, this.vec3Scratch, rayOrigin);
+        if (Math.sqrt(Math.pow(this.vec3Scratch[0],2) + Math.pow(this.vec3Scratch[2],2)) > this.greatestExtent) {
+            return null;
+        }
+
+        // Per-face check
         this.rootMesh.forEachMesh((node) => {
             const geo = node.mesh.geometry;
             if (geo === undefined || geo.numFaces === 0) {
