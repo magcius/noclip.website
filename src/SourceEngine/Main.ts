@@ -925,8 +925,6 @@ export class ProjectedLightRenderer {
     public debugName: string = 'ProjectedLight';
     public depthTextureValid = false;
 
-    private lastInstCount = -1;
-
     public prepareRenderTarget(renderContext: SourceRenderContext): void {
         const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
@@ -949,16 +947,6 @@ export class ProjectedLightRenderer {
             bspRenderer.prepareToRenderView(renderContext, renderInstManager);
         }
 
-        // Use the inst count as an approximation for which objects have been drawn into the shadow map.
-        // Doesn't work if the objects or the lights move...
-        const instCount = renderContext.currentView.mainList.renderInsts.length;
-        this.depthTextureValid = false;
-        if (this.depthTextureValid && this.lastInstCount === instCount) {
-            this.light.frustumView.reset();
-        } else {
-            this.depthTextureValid = false;
-        }
-
         renderContext.currentView = null!;
     }
 
@@ -977,7 +965,7 @@ export class ProjectedLightRenderer {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, depthTargetID);
 
             pass.exec((passRenderer) => {
-                this.lastInstCount = this.light.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                this.light.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
