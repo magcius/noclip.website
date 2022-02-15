@@ -1056,7 +1056,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (this.binder !== null) {
             if (this.calcBinderFlag) {
                 this.binder.bind(sceneObjHolder, scratchVec3a, this.velocity);
-                vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
+                vec3.add(this.translation, this.translation, scratchVec3a);
             } else {
                 vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
                 this.binder.clear();

@@ -966,7 +966,7 @@ class DiskGravity extends PlanetGravity {
         const length = vec3.length(this.globalSideDir);
         vec3.normalize(this.globalSideDir, this.globalSideDir);
         this.globalRad = this.localRad * length;
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.globalPos);
+        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.globalPos);
     }
 
     protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
