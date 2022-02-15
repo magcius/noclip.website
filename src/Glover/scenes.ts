@@ -13,7 +13,7 @@ import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT
 
 import { GenericRenderable, SceneLighting } from './render';
 import { GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer, ElectricityThicknessStyle, ElectricityRandStyle } from './actor';
-import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
+import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFootprintRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -63,21 +63,64 @@ const powerup_objects = [
     0xAB3EA4DB, // vanish.ndo
 ];
 
-export class GloverWaterVolume {
-    constructor (public lft: vec3, public wdh: vec3, public surface_y: number) {
+export class GloverWaterVolume implements GenericRenderable {
+    public visible: boolean = true;
+
+    private rippleRenderers: GloverFootprintRenderer[] = [];
+
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textures: GloverTextureHolder,
+        public lft: vec3, public wdh: vec3, public surface_y: number)
+    {
         lft[1] = Math.min(lft[1], surface_y - 25.0);
         wdh[1] = Math.max(wdh[1], surface_y + 25.0 - lft[1]);
     }
 
     public inBbox(pt: vec3) : boolean {
-        return (pt[0] > this.lft[0] && pt[0] <= this.lft[0] + this.wdh[0] &&
-                pt[1] > this.lft[1] && pt[1] <= this.lft[1] + this.wdh[1] &&
-                pt[2] > this.lft[2] && pt[2] <= this.lft[2] + this.wdh[2];
+        return pt[0] > this.lft[0] && pt[0] <= this.lft[0] + this.wdh[0] &&
+               pt[1] > this.lft[1] && pt[1] <= this.lft[1] + this.wdh[1] &&
+               pt[2] > this.lft[2] && pt[2] <= this.lft[2] + this.wdh[2];
     }
 
-    public surfaceRipple(position: vec3) {
-        // TODO
+    public surfaceRipple(position: vec3, velocity: vec3) {
+        let renderer: GloverFootprintRenderer | null = null;
+        for (let possibleRenderer of this.rippleRenderers) {
+            if (!possibleRenderer.active) {
+                renderer = possibleRenderer;
+                break;
+            }
+        }
+        if (renderer === null) {
+            const texID = 0x08D7863E; // ai_ripple.bmp
+            renderer = new GloverFootprintRenderer(this.device, this.cache, this.textures, texID);
+            this.rippleRenderers.push(renderer);
+        }
+
+        let dstScale = velocity[1]/2;
+        dstScale = Math.max(Math.min(dstScale, 5), 3);
+        renderer.reset(0, dstScale, 0.2,
+            200/255, 0, 10/255,
+            80,
+            position, [0,1,0]);
     }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+        for (let renderer of this.rippleRenderers) {
+            if (renderer.active) {
+                renderer.prepareToRender(device, renderInstManager, viewerInput);
+            }
+        }
+
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let renderer of this.rippleRenderers) {
+            renderer.destroy(device);
+        }
+    }
+
 }
 
 class GloverVent implements GenericRenderable {
@@ -88,14 +131,15 @@ class GloverVent implements GenericRenderable {
 
     public visible: boolean = true;
 
+    private dutyCycles: number[] = [];
+    private dutyAdvance: number = 0;
+    private dutyNextIdx: number = 0;
+
+    private active: boolean = true;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private velocity: vec3, private type: number, waterVolumes: GloverWaterVolume[]) {
         vec3.scale(this.velocity, this.velocity, 1/SRC_FRAME_TO_MS);
         if (type === 8) {
-            // TODO: these bubble particles should be on the OVERLAY layer and rendermode, eg:
-            //      rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2);
-            //      rspState.gDPSetCombine(0xFC121624, 0xff2fffff); // gsDPSetCombineMode(G_CC_MODULATEIA, G_CC_MODULATEIA)
-            //      rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, alpha * 255);
-
             this.particles = new ParticlePool(device, cache, textureHolder, 0x14, waterVolumes);
         }
     }
@@ -106,31 +150,56 @@ class GloverVent implements GenericRenderable {
         }
     }
 
+    public pushDutyCycle(framesOff: number, framesOn: number) {
+        this.dutyCycles.push(framesOff * SRC_FRAME_TO_MS);
+        this.dutyCycles.push(framesOn * SRC_FRAME_TO_MS);
+    }
+
+    public advanceDutyCycle(frames: number) {
+        for (let x = 0; x < frames; x += 1) {
+            this.dutyAdvance -= SRC_FRAME_TO_MS;
+            if (this.dutyAdvance < 0) {
+                this.dutyAdvance = this.dutyCycles[this.dutyNextIdx];
+                this.active = (this.dutyNextIdx & 1) === 1;
+                this.dutyNextIdx = (this.dutyNextIdx + 1) % this.dutyCycles.length;
+            }
+        }
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible) {
             return;
         }
 
-        this.lastFrameAdvance += viewerInput.deltaTime;
-        if (this.lastFrameAdvance > SRC_FRAME_TO_MS) {
-            this.lastFrameAdvance = 0;
-
-
-            if (this.type === 8) {
-                // Accurate to engine, but waaaay too much for
-                // browser RNG:
-                // if (Math.floor(Math.random()*10) < 5) {
-                if (Math.floor(Math.random()*50) < 2) {
-                    let particleOrigin = this.position.slice();
-                    let particleVelocity = this.velocity.slice();
-                    particleVelocity[1] += 1/SRC_FRAME_TO_MS;
-                    particleOrigin[0] += Math.floor(Math.random()*10) - 5;
-                    particleOrigin[1] += Math.floor(Math.random()*10) - 5;
-                    particleOrigin[2] += Math.floor(Math.random()*10) - 5;
-                    this.particles!.spawn(particleOrigin, particleVelocity);
-                }
+        if (this.dutyCycles.length > 0) {
+            this.dutyAdvance -= viewerInput.deltaTime;
+            if (this.dutyAdvance < 0) {
+                this.dutyAdvance = this.dutyCycles[this.dutyNextIdx];
+                this.active = (this.dutyNextIdx & 1) === 1;
+                this.dutyNextIdx = (this.dutyNextIdx + 1) % this.dutyCycles.length;
             }
+        }
 
+
+        if (this.active) {
+            this.lastFrameAdvance += viewerInput.deltaTime;
+            if (this.lastFrameAdvance > SRC_FRAME_TO_MS) {
+                this.lastFrameAdvance = 0;
+
+
+                if (this.type === 8) {
+                    if (Math.floor(Math.random()*10) < 5) {
+                        let particleOrigin = this.position.slice();
+                        let particleVelocity = this.velocity.slice();
+                        particleVelocity[1] += 1/SRC_FRAME_TO_MS;
+                        particleOrigin[0] += Math.floor(Math.random()*10) - 5;
+                        particleOrigin[1] += Math.floor(Math.random()*10) - 5;
+                        particleOrigin[2] += Math.floor(Math.random()*10) - 5;
+                        this.particles!.spawn(particleOrigin, particleVelocity);
+                    }
+                }
+
+            }
         }
 
         if (this.particles !== null) {
@@ -183,7 +252,6 @@ class GloverBuzzer implements GenericRenderable {
     public pushDutyCycle(framesOff: number, framesOn: number) {
         this.dutyCycles.push(framesOff * SRC_FRAME_TO_MS);
         this.dutyCycles.push(framesOn * SRC_FRAME_TO_MS);
-        console.log(this.dutyCycles);
     }
 
     public reposition(pt1: vec3 | GloverPlatform | null, pt2: vec3 | GloverPlatform | null) {
@@ -599,10 +667,15 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                 quat.mul(this.globalRotation, this.parent.globalRotation, this.globalRotation);
             }
 
-            // TODO: ck2 flags can't have this line active,
-            //       yet almost everything else needs it:
-            //       wtf?
-            vec3.transformQuat(this.globalPosition, this.globalPosition, this.parent.globalRotation);
+            // TODO: This conditional check to only apply parent rotation if
+            //       the parent is actively spinning comes from needing the
+            //       roller coaster flags to be aligned properly in Carnival 2.
+            //       This feels like a bodge; look into the engine to figure
+            //       out exactly how those flags are positioned and if we can
+            //       rip this out.
+            // if (vec3.length(this.parent.spinSpeed) > 0) {
+                vec3.transformQuat(this.globalPosition, this.globalPosition, this.parent.globalRotation);
+            // }
 
             vec3.add(this.globalPosition, this.globalPosition, this.parent.globalPosition);
         }
@@ -1597,11 +1670,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     currentObject = currentActor;
                     mat4.fromTranslation(currentActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     currentActor.setRenderMode(0x20, 0x20);
-                    sceneRenderer.waterVolumes.push(new GloverWaterVolume(
+                    const volume = new GloverWaterVolume(
+                        device, cache, textureHolder,
                         [cmd.params.left, cmd.params.top, cmd.params.front],
                         [cmd.params.width, cmd.params.bottom, cmd.params.depth],
                         cmd.params.surfaceY;
-                    ))
+                    )
+                    sceneRenderer.waterVolumes.push(volume);
+                    sceneRenderer.miscRenderers.push(volume);
                     break;
                 }
                 case 'LandActor':
@@ -1711,6 +1787,13 @@ class SceneDesc implements Viewer.SceneDesc {
                         sceneRenderer.waterVolumes);
                     currentObject = currentVent;
                     sceneRenderer.miscRenderers.push(currentVent);
+                    break;
+                }
+                case 'VentDutyCycle': {
+                    if (currentVent === null) {
+                        throw `No active vent for ${cmd.params.__type}!`;
+                    }
+                    currentVent.pushDutyCycle(cmd.params.framesOff, cmd.params.framesOn);
                     break;
                 }
                 case 'Platform': {
@@ -1843,12 +1926,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'PlatVentAdvanceFrames': {
-                    // TODO: support vent objects, too
-                    if (currentPlatform === null) {
-                        throw `No active platform for ${cmd.params.__type}!`;
-                    }
-                    for (let i = 0; i < cmd.params.numFrames / CONVERT_FRAMERATE; i++) {
-                        currentPlatform.advanceFrame(SRC_FRAME_TO_MS);
+                    if (currentObject instanceof GloverPlatform) {
+                        for (let i = 0; i < cmd.params.numFrames / CONVERT_FRAMERATE; i++) {
+                            currentObject.advanceFrame(SRC_FRAME_TO_MS);
+                        }
+                    } else if (currentObject instanceof GloverVent) {
+                        currentObject.advanceDutyCycle(cmd.params.numFrames);
+                    } else {                        
+                        throw `No active object for ${cmd.params.__type}!`;
                     }
                     break;
                 }

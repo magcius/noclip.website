@@ -10,7 +10,7 @@ import * as RDPRenderModes from './rdp_render_modes';
 
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3, vec4, quat } from "gl-matrix";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
@@ -846,5 +846,120 @@ export class GloverWeatherRenderer {
     public destroy(device: GfxDevice): void {
         this.spriteRenderer.destroy(device);
         this.lightningRenderer.destroy(device);
+    }
+}
+
+
+export class GloverFootprintRenderer extends GloverSpriteRenderer {
+    protected isBillboard: boolean = false;
+
+    private drawMatrix: mat4 = mat4.create();
+
+    private scaleDelta: number;
+    private dstScale: number;
+    private scale: number;
+
+    private alphaDelta: number;
+    private dstAlpha: number;
+    private alpha: number;
+
+    private rotation: quat = quat.create();
+    private position: vec3 = vec3.create();
+
+    public active: boolean = false;
+    private lifetime: number;
+    private lastFrameAdvance: number = 0;
+
+    protected initializePipeline(rspState: Render.GloverRSPState) {
+        Render.initializeRenderState(rspState);
+        rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
+        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+        rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
+        rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
+        rspState.gDPSetPrimColor(0, 0, 0, 0, 0, 0xFF);
+    }
+    
+    constructor(
+        device: GfxDevice,
+        cache: GfxRenderCache,
+        textures: Textures.GloverTextureHolder,
+        private textureID: number)
+    {
+        super(device, cache, textures, [textureID]);
+        this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.FOOTPRINTS);
+    }
+
+    public reset(scale: number, dstScale: number, scaleDelta: number,
+                 alpha: number, dstAlpha: number, alphaDelta: number,
+                 lifetimeFrames: number,
+                 position: vec3, normal: vec3)        
+    {
+        assert(alpha >= 0 && alpha <= 1);
+        assert(alphaDelta >= 0 && alphaDelta <= 1);
+
+        this.active = true;
+        this.lifetime = lifetimeFrames * SRC_FRAME_TO_MS;
+
+        // TODO: for the time being, still measured in frames:
+        this.scaleDelta = scaleDelta;
+        this.dstScale = dstScale;
+        this.scale = scale;
+
+        this.alphaDelta = alphaDelta / SRC_FRAME_TO_MS;
+        this.dstAlpha = dstAlpha;
+        this.alpha = alpha;
+
+        vec3.copy(this.position, position);
+        quat.rotationTo(this.rotation, normal, [0,0,-1]);
+        quat.conjugate(this.rotation, this.rotation);
+
+
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.active) {
+            return;
+        }
+
+        this.lastFrameAdvance += viewerInput.deltaTime;
+        this.lifetime -= viewerInput.deltaTime;
+
+        if (this.lifetime <= 0 || (this.dstAlpha == 0 && this.alpha ==0)) {
+            this.active = false;
+            return;
+        }
+
+        if (this.alpha < this.dstAlpha) {
+            this.alpha += this.alphaDelta * viewerInput.deltaTime;
+        } else if (this.alpha > this.dstAlpha) {
+            this.alpha -= this.alphaDelta * viewerInput.deltaTime;
+        }
+
+        // TODO: convert to delta time:
+        if (this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
+            this.lastFrameAdvance -= SRC_FRAME_TO_MS;
+            if (0.0 < this.scaleDelta) {
+                this.scale += (this.dstScale - this.scale) * this.scaleDelta;
+            } else {
+                let scaleMidpoint = (this.dstScale - this.scale) / 2;
+                if ((scaleMidpoint < -this.scaleDelta && this.scaleDelta > 0) || scaleMidpoint < this.scaleDelta) {
+                    if (scaleMidpoint < -this.scaleDelta) {
+                        this.scale += this.scaleDelta;
+                    } else {
+                        this.scale -= scaleMidpoint;
+                    }
+                } else {
+                    this.scale -= this.scaleDelta;
+                }
+            }
+        }
+
+        mat4.fromRotationTranslationScale(this.drawMatrix,
+            this.rotation,
+            this.position,
+            [this.scale*10, this.scale*10, this.scale*10]
+        );
+
+        super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0, {r: 1, g: 1, b: 1, a: this.alpha});
     }
 }

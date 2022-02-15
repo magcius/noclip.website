@@ -621,6 +621,22 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
+  class VentDutyCycle {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'VentDutyCycle';
+    _io: any;
+
+    framesOff: number;
+    framesOn: number;
+
+    _debug: {
+      framesOff: DebugPosition;
+      framesOn: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
   class Plat0xc3 {
     constructor(io: any, parent?: any, root?: any);
     __type: 'Plat0xc3';
@@ -1181,22 +1197,6 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
-  class VentAppend0xa3 {
-    constructor(io: any, parent?: any, root?: any);
-    __type: 'VentAppend0xa3';
-    _io: any;
-
-    u16IdxPlus0x10: number;
-    u16IdxPlus0x1c: number;
-
-    _debug: {
-      u16IdxPlus0x10: DebugPosition;
-      u16IdxPlus0x1c: DebugPosition;
-    };
-  }
-}
-
-declare namespace GloverLevel {
   class UnknownSound0xbd {
     constructor(io: any, parent?: any, root?: any);
     __type: 'UnknownSound0xbd';
@@ -1325,7 +1325,7 @@ declare namespace GloverLevel {
     _io: any;
 
     typeCode: number;
-    params: GloverLevel.Plat0x78 | GloverLevel.Rope | GloverLevel.NullPlatform | GloverLevel.PlatOrbitPause | GloverLevel.Plat0x9f | GloverLevel.PlatSound0xc2 | GloverLevel.PlatSpecial0xb8 | GloverLevel.PlatCat0x69 | GloverLevel.PlatSpecial0x8e | GloverLevel.PlatRocking | GloverLevel.VentAppend0xa3 | GloverLevel.Enemy | GloverLevel.PlatPos0xa7 | GloverLevel.LandActor | GloverLevel.Puzzle | GloverLevel.Unknown0xa9 | GloverLevel.Vent | GloverLevel.PlatMvspn0x74 | GloverLevel.PlatOrbitFlip0x77 | GloverLevel.PuzzleOr | GloverLevel.PuzzleNumtimes | GloverLevel.PlatSetParent | GloverLevel.PlatScale | GloverLevel.LookAtHand0x60 | GloverLevel.Actor0xbf | GloverLevel.GloverSpawnPoint | GloverLevel.PuzzleAction | GloverLevel.LookAtBall0x61 | GloverLevel.PlatActorSurfaceType | GloverLevel.BackgroundActor | GloverLevel.PlatDestructible | GloverLevel.PlatSine | GloverLevel.PlatConstantSpin | GloverLevel.PlatNoClip | GloverLevel.PuzzleCond | GloverLevel.PlatMvspn0x73 | GloverLevel.PlatPush0x5b | GloverLevel.PlatPathPoint | GloverLevel.PlatOrbit | GloverLevel.PlatMvspn0x59 | GloverLevel.PlatformConveyor | GloverLevel.Platform | GloverLevel.PlatSpinSound0xc5 | GloverLevel.PlatGoForwards0x5f | GloverLevel.SetTeleport | GloverLevel.PlatMvspn0x58 | GloverLevel.Enemy0xa1 | GloverLevel.PlatFan0x8a | GloverLevel.CameraSpawnPoint | GloverLevel.PlatPlayObjectAnimation | GloverLevel.Plat0x7e | GloverLevel.FogConfiguration | GloverLevel.PuzzleAnd | GloverLevel.PlatCrumb0x67 | GloverLevel.PlatCheckpoint | GloverLevel.PlatSpecial0xb9 | GloverLevel.SetObjectSparkle | GloverLevel.EnemyAttackInstruction | GloverLevel.PlatSpinFlip | GloverLevel.Enemy0xba | GloverLevel.AnimatedBackgroundActor | GloverLevel.Backdrop | GloverLevel.PlatCopySpinFromParent | GloverLevel.Water | GloverLevel.PuzzleAny | GloverLevel.PlatSetInitialPos | GloverLevel.PlatConf0x72 | GloverLevel.Buzzer | GloverLevel.SetActorScale | GloverLevel.PlatSpecial0x9e | GloverLevel.PlatOrbitAroundPoint | GloverLevel.AmbientLight | GloverLevel.Unrecognized | GloverLevel.PlatPathAcceleration | GloverLevel.EndLevelData | GloverLevel.Wind | GloverLevel.PlatStr0x7a | GloverLevel.PlatActorEnableWaterAnimation | GloverLevel.Plat0xc3 | GloverLevel.PlatSpike | GloverLevel.MrTip | GloverLevel.Cameo | GloverLevel.PlatSpecial0xc7 | GloverLevel.Plat0xa4 | GloverLevel.BuzzerDutyCycle | GloverLevel.PlatMaxVelocity | GloverLevel.UnknownSound0xbd | GloverLevel.SetExit | GloverLevel.CameoInst | GloverLevel.PlatSound0xc1 | GloverLevel.GaribGroup | GloverLevel.PlatTopple0x81 | GloverLevel.DiffuseLight | GloverLevel.Plat0x9d | GloverLevel.SetActorRotation | GloverLevel.Garib | GloverLevel.Plat0x66 | GloverLevel.PlatSpecial0x6e | GloverLevel.PlatMagnet0x8b | GloverLevel.EnemyConditionalInstruction | GloverLevel.BallSpawnPoint | GloverLevel.Powerup | GloverLevel.PlatSpinPause0x7c | GloverLevel.PlatDestructibleSound | GloverLevel.Enemy0x84 | GloverLevel.PlatVentAdvanceFrames | GloverLevel.Plat0xc6 | GloverLevel.PlatSetTag | GloverLevel.EnvironmentalSound | GloverLevel.PlatOrbitSound0xc4 | GloverLevel.SetGlobal0xb7 | GloverLevel.PlatSpin0x80 | GloverLevel.PlatMvspn0x5a | GloverLevel.EnemyNormalInstruction | undefined;
+    params: GloverLevel.Plat0x78 | GloverLevel.Rope | GloverLevel.NullPlatform | GloverLevel.PlatOrbitPause | GloverLevel.Plat0x9f | GloverLevel.PlatSound0xc2 | GloverLevel.PlatSpecial0xb8 | GloverLevel.PlatCat0x69 | GloverLevel.PlatSpecial0x8e | GloverLevel.PlatRocking | GloverLevel.VentDutyCycle | GloverLevel.Enemy | GloverLevel.PlatPos0xa7 | GloverLevel.LandActor | GloverLevel.Puzzle | GloverLevel.Unknown0xa9 | GloverLevel.Vent | GloverLevel.PlatMvspn0x74 | GloverLevel.PlatOrbitFlip0x77 | GloverLevel.PuzzleOr | GloverLevel.PuzzleNumtimes | GloverLevel.PlatSetParent | GloverLevel.PlatScale | GloverLevel.LookAtHand0x60 | GloverLevel.Actor0xbf | GloverLevel.GloverSpawnPoint | GloverLevel.PuzzleAction | GloverLevel.LookAtBall0x61 | GloverLevel.PlatActorSurfaceType | GloverLevel.BackgroundActor | GloverLevel.PlatDestructible | GloverLevel.PlatSine | GloverLevel.PlatConstantSpin | GloverLevel.PlatNoClip | GloverLevel.PuzzleCond | GloverLevel.PlatMvspn0x73 | GloverLevel.PlatPush0x5b | GloverLevel.PlatPathPoint | GloverLevel.PlatOrbit | GloverLevel.PlatMvspn0x59 | GloverLevel.PlatformConveyor | GloverLevel.Platform | GloverLevel.PlatSpinSound0xc5 | GloverLevel.PlatGoForwards0x5f | GloverLevel.SetTeleport | GloverLevel.PlatMvspn0x58 | GloverLevel.Enemy0xa1 | GloverLevel.PlatFan0x8a | GloverLevel.CameraSpawnPoint | GloverLevel.PlatPlayObjectAnimation | GloverLevel.Plat0x7e | GloverLevel.FogConfiguration | GloverLevel.PuzzleAnd | GloverLevel.PlatCrumb0x67 | GloverLevel.PlatCheckpoint | GloverLevel.PlatSpecial0xb9 | GloverLevel.SetObjectSparkle | GloverLevel.EnemyAttackInstruction | GloverLevel.PlatSpinFlip | GloverLevel.Enemy0xba | GloverLevel.AnimatedBackgroundActor | GloverLevel.Backdrop | GloverLevel.PlatCopySpinFromParent | GloverLevel.Water | GloverLevel.PuzzleAny | GloverLevel.PlatSetInitialPos | GloverLevel.PlatConf0x72 | GloverLevel.Buzzer | GloverLevel.SetActorScale | GloverLevel.PlatSpecial0x9e | GloverLevel.PlatOrbitAroundPoint | GloverLevel.AmbientLight | GloverLevel.Unrecognized | GloverLevel.PlatPathAcceleration | GloverLevel.EndLevelData | GloverLevel.Wind | GloverLevel.PlatStr0x7a | GloverLevel.PlatActorEnableWaterAnimation | GloverLevel.Plat0xc3 | GloverLevel.PlatSpike | GloverLevel.MrTip | GloverLevel.Cameo | GloverLevel.PlatSpecial0xc7 | GloverLevel.Plat0xa4 | GloverLevel.BuzzerDutyCycle | GloverLevel.PlatMaxVelocity | GloverLevel.UnknownSound0xbd | GloverLevel.SetExit | GloverLevel.CameoInst | GloverLevel.PlatSound0xc1 | GloverLevel.GaribGroup | GloverLevel.PlatTopple0x81 | GloverLevel.DiffuseLight | GloverLevel.Plat0x9d | GloverLevel.SetActorRotation | GloverLevel.Garib | GloverLevel.Plat0x66 | GloverLevel.PlatSpecial0x6e | GloverLevel.PlatMagnet0x8b | GloverLevel.EnemyConditionalInstruction | GloverLevel.BallSpawnPoint | GloverLevel.Powerup | GloverLevel.PlatSpinPause0x7c | GloverLevel.PlatDestructibleSound | GloverLevel.Enemy0x84 | GloverLevel.PlatVentAdvanceFrames | GloverLevel.Plat0xc6 | GloverLevel.PlatSetTag | GloverLevel.EnvironmentalSound | GloverLevel.PlatOrbitSound0xc4 | GloverLevel.SetGlobal0xb7 | GloverLevel.PlatSpin0x80 | GloverLevel.PlatMvspn0x5a | GloverLevel.EnemyNormalInstruction | undefined;
 
     _debug: {
       typeCode: DebugPosition;

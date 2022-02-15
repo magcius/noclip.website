@@ -905,6 +905,28 @@ var GloverLevel = (function() {
     return PlatConstantSpin;
   })();
 
+  var VentDutyCycle = GloverLevel.VentDutyCycle = (function() {
+    function VentDutyCycle(_io, _parent, _root) {
+      this.__type = 'VentDutyCycle';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    VentDutyCycle.prototype._read = function() {
+      this._debug.framesOff = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.framesOff = this._io.readS2be();
+      this._debug.framesOff.end = this._io.pos;
+      this._debug.framesOn = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.framesOn = this._io.readS2be();
+      this._debug.framesOn.end = this._io.pos;
+    }
+
+    return VentDutyCycle;
+  })();
+
   var Plat0xc3 = GloverLevel.Plat0xc3 = (function() {
     function Plat0xc3(_io, _parent, _root) {
       this.__type = 'Plat0xc3';
@@ -1711,28 +1733,6 @@ var GloverLevel = (function() {
     return PuzzleCondD;
   })();
 
-  var VentAppend0xa3 = GloverLevel.VentAppend0xa3 = (function() {
-    function VentAppend0xa3(_io, _parent, _root) {
-      this.__type = 'VentAppend0xa3';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    VentAppend0xa3.prototype._read = function() {
-      this._debug.u16IdxPlus0x10 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u16IdxPlus0x10 = this._io.readU2be();
-      this._debug.u16IdxPlus0x10.end = this._io.pos;
-      this._debug.u16IdxPlus0x1c = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u16IdxPlus0x1c = this._io.readU2be();
-      this._debug.u16IdxPlus0x1c.end = this._io.pos;
-    }
-
-    return VentAppend0xa3;
-  })();
-
   var UnknownSound0xbd = GloverLevel.UnknownSound0xbd = (function() {
     function UnknownSound0xbd(_io, _parent, _root) {
       this.__type = 'UnknownSound0xbd';
@@ -1949,7 +1949,7 @@ var GloverLevel = (function() {
         this.params = new PlatRocking(this._io, this, this._root);
         break;
       case 163:
-        this.params = new VentAppend0xa3(this._io, this, this._root);
+        this.params = new VentDutyCycle(this._io, this, this._root);
         break;
       case 131:
         this.params = new Enemy(this._io, this, this._root);

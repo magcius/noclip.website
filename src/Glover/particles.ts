@@ -612,7 +612,7 @@ export class Particle {
             (32 - wobble * 7)/(3*8),
             1
         );
-        if (Math.floor(Math.random()*2) === 1) {
+        if (Math.floor(Math.random()*3) === 1) {
             this.velocity[0] *= 0.5;
             this.velocity[2] *= 0.5;
             this.velocity[0] += Math.cos(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
@@ -620,7 +620,7 @@ export class Particle {
         }
         for (let waterVolume of this.waterVolumes) {
             if (waterVolume.inBbox(this.position) && this.position[1] >= waterVolume.surface_y) {
-                waterVolume.surfaceRipple(this.position);
+                waterVolume.surfaceRipple(this.position, this.velocity);
                 this.active = false;
             }
         }
@@ -631,6 +631,9 @@ export class Particle {
         const params = particleParameters[this.particleType];
 
         this.lastFrameAdvance += viewerInput.deltaTime;
+
+        // TODO: look into default particle physics parameters as set by
+        //       initParticleSystem(), around address 0x801b6570
 
         // TODO: this delta time implementation isn't always
         //       playing nicely with things like, eg, bubbles.
@@ -767,13 +770,6 @@ export class MeshSparkle implements GenericRenderable {
                 const lookat = MeshSparkle.positionScratch2;
                 vec3.set(origin, vert.x, vert.y, vert.z);
                 vec3.transformMat4(origin, origin, this.actor.modelMatrix)
-
-                // TODO: remove now that this was decomposed into pushAlongLookatVector
-                // mat4.getTranslation(lookat, viewerInput.camera.worldMatrix);
-                // vec3.sub(lookat, origin, lookat);
-                // vec3.normalize(lookat, lookat);
-                // vec3.scaleAndAdd(origin, origin, lookat, -6);
-
                 pushAlongLookatVector(origin, origin, -6, viewerInput);
 
                 const particle = this.particles.spawn(origin, MeshSparkle.velocity);
