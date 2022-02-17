@@ -206,7 +206,7 @@ function parseOffset(chunkId: string): vec3 {
     return vec3.fromValues(
         parseInt(bits[1]) * CHUNK_SCALE,
         parseInt(bits[2]) * CHUNK_SCALE,
-        parseInt(bits[3]) * CHUNK_SCALE)
+        parseInt(bits[3]) * CHUNK_SCALE,
     );
 }
 
