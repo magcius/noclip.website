@@ -26,7 +26,7 @@ interface Range {
     rangeSize: number,
 }
 
-interface MeshData {
+interface MeshMetadata {
     name: string,
     offset: number,
     size: number,
@@ -62,11 +62,11 @@ export class UnityAssetManager {
         this.asset = wasm.Asset.deserialize(headerBytes);
     }
 
-    public async downloadMeshData() {
+    public async downloadMeshMetadata() {
         let wasm = await loadWasm();
         let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
-        let meshDataArray = wasm.get_mesh_data(this.asset, assetData);
-        let result: MeshData[] = [];
+        let meshDataArray = wasm.get_mesh_metadata(this.asset, assetData);
+        let result: MeshMetadata[] = [];
         for (let i=0; i<meshDataArray.length; i++) {
             let data = meshDataArray.get(i);
             result.push({
@@ -78,7 +78,7 @@ export class UnityAssetManager {
         downloadBlob('meshData.assetPath}.json', new Blob([JSON.stringify(result, null, 2)]));
     }
 
-    public async loadMesh(meshData: MeshData): Promise<Mesh> {
+    public async loadMesh(meshData: MeshMetadata): Promise<Mesh> {
         let wasm = await loadWasm();
         let range = { rangeStart: meshData.offset, rangeSize: meshData.size };
         let meshBytes = await this.loadBytes(range);
