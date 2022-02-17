@@ -1,7 +1,7 @@
 import { DataFetcher } from '../../DataFetcher';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
-import type { Asset, Mesh } from '../../../rust/pkg/index';
+import type { AssetInfo, Mesh } from '../../../rust/pkg/index';
 
 let _wasm: any | null = null;
 
@@ -33,7 +33,7 @@ interface MeshMetadata {
 }
 
 export class UnityAssetManager {
-    private asset: Asset;
+    private assetInfo: AssetInfo;
     private fetcher: DataFetcher;
 
     constructor(public assetPath: string, private context: SceneContext) {
@@ -44,7 +44,7 @@ export class UnityAssetManager {
         return new Uint8Array(res.arrayBuffer);
     }
 
-    public async load() {
+    public async loadAssetInfo() {
         let wasm = await loadWasm();
         let headerBytes = await this.loadBytes({
             rangeStart: 0,
@@ -52,20 +52,19 @@ export class UnityAssetManager {
         });
         let assetHeader = wasm.AssetHeader.deserialize(headerBytes);
         if (assetHeader.data_offset > headerBytes.byteLength) {
-            let range = {
+            let extraBytes = await this.loadBytes({
                 rangeStart: headerBytes.byteLength,
                 rangeSize: assetHeader.data_offset - headerBytes.byteLength,
-            };
-            let extraBytes = await this.loadBytes(range);
+            });
             headerBytes = concatBufs(headerBytes, extraBytes);
         }
-        this.asset = wasm.Asset.deserialize(headerBytes);
+        this.assetInfo = wasm.Asset.deserialize(headerBytes);
     }
 
     public async downloadMeshMetadata() {
         let wasm = await loadWasm();
         let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
-        let meshDataArray = wasm.get_mesh_metadata(this.asset, assetData);
+        let meshDataArray = wasm.get_mesh_metadata(this.assetInfo, assetData);
         let result: MeshMetadata[] = [];
         for (let i=0; i<meshDataArray.length; i++) {
             let data = meshDataArray.get(i);
@@ -80,8 +79,10 @@ export class UnityAssetManager {
 
     public async loadMesh(meshData: MeshMetadata): Promise<Mesh> {
         let wasm = await loadWasm();
-        let range = { rangeStart: meshData.offset, rangeSize: meshData.size };
-        let meshBytes = await this.loadBytes(range);
-        return wasm.Mesh.from_bytes(meshBytes, this.asset);
+        let meshBytes = await this.loadBytes({
+            rangeStart: meshData.offset,
+            rangeSize: meshData.size,
+        });
+        return wasm.Mesh.from_bytes(meshBytes, this.assetInfo);
     }
 }

@@ -9,7 +9,7 @@ use crate::unity::bitstream::BitStream;
 // empty type for when we just wanna move the read stream along
 pub struct NoOp {}
 impl Deserialize for NoOp {
-    fn deserialize(_: &mut AssetReader, _: &Asset) -> Result<Self> {
+    fn deserialize(_: &mut AssetReader, _: &AssetInfo) -> Result<Self> {
         todo!();
     }
 }
@@ -23,7 +23,7 @@ pub struct ChannelInfo {
 }
 
 impl Deserialize for ChannelInfo {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(ChannelInfo {
             stream: reader.read_u8()?,
             offset: reader.read_u8()?,
@@ -48,7 +48,7 @@ impl PackedIntVector {
 }
 
 impl Deserialize for PackedIntVector {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let num_items = reader.read_u32()?;
         let data = reader.read_byte_array()?;
         reader.align()?;
@@ -85,7 +85,7 @@ impl PackedFloatVector {
 }
 
 impl Deserialize for PackedFloatVector {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let num_items = reader.read_u32()?;
         let range = reader.read_f32()?;
         let start = reader.read_f32()?;
@@ -119,7 +119,7 @@ pub struct CompressedMesh {
 }
 
 impl Deserialize for CompressedMesh {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(CompressedMesh {
             vertices: PackedFloatVector::deserialize(reader, asset)?,
             uv: PackedFloatVector::deserialize(reader, asset)?,
@@ -144,7 +144,7 @@ pub struct StreamingInfo {
 }
 
 impl Deserialize for StreamingInfo {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(StreamingInfo {
             size: reader.read_u32()?,
             offset: reader.read_u32()?,
@@ -161,7 +161,7 @@ pub struct VertexData {
 }
 
 impl Deserialize for VertexData {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let vertex_count = reader.read_u32()?;
         let channels = ChannelInfo::deserialize_array(reader, asset)?;
         reader.align()?;
@@ -180,7 +180,7 @@ pub struct Shape {
 }
 
 impl Deserialize for Shape {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         // TODO actually get shapes
         let _vertices = NoOp::deserialize_array(reader, asset)?;
         let _shapes = NoOp::deserialize_array(reader, asset)?;
@@ -198,7 +198,7 @@ pub struct Vec3f {
 }
 
 impl Deserialize for Vec3f {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(Vec3f {
             x: reader.read_f32()?,
             y: reader.read_f32()?,
@@ -214,7 +214,7 @@ pub struct AABB {
 }
 
 impl Deserialize for AABB {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(AABB {
             center: Vec3f::deserialize(reader, asset)?,
             extent: Vec3f::deserialize(reader, asset)?,
@@ -234,7 +234,7 @@ pub struct SubMesh {
 }
 
 impl Deserialize for SubMesh {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(SubMesh {
             first_byte: reader.read_u32()?,
             index_count: reader.read_u32()?,
@@ -256,7 +256,7 @@ pub enum MeshCompression {
 }
 
 impl Deserialize for MeshCompression {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(match reader.read_u8()? {
             0 => MeshCompression::Off,
             1 => MeshCompression::Low,
@@ -293,7 +293,7 @@ pub struct Mesh {
 
 #[wasm_bindgen]
 impl Mesh {
-    pub fn from_bytes(data: Vec<u8>, asset: &Asset) -> std::result::Result<Mesh, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Mesh, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
         Mesh::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
@@ -326,7 +326,7 @@ impl Mesh {
 }
 
 impl Deserialize for Mesh {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let name = reader.read_char_array()?;
         let unity2019 = UnityVersion { major: 2019, ..Default::default() };
         // TODO support older versions
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn test_read_uncompressed_mesh() {
         let mut reader = read_test_asset("test_data/unity_assets/v22/sharedassets0.assets");
-        let asset = reader.read_asset().unwrap();
+        let asset = reader.read_asset_info().unwrap();
         reader.seek_to_object(&asset.objects[3]).unwrap();
         assert!(Mesh::deserialize(&mut reader, &asset).is_err());
     }
@@ -408,7 +408,7 @@ mod tests {
     #[test]
     fn test_read_compressed_mesh() {
         let mut reader = read_test_asset("test_data/unity_assets/v22/compressed_mesh.assets");
-        let asset = reader.read_asset().unwrap();
+        let asset = reader.read_asset_info().unwrap();
         reader.seek_to_object(&asset.objects[3]).unwrap();
         let mesh = Mesh::deserialize(&mut reader, &asset).unwrap();
         assert_eq!(mesh.compressed_mesh.vertices.num_items, 14577);

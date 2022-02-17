@@ -4,7 +4,7 @@ use crate::unity::reader::AssetReader;
 
 #[wasm_bindgen]
 #[derive(Debug)]
-pub struct Asset {
+pub struct AssetInfo {
     #[wasm_bindgen(skip)]
     pub header: AssetHeader,
     #[wasm_bindgen(skip)]
@@ -22,9 +22,9 @@ pub struct Asset {
 }
 
 #[wasm_bindgen]
-impl Asset {
-    pub fn deserialize(data: Vec<u8>) -> Result<Asset, String> {
-        AssetReader::new(data).read_asset()
+impl AssetInfo {
+    pub fn deserialize(data: Vec<u8>) -> Result<AssetInfo, String> {
+        AssetReader::new(data).read_asset_info()
             .map_err(|err| format!("{:?}", err))
     }
 }

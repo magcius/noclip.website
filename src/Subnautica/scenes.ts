@@ -214,7 +214,7 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderer = new SubnauticaRenderer(device);
         let assets = new UnityAssetManager('subnautica/resources.assets', context);
-        await assets.load();
+        await assets.loadAssetInfo();
         chunks.forEach(chunk => {
             let offset = parseChunkId(chunk.name);
             assets.loadMesh(chunk).then(mesh => {

@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::unity::reader::AssetReader;
-use crate::unity::asset::Asset;
+use crate::unity::asset::AssetInfo;
 
 pub mod asset;
 pub mod reader;
@@ -38,7 +38,7 @@ impl MeshMetadata {
 }
 
 #[wasm_bindgen]
-pub fn get_mesh_metadata(asset: &Asset, data: Vec<u8>) -> MeshMetadataArray {
+pub fn get_mesh_metadata(asset: &AssetInfo, data: Vec<u8>) -> MeshMetadataArray {
     let mut reader = AssetReader::new(data);
     let mut mesh_data: Vec<MeshMetadata> = asset.objects.iter()
         .filter(|obj| obj.class_id == 43)

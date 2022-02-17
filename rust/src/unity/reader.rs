@@ -37,9 +37,9 @@ impl From<std::io::Error> for AssetReaderError {
 pub type Result<T> = std::result::Result<T, AssetReaderError>;
 
 pub trait Deserialize {
-    fn deserialize(reader: &mut AssetReader, asset: &Asset) -> Result<Self> where Self: Sized;
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> where Self: Sized;
 
-    fn deserialize_array(reader: &mut AssetReader, asset: &Asset) -> Result<Vec<Self>> where Self: Sized {
+    fn deserialize_array(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Vec<Self>> where Self: Sized {
         let n = reader.read_i32()?;
         let mut result = Vec::new();
         for _ in 0..n {
@@ -66,7 +66,7 @@ impl AssetReader {
         }
     }
 
-    pub fn read_asset(&mut self) -> Result<Asset> {
+    pub fn read_asset_info(&mut self) -> Result<AssetInfo> {
         let header = self.read_header()?;
         self.set_endianness(header.endianness);
         let metadata = self.read_metadata()?;
@@ -75,7 +75,7 @@ impl AssetReader {
         let externals = self.read_externals()?;
         let ref_types = self.read_ref_types(&metadata)?;
         let user_information = self.read_null_terminated_string()?;
-        Ok(Asset {
+        Ok(AssetInfo {
             header,
             metadata,
             objects,
@@ -441,13 +441,13 @@ mod tests {
     #[test]
     fn test_all_together() {
         let mut reader = read_test_asset();
-        let _asset = reader.read_asset().unwrap();
+        let _asset = reader.read_asset_info().unwrap();
     }
 
     #[test]
     fn test_v22() {
         let data = std::fs::read("test_data/unity_assets/v22/sharedassets0.assets").unwrap();
         let mut reader = AssetReader::new(data);
-        let _asset = reader.read_asset().unwrap();
+        let _asset = reader.read_asset_info().unwrap();
     }
 }
