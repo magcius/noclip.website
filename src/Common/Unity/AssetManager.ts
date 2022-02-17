@@ -6,10 +6,7 @@ import type { AssetInfo, Mesh } from '../../../rust/pkg/index';
 let _wasm: any | null = null;
 
 async function loadWasm() {
-    if (_wasm === null) {
-        _wasm = await import('../../../rust/pkg/index');
-    }
-    return _wasm;
+    return await import('../../../rust/pkg/index');
 }
 
 const MAX_HEADER_LENGTH = 4096;
@@ -22,14 +19,14 @@ function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array {
 }
 
 interface Range {
-    rangeStart: number,
-    rangeSize: number,
+    rangeStart: number;
+    rangeSize: number;
 }
 
-interface MeshMetadata {
-    name: string,
-    offset: number,
-    size: number,
+export interface MeshMetadata {
+    name: string;
+    offset: number;
+    size: number;
 }
 
 export class UnityAssetManager {
@@ -58,13 +55,14 @@ export class UnityAssetManager {
             });
             headerBytes = concatBufs(headerBytes, extraBytes);
         }
-        this.assetInfo = wasm.Asset.deserialize(headerBytes);
+        this.assetInfo = wasm.AssetInfo.deserialize(headerBytes);
     }
 
     public async downloadMeshMetadata() {
         let wasm = await loadWasm();
         let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
-        let meshDataArray = wasm.get_mesh_metadata(this.assetInfo, assetData);
+        let assetBytes = new Uint8Array(assetData.arrayBuffer);
+        let meshDataArray = wasm.get_mesh_metadata(this.assetInfo, assetBytes);
         let result: MeshMetadata[] = [];
         for (let i=0; i<meshDataArray.length; i++) {
             let data = meshDataArray.get(i);
@@ -74,6 +72,7 @@ export class UnityAssetManager {
                 size: data.size,
             })
         }
+
         downloadBlob('meshData.assetPath}.json', new Blob([JSON.stringify(result, null, 2)]));
     }
 

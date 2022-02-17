@@ -4,12 +4,12 @@ import { SceneContext } from '../SceneBase';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { chunks, ChunkInfo } from './chunks';
-import { UnityAssetManager } from '../Common/Unity/AssetManager';
+import { UnityAssetManager, MeshMetadata } from '../Common/Unity/AssetManager';
 
 class ChunkProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -17,6 +17,7 @@ class ChunkProgram extends DeviceProgram {
     public static a_Index = 2;
 
     public static ub_SceneParams = 0;
+    public static ub_ShapeParams = 1;
 
     public override both = `
 precision mediump float;
@@ -26,6 +27,10 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ModelView;
 };
 
+layout(std140) uniform ub_ShapeParams {
+    Mat4x4 u_ChunkModel;
+};
+
 varying vec2 v_LightIntensity;
 
 #ifdef VERT
@@ -33,8 +38,7 @@ layout(location = ${ChunkProgram.a_Position}) attribute vec3 a_Position;
 layout(location = ${ChunkProgram.a_Normal}) attribute vec3 a_Normal;
 
 void mainVS() {
-    const float t_ModelScale = 20.0;
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position * t_ModelScale, 1.0)));
+    gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(u_ChunkModel, vec4(a_Position, 1.0))));
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     vec3 normal = normalize(a_Normal);
     float t_LightIntensityF = dot(-normal, t_LightDirection);
@@ -64,13 +68,7 @@ class MeshRenderer {
     public inputState: GfxInputState;
     public numVertices: number;
 
-    constructor(device: GfxDevice, mesh: Mesh, public offset: Vertex, public inputLayout: GfxInputLayout) {
-        for (let i=0; i<mesh.vertices.length; i += 3) {
-            mesh.vertices[i+0] += offset.x;
-            mesh.vertices[i+1] += offset.y;
-            mesh.vertices[i+2] += offset.z;
-        }
-
+    constructor(device: GfxDevice, mesh: Mesh, public modelMatrix: mat4, public inputLayout: GfxInputLayout) {
         this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertices.buffer);
         this.normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.normals.buffer);
         this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.indices.buffer);
@@ -83,10 +81,18 @@ class MeshRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
+        const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
+        //mat4.identity(this.modelMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.numVertices);
         renderInstManager.submitRenderInst(renderInst);
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice) {
@@ -98,17 +104,18 @@ class MeshRenderer {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 1, numSamplers: 0 }, // ub_SceneParams
+    { numUniformBuffers: 2, numSamplers: 0 }, // ub_SceneParams
 ];
 
-class Mesh {
-    vertices: Float32Array,
-    normals: Float32Array,
-    indices: Int32Array,
+interface Mesh {
+    vertices: Float32Array;
+    normals: Float32Array;
+    indices: Int32Array;
 }
 
 class SubnauticaRenderer implements Viewer.SceneGfx {
     public inputState: GfxInputState;
+    public scaleFactor = 20;
     private inputLayout: GfxInputLayout;
     private meshRenderers: MeshRenderer[];
     private renderHelper: GfxRenderHelper;
@@ -120,8 +127,12 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         this.meshRenderers = [];
     }
 
-    addMesh(mesh: Mesh, offset: Vertex) {
-        this.meshRenderers.push(new MeshRenderer(this.device, mesh, offset, this.inputLayout));
+    addMesh(mesh: Mesh, offset: vec3) {
+        let model = mat4.create();
+        let scaling = vec3.fromValues(this.scaleFactor, this.scaleFactor, this.scaleFactor);
+        mat4.fromScaling(model, scaling);
+        mat4.translate(model, model, offset);
+        this.meshRenderers.push(new MeshRenderer(this.device, mesh, model, this.inputLayout));
     }
 
     createInputLayout(device: GfxDevice): GfxInputLayout {
@@ -190,19 +201,13 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     }
 }
 
-class Vertex {
-    x: number;
-    y: number;
-    z: number;
-}
-
-function parseChunkId(chunkId: string): Vertex {
+function parseOffset(chunkId: string): vec3 {
     let bits = chunkId.split('-');
-    return {
-        x: parseInt(bits[1]) * CHUNK_SCALE,
-        y: parseInt(bits[2]) * CHUNK_SCALE,
-        z: parseInt(bits[3]) * CHUNK_SCALE,
-    }
+    return vec3.fromValues(
+        parseInt(bits[1]) * CHUNK_SCALE,
+        parseInt(bits[2]) * CHUNK_SCALE,
+        parseInt(bits[3]) * CHUNK_SCALE)
+    );
 }
 
 class SubnauticaSceneDesc implements Viewer.SceneDesc {
@@ -213,10 +218,16 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderer = new SubnauticaRenderer(device);
+        const chunks: MeshMetadata[] = await context.dataFetcher.fetchData('subnautica/chunks.json')
+            .then(data => {
+                let decoder = new TextDecoder();
+                return JSON.parse(decoder.decode(data.arrayBuffer)).chunks;
+            });
         let assets = new UnityAssetManager('subnautica/resources.assets', context);
         await assets.loadAssetInfo();
+
         chunks.forEach(chunk => {
-            let offset = parseChunkId(chunk.name);
+            let offset = parseOffset(chunk.name);
             assets.loadMesh(chunk).then(mesh => {
                 renderer.addMesh({
                     vertices: mesh.get_vertices(),

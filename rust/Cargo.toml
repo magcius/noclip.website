@@ -8,11 +8,10 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-g']
+wasm-opt = ['-Os', '--debuginfo']
 
 [profile.release]
 lto = true
-debug = true
 opt-level = "s"
 
 [dependencies]

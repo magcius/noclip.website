@@ -378,7 +378,7 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
         return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
 
     const config = new GfxPlatformWebGL2Config();
-    config.trackResources = false;
+    config.trackResources = IS_DEVELOPMENT;
     config.shaderDebug = IS_DEVELOPMENT;
 
     const gfxSwapChain = createSwapChainForWebGL2(gl, config);
