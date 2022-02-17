@@ -1,14 +1,32 @@
+use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::version::UnityVersion;
+use crate::unity::reader::AssetReader;
 
+#[wasm_bindgen]
 #[derive(Debug)]
 pub struct Asset {
+    #[wasm_bindgen(skip)]
     pub header: AssetHeader,
+    #[wasm_bindgen(skip)]
     pub metadata: AssetMetadata,
+    #[wasm_bindgen(skip)]
     pub objects: Vec<UnityObject>,
+    #[wasm_bindgen(skip)]
     pub script_types: Vec<ScriptType>,
+    #[wasm_bindgen(skip)]
     pub externals: Vec<External>,
+    #[wasm_bindgen(skip)]
     pub ref_types: Vec<SerializedType>,
+    #[wasm_bindgen(skip)]
     pub user_information: String,
+}
+
+#[wasm_bindgen]
+impl Asset {
+    pub fn deserialize(data: Vec<u8>) -> Result<Asset, String> {
+        AssetReader::new(data).read_asset()
+            .map_err(|err| format!("{:?}", err))
+    }
 }
 
 #[derive(Debug)]
@@ -52,13 +70,23 @@ pub enum Endianness {
     Little,
 }
 
+#[wasm_bindgen]
 #[derive(Debug)]
 pub struct AssetHeader {
     pub metadata_size: usize,
     pub file_size: usize,
     pub version: u8,
     pub data_offset: usize,
+    #[wasm_bindgen(skip)]
     pub endianness: Endianness,
+}
+
+#[wasm_bindgen]
+impl AssetHeader {
+    pub fn deserialize(data: Vec<u8>) -> AssetHeader {
+        let mut reader = AssetReader::new(data);
+        reader.read_header().unwrap()
+    }
 }
 
 #[derive(Debug, Default, Clone)]

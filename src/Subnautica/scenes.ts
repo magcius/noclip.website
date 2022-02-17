@@ -8,6 +8,8 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { chunks, ChunkInfo } from './chunks';
+import { UnityAssetManager } from '../Common/Unity/AssetManager';
 
 class ChunkProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -102,7 +104,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 class Mesh {
     vertices: Float32Array,
     normals: Float32Array,
-    indices: Uint32Array,
+    indices: Int32Array,
 }
 
 class SubnauticaRenderer implements Viewer.SceneGfx {
@@ -203,11 +205,6 @@ function parseChunkId(chunkId: string): Vertex {
     }
 }
 
-class ChunkInfo {
-    name: string,
-    idx: number,
-}
-
 class SubnauticaSceneDesc implements Viewer.SceneDesc {
     private inputLayout: GfxInputLayout;
 
@@ -215,54 +212,19 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const { MeshDatabase } = await import("../../rust/pkg/index");
         const renderer = new SubnauticaRenderer(device);
-        const decoder = new TextDecoder();
-        let chunks: ChunkInfo[] = [];
-        let db = await context.dataFetcher.fetchData(`subnautica/resources.assets`)
-            .then(chunk => {
-                let db = MeshDatabase.new(new Uint8Array(chunk.arrayBuffer))
-                db.read();
-                for (let i=0; i<db.count_meshes(); i++) {
-                    let name = db.get_mesh_name(i);
-                    if (name.startsWith('Chunk')) {
-                        chunks.push({ name: name, idx: i });
-                    }
-                }
-                return db;
-            });
-
-        function loadChunk() {
-            let info: ChunkInfo | undefined = chunks.shift();
-            if (info === undefined) {
-                return false;
-            }
-            let offset = parseChunkId(info.name);
-            let chunk: any = db.load_mesh(info.idx);
-            try {
-                let mesh: Mesh = {
-                    vertices: chunk.get_vertices(),
-                    normals: chunk.get_normals(),
-                    indices: chunk.get_indices(),
-                };
-                renderer.addMesh(mesh, offset);
-            } catch (e) {
-                // TODO fix uncompressed meshes
-                console.log(`couldn't load mesh: ${e}`);
-            }
-            return true;
-        }
-
-        function loadChunks() {
-            for (let i=0; i<3; i++) {
-                if (!loadChunk()) {
-                    return;
-                }
-            }
-            setTimeout(loadChunks, 0);
-        }
-
-        loadChunks();
+        let assets = new UnityAssetManager('subnautica/resources.assets', context);
+        await assets.load();
+        chunks.forEach(chunk => {
+            let offset = parseChunkId(chunk.name);
+            assets.loadMesh(chunk).then(mesh => {
+                renderer.addMesh({
+                    vertices: mesh.get_vertices(),
+                    normals: mesh.get_normals(),
+                    indices: mesh.get_indices(),
+                }, offset);
+            })
+        });
 
         return renderer;
     }

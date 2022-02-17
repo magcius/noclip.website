@@ -195,7 +195,7 @@ impl AssetReader {
         Ok(buf)
     }
 
-    fn read_header(&mut self) -> Result<AssetHeader> {
+    pub fn read_header(&mut self) -> Result<AssetHeader> {
         let mut metadata_size = self.read_u32()?;
         let mut file_size = self.read_u32()? as i64;
         let version = self.read_u32()?;

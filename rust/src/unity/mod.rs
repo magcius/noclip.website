@@ -1,8 +1,7 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::unity::mesh::*;
-use crate::unity::reader::*;
-use crate::unity::asset::*;
+use crate::unity::reader::AssetReader;
+use crate::unity::asset::Asset;
 
 pub mod asset;
 pub mod reader;
@@ -11,50 +10,50 @@ pub mod version;
 pub mod bitstream;
 
 #[wasm_bindgen]
-pub struct MeshDatabase {
-    reader: AssetReader,
-    asset: Option<Asset>,
-    mesh_offsets: Option<Vec<u64>>,
+pub struct MeshDataArray {
+    pub length: usize,
+    data: Vec<MeshData>,
 }
 
 #[wasm_bindgen]
-impl MeshDatabase {
-    pub fn new(asset_data: Vec<u8>) -> MeshDatabase {
-        MeshDatabase {
-            reader: AssetReader::new(asset_data),
-            asset: None,
-            mesh_offsets: None,
-        }
+impl MeshDataArray {
+    pub fn get(&self, i: usize) -> MeshData {
+        self.data[i].clone()
     }
+}
 
-    pub fn read(&mut self) {
-        self.asset = Some(self.reader.read_asset().unwrap());
-        self.mesh_offsets = Some(self.get_mesh_offsets())
-    }
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct MeshData {
+    pub offset: usize,
+    pub size: usize,
+    name: String,
+}
 
-    fn get_mesh_offsets(&self) -> Vec<u64> {
-        match self.asset.as_ref() {
-            Some(asset) => asset.objects.iter()
-                .filter(|obj| obj.class_id == 43) // Mesh = 43
-                .map(|obj| obj.byte_start as u64)
-                .collect(),
-            None => vec![],
-        }
+#[wasm_bindgen]
+impl MeshData {
+    pub fn get_name(&self) -> String {
+        self.name.clone()
     }
- 
-    pub fn count_meshes(&self) -> usize {
-        self.mesh_offsets.as_ref().unwrap().len()
-    }
+}
 
-    pub fn get_mesh_name(&mut self, i: usize) -> String {
-        let offs = self.mesh_offsets.as_ref().unwrap()[i];
-        self.reader.seek(std::io::SeekFrom::Start(offs as u64)).unwrap();
-        self.reader.read_char_array().unwrap()
+#[wasm_bindgen]
+pub fn get_mesh_data(asset: &Asset, data: Vec<u8>) -> MeshDataArray {
+    let mut reader = AssetReader::new(data);
+    let mut mesh_data: Vec<MeshData> = asset.objects.iter()
+        .filter(|obj| obj.class_id == 43)
+        .map(|obj| MeshData {
+            offset: obj.byte_start as usize,
+            size: obj.byte_size as usize,
+            name: String::new(),
+        })
+        .collect();
+    for mesh in mesh_data.iter_mut() {
+        reader.seek(std::io::SeekFrom::Start(mesh.offset as u64)).unwrap();
+        mesh.name = reader.read_char_array().unwrap();
     }
-
-    pub fn load_mesh(&mut self, i: usize) -> Mesh {
-        let offs = self.mesh_offsets.as_ref().unwrap()[i];
-        self.reader.seek(std::io::SeekFrom::Start(offs as u64)).unwrap();
-        Mesh::deserialize(&mut self.reader, &self.asset.as_ref().unwrap()).unwrap()
+    MeshDataArray {
+        length: mesh_data.len(),
+        data: mesh_data,
     }
 }

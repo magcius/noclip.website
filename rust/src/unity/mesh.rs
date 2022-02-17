@@ -293,6 +293,12 @@ pub struct Mesh {
 
 #[wasm_bindgen]
 impl Mesh {
+    pub fn from_bytes(data: Vec<u8>, asset: &Asset) -> std::result::Result<Mesh, String> {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(asset.header.endianness);
+        Mesh::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
+    }
+
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
