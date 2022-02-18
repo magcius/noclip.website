@@ -307,11 +307,12 @@ impl Deserialize for Shape {
     }
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
 pub struct Vec3f {
-    x: f32,
-    y: f32,
-    z: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl Deserialize for Vec3f {
@@ -324,10 +325,11 @@ impl Deserialize for Vec3f {
     }
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
 pub struct AABB {
-    center: Vec3f,
-    extent: Vec3f,
+    pub center: Vec3f,
+    pub extent: Vec3f,
 }
 
 impl Deserialize for AABB {
@@ -407,7 +409,7 @@ pub struct Mesh {
     raw_index_buffer: Vec<u8>,
     vertex_data: VertexData,
     compressed_mesh: CompressedMesh,
-    local_aabb: AABB,
+    pub local_aabb: AABB,
     mesh_usage_flags: i32,
     hash_metrics: [f32; 2],
     baked_convex_collision_mesh: Vec<u8>,

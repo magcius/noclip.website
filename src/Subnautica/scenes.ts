@@ -9,6 +9,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { UnityAssetManager, MeshMetadata, UnityMesh, a_Position, a_Normal } from '../Common/Unity/AssetManager';
+import { AABB } from '../Geometry';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -65,7 +66,13 @@ class MeshRenderer {
     constructor(device: GfxDevice, public mesh: UnityMesh, public modelMatrix: mat4) {
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const bbox = new AABB();
+        bbox.transform(this.mesh.bbox, this.modelMatrix);
+        if (!viewerInput.camera.frustum.contains(bbox)) {
+            return;
+        }
+
         const template = renderInstManager.pushTemplateRenderInst();
 
         let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
@@ -120,7 +127,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
         for (let i = 0; i < this.meshRenderers.length; i++)
-            this.meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager);
+            this.meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
