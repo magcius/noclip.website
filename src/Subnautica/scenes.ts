@@ -9,13 +9,9 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { UnityAssetManager, MeshMetadata } from '../Common/Unity/AssetManager';
+import { UnityAssetManager, MeshMetadata, UnityMesh, a_Position, a_Normal } from '../Common/Unity/AssetManager';
 
 class ChunkProgram extends DeviceProgram {
-    public static a_Position = 0;
-    public static a_Normal = 1;
-    public static a_Index = 2;
-
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
 
@@ -34,8 +30,8 @@ layout(std140) uniform ub_ShapeParams {
 varying vec2 v_LightIntensity;
 
 #ifdef VERT
-layout(location = ${ChunkProgram.a_Position}) attribute vec3 a_Position;
-layout(location = ${ChunkProgram.a_Normal}) attribute vec3 a_Normal;
+layout(location = ${a_Position}) attribute vec3 a_Position;
+layout(location = ${a_Normal}) attribute vec3 a_Normal;
 
 void mainVS() {
     gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(u_ChunkModel, vec4(a_Position, 1.0))));
@@ -65,19 +61,9 @@ class MeshRenderer {
     public normsBuf: GfxBuffer;
     public vertsBuf: GfxBuffer;
     public trisBuf: GfxBuffer;
-    public inputState: GfxInputState;
     public numVertices: number;
 
-    constructor(device: GfxDevice, mesh: Mesh, public modelMatrix: mat4, public inputLayout: GfxInputLayout) {
-        this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertices.buffer);
-        this.normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.normals.buffer);
-        this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.indices.buffer);
-
-        this.inputState = device.createInputState(inputLayout, [
-            { buffer: this.vertsBuf, byteOffset: 0, },
-            { buffer: this.normsBuf, byteOffset: 0, },
-        ], { buffer: this.trisBuf, byteOffset: 0 });
-        this.numVertices = mesh.indices.length;
+    constructor(device: GfxDevice, public mesh: UnityMesh, public modelMatrix: mat4) {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
@@ -85,21 +71,17 @@ class MeshRenderer {
 
         let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
         const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
-        //mat4.identity(this.modelMatrix);
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(this.numVertices);
+        renderInst.setInputLayoutAndState(this.mesh.inputLayout, this.mesh.inputState);
+        renderInst.drawIndexes(this.mesh.numIndices);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyBuffer(this.normsBuf);
-        device.destroyBuffer(this.trisBuf);
-        device.destroyBuffer(this.vertsBuf);
-        device.destroyInputState(this.inputState);
+        this.mesh.destroy(device);
     }
 }
 
@@ -116,37 +98,22 @@ interface Mesh {
 class SubnauticaRenderer implements Viewer.SceneGfx {
     public inputState: GfxInputState;
     public scaleFactor = 20;
-    private inputLayout: GfxInputLayout;
     private meshRenderers: MeshRenderer[];
     private renderHelper: GfxRenderHelper;
     public program: GfxProgram;
 
     constructor(public device: GfxDevice) {
         this.program = device.createProgram(new ChunkProgram());
-        this.inputLayout = this.createInputLayout(device);
         this.meshRenderers = [];
+        this.renderHelper = new GfxRenderHelper(device);
     }
 
-    addMesh(mesh: Mesh, offset: vec3) {
+    addMesh(mesh: UnityMesh, offset: vec3) {
         let model = mat4.create();
         let scaling = vec3.fromValues(this.scaleFactor, this.scaleFactor, this.scaleFactor);
         mat4.fromScaling(model, scaling);
         mat4.translate(model, model, offset);
-        this.meshRenderers.push(new MeshRenderer(this.device, mesh, model, this.inputLayout));
-    }
-
-    createInputLayout(device: GfxDevice): GfxInputLayout {
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: ChunkProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
-            { location: ChunkProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
-            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
-        ];
-        const indexBufferFormat: GfxFormat = GfxFormat.U32_R;
-        this.renderHelper = new GfxRenderHelper(device);
-        return device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.meshRenderers.push(new MeshRenderer(this.device, mesh, model));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -194,7 +161,6 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyInputLayout(this.inputLayout);
         device.destroyProgram(this.program);
         this.meshRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy();
@@ -223,18 +189,14 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
                 let decoder = new TextDecoder();
                 return JSON.parse(decoder.decode(data.arrayBuffer)).chunks;
             });
-        let assets = new UnityAssetManager('subnautica/resources.assets', context);
+        let assets = new UnityAssetManager('subnautica/resources.assets', context, device);
         await assets.loadAssetInfo();
 
         chunks.forEach(chunk => {
             let offset = parseOffset(chunk.name);
             assets.loadMesh(chunk).then(mesh => {
-                renderer.addMesh({
-                    vertices: mesh.get_vertices(),
-                    normals: mesh.get_normals(),
-                    indices: mesh.get_indices(),
-                }, offset);
-            })
+                renderer.addMesh(mesh, offset);
+            });
         });
 
         return renderer;

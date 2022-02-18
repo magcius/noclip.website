@@ -5,6 +5,8 @@ use crate::unity::asset::*;
 use crate::unity::reader::*;
 use crate::unity::version::UnityVersion;
 use crate::unity::bitstream::BitStream;
+use std::io::Cursor;
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 // empty type for when we just wanna move the read stream along
 pub struct NoOp {}
@@ -14,12 +16,70 @@ impl Deserialize for NoOp {
     }
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct ChannelInfo {
-    stream: u8,
-    offset: u8,
-    format: u8,
-    dimension: u8,
+    pub stream: u8,
+    pub offset: u8,
+    pub format: VertexFormat,
+    pub dimension: u8,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy)]
+pub enum VertexFormat {
+    Float,
+    Float16,
+    UNorm8,
+    SNorm8,
+    UNorm16,
+    SNorm16,
+    UInt8,
+    SInt8,
+    UInt16,
+    SInt16,
+    UInt32,
+    SInt32,
+}
+
+#[wasm_bindgen]
+impl ChannelInfo {
+    pub fn get_format(value: u8) -> VertexFormat {
+        match value {
+            0 => VertexFormat::Float,
+            1 => VertexFormat::Float16,
+            2 => VertexFormat::UNorm8,
+            3 => VertexFormat::SNorm8,
+            4 => VertexFormat::UNorm16,
+            5 => VertexFormat::SNorm16,
+            6 => VertexFormat::UInt8,
+            7 => VertexFormat::SInt8,
+            8 => VertexFormat::UInt16,
+            9 => VertexFormat::SInt16,
+            10 => VertexFormat::UInt32,
+            11 => VertexFormat::SInt32,
+            _ => panic!("unrecognized format {}", value)
+        }
+    }
+
+    pub fn get_format_size(&self) -> usize {
+        match self.format {
+            VertexFormat::Float |
+            VertexFormat::UInt32 |
+            VertexFormat::SInt32 => 4,
+
+            VertexFormat::Float16 |
+            VertexFormat::UNorm16 |
+            VertexFormat::SNorm16 |
+            VertexFormat::UInt16 |
+            VertexFormat::SInt16 => 2,
+
+            VertexFormat::UNorm8 |
+            VertexFormat::SNorm8 |
+            VertexFormat::UInt8 |
+            VertexFormat::SInt8 => 1,
+        }
+    }
 }
 
 impl Deserialize for ChannelInfo {
@@ -27,8 +87,8 @@ impl Deserialize for ChannelInfo {
         Ok(ChannelInfo {
             stream: reader.read_u8()?,
             offset: reader.read_u8()?,
-            format: reader.read_u8()?,
-            dimension: reader.read_u8()?,
+            format: ChannelInfo::get_format(reader.read_u8()?),
+            dimension: reader.read_u8()? & 0x0F,
         })
     }
 }
@@ -136,11 +196,19 @@ impl Deserialize for CompressedMesh {
     }
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct StreamingInfo {
-    size: u32,
-    offset: u32,
+    pub size: u32,
+    pub offset: u32,
     path: String,
+}
+
+#[wasm_bindgen]
+impl StreamingInfo {
+    pub fn get_path(&self) -> String {
+        return self.path.clone();
+    }
 }
 
 impl Deserialize for StreamingInfo {
@@ -153,11 +221,91 @@ impl Deserialize for StreamingInfo {
     }
 }
 
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct VertexStreamInfo {
+    channel_mask: u32,
+    pub offset: u32,
+    pub stride: u32,
+    divider_op: u8,
+    frequency: u32,
+}
+
+impl VertexStreamInfo {
+    pub fn from_channels(channels: &Vec<ChannelInfo>, vertex_count: usize) -> Vec<VertexStreamInfo> {
+        let mut n_streams = 0;
+        for c in channels {
+            if c.stream > n_streams {
+                n_streams = c.stream;
+            }
+        }
+        n_streams += 1;
+        let mut result = Vec::with_capacity(n_streams as usize);
+        let mut offset = 0;
+        for s in 0..n_streams {
+            let mut channel_mask = 0;
+            let mut stride = 0;
+            for chn in 0..channels.len() {
+                let channel = &channels[chn];
+                if channel.stream == s {
+                    if channel.dimension > 0 {
+                        channel_mask |= 1 << chn;
+                        stride += channel.dimension as usize * channel.get_format_size();
+                    }
+                }
+            }
+
+            result.push(VertexStreamInfo {
+                channel_mask,
+                offset,
+                stride: stride as u32,
+                divider_op: 0,
+                frequency: 0,
+            });
+            offset += (vertex_count * stride) as u32;
+            offset = (offset + 15) & 15;
+        }
+        return result;
+    }
+}
+
 #[derive(Debug)]
 pub struct VertexData {
     vertex_count: u32,
     channels: Vec<ChannelInfo>,
+    streams: Vec<VertexStreamInfo>,
     data: Vec<u8>,
+}
+
+impl VertexData {
+    pub fn read_stream_f32(&self, chn: usize) -> Vec<f32> {
+        let channel = &self.channels[chn];
+        let mut cursor = Cursor::new(&self.data);
+        match channel.format {
+            VertexFormat::Float => {},
+            _ => panic!("vertex format {:?} not yet implemented", channel.format),
+        };
+        if channel.dimension > 0 {
+            let stream = &self.streams[channel.stream as usize];
+            if (stream.channel_mask & (1 << chn)) > 0 {
+                let component_byte_size = channel.get_format_size();
+                let byte_size = self.vertex_count as usize & channel.dimension as usize * component_byte_size;
+                let mut floats: Vec<f32> = Vec::with_capacity(self.vertex_count as usize * component_byte_size);
+                for v in 0..self.vertex_count {
+                    let vertex_offset = stream.offset + channel.offset as u32 + stream.stride * v;
+                    for d in 0..channel.dimension {
+                        let component_offset = vertex_offset as usize + component_byte_size * d as usize;
+                        floats.push(match channel.format {
+                            VertexFormat::Float => cursor.read_f32::<LittleEndian>().unwrap(),
+                            _ => unreachable!(),
+                        });
+                    }
+                }
+                return floats;
+            }
+        }
+        return vec![];
+    }
 }
 
 impl Deserialize for VertexData {
@@ -167,8 +315,10 @@ impl Deserialize for VertexData {
         reader.align()?;
         let data = reader.read_byte_array()?;
         reader.align()?;
+        let streams = VertexStreamInfo::from_channels(&channels, vertex_count as usize);
         Ok(VertexData {
             vertex_count,
+            streams,
             channels,
             data,
         })
@@ -270,6 +420,13 @@ impl Deserialize for MeshCompression {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+#[wasm_bindgen]
+pub enum IndexFormat {
+    UInt16,
+    UInt32,
+}
+
 #[derive(Debug)]
 #[wasm_bindgen]
 pub struct Mesh {
@@ -279,7 +436,7 @@ pub struct Mesh {
     is_readable: bool,
     keep_vertices: bool,
     keep_indices: bool,
-    index_format: i32,
+    pub index_format: IndexFormat,
     raw_index_buffer: Vec<u8>,
     vertex_data: VertexData,
     compressed_mesh: CompressedMesh,
@@ -303,25 +460,71 @@ impl Mesh {
         self.name.clone()
     }
 
-    pub fn get_vertices(&self) -> Vec<f32> {
-        if self.mesh_compression == MeshCompression::Off {
-            panic!("non-compressed meshes not yet implemented");
-        }
-        self.compressed_mesh.vertices.unpack()
+    pub fn is_compressed(&self) -> bool {
+        return self.mesh_compression != MeshCompression::Off
     }
 
-    pub fn get_normals(&self) -> Vec<f32> {
+    pub fn get_vertices(&self) -> Option<Vec<f32>> {
         if self.mesh_compression == MeshCompression::Off {
-            panic!("non-compressed meshes not yet implemented");
+            None
+        } else {
+            Some(self.compressed_mesh.vertices.unpack())
         }
-        self.compressed_mesh.normals.octohedral_unpack(&self.compressed_mesh.normal_signs)
     }
 
-    pub fn get_indices(&self) -> Vec<i32> {
+    pub fn get_normals(&self) -> Option<Vec<f32>> {
         if self.mesh_compression == MeshCompression::Off {
-            panic!("non-compressed meshes not yet implemented");
+            None
+        } else {
+            let signs = &self.compressed_mesh.normal_signs;
+            Some(self.compressed_mesh.normals.octohedral_unpack(signs))
         }
-        self.compressed_mesh.triangles.unpack()
+    }
+
+    pub fn get_indices(&self) -> Option<Vec<i32>> {
+        if self.mesh_compression == MeshCompression::Off {
+            None
+        } else {
+            Some(self.compressed_mesh.triangles.unpack())
+        }
+    }
+
+    pub fn get_streaming_info(&self) -> Option<StreamingInfo> {
+        if self.streaming_info.path.is_empty() {
+            None
+        } else {
+            Some(self.streaming_info.clone())
+        }
+    }
+
+    pub fn set_vertex_data(&mut self, data: Vec<u8>) {
+        self.vertex_data.data = data;
+    }
+
+    pub fn get_vertex_count(&self) -> usize {
+        self.vertex_data.vertex_count as usize
+    }
+
+    pub fn get_vertex_data(&self) -> Vec<u8> {
+        self.vertex_data.data.clone()
+    }
+
+    pub fn get_index_data(&self) -> Vec<u8> {
+        self.raw_index_buffer.clone()
+    }
+
+    pub fn get_channel_info(&self, i: usize) -> Option<ChannelInfo> {
+        match self.vertex_data.channels.get(i) {
+            Some(c) => Some(c.clone()),
+            None => None,
+        }
+    }
+
+    pub fn get_vertex_stream_info(&self, i: usize) -> Option<VertexStreamInfo> {
+        match self.vertex_data.streams.get(i) {
+            Some(s) => Some(s.clone()),
+            None => None,
+        }
     }
 }
 
@@ -346,7 +549,7 @@ impl Deserialize for Mesh {
         let keep_vertices = reader.read_bool()?;
         let keep_indices = reader.read_bool()?;
         reader.align()?;
-        let index_format = reader.read_i32()?;
+        let index_format = if reader.read_i32()? == 0 { IndexFormat::UInt16 } else { IndexFormat::UInt32 };
         let raw_index_buffer = reader.read_byte_array()?;
         reader.align()?;
         let vertex_data = VertexData::deserialize(reader, asset)?;
@@ -359,13 +562,9 @@ impl Deserialize for Mesh {
         let baked_triangle_collision_mesh = reader.read_byte_array()?;
         reader.align()?;
         let hash_metrics = [reader.read_f32()?, reader.read_f32()?];
-
-        // TODO: read in vertex data from StreamingInfo file
         let streaming_info = StreamingInfo::deserialize(reader, asset)?;
-        if !streaming_info.path.is_empty() {
-            let reason = "Meshes with streaming data not currently supported";
-            return Err(AssetReaderError::UnsupportedFeature(reason.into()))
-        }
+        //web_sys::console::log_1(&format!("{:?}", &vertex_data.channels).into());
+        //web_sys::console::log_1(&format!("{:?}", &vertex_data.streams).into());
 
         Ok(Mesh {
             name,
