@@ -62,7 +62,11 @@ export var framesets = {
 export enum FlipbookType {
     Looping = 1,
     Oneshot = 2,
-    RandomStartLooping = 4
+    MirrorLooping = 3, // TODO
+    RandomStartLooping = 4,
+    OnlyTweened = 5, // TODO
+    OneshotBackwards = 6, // TODO
+    NotTweened = 7 // TODO
 }
 
 export interface Flipbook {
@@ -588,8 +592,6 @@ export class Particle {
     private lifetime: number = 0;
 
     constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[]) {
-        // TODO: use one renderer for all particles of
-        //       same time, possibly even with same renderInst template
         this.flipbook = new GloverFlipbookRenderer(
             device, cache, textureHolder, particleFlipbooks[particleType]);
     } 

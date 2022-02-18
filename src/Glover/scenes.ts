@@ -39,6 +39,7 @@ import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
 import { radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion, pushAlongLookatVector } from './util';
 import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
+import { BulletPool } from './bullets';
 
 
 import { KaitaiStream } from 'kaitai-struct';
@@ -125,6 +126,7 @@ export class GloverWaterVolume implements GenericRenderable {
 
 class GloverVent implements GenericRenderable {
 
+    private bullets: BulletPool | null = null;
     private particles: ParticlePool | null = null;
 
     private lastFrameAdvance: number = 0;
@@ -137,10 +139,31 @@ class GloverVent implements GenericRenderable {
 
     private active: boolean = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private velocity: vec3, private type: number, waterVolumes: GloverWaterVolume[]) {
+    private scratchVec3: vec3 = vec3.create();
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private velocity: vec3, private type: number, private parent: GloverPlatform | null, waterVolumes: GloverWaterVolume[]) {
+        // TODO: manual scaling for fire vent in Carnival 2
+
         vec3.scale(this.velocity, this.velocity, 1/SRC_FRAME_TO_MS);
         if (type === 8) {
             this.particles = new ParticlePool(device, cache, textureHolder, 0x14, waterVolumes);
+        } else {
+            const bulletType = {
+                0: 4,
+                1: 5,
+                2: 5,
+                3: 17,
+                4: 18,
+                5: 19,
+                6: 20,
+                7: 21,
+                9: 24,
+                10: 13
+            }[type];
+            if (bulletType !== undefined) {
+                this.bullets = new BulletPool(device, cache, textureHolder, bulletType, waterVolumes);
+                // TODO: particle pool for bullet type 24/0x18
+            }
         }
     }
 
@@ -148,6 +171,14 @@ class GloverVent implements GenericRenderable {
         if (this.particles !== null) {
             this.particles.destroy(device);
         }
+        if (this.bullets !== null) {
+            this.bullets.destroy(device);
+        }
+
+    }
+
+    public setParent(parent: GloverPlatform): void {
+        this.parent = parent;
     }
 
     public pushDutyCycle(framesOff: number, framesOn: number) {
@@ -199,12 +230,37 @@ class GloverVent implements GenericRenderable {
                     }
                 }
 
+                if (this.bullets !== null) {
+                    let finalPos = this.position;
+                    if (this.parent !== null) {
+                        finalPos = this.scratchVec3;
+                        vec3.add(finalPos, this.position, this.parent.getPosition());
+                    }
+                    const bullet = this.bullets.spawn(finalPos);
+                    vec3.copy(bullet.velocity, this.velocity);
+                    vec3.scale(bullet.velocity, bullet.velocity, SRC_FRAME_TO_MS);
+                    // TODO:
+                      // if (vent->bulletType != '\x12') {
+                      //   iVar3 = random(0xb);
+                      //   fVar8 = 20.0;
+                      //   (bullet->actor).vel.x = (bullet->actor).vel.x + (float)(iVar3 + -5) / 20.0;
+                      //   iVar3 = random(0xb);
+                      //   (bullet->actor).vel.y = (bullet->actor).vel.y + (float)(iVar3 + -5) / fVar8;
+                      //   iVar3 = random(0xb);
+                      //   (bullet->actor).vel.z = (bullet->actor).vel.z + (float)(iVar3 + -5) / fVar8;
+                      // }
+                }
+
             }
         }
 
         if (this.particles !== null) {
             this.particles.prepareToRender(device, renderInstManager, viewerInput);
         }
+        if (this.bullets !== null) {
+            this.bullets.prepareToRender(device, renderInstManager, viewerInput);
+        }
+
     }
 
 }
@@ -217,7 +273,7 @@ class GloverBuzzer implements GenericRenderable {
     private pt1: vec3 | GloverPlatform = vec3.create();
     private pt2: vec3 | GloverPlatform = vec3.create();
 
-    private scratchVec3 = vec3.create();
+    private scratchVec3: vec3 = vec3.create();
 
     private lastFrameAdvance: number = 0;
 
@@ -225,7 +281,7 @@ class GloverBuzzer implements GenericRenderable {
     private dutyAdvance: number = 0;
     private dutyNextIdx: number = 0;
 
-    private active = true;
+    public active: boolean = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder,
         thickness: number, diameter: number, flags: number, color: Color, colorJitter: number)
@@ -1621,6 +1677,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let skyboxClearColor = [0,0,0];
 
         let buzzerConnections: [GloverBuzzer, number, number][] = [];
+        let ventParents: [GloverVent, number][] = [];
         let shadowCasters: [Shadows.ShadowCaster, boolean][] = [];
         let ballActors: GloverActorRenderer[] = [];
 
@@ -1752,7 +1809,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         vec3.fromValues(cmd.params.end2X, cmd.params.end2Y, cmd.params.end2Z));
                     if (cmd.params.drawFlags & 0x20) {
                         // "Starts inactive" flag
-                        currentBuzzer.visible = false;
+                        currentBuzzer.active = false;
                     }
                     buzzerConnections.push([currentBuzzer, cmd.params.platform1Tag, cmd.params.platform2Tag]);
                     sceneRenderer.miscRenderers.push(currentBuzzer);
@@ -1784,7 +1841,11 @@ class SceneDesc implements Viewer.SceneDesc {
                         [cmd.params.originX, cmd.params.originY, cmd.params.originZ],
                         [cmd.params.particleVelocityX, cmd.params.particleVelocityY, cmd.params.particleVelocityZ],
                         cmd.params.type,
+                        null,
                         sceneRenderer.waterVolumes);
+                    if (cmd.params.parentTag != 0) {
+                        ventParents.push([currentVent, cmd.params.parentTag]);
+                    }
                     currentObject = currentVent;
                     sceneRenderer.miscRenderers.push(currentVent);
                     break;
@@ -2050,6 +2111,11 @@ class SceneDesc implements Viewer.SceneDesc {
 
         for (let platform of sceneRenderer.platforms) {
             platform.updateModelMatrix();
+        }
+
+        for (let [vent, tag] of ventParents) {
+            assert(sceneRenderer.platformByTag.has(tag));
+            vent.setParent(sceneRenderer.platformByTag.get(tag)!);
         }
 
         for (let connection of buzzerConnections) {

@@ -406,6 +406,12 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
             GloverFlipbookRenderer.renderCache.set(key, this.spriteRenderer);
         }        
 
+        // TODO: implement these types:
+        // MirrorLooping = 3, // TODO
+        // OneshotBackwards = 6, // TODO
+        // NotTweened = 7 // TODO
+
+
         this.playing = true;
 
         if (flipbookMetadata.type === FlipbookType.RandomStartLooping) {
@@ -441,18 +447,20 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
             if (this.lastFrameAdvance > 50) {
                 this.lastFrameAdvance = 0;
 
-                if (this.frameCounter > 0) {
-                    this.frameCounter -= 0x20;
-                } else {
-                    this.frameCounter += this.frameDelay;
-                    this.curFrame += 1;
-                    if (this.curFrame >= this.flipbookMetadata.frameset.length) {
-                        if (this.loop) {
-                            this.curFrame = 0;
-                            this.playing = true;
-                        } else {
-                            this.curFrame = this.flipbookMetadata.frameset.length - 1;
-                            this.playing = false;
+                if (this.flipbookMetadata.type !== FlipbookType.OnlyTweened) {
+                    if (this.frameCounter > 0) {
+                        this.frameCounter -= 0x20;
+                    } else {
+                        this.frameCounter += this.frameDelay;
+                        this.curFrame += 1;
+                        if (this.curFrame >= this.flipbookMetadata.frameset.length) {
+                            if (this.loop) {
+                                this.curFrame = 0;
+                                this.playing = true;
+                            } else {
+                                this.curFrame = this.flipbookMetadata.frameset.length - 1;
+                                this.playing = false;
+                            }
                         }
                     }
                 }
@@ -480,7 +488,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
                 size += (this.endSize - this.startSize) * this.timeRemaining / this.lifetime;
             }
         }
-        size /= 3;
+        size /= 4;
 
         if (this.lifetime > 0) {
             this.timeRemaining -= viewerInput.deltaTime;
