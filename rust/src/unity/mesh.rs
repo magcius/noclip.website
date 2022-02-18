@@ -5,8 +5,6 @@ use crate::unity::asset::*;
 use crate::unity::reader::*;
 use crate::unity::version::UnityVersion;
 use crate::unity::bitstream::BitStream;
-use std::io::Cursor;
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 // empty type for when we just wanna move the read stream along
 pub struct NoOp {}
@@ -275,37 +273,6 @@ pub struct VertexData {
     channels: Vec<ChannelInfo>,
     streams: Vec<VertexStreamInfo>,
     data: Vec<u8>,
-}
-
-impl VertexData {
-    pub fn read_stream_f32(&self, chn: usize) -> Vec<f32> {
-        let channel = &self.channels[chn];
-        let mut cursor = Cursor::new(&self.data);
-        match channel.format {
-            VertexFormat::Float => {},
-            _ => panic!("vertex format {:?} not yet implemented", channel.format),
-        };
-        if channel.dimension > 0 {
-            let stream = &self.streams[channel.stream as usize];
-            if (stream.channel_mask & (1 << chn)) > 0 {
-                let component_byte_size = channel.get_format_size();
-                let byte_size = self.vertex_count as usize & channel.dimension as usize * component_byte_size;
-                let mut floats: Vec<f32> = Vec::with_capacity(self.vertex_count as usize * component_byte_size);
-                for v in 0..self.vertex_count {
-                    let vertex_offset = stream.offset + channel.offset as u32 + stream.stride * v;
-                    for d in 0..channel.dimension {
-                        let component_offset = vertex_offset as usize + component_byte_size * d as usize;
-                        floats.push(match channel.format {
-                            VertexFormat::Float => cursor.read_f32::<LittleEndian>().unwrap(),
-                            _ => unreachable!(),
-                        });
-                    }
-                }
-                return floats;
-            }
-        }
-        return vec![];
-    }
 }
 
 impl Deserialize for VertexData {

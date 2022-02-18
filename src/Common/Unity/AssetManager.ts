@@ -1,10 +1,8 @@
-import { DataFetcher } from '../../DataFetcher';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
-import { AssetInfo, Mesh, VertexFormat, IndexFormat, StreamingInfo } from '../../../rust/pkg/index';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../../gfx/platform/GfxPlatform';
-import { FormatTypeFlags } from '../../gfx/platform/GfxPlatformFormat';
+import { AssetInfo, Mesh, VertexFormat, StreamingInfo } from '../../../rust/pkg/index';
+import { GfxDevice, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
 
 let _wasm: any | null = null;
 
@@ -47,7 +45,6 @@ export class UnityMesh {
 
 export class UnityAssetManager {
     private assetInfo: AssetInfo;
-    private fetcher: DataFetcher;
 
     constructor(public assetPath: string, private context: SceneContext, public device: GfxDevice) {
     }

@@ -2,12 +2,11 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { UnityAssetManager, MeshMetadata, UnityMesh, a_Position, a_Normal } from '../Common/Unity/AssetManager';
 
@@ -89,12 +88,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 0 }, // ub_SceneParams
 ];
 
-interface Mesh {
-    vertices: Float32Array;
-    normals: Float32Array;
-    indices: Int32Array;
-}
-
 class SubnauticaRenderer implements Viewer.SceneGfx {
     public inputState: GfxInputState;
     public scaleFactor = 20;
@@ -120,7 +113,6 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
-        //template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         let offs = template.allocateUniformBuffer(ChunkProgram.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(ChunkProgram.ub_SceneParams);
@@ -177,8 +169,6 @@ function parseOffset(chunkId: string): vec3 {
 }
 
 class SubnauticaSceneDesc implements Viewer.SceneDesc {
-    private inputLayout: GfxInputLayout;
-
     constructor(public id: string, public name: string) {
     }
 
