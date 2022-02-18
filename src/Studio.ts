@@ -780,14 +780,17 @@ export class StudioPanel extends FloatingPanel {
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
+
+        this.mainPanel.parentElement!.style.minWidth = '100%';
+        this.mainPanel.parentElement!.style.left = '0px';
+        this.mainPanel.parentElement!.style.bottom = '0px';
+        this.mainPanel.parentElement!.style.top = '';
+        this.mainPanel.style.backgroundColor = 'rgba(0, 0, 0, 1)';
         // Closing the panel will be done by disabling studio mode
         this.closeButton.style.display = 'none';
         this.header.ondblclick = null;
+        this.header.onmousedown = null;
 
-        this.onMotion = (dx: number, dy: number) => {
-            this.elem.style.left = clamp((parseFloat(this.elem.style.left!) + dx), 0, window.innerWidth - this.elem.offsetWidth) + 'px';
-            this.elem.style.top = clamp((parseFloat(this.elem.style.top!) + dy), 0, window.innerHeight - this.elem.offsetHeight) + 'px';
-        }
         this.elem.onmouseover = () => {
             this.elem.style.opacity = '1';
         };
@@ -795,13 +798,9 @@ export class StudioPanel extends FloatingPanel {
             this.elem.style.opacity = '0.8';
         };
 
-        this.setWidth('650px');
         this.elem.id = 'studioPanel';
         this.elem.style.display = 'none';
         this.elem.style.zIndex = '1';
-        this.elem.onmouseout = () => {
-            this.elem.style.opacity = '0.8';
-        };
         this.elem.style.opacity = '0.8';
         this.elem.style.userSelect = 'none';
 
@@ -814,14 +813,24 @@ export class StudioPanel extends FloatingPanel {
         this.contents.style.lineHeight = '36px';
         this.studioPanelContents = this.contents.querySelector('#studioPanelContents') as HTMLElement;
 
+        this.setWidth('100%');
     }
 
     public show(): void {
         this.elem.style.display = '';
+        const bBar = document.querySelector('#BottomBar') as HTMLElement;
+        if (bBar) {
+            bBar.dataset.ob = bBar.style.bottom;
+            bBar.style.bottom = (this.elem.getBoundingClientRect().height + 24) + 'px';
+        }
     }
 
     public hide(): void {
         this.elem.style.display = 'none';
+        const bBar = document.querySelector('#BottomBar') as HTMLElement;
+        if (bBar && bBar.dataset.ob) {
+            bBar.style.bottom = bBar.dataset.ob;
+        }
     }
 
     public initStudio(): void {
@@ -836,6 +845,12 @@ export class StudioPanel extends FloatingPanel {
             #studioPanel {
                 font: 16px monospace;
                 color: #fefefe;
+            }
+            #studioPanelContents {
+                display: grid;
+                grid-gap: 9px;
+                grid-auto-flow: column;
+                grid-template-columns: 1fr 4fr 1fr;
             }
             #studioPanel select {
                 background: #000;
@@ -858,6 +873,7 @@ export class StudioPanel extends FloatingPanel {
                 line-height: 1.5;
                 padding: 0 1rem;
                 min-height: 3rem;
+                text-align: center;
             }
             #studioPanel small {
                 line-height: 1.7;
@@ -912,17 +928,12 @@ export class StudioPanel extends FloatingPanel {
             #timelineElementsCanvas {
                 z-index: 4;
             }
-            #keyframeList {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-                height: 27rem;
-                overflow-y: scroll;
-                border: 1px solid #555;
-            }
-            #keyframeList > li {
-                position: relative;
-                background-color: #441111;
+            #timelineControlsContainer {
+                display: grid;
+                grid-gap: 12px;
+                grid-auto-flow: column;
+                justify-content: end;
+                margin: 8px 32px;
             }
             #keyframeControls {
                 line-height: 1.2;
@@ -946,119 +957,131 @@ export class StudioPanel extends FloatingPanel {
                 font: 16px monospace;
                 color: #fefefe;
             }
+            .SettingsButton.IconButton {
+                width: 36px;
+                height: 36px;
+                padding: 0 0 0 0.05rem;
+                line-height: 2.4;
+            }
             #studioControlsContainer .disabled,
             .SettingsButton.disabled {
                 cursor: not-allowed!important;
                 opacity: 0.5;
             }
             #playbackControls {
-                padding: 0 5rem 1rem;
+                display: flex;
                 border-top: 1px solid #444;
+                width: 12rem;
             }
         </style>
-        <div style="position: relative;">
-            <div id="undoRedoBtnContainer" style="position: absolute; left: 1rem; top: -0.25rem; white-space: nowrap;" hidden>
-                <button type="button" id="undoBtn" class="SettingsButton disabled" disabled></button>
-                <button type="button" id="redoBtn" class="SettingsButton disabled" disabled></button>
-            </div>
-        </div>
-        <div style="position: relative;">
-            <div style="position: absolute; right: 1rem;top: -0.25rem; width: 5rem;">
-                <button type="button" id="saveAnimationBtn" class="SettingsButton" hidden>Save</button>
-            </div>
-        </div>
-        <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
-        <div id="studioSaveLoadControls" hidden>
-            <div style="display: grid;grid-template-columns: 1fr 1fr; gap: 0.25rem 1rem;">
-                <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
-                <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
-                <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
-                <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
-            </div>
-        </div>
-        <div id="studioHelpText"></div>
-        <div id="studioControlsContainer" hidden>
-            <div id="timelineControlsContainer" style="display: grid; grid-gap: 12px; grid-auto-flow: column; justify-content: end; margin: 0 12px;">
-                <div>
-                    <input id="playheadTimePositionInput" class="StudioNumericInput" type="number" min="0" max="300" step="0.1" value="0"><span>/</span>
-                    <input id="timelineLengthInput" class="StudioNumericInput" type="number" min="1" max="300" step="0.1" value="${Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND}"><span>s</span>
+        <div>
+            <div style="position: relative;">
+                <div id="undoRedoBtnContainer" style="position: absolute; left: 1rem; top: -0.25rem; white-space: nowrap;" hidden>
+                    <button type="button" id="undoBtn" class="SettingsButton disabled" disabled></button>
+                    <button type="button" id="redoBtn" class="SettingsButton disabled" disabled></button>
                 </div>
+            </div>
+            <div style="position: relative;">
+                <div style="position: absolute; right: 1rem;top: -0.25rem; width: 5rem;">
+                    <button type="button" id="saveAnimationBtn" class="SettingsButton" hidden>Save</button>
+                </div>
+            </div>
+            <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
+            <div id="studioSaveLoadControls" hidden>
+                <div style="display: grid;grid-template-columns: 1fr 1fr; gap: 0.25rem 1rem;">
+                    <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
+                    <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
+                    <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
+                    <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
+                </div>
+            </div>
+            <div id="previewOptionsContainer">
+                <div style="text-align: center;">Preview Options</div>
+            </div>
+        </div>
+        <div>
+            <div id="studioHelpText"></div>
+            <div id="studioControlsContainer" hidden>
+                <div id="timelineControlsContainer">
+                    <div id="playbackControls">
+                        <button type="button" id="playAnimationBtn" class="SettingsButton">▶</button>
+                        <button type="button" id="stopAnimationBtn" class="SettingsButton" hidden>■</button>
+                    </div>
 
-                <button type="button" id="loopAnimationBtn" title="Loop" class="SettingsButton">🔁</button>
-                <button type="button" id="snapBtn" title="Snap" class="SettingsButton">🧲</button>
-            </div>
-            <div style="display: flex;">
-                <div id="trackLabels">
-                    <div id="positionLookAtBankLabels" hidden>
-                        <div class="label-col">
-                            <small>Position</small>
-                            <small>LookAt</small>
-                            <small>Bank</small>
-                        </div>
+                    <div>
+                        <input id="playheadTimePositionInput" class="StudioNumericInput" type="number" min="0" max="300" step="0.1" value="0"><span>/</span>
+                        <input id="timelineLengthInput" class="StudioNumericInput" type="number" min="1" max="300" step="0.1" value="${Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND}"><span>s</span>
                     </div>
-                    <div id="fullLabels" hidden>
-                        <div class="label-container">
-                            <span>Position</span>
+
+                    <button type="button" id="loopAnimationBtn" title="Loop" class="SettingsButton IconButton">🔁</button>
+                    <button type="button" id="snapBtn" title="Snap" class="SettingsButton IconButton">🧲</button>
+                </div>
+                <div style="display: flex;">
+                    <div id="trackLabels">
+                        <div id="positionLookAtBankLabels" hidden>
                             <div class="label-col">
-                                <small>X</small>
-                                <small>Y</small>
-                                <small>Z</small>
+                                <small>Position</small>
+                                <small>LookAt</small>
+                                <small>Bank</small>
                             </div>
                         </div>
-                        <div class="label-container">
-                            <span>LookAt</span>
-                            <div class="label-col">
-                                <small>X</small>
-                                <small>Y</small>
-                                <small>Z</small>
+                        <div id="fullLabels" hidden>
+                            <div class="label-container">
+                                <span>Position</span>
+                                <div class="label-col">
+                                    <small>X</small>
+                                    <small>Y</small>
+                                    <small>Z</small>
+                                </div>
                             </div>
-                        </div>
-                        <div class="label-container">
-                            <small>Bank</small>
-                        </div>
-                    </div>
-                </div>
-                <div id="timelineContainer">
-                    <div id="timelineHeaderBg"></div>
-                    <div id="timelineTracksBg"></div>
-                    <canvas id="timelineMarkersCanvas" width="600" height="${Timeline.HEADER_HEIGHT}"></canvas>
-                    <canvas id="timelineElementsCanvas" width="600" height="${Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT}" tabindex="-1"></canvas>
-                </div>
-            </div>
-            <div style="display: grid;grid-template-columns: 1.25fr 1fr;">
-                <div>
-                    <div style="text-align: center;">Keyframe Settings</div>
-                    <div id="selectKeyframeMsg">Select a keyframe.</div>
-                    <div id="keyframeControls" hidden>
-                        <div style="width: 50%; margin: 0 auto 0.5rem;">
-                            <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Keyframe</button>
-                        </div>
-                        <div id="interpolationSettings">
-                            <div id="customTangentsContainer" style="display: grid; grid-auto-flow: column; text-align: center;">
-                                <div>
-                                    <div><span>X Position:</span> <input id="posXTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                    <div><span>Y Position:</span> <input id="posYTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                    <div><span>Z Position:</span> <input id="posZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                            <div class="label-container">
+                                <span>LookAt</span>
+                                <div class="label-col">
+                                    <small>X</small>
+                                    <small>Y</small>
+                                    <small>Z</small>
                                 </div>
-                                <div>
-                                    <div><span>LookAt X:</span> <input id="lookAtXTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                    <div><span>LookAt Y:</span> <input id="lookAtYTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                    <div><span>LookAt Z:</span> <input id="lookAtZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                </div>
-                                <div>
-                                    <span>Bank rotation:</span> <input id="bankTangentInput" class="StudioNumericInput" type="number" step="0.01" value="0">
-                                </div>
+                            </div>
+                            <div class="label-container">
+                                <small>Bank</small>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div id="previewOptionsContainer">
-                    <div style="text-align: center;">Preview Options</div>
+                    <div id="timelineContainer">
+                        <div id="timelineHeaderBg"></div>
+                        <div id="timelineTracksBg"></div>
+                        <canvas id="timelineMarkersCanvas" width="600" height="${Timeline.HEADER_HEIGHT}"></canvas>
+                        <canvas id="timelineElementsCanvas" width="600" height="${Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT}" tabindex="-1"></canvas>
+                    </div>
                 </div>
             </div>
-            <div id="playbackControls">
-                <button type="button" id="playAnimationBtn" class="SettingsButton">▶</button>
-                <button type="button" id="stopAnimationBtn" class="SettingsButton" hidden>■</button>
+        </div>
+        <div style="display: grid;grid-template-columns: 1.25fr 1fr;">
+            <div>
+                <div style="text-align: center;">Keyframe Settings</div>
+                <div id="selectKeyframeMsg">Select a keyframe.</div>
+                <div id="keyframeControls" hidden>
+                    <div style="width: 50%; margin: 0 auto 0.5rem;">
+                        <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Keyframe</button>
+                    </div>
+                    <div id="interpolationSettings">
+                        <div id="customTangentsContainer" style="display: grid; grid-auto-flow: column; text-align: center;">
+                            <div>
+                                <div><span>X Position:</span> <input id="posXTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>Y Position:</span> <input id="posYTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>Z Position:</span> <input id="posZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                            </div>
+                            <div>
+                                <div><span>LookAt X:</span> <input id="lookAtXTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>LookAt Y:</span> <input id="lookAtYTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>LookAt Z:</span> <input id="lookAtZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                            </div>
+                            <div>
+                                <span>Bank rotation:</span> <input id="bankTangentInput" class="StudioNumericInput" type="number" step="0.01" value="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>`);
         this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
