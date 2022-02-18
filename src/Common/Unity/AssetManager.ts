@@ -3,13 +3,18 @@ import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
 import { AssetInfo, Mesh, VertexFormat, StreamingInfo } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
+import { FormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 
 let _wasm: any | null = null;
 
 async function loadWasm() {
-    return await import('../../../rust/pkg/index');
+    if (_wasm === null) {
+        _wasm = await import('../../../rust/pkg/index');
+    }
+    return _wasm;
 }
 
+// this is a ballpark estimate, it's probably much lower
 const MAX_HEADER_LENGTH = 4096;
 
 function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array {
@@ -119,7 +124,7 @@ export class UnityAssetManager {
     }
 }
 
-async function compressedMeshLayout(device: GfxDevice, mesh: Mesh): Promise<UnityMesh> {
+function compressedMeshLayout(device: GfxDevice, mesh: Mesh): UnityMesh {
     let vertices = mesh.get_vertices()!;
     let normals = mesh.get_normals()!;
     let indices = mesh.get_indices()!;
@@ -145,47 +150,55 @@ async function compressedMeshLayout(device: GfxDevice, mesh: Mesh): Promise<Unit
     return new UnityMesh(layout, state, indices.length);
 }
 
-// tbh not sure about many of these
-function vertexFormatToGfxFormat(wasm: any, fmt: VertexFormat): GfxFormat {
-    switch (fmt) {
-        case wasm.VertexFormat.Float: return GfxFormat.F32_RGB;
-        case wasm.VertexFormat.Float16: return GfxFormat.F16_RGB;
-        case wasm.VertexFormat.UNorm8: return GfxFormat.U8_RGB_NORM;
-        case wasm.VertexFormat.SNorm8: return GfxFormat.S8_RGB_NORM;
-        case wasm.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
-        case wasm.VertexFormat.SNorm16: return GfxFormat.S16_RGB_NORM;
-        case wasm.VertexFormat.UInt8: return GfxFormat.U8_R;
-        case wasm.VertexFormat.SInt8: return GfxFormat.S8_R;
-        case wasm.VertexFormat.UInt16: return GfxFormat.U16_R;
-        case wasm.VertexFormat.SInt16: return GfxFormat.S16_R;
-        case wasm.VertexFormat.UInt32: return GfxFormat.U32_R;
-        case wasm.VertexFormat.SInt32: return GfxFormat.S32_R;
+function setFormatCompFlags(fmt: GfxFormat, compFlags: FormatCompFlags): GfxFormat {
+    return (fmt & 0xFFFF00FF) | (compFlags << 8);
+}
+
+function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
+    switch (vertexFormat) {
+        case _wasm.VertexFormat.Float: return GfxFormat.F32_R;
+        case _wasm.VertexFormat.Float16: return GfxFormat.F16_R;
+        case _wasm.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
+        case _wasm.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
+        case _wasm.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
+        case _wasm.VertexFormat.SNorm16: return GfxFormat.S16_RG_NORM;
+        case _wasm.VertexFormat.UInt8: return GfxFormat.U8_R;
+        case _wasm.VertexFormat.SInt8: return GfxFormat.S8_R;
+        case _wasm.VertexFormat.UInt16: return GfxFormat.U16_R;
+        case _wasm.VertexFormat.SInt16: return GfxFormat.S16_R;
+        case _wasm.VertexFormat.UInt32: return GfxFormat.U32_R;
+        case _wasm.VertexFormat.SInt32: return GfxFormat.S32_R;
         default:
-            throw new Error(`didn't recognize format ${fmt}`);
+            throw new Error(`didn't recognize format ${vertexFormat}`);
     }
 }
 
-async function meshLayout(device: GfxDevice, mesh: Mesh): Promise<UnityMesh> {
-    let wasm = await loadWasm();
+function vertexFormatToGfxFormat(vertexFormat: VertexFormat, dimension: number): GfxFormat {
+    const baseFormat = vertexFormatToGfxFormatBase(vertexFormat);
+    const compFlags = dimension as FormatCompFlags;
+    return setFormatCompFlags(baseFormat, compFlags);
+}
+
+function meshLayout(device: GfxDevice, mesh: Mesh): UnityMesh {
     let vertexInfo = mesh.get_channel_info(0)!;
+    let vertexFormat = vertexFormatToGfxFormat(vertexInfo.format, vertexInfo.dimension);
     let normalInfo = mesh.get_channel_info(1)!;
-    let streamInfo = mesh.get_vertex_stream_info(0)!;
-    let indices = mesh.get_index_data();
+    let normalFormat = vertexFormatToGfxFormat(normalInfo.format, normalInfo.dimension);
     let vertBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data());
-    let indicesBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices);
-
-    let normOffset = vertexInfo.dimension * vertexInfo.get_format_size();
-
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-        { location: a_Position, bufferIndex: 0, bufferByteOffset: 0, format: vertexFormatToGfxFormat(wasm, vertexInfo.format), },
-        { location: a_Normal, bufferIndex: 0, bufferByteOffset: normOffset, format: vertexFormatToGfxFormat(wasm, normalInfo.format), },
+        { location: a_Position, bufferIndex: 0, bufferByteOffset: 0, format: vertexFormat },
+        { location: a_Normal, bufferIndex: 0, bufferByteOffset: normalInfo.offset, format: normalFormat },
     ];
+
+    let indices = mesh.get_index_data();
+    let indicesBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices);
+    let streamInfo = mesh.get_vertex_stream_info(0)!;
     const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
         { byteStride: streamInfo.stride, frequency: GfxVertexBufferFrequency.PerVertex, },
     ];
     let indexBufferFormat: GfxFormat;
     let numIndices = 0;
-    if (mesh.index_format === wasm.IndexFormat.UInt32) {
+    if (mesh.index_format === _wasm.IndexFormat.UInt32) {
         indexBufferFormat = GfxFormat.U32_R;
         numIndices = indices.length / 4;
     } else {
