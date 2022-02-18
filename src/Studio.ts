@@ -1099,24 +1099,24 @@ export class StudioPanel extends FloatingPanel {
         this.redoBtn.insertAdjacentElement('afterbegin', createDOMFromString(REDO_ICON).querySelector('svg')!);
 
         this.studioDataBtn = this.contents.querySelector('#studioDataBtn') as HTMLButtonElement;
-        this.studioDataBtn.dataset.helpText = 'Save the current animation, or load a previously-saved animation.';
+        this.studioDataBtn.title = 'Save the current animation, or load a previously-saved animation.';
 
         this.studioSaveLoadControls = this.contents.querySelector('#studioSaveLoadControls') as HTMLElement;
 
         this.newAnimationBtn = this.contents.querySelector('#newAnimationBtn') as HTMLButtonElement;
-        this.newAnimationBtn.dataset.helpText = 'Clear the current keyframes and create a new animation.';
+        this.newAnimationBtn.title = 'Clear the current keyframes and create a new animation.';
 
         this.loadAnimationBtn = this.contents.querySelector('#loadAnimationBtn') as HTMLButtonElement;
-        this.loadAnimationBtn.dataset.helpText = 'Load the previously-saved animation for this map. Overwrites the current keyframes!';
+        this.loadAnimationBtn.title = 'Load the previously-saved animation for this map. Overwrites the current keyframes!';
 
         this.saveAnimationBtn = this.contents.querySelector('#saveAnimationBtn') as HTMLButtonElement;
-        this.saveAnimationBtn.dataset.helpText = 'Save the current animation for this map to your browser\'s local storage.';
+        this.saveAnimationBtn.title = 'Save the current animation for this map to your browser\'s local storage.';
 
         this.importAnimationBtn = this.contents.querySelector('#importAnimationBtn') as HTMLButtonElement;
-        this.importAnimationBtn.dataset.helpText = 'Load an animation from a JSON file.';
+        this.importAnimationBtn.title = 'Load an animation from a JSON file.';
 
         this.exportAnimationBtn = this.contents.querySelector('#exportAnimationBtn') as HTMLButtonElement;
-        this.exportAnimationBtn.dataset.helpText = 'Save the current animation as a JSON file.';
+        this.exportAnimationBtn.title = 'Save the current animation as a JSON file.';
 
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
 
@@ -1134,7 +1134,7 @@ export class StudioPanel extends FloatingPanel {
             this.timeline.snappingEnabled = !this.timeline.snappingEnabled;
             setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
         };
-        this.snapBtn.dataset.helpText = 'Snap keyframes to the playhead, and vice-versa.';
+        this.snapBtn.title = 'Snap keyframes to the playhead, and vice-versa.';
         setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
         setElementHighlighted(this.snapBtn, false);
 
@@ -1191,7 +1191,7 @@ export class StudioPanel extends FloatingPanel {
         };
 
         this.loopAnimationBtn = this.contents.querySelector('#loopAnimationBtn') as HTMLButtonElement;
-        this.loopAnimationBtn.dataset.helpText = 'Loop the animation until manually stopped.';
+        this.loopAnimationBtn.title = 'Loop the animation until manually stopped.';
         this.loopAnimationBtn.onclick = () => {
             this.animation.loop = !this.animation.loop;
             setElementHighlighted(this.loopAnimationBtn, this.animation.loop);
@@ -1216,7 +1216,7 @@ export class StudioPanel extends FloatingPanel {
         this.selectKeyframeMsg = this.contents.querySelector('#selectKeyframeMsg') as HTMLElement;
 
         this.editKeyframePositionBtn = this.contents.querySelector('#editKeyframePositionBtn') as HTMLButtonElement;
-        this.editKeyframePositionBtn.dataset.helpText = 'Edit the camera position represented by this keyframe.';
+        this.editKeyframePositionBtn.title = 'Edit the camera position represented by this keyframe.';
         setElementHighlighted(this.editKeyframePositionBtn, false);
         this.editKeyframePositionBtn.onclick = () => { this.beginEditKeyframePosition(); };
 
@@ -1243,7 +1243,7 @@ export class StudioPanel extends FloatingPanel {
         this.useAutoTangentValuesCheckbox.elem.style.justifyContent = 'center';
         this.useAutoTangentValuesCheckbox.elem.style.alignItems = '';
         this.useAutoTangentValuesCheckbox.elem.style.gridTemplateColumns = '';
-        this.useAutoTangentValuesCheckbox.elem.dataset.helpText = 'Automatically calculate the tangent values for this keyframe using the Catmull-Rom spline formula.';
+        this.useAutoTangentValuesCheckbox.elem.title = 'Automatically calculate the tangent values for this keyframe using the Catmull-Rom spline formula.';
         this.useAutoTangentValuesCheckbox.onchanged = () => {
             this.autoTangentCheckBoxOnChanged();
             this.saveState();
@@ -1251,7 +1251,7 @@ export class StudioPanel extends FloatingPanel {
         this.interpolationSettings.insertAdjacentElement('afterbegin', this.useAutoTangentValuesCheckbox.elem);
 
         this.showPreviewLineCheckbox = new Checkbox('Show Animation Preview Line', true);
-        this.showPreviewLineCheckbox.elem.dataset.helpText = 'Show/Hide the line indicating the path of the animation.';
+        this.showPreviewLineCheckbox.elem.title = 'Show/Hide the line indicating the path of the animation.';
         this.showPreviewLineCheckbox.onchanged = () => {
             if (this.showPreviewLineCheckbox.checked)
                 this.updatePreviewSteps();
@@ -1259,7 +1259,7 @@ export class StudioPanel extends FloatingPanel {
             // TODO - Customize preview line colours?
         };
         this.livePreviewCheckbox = new Checkbox('Live Preview');
-        this.livePreviewCheckbox.elem.dataset.helpText = 'Preview the animation when moving the playhead or keyframes.';
+        this.livePreviewCheckbox.elem.title = 'Preview the animation when moving the playhead or keyframes.';
         this.livePreviewCheckbox.onchanged = () => {
             if (this.livePreviewCheckbox.checked)
                 this.updatePreviewSteps();
@@ -1274,8 +1274,8 @@ export class StudioPanel extends FloatingPanel {
 
         this.delayStartCheckbox = new Checkbox('Delay animation playback');
         this.hideUiCheckbox = new Checkbox('Hide UI during playback');
-        this.delayStartCheckbox.elem.dataset.helpText = 'Delay the start of the animation by 2s. Useful for avoiding capture of the mouse cursor.';
-        this.hideUiCheckbox.elem.dataset.helpText = 'Hide the noclip UI during playback. (Press Escape to stop playback.)';
+        this.delayStartCheckbox.elem.title = 'Delay the start of the animation by 2s. Useful for avoiding capture of the mouse cursor.';
+        this.hideUiCheckbox.elem.title = 'Hide the noclip UI during playback. (Press Escape to stop playback.)';
         this.playbackControls.insertAdjacentElement('afterbegin', this.delayStartCheckbox.elem);
         this.playbackControls.insertAdjacentElement('afterbegin', this.hideUiCheckbox.elem);
 
@@ -1319,17 +1319,6 @@ export class StudioPanel extends FloatingPanel {
                 if (!element.disabled)
                     this.selectedNumericInput = element;
             });
-        }
-
-        // Set a mouseover event for any elements in the panel with defined help text.
-        const controls: NodeList = document.querySelectorAll('#studioPanelContents *');
-        for (let i = 0; i < controls.length; i++) {
-            const control: HTMLElement = controls[i] as HTMLElement;
-            if (control.dataset.helpText) {
-                control.onfocus = () => this.displayHelpText(control);
-                control.onmouseenter = () => this.displayHelpText(control);
-                control.onmouseleave = () => this.resetHelpText();
-            }
         }
 
         document.addEventListener('mousemove', (e: MouseEvent) => {
@@ -1996,11 +1985,6 @@ export class StudioPanel extends FloatingPanel {
         this.studioControlsContainer.setAttribute('hidden', '');
         this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
         this.resetHelpText();
-    }
-
-    private displayHelpText(elem: HTMLElement) {
-        if (!this.editingKeyframe && !this.persistHelpText)
-            this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
     }
 
     private resetHelpText() {
