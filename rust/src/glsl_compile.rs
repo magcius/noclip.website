@@ -45,7 +45,8 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
         }
     };
 
-    match naga::back::wgsl::write_string(&module, &info) {
+    let writer_flags = naga::back::wgsl::WriterFlags::all();
+    match naga::back::wgsl::write_string(&module, &info, writer_flags) {
         Ok(v) => v,
         Err(e) => {
             show_error(&"wgsl::write_string", e);

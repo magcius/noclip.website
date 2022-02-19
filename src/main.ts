@@ -80,6 +80,7 @@ import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeOfTheFlyingDutchman/scenes";
 import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes';
 import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
+import * as Scenes_Subnautica from './Subnautica/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -195,6 +196,7 @@ const sceneGroups = [
     Scenes_TheStanleyParable.sceneGroup,
     Scenes_Infra.sceneGroup,
     Scenes_JetSetRadio.sceneGroup,
+    Scenes_Subnautica.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
