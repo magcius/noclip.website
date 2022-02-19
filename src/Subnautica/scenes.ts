@@ -8,7 +8,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { UnityAssetManager, MeshMetadata, UnityMesh, a_Position, a_Normal } from '../Common/Unity/AssetManager';
+import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager';
 import { AABB } from '../Geometry';
 
 class ChunkProgram extends DeviceProgram {
@@ -30,8 +30,8 @@ layout(std140) uniform ub_ShapeParams {
 varying vec2 v_LightIntensity;
 
 #ifdef VERT
-layout(location = ${a_Position}) attribute vec3 a_Position;
-layout(location = ${a_Normal}) attribute vec3 a_Normal;
+layout(location = ${UnityChannel.Vertex}) attribute vec3 a_Position;
+layout(location = ${UnityChannel.Normal}) attribute vec3 a_Normal;
 
 void mainVS() {
     gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(u_ChunkModel, vec4(a_Position, 1.0))));
@@ -208,4 +208,4 @@ const sceneDescs = [
     new SubnauticaSceneDesc("Scanner Map", "Scanner Map"),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: true };

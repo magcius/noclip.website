@@ -433,7 +433,7 @@ impl Mesh {
         return self.mesh_compression != MeshCompression::Off
     }
 
-    pub fn get_vertices(&self) -> Option<Vec<f32>> {
+    pub fn unpack_vertices(&self) -> Option<Vec<f32>> {
         if self.mesh_compression == MeshCompression::Off {
             None
         } else {
@@ -441,7 +441,7 @@ impl Mesh {
         }
     }
 
-    pub fn get_normals(&self) -> Option<Vec<f32>> {
+    pub fn unpack_normals(&self) -> Option<Vec<f32>> {
         if self.mesh_compression == MeshCompression::Off {
             None
         } else {
@@ -450,7 +450,7 @@ impl Mesh {
         }
     }
 
-    pub fn get_indices(&self) -> Option<Vec<i32>> {
+    pub fn unpack_indices(&self) -> Option<Vec<i32>> {
         if self.mesh_compression == MeshCompression::Off {
             None
         } else {
