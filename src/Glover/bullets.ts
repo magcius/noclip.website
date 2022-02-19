@@ -125,7 +125,7 @@ var bulletParameters = [
   {"actorBeh0x0": 0.009999999776482582, "actorBehMobility": 15.0, "actorDecel0x70": 1.0, "actorFlags": 0x0, "actorMaximumRadius": 7.0, "bulletFlags": 0x1, "flipbook1Color": {"a": 0, "b": 0, "g": 128, "r": 255}, "flipbook1Idx": 0, "flipbook1Ptr": 2149515920, "flipbook2Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook2Idx": 1, "flipbook2Ptr": 2149515936, "destroyFunc": 0, "frameAdvanceFunc": 0, "lifetime": 5000, "name": "", "numBillboards": 2, "objectPtr": 0, "trailParticleType": 10, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 65, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 48, 0, 0, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 1.0, "unk0x8c": 0.03999999910593033, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 17}, 
   {"actorBeh0x0": 0.009999999776482582, "actorBehMobility": 10.0, "actorDecel0x70": 1.0, "actorFlags": 0x0, "actorMaximumRadius": 7.0, "bulletFlags": 0x2, "flipbook1Color": {"a": 0, "b": 255, "g": 160, "r": 0}, "flipbook1Idx": 0, "flipbook1Ptr": 2149515920, "flipbook2Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook2Idx": 1, "flipbook2Ptr": 2149515936, "destroyFunc": 0, "frameAdvanceFunc": 0, "lifetime": 5000, "name": "", "numBillboards": 2, "objectPtr": 0, "trailParticleType": 12, "unk0x16": 0, "unk0x28": [191, 128, 0, 0, 65, 0, 0, 0, 63, 128, 0, 0, 63, 128, 0, 0, 65, 0, 0, 0, 63, 128, 0, 0, 191, 128, 0, 0, 65, 0, 0, 0, 191, 128, 0, 0, 63, 128, 0, 0, 65, 0, 0, 0, 191, 128, 0, 0, 65, 32, 0, 0, 64, 224, 0, 0, 64, 160, 0, 0, 193, 32, 0, 0, 64, 224, 0, 0, 64, 160, 0, 0, 65, 32, 0, 0, 64, 224, 0, 0, 192, 160, 0, 0, 193, 32, 0, 0, 64, 224, 0, 0, 192, 160, 0, 0], "unk0x88": 0.5, "unk0x8c": 0.019999999552965164, "unk0x91": 24, "unk0x92": 4, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 40, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 18}, 
   {"actorBeh0x0": 0.009999999776482582, "actorBehMobility": 15.0, "actorDecel0x70": 1.0, "actorFlags": 0x98, "actorMaximumRadius": 7.0, "bulletFlags": 0x4, "flipbook1Color": {"a": 0, "b": 200, "g": 0, "r": 255}, "flipbook1Idx": 0, "flipbook1Ptr": 2149515920, "flipbook2Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook2Idx": 1, "flipbook2Ptr": 2149515936, "destroyFunc": 2149231952, "frameAdvanceFunc": 0, "lifetime": 100, "name": "", "numBillboards": 2, "objectPtr": 0, "trailParticleType": 10, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 65, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 224, 0, 0, 64, 224, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.4000000059604645, "unk0x8c": 0.019999999552965164, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 1092616192, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 17}, 
-    {"actorBeh0x0": 0.0, "actorBehMobility": 30.0, "actorDecel0x70": 1.0, "actorFlags": 0x20000, "actorMaximumRadius": 7.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook1Idx": -1, "flipbook1Ptr": 2149515904, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 0, "frameAdvanceFunc": 0, "lifetime": 6, "name": "", "numBillboards": 1, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 64, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 224, 0, 0, 192, 128, 0, 0, 0, 0, 0, 0, 64, 224, 0, 0, 192, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 24, "unk0x92": 2, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 13}, 
+  {"actorBeh0x0": 0.0, "actorBehMobility": 30.0, "actorDecel0x70": 1.0, "actorFlags": 0x20000, "actorMaximumRadius": 7.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook1Idx": -1, "flipbook1Ptr": 2149515904, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 0, "frameAdvanceFunc": 0, "lifetime": 6, "name": "", "numBillboards": 1, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 64, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 224, 0, 0, 192, 128, 0, 0, 0, 0, 0, 0, 64, 224, 0, 0, 192, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 24, "unk0x92": 2, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 13}, 
 
   // Fire 1
   {"actorBeh0x0": 3.0, "actorBehMobility": 50.0, "actorDecel0x70": 1.0, "actorFlags": 0x60000, "actorMaximumRadius": 5.0, "bulletFlags": 0x10, "flipbook1Color": {"a": 0, "b": 0, "g": 200, "r": 255}, "flipbook1Idx": 6, "flipbook1Ptr": 2149516016, "flipbook2Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook2Idx": 7, "flipbook2Ptr": 2149516032, "destroyFunc": 0, "frameAdvanceFunc": 0, "lifetime": 16, "name": "", "numBillboards": 2, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 1}, 
@@ -141,7 +141,10 @@ var bulletParameters = [
   {"actorBeh0x0": 3.0, "actorBehMobility": 30.0, "actorDecel0x70": 1.0, "actorFlags": 0x60010, "actorMaximumRadius": 1.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook1Idx": null, "flipbook1Ptr": 0, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 2149232124, "frameAdvanceFunc": 2149239760, "lifetime": 60, "name": "sting.ndo", "numBillboards": 0, "objectPtr": 2151286012, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 193, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 193, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 1}, 
   {"actorBeh0x0": 5.0, "actorBehMobility": 1.5, "actorDecel0x70": 0.8999999761581421, "actorFlags": 0x118, "actorMaximumRadius": 27.0, "bulletFlags": 0x2, "flipbook1Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook1Idx": null, "flipbook1Ptr": 0, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 0, "frameAdvanceFunc": 2149238040, "lifetime": 250, "name": "bubble2.ndo", "numBillboards": 0, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 160, 0, 0, 65, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.4000000059604645, "unk0x8c": 0.03999999910593033, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 1092616192, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 33}, 
   {"actorBeh0x0": 3.0, "actorBehMobility": 2.5, "actorDecel0x70": 1.0, "actorFlags": 0x110, "actorMaximumRadius": 13.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook1Idx": null, "flipbook1Ptr": 0, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 0, "frameAdvanceFunc": 2149237656, "lifetime": 1000, "name": "bubble1.ndo", "numBillboards": 0, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 160, 0, 0, 65, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.20000000298023224, "unk0x8c": 0.03999999910593033, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 33}, 
-  {"actorBeh0x0": 4.0, "actorBehMobility": 30.0, "actorDecel0x70": 0.949999988079071, "actorFlags": 0x80000c1, "actorMaximumRadius": 5.0, "bulletFlags": 0x2, "flipbook1Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook1Idx": 4, "flipbook1Ptr": 2149515984, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 2149231828, "frameAdvanceFunc": 2149237492, "lifetime": 1000, "name": "", "numBillboards": 1, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 191, 128, 0, 0, 65, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.10000000149011612, "unk0x8c": 0.10000000149011612, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 1086324736, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 6}, 
+  
+  // Fountain
+  {"actorBeh0x0": 4.0, "actorBehMobility": 30.0, "actorDecel0x70": 0.949999988079071, "actorFlags": 0x80000c1, "actorMaximumRadius": 5.0, "bulletFlags": 0x2, "flipbook1Color": {"a": 0, "b": 255, "g": 255, "r": 255}, "flipbook1Idx": 4, "flipbook1Ptr": 2149515984, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 0x801aacd4, "frameAdvanceFunc": 0x801ac2f4, "lifetime": 1000, "name": "", "numBillboards": 1, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 191, 128, 0, 0, 65, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.10000000149011612, "unk0x8c": 0.10000000149011612, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0x40c00000, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 6}, 
+
   {"actorBeh0x0": 4.0, "actorBehMobility": 30.0, "actorDecel0x70": 1.0, "actorFlags": 0x60090, "actorMaximumRadius": 10.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook1Idx": null, "flipbook1Ptr": 0, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 2149231952, "frameAdvanceFunc": 0, "lifetime": 1000, "name": "cancerclaw.ndo", "numBillboards": 0, "objectPtr": 0, "trailParticleType": 1, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 65, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 24, "unk0x92": 2, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 69}, 
   {"actorBeh0x0": 20.0, "actorBehMobility": 30.0, "actorDecel0x70": 0.9800000190734863, "actorFlags": 0x19, "actorMaximumRadius": 10.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook1Idx": null, "flipbook1Ptr": 0, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 0, "frameAdvanceFunc": 2149236024, "lifetime": 200, "name": "bomb.ndo", "numBillboards": 0, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 0, 0, 0, 0, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 24, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 66}, 
   {"actorBeh0x0": 2.0, "actorBehMobility": 30.0, "actorDecel0x70": 0.9599999785423279, "actorFlags": 0x20099, "actorMaximumRadius": 20.0, "bulletFlags": 0x0, "flipbook1Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook1Idx": null, "flipbook1Ptr": 0, "flipbook2Color": {"a": 0, "b": 0, "g": 0, "r": 0}, "flipbook2Idx": null, "flipbook2Ptr": 0, "destroyFunc": 2149231496, "frameAdvanceFunc": 0, "lifetime": 200, "name": "klospie.ndo", "numBillboards": 0, "objectPtr": 0, "trailParticleType": 24, "unk0x16": 0, "unk0x28": [0, 0, 0, 0, 65, 0, 0, 0, 65, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "unk0x88": 0.0, "unk0x8c": 0.0, "unk0x91": 17, "unk0x92": 1, "unk0x93": 0, "unk0x98": 0, "unk0x9e": 0, "unk0xa1": 0, "unk0xa2": 0, "unk0xa3": 0, "bulletParamFlags": 66}, 
@@ -175,7 +178,9 @@ export class Bullet {
     private frameCount: number = 0;
     private lifetime: number = 0;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private pool: BulletPool, private waterVolumes: GloverWaterVolume[]) {
+    private callbackRequestedDestruct: boolean;
+
+    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, protected pool: BulletPool, protected waterVolumes: GloverWaterVolume[]) {
         const params = bulletParameters[this.pool.bulletType];
 
         assert(params.numBillboards < 3);
@@ -205,6 +210,7 @@ export class Bullet {
         this.setLifetime(params.lifetime);
         this.frameCount = 0;
         this.scale = vec3.fromValues(1, 1, 1);
+        this.callbackRequestedDestruct = false;
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -221,6 +227,13 @@ export class Bullet {
             }
             this.lastFrameAdvance = 0
 
+            if (this.callbackRequestedDestruct) {
+                this.destruct();
+                this.active = false;
+            }
+
+            this.callbackRequestedDestruct = this.frameAdvance(viewerInput);
+
             vec3.add(this.position, this.position, this.velocity);
 
             vec3.scale(this.velocity, this.velocity, params.actorDecel0x70);
@@ -228,6 +241,12 @@ export class Bullet {
             const velMag = vec3.length(this.velocity);
             if (velMag > params.actorBehMobility) {
               vec3.scale(this.velocity, this.velocity, params.actorBehMobility / velMag);
+            }
+
+            if ((params.actorFlags & 1) !== 0) {
+                const gravAccel = (params.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
+                const terminalVelocity = (params.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+                this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
             }
 
             // TODO: spawn trail particles --
@@ -259,8 +278,10 @@ export class Bullet {
         }
 
         if (this.lifetime == 0 && this.flipbooks.every((flipbook)=>!flipbook.playing)) {
-            this.active = false;    
+            this.destruct();
+            this.active = false;
         }
+
 
         for (let flipbook of this.flipbooks) {
             mat4.fromRotationTranslationScale(flipbook.drawMatrix, identityRotation, this.position, this.scale);
@@ -282,7 +303,43 @@ export class Bullet {
             flipbook.destroy(device);
         }
     }
+
+    protected frameAdvance(viewerInput: Viewer.ViewerRenderInput): boolean {
+        return false;
+    }
+
+    protected destruct(): void {
+    }
 }
+
+class WaterBullet extends Bullet {
+
+    private collidingVolume: GloverWaterVolume | null = null;
+
+    protected frameAdvance(viewerInput: Viewer.ViewerRenderInput): boolean {
+        for (let waterVolume of this.waterVolumes) {
+            if (waterVolume.inBbox(this.position) && this.position[1] <= waterVolume.surface_y) {
+                this.collidingVolume = waterVolume;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    protected destruct(): void {
+        if (this.collidingVolume !== null) {
+            // TODO: splashy little droplets
+            if (Math.random() * 10 < 5) {
+                this.collidingVolume.surfaceRipple(this.position, this.velocity);
+                this.collidingVolume.splash(this.position, 1, 2.0);
+            }
+        }
+    }
+}
+
+const bulletSubclasses: Map<number, any> = new Map<number, any>([
+    [13, WaterBullet]
+])
 
 export class BulletPool implements GenericRenderable {
     private bullets: Bullet[] = [];
@@ -301,7 +358,11 @@ export class BulletPool implements GenericRenderable {
             }
         }
         if (newBullet === null) {
-            newBullet = new Bullet(this.device, this.cache, this.textureHolder, this, this.waterVolumes);
+            if (bulletSubclasses.has(this.bulletType) {
+                newBullet = new (bulletSubclasses.get(this.bulletType)!)(this.device, this.cache, this.textureHolder, this, this.waterVolumes);
+            } else {
+                newBullet = new Bullet(this.device, this.cache, this.textureHolder, this, this.waterVolumes);
+            }
             this.bullets.push(newBullet);
         }
         newBullet.spawn(position);

@@ -642,6 +642,12 @@ export class Particle {
             this.lifetime -= 1;
             vec3.scale(this.velocity, this.velocity, params.friction);
 
+            if ((params.actorFlags & 1) !== 0) {
+                const gravAccel = (params.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
+                const terminalVelocity = (params.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+                this.velocity[1] = Math.max(this.velocity[1] - (gravAccel / SRC_FRAME_TO_MS), (terminalVelocity/SRC_FRAME_TO_MS));
+            }
+
             if (this.particleType === 0x14) {
                 this.advanceWaterParticle();
             }

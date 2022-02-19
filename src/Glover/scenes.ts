@@ -68,12 +68,17 @@ export class GloverWaterVolume implements GenericRenderable {
     public visible: boolean = true;
 
     private rippleRenderers: GloverFootprintRenderer[] = [];
+    private dropletPool: ParticlePool;
+
+    private scratchVec3: vec3 = vec3.create();
 
     constructor (private device: GfxDevice, private cache: GfxRenderCache, private textures: GloverTextureHolder,
         public lft: vec3, public wdh: vec3, public surface_y: number)
     {
         lft[1] = Math.min(lft[1], surface_y - 25.0);
         wdh[1] = Math.max(wdh[1], surface_y + 25.0 - lft[1]);
+
+        this.dropletPool = new ParticlePool(device, cache, textures, 3);
     }
 
     public inBbox(pt: vec3) : boolean {
@@ -104,6 +109,28 @@ export class GloverWaterVolume implements GenericRenderable {
             position, [0,1,0]);
     }
 
+    public splash(position: vec3, total: number, y_offset: number) {
+        const thetaDelta = Math.PI * 2 / total;
+        let theta = Math.random() * 6;
+
+        for (let i = 0; i < total; i++) {
+            let velocity = this.scratchVec3;
+            let rnd = Math.random() * 3;
+            velocity[0] = Math.cos(-theta) * rnd;
+            velocity[1] = y_offset + Math.random() * 9;
+            velocity[2] = Math.sin(-theta) * rnd;
+            theta = radianModulo(theta + thetaDelta);
+
+            vec3.scale(velocity, velocity, 1/SRC_FRAME_TO_MS);
+
+            let particle = this.dropletPool.spawn(position, velocity);
+            if ((i & 1)==1) {
+                particle.scale[0] = -1;
+            }
+        }
+    }
+
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible) {
             return;
@@ -113,13 +140,14 @@ export class GloverWaterVolume implements GenericRenderable {
                 renderer.prepareToRender(device, renderInstManager, viewerInput);
             }
         }
-
+        this.dropletPool.prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
         for (let renderer of this.rippleRenderers) {
             renderer.destroy(device);
         }
+        this.dropletPool.destroy(device);
     }
 
 }
