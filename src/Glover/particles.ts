@@ -582,6 +582,7 @@ export class Particle {
 
     public flipbook: GloverFlipbookRenderer;
 
+    private lastPosition: vec3 = vec3.create();
     private position: vec3 = vec3.create();
     private velocity: vec3 = vec3.create();
 
@@ -591,7 +592,7 @@ export class Particle {
     private frameCount: number = 0;
     private lifetime: number = 0;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[]) {
+    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[] = []) {
         this.flipbook = new GloverFlipbookRenderer(
             device, cache, textureHolder, particleFlipbooks[particleType]);
     } 
@@ -620,13 +621,6 @@ export class Particle {
             this.velocity[0] += Math.cos(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
             this.velocity[2] += Math.sin(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
         }
-        for (let waterVolume of this.waterVolumes) {
-            if (waterVolume.inBbox(this.position) && this.position[1] >= waterVolume.surface_y) {
-                waterVolume.surfaceRipple(this.position, this.velocity);
-                this.active = false;
-            }
-        }
-
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -640,6 +634,7 @@ export class Particle {
         // TODO: this delta time implementation isn't always
         //       playing nicely with things like, eg, bubbles.
         //       Figure out a better way to handle this:
+        vec3.copy(this.lastPosition, this.position);
         vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
         for (let x = this.lastFrameAdvance; x > SRC_FRAME_TO_MS; x -= SRC_FRAME_TO_MS) {
             this.lastFrameAdvance = 0;
@@ -651,8 +646,21 @@ export class Particle {
                 this.advanceWaterParticle();
             }
 
+
         }
         
+        if (this.waterVolumes.length > 0) {
+            for (let waterVolume of this.waterVolumes) {
+                if (waterVolume.inBbox(this.lastPosition) && this.position[1] >= waterVolume.surface_y) {
+                    if (this.particleType === 0x14) {
+                        waterVolume.surfaceRipple(this.position, this.velocity);
+                    }
+                    this.active = false;
+                    return;
+                }
+            }
+        }
+
         mat4.fromRotationTranslationScale(this.flipbook.drawMatrix, identityRotation, this.position, this.scale);
 
         this.flipbook.prepareToRender(device, renderInstManager, viewerInput);
@@ -676,7 +684,7 @@ export class ParticlePool implements GenericRenderable {
 
     public visible: boolean = true;
 
-    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[]) {
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private particleType: number, private waterVolumes: GloverWaterVolume[] = []) {
     }
 
     public spawn(origin: vec3 | number[], velocity: vec3 | number[]): Particle {

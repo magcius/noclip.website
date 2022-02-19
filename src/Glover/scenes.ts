@@ -239,16 +239,11 @@ class GloverVent implements GenericRenderable {
                     const bullet = this.bullets.spawn(finalPos);
                     vec3.copy(bullet.velocity, this.velocity);
                     vec3.scale(bullet.velocity, bullet.velocity, SRC_FRAME_TO_MS);
-                    // TODO:
-                      // if (vent->bulletType != '\x12') {
-                      //   iVar3 = random(0xb);
-                      //   fVar8 = 20.0;
-                      //   (bullet->actor).vel.x = (bullet->actor).vel.x + (float)(iVar3 + -5) / 20.0;
-                      //   iVar3 = random(0xb);
-                      //   (bullet->actor).vel.y = (bullet->actor).vel.y + (float)(iVar3 + -5) / fVar8;
-                      //   iVar3 = random(0xb);
-                      //   (bullet->actor).vel.z = (bullet->actor).vel.z + (float)(iVar3 + -5) / fVar8;
-                      // }
+                    if (this.bullets.bulletType != 0x12) {
+                        bullet.velocity[0] += (Math.floor(Math.random()*11) - 5) / 20.0;
+                        bullet.velocity[1] += (Math.floor(Math.random()*11) - 5) / 20.0;
+                        bullet.velocity[2] += (Math.floor(Math.random()*11) - 5) / 20.0;
+                    }
                 }
 
             }
@@ -484,12 +479,12 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         public actor: GloverActorRenderer | null)
     { }
 
-    public initExitSparkle(waterVolumes: GloverWaterVolume[]): ParticlePool {
+    public initExitSparkle(): ParticlePool {
         assert(this.actor !== null);
         assert(this.exitSparkle == false);
         this.exitSparkle = true;
         this.exitSparkleParticles = new ParticlePool(
-            this.actor.device, this.actor.cache, this.actor.textures, 0x15, waterVolumes);
+            this.actor.device, this.actor.cache, this.actor.textures, 0x15);
         return this.exitSparkleParticles;
     }
 
@@ -903,8 +898,8 @@ export class CollectibleSparkle implements GenericRenderable {
 
     public visible: boolean = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private type: CollectibleSparkleType, waterVolumes: GloverWaterVolume[]) {
-        this.particles = new ParticlePool(device, cache, textureHolder, 6, waterVolumes);
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private type: CollectibleSparkleType) {
+        this.particles = new ParticlePool(device, cache, textureHolder, 6);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1025,11 +1020,11 @@ export class GloverMrTip implements Shadows.ShadowCaster {
 
     private static primColor = {r: 1, g: 1, b: 1, a: 0.94};
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, waterVolumes: GloverWaterVolume[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3) {
         this.mainBillboard = new GloverSpriteRenderer(device, cache, textureHolder,
             [0x6D419194, 0x8C641CE9], true);
         this.yOffset = Math.floor(Math.random()*5000);
-        this.particles = new ParticlePool(device, cache, textureHolder, 7, waterVolumes);
+        this.particles = new ParticlePool(device, cache, textureHolder, 7);
         mat4.fromTranslation(this.drawMatrix, this.position);
     }
 
@@ -2027,7 +2022,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
                     if (cmd.params.type == 1 || cmd.params.type == 3 || this.id == "09") {
-                        const emitter = currentPlatform.initExitSparkle(sceneRenderer.waterVolumes);
+                        const emitter = currentPlatform.initExitSparkle();
                         sceneRenderer.miscRenderers.push(emitter);
                     }
                     if (!cmd.params.visible) {
@@ -2055,7 +2050,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     flipbook.visible = (currentGaribState !== 0);
                     if (cmd.params.type == 2) {
                         // Extra lives are sparkly
-                        const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife, sceneRenderer.waterVolumes);
+                        const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife);
                         sceneRenderer.miscRenderers.push(emitter);
                         emitter.visible = (currentGaribState !== 0);
                     }
@@ -2073,15 +2068,14 @@ class SceneDesc implements Viewer.SceneDesc {
                         actor.shadowSize = 10;
                         actor.playSkeletalAnimation(0, true, false);
                         shadowCasters.push([actor, false]);
-                        sceneRenderer.miscRenderers.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup, sceneRenderer.waterVolumes));
+                        sceneRenderer.miscRenderers.push(new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.Powerup));
                     }
                     break;
                 }
                 case 'MrTip': {
                     let tip = new GloverMrTip(
                         device, cache, textureHolder,
-                        vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z),
-                        sceneRenderer.waterVolumes);
+                        vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z));
                     sceneRenderer.mrtips.push(tip);
                     shadowCasters.push([tip, false]);
                     break;
@@ -2150,6 +2144,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         // Project shadows
+        // TODO: not onto no-clip objects
         for (let [shadowCaster, dynamic] of shadowCasters) {
             const shadow = new Shadows.Shadow(shadowCaster, shadowTerrain, dynamic);
             sceneRenderer.shadows.push(shadow);
