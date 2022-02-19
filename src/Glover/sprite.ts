@@ -467,7 +467,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
             }
         }
 
-        let alpha = 0xFF;
+        let alpha = this.endAlpha;
         if (this.startAlpha != this.endAlpha) {
             alpha = this.startAlpha;
             if (this.lifetime < 0) {
