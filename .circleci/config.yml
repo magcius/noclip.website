@@ -7,7 +7,7 @@ jobs:
         - master
 
     docker:
-      - image: cimg/rust:1.54-node
+      - image: cimg/rust:1.58-node
         auth:
           username: jasperrlz
           password: $DOCKERHUB_PASSWORD
@@ -41,7 +41,7 @@ jobs:
             - node_modules
             - .cache
             - .cargo
-          key: v3-dependencies-{{ checksum "package.json" }}
+          key: v4-dependencies-{{ checksum "package.json" }}
 
       - add_ssh_keys:
           fingerprints:
