@@ -485,7 +485,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
     // Path
     
-    private path : PlatformPathPoint[] = [];
+    public path : PlatformPathPoint[] = [];
     private pathDirection : number = 1;
     private pathTimeLeft : number = 0;
     private pathCurPt : number = 0;
@@ -746,15 +746,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                 quat.mul(this.globalRotation, this.parent.globalRotation, this.globalRotation);
             }
 
-            // TODO: This conditional check to only apply parent rotation if
-            //       the parent is actively spinning comes from needing the
-            //       roller coaster flags to be aligned properly in Carnival 2.
-            //       This feels like a bodge; look into the engine to figure
-            //       out exactly how those flags are positioned and if we can
-            //       rip this out.
-            // if (vec3.length(this.parent.spinSpeed) > 0) {
+            if (this.parent.path.length <= 1) {
                 vec3.transformQuat(this.globalPosition, this.globalPosition, this.parent.globalRotation);
-            // }
+            }
 
             vec3.add(this.globalPosition, this.globalPosition, this.parent.globalPosition);
         }
