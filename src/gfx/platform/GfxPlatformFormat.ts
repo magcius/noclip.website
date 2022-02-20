@@ -171,6 +171,10 @@ export function getFormatByteSize(fmt: GfxFormat): number {
     return typeByteSize * componentCount;
 }
 
+export function setFormatCompFlags(fmt: GfxFormat, compFlags: FormatCompFlags): GfxFormat {
+    return (fmt & 0xFFFF00FF) | (compFlags << 8);
+}
+
 export function setFormatFlags(fmt: GfxFormat, flags: FormatFlags): GfxFormat {
     return (fmt & 0xFFFFFF00) | flags;
 }

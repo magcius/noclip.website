@@ -3,7 +3,7 @@ import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
 import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
-import { FormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
+import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
 import { vec3 } from 'gl-matrix';
@@ -168,10 +168,6 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     let buffers = [vertsBuf, normsBuf, trisBuf];
 
     return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers);
-}
-
-function setFormatCompFlags(fmt: GfxFormat, compFlags: FormatCompFlags): GfxFormat {
-    return (fmt & 0xFFFF00FF) | (compFlags << 8);
 }
 
 function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
