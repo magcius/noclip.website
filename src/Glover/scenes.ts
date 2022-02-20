@@ -214,6 +214,15 @@ class GloverVent implements GenericRenderable {
         this.dutyCycles.push(framesOn * SRC_FRAME_TO_MS);
     }
 
+    public clearDutyCycle() {
+        this.dutyCycles = []
+    }
+
+    public oneshotRun(frames: number) {
+        this.active = true;
+        this.dutyAdvance = frames * SRC_FRAME_TO_MS;
+    }
+
     public advanceDutyCycle(frames: number) {
         for (let x = 0; x < frames; x += 1) {
             this.dutyAdvance -= SRC_FRAME_TO_MS;
@@ -230,12 +239,15 @@ class GloverVent implements GenericRenderable {
             return;
         }
 
-        if (this.dutyCycles.length > 0) {
+        if (this.dutyAdvance > 0) {
             this.dutyAdvance -= viewerInput.deltaTime;
-            if (this.dutyAdvance < 0) {
+        } else {
+            if (this.dutyCycles.length > 0) {
                 this.dutyAdvance = this.dutyCycles[this.dutyNextIdx];
                 this.active = (this.dutyNextIdx & 1) === 1;
                 this.dutyNextIdx = (this.dutyNextIdx + 1) % this.dutyCycles.length;
+            } else {
+                this.active = false;
             }
         }
 
@@ -406,6 +418,8 @@ class PlatformPathPoint {
     }
 }
 
+type PathCallbackFunc = (plat: GloverPlatform, idx: number) => void;
+
 export class GloverPlatform implements Shadows.ShadowCaster {
 
     private scratchQuat = quat.create();
@@ -490,6 +504,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     private pathTimeLeft : number = 0;
     private pathCurPt : number = 0;
     private pathPaused : boolean = false;
+    private pathCallbacks : PathCallbackFunc[] = [];
     public pathAccel : number = 0;
     public pathMaxVel : number = NaN;
     private lastPathAdvance: number = 0;
@@ -528,6 +543,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
         }
     }
 
+    public pushPathCallback(callback: PathCallbackFunc) {
+        this.pathCallbacks.push(callback);
+    }
+
     public setPosition(x: number, y: number, z: number) {
         this.position[0] = x;
         this.position[1] = y;
@@ -537,6 +556,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     public getPosition(): vec3 {
         return this.globalPosition;
     }
+
 
     public setScale(x: number, y: number, z: number) {
         this.scale[0] = x;
@@ -840,10 +860,11 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                             this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
                             this.pathTimeLeft = this.path[this.pathCurPt].duration;
                             this.pathPaused = this.path[this.pathCurPt].duration < 0;
-                            // TODO: remove:
-                            // if (this.actor!.actorObject.mesh.name.slice(0,6) === "pi2fly") {
-                            //     console.log(this.pathCurPt, this.path[this.pathCurPt]);
-                            // }
+                        }
+                        if (this.pathCallbacks.length > 0 && curSpeed > 0) {
+                            for (let callback of this.pathCallbacks) {
+                                callback(this, this.pathCurPt);
+                            }
                         }
                         vec3.copy(this.nextPosition, dstPt);
                         vec3.zero(this.velocity);
@@ -2173,6 +2194,32 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.shadows.push(shadow);
             shadow.visible = shadowCaster.visible;
         }
+
+        // Hard-coded fix for the stamp vents in Out Of This World 2, because
+        // our path movement code isn't frame-accurate so otherwise things get
+        // out of sync
+        if (this.id == '24') {
+            for (let [vent, tag] of ventParents) {
+                const plat: GloverPlatform = sceneRenderer.platformByTag.get(tag)!;
+                if (tag === 138) {
+                    plat.pushPathCallback((plat: GloverPlatform, pathIdx: number): void => {
+                        if (pathIdx === 1) {
+                            vent.oneshotRun(11);
+                        } else {
+                            vent.oneshotRun(1);
+                        }
+                    });
+                } else {
+                    plat.pushPathCallback((plat: GloverPlatform, pathIdx: number): void => {
+                        if (pathIdx === 0) {
+                            vent.oneshotRun(11);
+                        }
+                    });
+                }
+                vent.clearDutyCycle();
+            }
+        }
+
 
         sceneRenderer.renderPassDescriptor = makeAttachmentClearDescriptor(
             colorNewFromRGBA(skyboxClearColor[0], skyboxClearColor[1], skyboxClearColor[2]));
