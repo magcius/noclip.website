@@ -604,6 +604,8 @@ class GloverMeshRenderer {
                     initialTexture = 0x7845b646; // hydraulic press in ootw 2
                 } else if (meshData.id === 0xa6d60dd) {
                     initialTexture = 0xA64446E2; // platform in ootw 2
+                } else if (meshData.id === 0x26fe3bb1) {
+                    initialTexture = 0xB016FD5A; // well in various hub worlds
                 }
 
                 if (initialTexture !== null) {
