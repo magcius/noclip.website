@@ -10,9 +10,13 @@ import { getPointHermite } from './Spline';
 export const CLAPBOARD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" height="20" fill="white"><path d="M61,22H14.51l3.41-.72h0l7.74-1.64,2-.43h0l6.85-1.46h0l1.17-.25,8.61-1.83h0l.78-.17,9-1.91h0l.4-.08L60,12.33a1,1,0,0,0,.77-1.19L59.3,4.3a1,1,0,0,0-1.19-.77l-19,4-1.56.33h0L28.91,9.74,27.79,10h0l-9.11,1.94-.67.14h0L3.34,15.17a1,1,0,0,0-.77,1.19L4,23.11V60a1,1,0,0,0,1,1H61a1,1,0,0,0,1-1V23A1,1,0,0,0,61,22ZM57,5.8l.65.6.89,4.19-1.45.31L52.6,6.75ZM47.27,7.88,51.8,12,47.36,13,42.82,8.83ZM37.48,10,42,14.11l-4.44.94L33,10.91ZM27.7,12l4.53,4.15-4.44.94L23.26,13Zm-9.78,2.08,4.53,4.15L18,19.21l-4.53-4.15ZM19.49,29H14.94l3.57-5h4.54Zm9-5h4.54l-3.57,5H24.94ZM39,45.88l-11,6A1,1,0,0,1,26.5,51V39A1,1,0,0,1,28,38.12l11,6a1,1,0,0,1,0,1.76ZM39.49,29H34.94l3.57-5h4.54Zm10,0H44.94l3.57-5h4.54ZM60,29H54.94l3.57-5H60Z"/></svg>`;
 const UNDO_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="16"><g transform="translate(0,-952.36218)"><path overflow="visible" style="" d="m 39.999997,975.36218 -31.9999995,25.00002 31.9999995,25 0,-14 c 1.7024,-0.08 31.3771,-0.033 52.000005,18 -8.252999,-25.4273 -34.173805,-35.48722 -52.000005,-40.00002 z" fill="#ffffff" stroke="none"/></g></svg>`;
 const REDO_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="16"><g transform="translate(0,-952.36218)"><path d="m 60,975.36216 32,24.99994 -32,25.0001 0,-12.0001 c -1.7024,-0.08 -31.3771,-2.0334 -52,16.0001 8.253,-25.4274 34.1738,-37.48724 52,-42.00004 z" style="" overflow="visible" fill="#ffffff" stroke="none"/></g></svg>`;
+const ZOOM_OUT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="white" viewBox="0 -110 700 700"><g><path d="m579.16 503.12-112.61-144.38c35.895-37.285 56.285-86.812 57.051-138.56 0.76172-51.75-18.156-101.86-52.934-140.18-34.777-38.332-82.812-62.02-134.39-66.277-51.578-4.2578-102.85 11.238-143.44 43.348-40.59 32.109-67.469 78.438-75.199 129.61-7.7305 51.172 4.2695 103.37 33.562 146.04 29.297 42.664 73.707 72.609 124.24 83.777 50.535 11.164 103.43 2.7188 147.97-23.629l112.44 144.11c4.5156 5.7656 11.145 9.4922 18.418 10.363 7.2734 0.87109 14.594-1.1914 20.344-5.7266 5.6758-4.5234 9.3359-11.105 10.188-18.316 0.85156-7.207-1.1758-14.461-5.6367-20.184zm-243.52-129.59c-43.453 4.6094-86.871-9.0391-119.87-37.688-33-28.645-52.613-69.715-54.152-113.39-1.543-43.668 15.133-86.02 46.031-116.92 30.898-30.898 73.246-47.57 116.92-46.031s84.742 21.152 113.39 54.152c28.648 33 42.297 76.414 37.684 119.87-3.8008 35.828-19.773 69.27-45.25 94.746-25.477 25.477-58.918 41.449-94.75 45.254z"/><path d="m226.19 194.43h186.64c12.469 0 22.574 12.445 22.574 22.531 0 12.445-10.105 22.531-22.574 22.531h-186.64c-12.469 0-22.574-12.445-22.574-22.531 0-12.445 10.105-22.531 22.574-22.531z"/></g></svg>`;
+const ZOOM_IN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="white" viewBox="0 -110 700 700"><g><path d="m579.16 503.12-112.61-144.38c35.895-37.285 56.285-86.812 57.051-138.56 0.76172-51.75-18.156-101.86-52.934-140.18-34.777-38.332-82.812-62.02-134.39-66.277-51.578-4.2578-102.85 11.238-143.44 43.348-40.59 32.109-67.469 78.438-75.199 129.61-7.7305 51.172 4.2695 103.37 33.562 146.04 29.297 42.664 73.707 72.609 124.24 83.777 50.535 11.164 103.43 2.7188 147.97-23.629l112.44 144.11c4.5156 5.7656 11.145 9.4922 18.418 10.363 7.2734 0.87109 14.594-1.1914 20.344-5.7266 5.6758-4.5234 9.3359-11.105 10.188-18.316 0.85156-7.207-1.1758-14.461-5.6367-20.184zm-243.52-129.59c-43.453 4.6094-86.871-9.0391-119.87-37.688-33-28.645-52.613-69.715-54.152-113.39-1.543-43.668 15.133-86.02 46.031-116.92 30.898-30.898 73.246-47.57 116.92-46.031s84.742 21.152 113.39 54.152c28.648 33 42.297 76.414 37.684 119.87-3.8008 35.828-19.773 69.27-45.25 94.746-25.477 25.477-58.918 41.449-94.75 45.254z"/><path d="m401.45 202.91h-67.375v-69.215c0.3125-3.9648-1.0469-7.8789-3.7461-10.797-2.6992-2.9219-6.4961-4.582-10.473-4.582-3.9766 0-7.7734 1.6602-10.473 4.582-2.6992 2.918-4.0547 6.832-3.7461 10.797v69.211h-67.375v0.003906c-5.1562 0-9.9219 2.75-12.504 7.2188-2.5781 4.4648-2.5781 9.9688 0 14.438 2.582 4.4648 7.3477 7.2188 12.504 7.2188h67.375v69.211c0.58203 7.4219 6.7773 13.145 14.219 13.145 7.4453 0 13.637-5.7227 14.219-13.145v-69.211h67.375c5.1602 0 9.9258-2.7539 12.504-7.2188 2.5781-4.4688 2.5781-9.9727 0-14.438-2.5781-4.4688-7.3438-7.2188-12.504-7.2188z"/></g></svg>`;
 const MILLISECONDS_IN_SECOND = 1000.0;
 const MIN_ANIMATION_LENGTH_SEC = 1;
 const MAX_ANIMATION_LENGTH_SEC = 300;
+const MAX_ZOOM_LEVEL = 5;
+const ZOOM_STEP = 0.25;
 
 export interface Keyframe {
     time: number;
@@ -275,11 +279,15 @@ class Timeline {
         this.markersCtx.restore();
         this.elementsCtx.save();
         this.markersCtx.save();
+        this.setupContexts();
+        this.setScaleAndDrawMarkers(timelineLengthMs);
+    }
+
+    public setupContexts() {
         this.elementsCtx.translate(Playhead.HALF_WIDTH, 0);
         this.markersCtx.translate(Playhead.HALF_WIDTH, 0);
         this.markersCtx.strokeStyle = Timeline.MARKER_COLOR;
         this.markersCtx.fillStyle = Timeline.MARKER_COLOR;
-        this.setScaleAndDrawMarkers(timelineLengthMs);
     }
 
     private width: number;
@@ -351,6 +359,7 @@ class Timeline {
             const timeMs = kfIcon.keyframesMap.values().next().value.time;
             kfIcon.updatePosition((timeMs / MILLISECONDS_IN_SECOND) * (this.pixelsPerSecond / this.timelineScaleFactor), timeMs);
         }
+        this.markersCtx.save();
     }
 
     public getTimelineLengthMs(): number {
@@ -362,12 +371,14 @@ class Timeline {
     }
 
     public draw() {
+        this.elementsCtx.restore();
         this.elementsCtx.clearRect(-Playhead.WIDTH, 0, this.width + Playhead.WIDTH, this.height);
         this.playhead.draw(this.elementsCtx);
         for (const kfIcon of this.keyframeIcons) {
             kfIcon.draw(this.elementsCtx);
         }
         this.playhead.drawLine(this.elementsCtx);
+        this.elementsCtx.save();
     }
 
     public addKeyframeIcon(kfs: Map<KeyframeTrackType, Keyframe>, t: number, y: number, type: KeyframeIconType, selectAfterAdd: boolean) {
@@ -765,16 +776,19 @@ export class StudioPanel extends FloatingPanel {
     public timeline: Timeline;
     private selectedTracks: number = KeyframeTrackType.allTracks;
 
+    private zoomLevel: number = 1;
+    private zoomOutBtn: HTMLButtonElement;
+    private zoomInBtn: HTMLButtonElement;
+
     private previewOptionsContainer: HTMLElement;
     private showPreviewLineCheckbox: Checkbox;
     private livePreviewCheckbox: Checkbox;
 
-    private playbackControls: HTMLElement;
-    private hideUiCheckbox: Checkbox;
-    private delayStartCheckbox: Checkbox;
     private loopAnimationBtn: HTMLButtonElement;
     private playAnimationBtn: HTMLButtonElement;
     private stopAnimationBtn: HTMLButtonElement;
+    private prevKeyframeBtn: HTMLButtonElement;
+    private nextKeyframeBtn: HTMLButtonElement;
 
     private selectedNumericInput: HTMLInputElement | undefined;
 
@@ -782,10 +796,12 @@ export class StudioPanel extends FloatingPanel {
         super();
 
         this.mainPanel.parentElement!.style.minWidth = '100%';
+        this.mainPanel.parentElement!.style.height = '330px';
         this.mainPanel.parentElement!.style.left = '0px';
         this.mainPanel.parentElement!.style.bottom = '0px';
         this.mainPanel.parentElement!.style.top = '';
         this.mainPanel.style.backgroundColor = 'rgba(0, 0, 0, 1)';
+        this.mainPanel.style.height = '100%';
         // Closing the panel will be done by disabling studio mode
         this.closeButton.style.display = 'none';
         this.header.ondblclick = null;
@@ -871,8 +887,7 @@ export class StudioPanel extends FloatingPanel {
             }
             #studioHelpText {
                 line-height: 1.5;
-                padding: 0 1rem;
-                min-height: 3rem;
+                min-height: 1rem;
                 text-align: center;
             }
             #studioPanel small {
@@ -897,9 +912,9 @@ export class StudioPanel extends FloatingPanel {
             #timelineContainer {
                 padding: 0 15px;
                 margin-bottom: 10px;
-                overflow: hidden;
+                overflow: auto hidden;
                 position: relative;
-                height: ${Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT}px;
+                height: 225px;
                 flex: 1;
             }
             #timelineContainer > canvas {
@@ -917,7 +932,7 @@ export class StudioPanel extends FloatingPanel {
             }
             #timelineTracksBg {
                 position: absolute;
-                height:100%;
+                height: ${Timeline.TRACK_HEIGHT}px;
                 top: ${Timeline.HEADER_HEIGHT}px;
                 background: repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px);
                 z-index: 1;
@@ -932,8 +947,13 @@ export class StudioPanel extends FloatingPanel {
                 display: grid;
                 grid-gap: 12px;
                 grid-auto-flow: column;
-                justify-content: end;
-                margin: 8px 32px;
+                justify-content: space-between;
+                margin: 5px 32px;
+            }
+            #zoomControls {
+                display: grid;
+                grid-gap: 10px;
+                grid-template-columns: 3rem 3rem;
             }
             #keyframeControls {
                 line-height: 1.2;
@@ -969,9 +989,9 @@ export class StudioPanel extends FloatingPanel {
                 opacity: 0.5;
             }
             #playbackControls {
-                display: flex;
-                border-top: 1px solid #444;
-                width: 12rem;
+                display: grid;
+                grid-gap: 1rem;
+                grid-template-columns: 3rem 10rem 3rem;
             }
         </style>
         <div>
@@ -1003,18 +1023,22 @@ export class StudioPanel extends FloatingPanel {
             <div id="studioHelpText"></div>
             <div id="studioControlsContainer" hidden>
                 <div id="timelineControlsContainer">
+                    <div id="zoomControls">
+                        <button type="button" id="zoomOutBtn" class="SettingsButton disabled" disabled></button>
+                        <button type="button" id="zoomInBtn" class="SettingsButton"></button>
+                    </div>
                     <div id="playbackControls">
+                        <button type="button" id="prevKeyframeBtn" class="SettingsButton">«</button>
                         <button type="button" id="playAnimationBtn" class="SettingsButton">▶</button>
                         <button type="button" id="stopAnimationBtn" class="SettingsButton" hidden>■</button>
+                        <button type="button" id="nextKeyframeBtn" class="SettingsButton">»</button>
                     </div>
-
                     <div>
                         <input id="playheadTimePositionInput" class="StudioNumericInput" type="number" min="0" max="300" step="0.1" value="0"><span>/</span>
                         <input id="timelineLengthInput" class="StudioNumericInput" type="number" min="1" max="300" step="0.1" value="${Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND}"><span>s</span>
+                        <button type="button" id="loopAnimationBtn" title="Loop" class="SettingsButton IconButton">🔁</button>
+                        <button type="button" id="snapBtn" title="Snap" class="SettingsButton IconButton">🧲</button>
                     </div>
-
-                    <button type="button" id="loopAnimationBtn" title="Loop" class="SettingsButton IconButton">🔁</button>
-                    <button type="button" id="snapBtn" title="Snap" class="SettingsButton IconButton">🧲</button>
                 </div>
                 <div style="display: flex;">
                     <div id="trackLabels">
@@ -1050,8 +1074,8 @@ export class StudioPanel extends FloatingPanel {
                     <div id="timelineContainer">
                         <div id="timelineHeaderBg"></div>
                         <div id="timelineTracksBg"></div>
-                        <canvas id="timelineMarkersCanvas" width="600" height="${Timeline.HEADER_HEIGHT}"></canvas>
-                        <canvas id="timelineElementsCanvas" width="600" height="${Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT}" tabindex="-1"></canvas>
+                        <canvas id="timelineMarkersCanvas" width="1000" height="${Timeline.HEADER_HEIGHT}"></canvas>
+                        <canvas id="timelineElementsCanvas" width="1000" height="${Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT}" tabindex="-1"></canvas>
                     </div>
                 </div>
             </div>
@@ -1136,7 +1160,6 @@ export class StudioPanel extends FloatingPanel {
         };
         this.snapBtn.title = 'Snap keyframes to the playhead, and vice-versa.';
         setElementHighlighted(this.snapBtn, this.timeline.snappingEnabled);
-        setElementHighlighted(this.snapBtn, false);
 
         this.playheadTimePositionInput = this.contents.querySelector('#playheadTimePositionInput') as HTMLInputElement;
         this.playheadTimePositionInput.dataset.prevValue = this.playheadTimePositionInput.value;
@@ -1270,18 +1293,6 @@ export class StudioPanel extends FloatingPanel {
         this.previewOptionsContainer.insertAdjacentElement('beforeend', this.showPreviewLineCheckbox.elem);
         this.previewOptionsContainer.insertAdjacentElement('beforeend', this.livePreviewCheckbox.elem);
 
-        this.playbackControls = this.contents.querySelector('#playbackControls') as HTMLElement;
-
-        this.delayStartCheckbox = new Checkbox('Delay animation playback');
-        this.hideUiCheckbox = new Checkbox('Hide UI during playback');
-        this.delayStartCheckbox.elem.title = 'Delay the start of the animation by 2s. Useful for avoiding capture of the mouse cursor.';
-        this.hideUiCheckbox.elem.title = 'Hide the noclip UI during playback. (Press Escape to stop playback.)';
-        this.playbackControls.insertAdjacentElement('afterbegin', this.delayStartCheckbox.elem);
-        this.playbackControls.insertAdjacentElement('afterbegin', this.hideUiCheckbox.elem);
-
-        this.playAnimationBtn = this.contents.querySelector('#playAnimationBtn') as HTMLButtonElement;
-        this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLButtonElement;
-
         this.studioDataBtn.onclick = () => this.studioSaveLoadControls.toggleAttribute('hidden');
         this.newAnimationBtn.onclick = () => {
             this.newAnimation();
@@ -1300,6 +1311,20 @@ export class StudioPanel extends FloatingPanel {
         this.lookAtZTangentInput.onchange = () => this.onChangeTangentInput(this.lookAtZTangentInput);
         this.bankTangentInput.onchange = () => this.onChangeTangentInput(this.bankTangentInput);
 
+        this.zoomOutBtn = this.contents.querySelector('#zoomOutBtn') as HTMLButtonElement;
+        this.zoomOutBtn.insertAdjacentElement('afterbegin', createDOMFromString(ZOOM_OUT_ICON).querySelector('svg')!);
+        this.zoomOutBtn.onclick = () => this.zoomOut();
+        this.zoomInBtn = this.contents.querySelector('#zoomInBtn') as HTMLButtonElement;
+        this.zoomInBtn.insertAdjacentElement('afterbegin', createDOMFromString(ZOOM_IN_ICON).querySelector('svg')!);
+        this.zoomInBtn.onclick = () => this.zoomIn();
+
+        this.playAnimationBtn = this.contents.querySelector('#playAnimationBtn') as HTMLButtonElement;
+        this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLButtonElement;
+        this.prevKeyframeBtn = this.contents.querySelector('#prevKeyframeBtn') as HTMLButtonElement;
+        this.prevKeyframeBtn.title = 'Jump to the previous keyframe on the timeline. Hotkey: J';
+        this.nextKeyframeBtn = this.contents.querySelector('#nextKeyframeBtn') as HTMLButtonElement;
+        this.nextKeyframeBtn.title = 'Jump to the next keyframe on the timeline. Hotkey: K';
+
         this.playAnimationBtn.onclick = (e) => {
             e.stopPropagation();
             this.playAnimation();
@@ -1310,6 +1335,16 @@ export class StudioPanel extends FloatingPanel {
             e.stopPropagation();
             this.stopAnimation();
             this.playAnimationBtn.focus();
+        }
+
+        this.prevKeyframeBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.prevKeyframe();
+        }
+
+        this.nextKeyframeBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.nextKeyframe();
         }
 
         const numericInputs: NodeList = document.querySelectorAll('#studioPanelContents .StudioNumericInput');
@@ -1363,15 +1398,9 @@ export class StudioPanel extends FloatingPanel {
             if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcon && !ev.repeat) {
                 this.deleteSelectedKeyframeIcon();
             } else if (ev.key === 'j') {
-                this.timeline.jumpToPreviousKeyframe();
-                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                if (this.timeline.livePreview)
-                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+                this.prevKeyframe();
             } else if (ev.key === 'k') {
-                this.timeline.jumpToNextKeyframe();
-                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                if (this.timeline.livePreview)
-                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+                this.nextKeyframe();
             } else if (ev.key === ',') {
                 this.movePlayhead(-1 / 60);
             } else if (ev.key === '.') {
@@ -1385,6 +1414,21 @@ export class StudioPanel extends FloatingPanel {
                 this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
             }
         });
+
+        this.mainPanel.addEventListener('wheel', (ev: WheelEvent) => {
+            ev.preventDefault();
+            if (ev.deltaY < 0) {
+                if (ev.ctrlKey)
+                    this.zoomIn();
+                //else
+                    // TODO - Scroll horizontally
+            } else {
+                if (ev.ctrlKey)
+                    this.zoomOut();
+                //else
+                    // TODO - Scroll horizontally
+            }
+        })
 
         document.addEventListener('mouseup', () => {
             if (this.timeline && !this.editingKeyframe) {
@@ -1401,9 +1445,13 @@ export class StudioPanel extends FloatingPanel {
 
         this.newAnimation();
         this.studioPanelContents.removeAttribute('hidden');
+
+        window.addEventListener('resize', () => {
+            this.rescaleTimelineContainer();
+        });
     }
 
-    public playAnimation() {
+    public playAnimation(theater?: boolean) {
         if (this.timeline.keyframeIcons.length > 1) {
             this.disableKeyframeControls();
             this.playAnimationBtn.setAttribute('hidden', '');
@@ -1411,16 +1459,13 @@ export class StudioPanel extends FloatingPanel {
             this.stopAnimationBtn.classList.remove('disabled');
             this.stopAnimationBtn.removeAttribute('hidden');
 
-            if (this.hideUiCheckbox.checked) {
-                this.ui.toggleUI(false);
-                this.elem.style.display = 'none';
-            }
-
             let startTime = this.timeline.getPlayheadTimeMs();
             if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
                 startTime = 0;
 
-            if (this.delayStartCheckbox.checked) {
+            if (theater) {
+                this.ui.toggleUI(false);
+                this.elem.style.display = 'none';
                 setTimeout(() => {
                     this.animationManager.initAnimationPlayback(this.animation, startTime);
                     this.studioCameraController.isAnimationPlaying = true;
@@ -1437,10 +1482,8 @@ export class StudioPanel extends FloatingPanel {
         this.enableKeyframeControls();
         this.playAnimationBtn.removeAttribute('hidden');
         this.stopAnimationBtn.setAttribute('hidden', '');
-        if (this.hideUiCheckbox.checked) {
-            this.ui.toggleUI(true);
-            this.elem.style.display = '';
-        }
+        this.ui.toggleUI(true);
+        this.elem.style.display = '';
     }
 
     private movePlayhead(moveAmountSeconds: number) {
@@ -1451,6 +1494,20 @@ export class StudioPanel extends FloatingPanel {
         }
         this.playheadTimePositionInput.value = (moveTime).toFixed(2);
         this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    private prevKeyframe(): void {
+        this.timeline.jumpToPreviousKeyframe();
+        this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+        if (this.timeline.livePreview)
+            this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+    }
+
+    private nextKeyframe(): void {
+        this.timeline.jumpToNextKeyframe();
+        this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+        if (this.timeline.livePreview)
+            this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
     }
 
     private redo() {
@@ -1514,6 +1571,7 @@ export class StudioPanel extends FloatingPanel {
         this.studioControlsContainer.removeAttribute('hidden');
         this.undoRedoBtnContainer.removeAttribute('hidden');
         this.saveAnimationBtn.removeAttribute('hidden');
+        this.rescaleTimelineContainer();
         this.studioHelpText.dataset.default = 'Move the playhead to the desired time, then move the camera and press Enter to place a keyframe.';
         this.animation.posXTrack.keyframes = loadedAnimation.posXTrack.keyframes;
         this.animation.posYTrack.keyframes = loadedAnimation.posYTrack.keyframes;
@@ -1673,12 +1731,10 @@ export class StudioPanel extends FloatingPanel {
     private initTimeline() {
         this.studioHelpText.dataset.default = 'Move the playhead to the desired time, then move the camera and press Enter to place a keyframe.';
         this.studioHelpText.innerText = this.studioHelpText.dataset.default;
-        const markersCtx = this.timelineMarkersCanvas.getContext('2d') as CanvasRenderingContext2D;
-        const elementsCtx = this.timelineElementsCanvas.getContext('2d') as CanvasRenderingContext2D;
         this.studioControlsContainer.removeAttribute('hidden');
         this.undoRedoBtnContainer.removeAttribute('hidden');
         this.saveAnimationBtn.removeAttribute('hidden');
-        this.timeline = new Timeline(markersCtx, elementsCtx, Timeline.DEFAULT_LENGTH_MS);
+        this.rescaleTimelineContainer();
         this.timeline.draw();
     }
 
@@ -2132,5 +2188,43 @@ export class StudioPanel extends FloatingPanel {
             e.removeAttribute('disabled');
             e.classList.remove('disabled');
         });
+    }
+
+    private zoomIn(): void {
+        if (this.zoomLevel < MAX_ZOOM_LEVEL) {
+            this.zoomLevel += ZOOM_STEP;
+            this.rescaleTimelineContainer();
+            if (this.zoomLevel === MAX_ZOOM_LEVEL) {
+                this.zoomInBtn.setAttribute('disabled', '');
+                this.zoomInBtn.classList.add('disabled');
+            }
+            this.zoomOutBtn.removeAttribute('disabled');
+            this.zoomOutBtn.classList.remove('disabled');
+        }
+    }
+
+    private zoomOut(): void {
+        if (this.zoomLevel > 1) {
+            this.zoomLevel -= ZOOM_STEP;
+            this.rescaleTimelineContainer();
+            if (this.zoomLevel === 1) {
+                this.zoomOutBtn.setAttribute('disabled', '');
+                this.zoomOutBtn.classList.add('disabled');
+            }
+            this.zoomInBtn.removeAttribute('disabled');
+            this.zoomInBtn.classList.remove('disabled');
+        }
+    }
+
+    private rescaleTimelineContainer(): void {
+        const timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
+        const width = parseInt(getComputedStyle(timeLineContainerElement).width) * this.zoomLevel;
+        this.timelineMarkersCanvas.width = width;
+        this.timelineElementsCanvas.width = width;
+        (this.contents.querySelector('#timelineHeaderBg') as HTMLElement).style.width = (width + Playhead.WIDTH) + 'px';
+        (this.contents.querySelector('#timelineTracksBg') as HTMLElement).style.width = (width + Playhead.WIDTH) + 'px';
+        this.timeline.setupContexts();
+        this.timeline.setScaleAndDrawMarkers();
+        this.timeline.draw();
     }
 }

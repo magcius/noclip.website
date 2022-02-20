@@ -2158,6 +2158,9 @@ used under Creative Commons CC-BY:</p>
 <li> Play Clapboard <span>by</span> Yoyon Pujiyono
 <li> Undo <span>by</span> Numero Uno
 <li> Redo <span>by</span> Numero Uno
+<li> Zoom In <span>by</span> Tanvir Islam
+<li> Zoom Out <span>by</span> Tanvir Islam
+
 </ul>
 `;
 
