@@ -488,7 +488,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
                 size += (this.endSize - this.startSize) * this.timeRemaining / this.lifetime;
             }
         }
-        size /= 4;
+        size /= 3;
 
         if (this.lifetime > 0) {
             this.timeRemaining -= viewerInput.deltaTime;

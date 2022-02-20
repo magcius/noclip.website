@@ -169,6 +169,9 @@ export class Bullet {
 
     public flipbooks: GloverFlipbookRenderer[] = [];
 
+    public lastPosition: vec3 = vec3.create();
+    public nextPosition: vec3 = vec3.create();
+
     public position: vec3 = vec3.create();
     public velocity: vec3 = vec3.create();
 
@@ -201,7 +204,8 @@ export class Bullet {
     public spawn(position: vec3) {
         const params = bulletParameters[this.pool.bulletType];
 
-        vec3.copy(this.position, position);
+        vec3.copy(this.nextPosition, position);
+        vec3.copy(this.lastPosition, position);
         this.velocity = vec3.fromValues(0,0,0);
         this.active = true;
         for (let flipbook of this.flipbooks) {
@@ -222,6 +226,8 @@ export class Bullet {
 
         this.lastFrameAdvance += viewerInput.deltaTime;
         if (this.lastFrameAdvance > SRC_FRAME_TO_MS) {
+            vec3.copy(this.lastPosition, this.nextPosition);
+            
             if (this.lifetime > 0) {
                 this.lifetime -= 1
             }
@@ -234,7 +240,7 @@ export class Bullet {
 
             this.callbackRequestedDestruct = this.frameAdvance(viewerInput);
 
-            vec3.add(this.position, this.position, this.velocity);
+            vec3.add(this.nextPosition, this.nextPosition, this.velocity);
 
             vec3.scale(this.velocity, this.velocity, params.actorDecel0x70);
 
@@ -276,6 +282,9 @@ export class Bullet {
             //  particleSpawn_801ae2e8(10,&(bullet->actor).last_pos,aPStack104,bullet->idx_0x163);
             // }
         }
+
+        vec3.lerp(this.position, this.lastPosition, this.nextPosition, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
+
 
         if (this.lifetime == 0 && this.flipbooks.every((flipbook)=>!flipbook.playing)) {
             this.destruct();
