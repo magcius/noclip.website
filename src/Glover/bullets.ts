@@ -209,7 +209,7 @@ export class Bullet {
         }
         this.setLifetime(params.lifetime);
         this.frameCount = 0;
-        this.scale = vec3.fromValues(1, 1, 1);
+        this.scale = vec3.fromValues(.5, .5, .5);
         this.callbackRequestedDestruct = false;
     }
 

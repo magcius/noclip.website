@@ -1135,7 +1135,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(30/60);
+        c.setSceneMoveSpeedMult(10/60);
     }
 
     public createPanels(): UI.Panel[] {
