@@ -809,6 +809,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
         if (this.path.length > 0 && this.pathMaxVel > 0) {
             if (this.lastPathAdvance >= SRC_FRAME_TO_MS) {
+
+                vec3.copy(this.lastPosition, this.nextPosition);
+
                 if (!this.pathPaused) {
                     const dstPt = this.path[this.pathCurPt].pos;
                     const journeyVector = this.scratchVec3;
@@ -842,14 +845,12 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                             //     console.log(this.pathCurPt, this.path[this.pathCurPt]);
                             // }
                         }
-                        vec3.copy(this.lastPosition, dstPt);
                         vec3.copy(this.nextPosition, dstPt);
                         vec3.zero(this.velocity);
                         curSpeed = 0;
                     }                
                 }
 
-                vec3.copy(this.lastPosition, this.nextPosition);
                 vec3.add(this.nextPosition, this.nextPosition, this.velocity);
 
                 this.lastPathAdvance = 0;
