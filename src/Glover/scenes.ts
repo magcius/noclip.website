@@ -121,8 +121,6 @@ export class GloverWaterVolume implements GenericRenderable {
             velocity[2] = Math.sin(-theta) * rnd;
             theta = radianModulo(theta + thetaDelta);
 
-            vec3.scale(velocity, velocity, 1/SRC_FRAME_TO_MS);
-
             let particle = this.dropletPool.spawn(position, velocity);
             if ((i & 1)==1) {
                 particle.scale[0] = -1;
@@ -172,7 +170,6 @@ class GloverVent implements GenericRenderable {
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private velocity: vec3, private type: number, private parent: GloverPlatform | null, waterVolumes: GloverWaterVolume[]) {
         // TODO: manual scaling for fire vent in Carnival 2
 
-        vec3.scale(this.velocity, this.velocity, 1/SRC_FRAME_TO_MS);
         if (type === 8) {
             this.particles = new ParticlePool(device, cache, textureHolder, 0x14, waterVolumes);
         } else {
@@ -262,7 +259,7 @@ class GloverVent implements GenericRenderable {
                     if (Math.floor(Math.random()*10) < 5) {
                         let particleOrigin = this.position.slice();
                         let particleVelocity = this.velocity.slice();
-                        particleVelocity[1] += 1/SRC_FRAME_TO_MS;
+                        particleVelocity[1] += 1;
                         particleOrigin[0] += Math.floor(Math.random()*10) - 5;
                         particleOrigin[1] += Math.floor(Math.random()*10) - 5;
                         particleOrigin[2] += Math.floor(Math.random()*10) - 5;
@@ -278,7 +275,6 @@ class GloverVent implements GenericRenderable {
                     }
                     const bullet = this.bullets.spawn(finalPos);
                     vec3.copy(bullet.velocity, this.velocity);
-                    vec3.scale(bullet.velocity, bullet.velocity, SRC_FRAME_TO_MS);
                     if (this.bullets.bulletType != 0x12) {
                         bullet.velocity[0] += (Math.floor(Math.random()*11) - 5) / 20.0;
                         bullet.velocity[1] += (Math.floor(Math.random()*11) - 5) / 20.0;
@@ -809,11 +805,6 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                         this.scratchVec3[2] - particleVelocity[2] * 9.0,
                     ]
 
-                    particleVelocity[0] /= SRC_FRAME_TO_MS;
-                    particleVelocity[1] /= SRC_FRAME_TO_MS;
-                    particleVelocity[2] /= SRC_FRAME_TO_MS;
-
-
                     spawnExitParticle(this.exitSparkleParticles, particleOrigin1, particleVelocity, 1.0);
 
                     particleVelocity[0] *= -1;
@@ -1100,9 +1091,9 @@ export class GloverMrTip implements Shadows.ShadowCaster {
                     this.position[2] + Math.floor(Math.random()*7) - 3,
                 ]
                 const particleVelocity = [
-                    Math.cos(-this.frameCount) / SRC_FRAME_TO_MS,
-                    -.5 / SRC_FRAME_TO_MS,
-                    Math.sin(-this.frameCount) / SRC_FRAME_TO_MS,
+                    Math.cos(-this.frameCount),
+                    -.5,
+                    Math.sin(-this.frameCount),
                 ]
                 this.particles.spawn(particleOrigin, particleVelocity);
             }
@@ -1830,7 +1821,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     const wind = new GloverWind(device, cache, textureHolder, sceneRenderer.waterVolumes,
                         [cmd.params.left, cmd.params.top, cmd.params.front],
                         [cmd.params.width, cmd.params.height, cmd.params.depth],
-                        [cmd.params.velX / SRC_FRAME_TO_MS, cmd.params.velY / SRC_FRAME_TO_MS, cmd.params.velZ / SRC_FRAME_TO_MS],
+                        [cmd.params.velX, cmd.params.velY, cmd.params.velZ],
                         cmd.params.turbulence);
                     sceneRenderer.miscRenderers.push(wind);
                     if (cmd.params.active === 0) {

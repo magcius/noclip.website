@@ -49,6 +49,10 @@ export function axisRotationToQuaternion(axis: [number, number, number], theta: 
   ];
 }
 
+export function lerp (start: number, end: number, t: number): number {
+  return (1-t)*start + t*end;
+}
+
 export function radianLerp(dst: vec3, start: vec3, end: vec3, t: number) {
     for (let axis = 0; axis < 3; axis += 1) {
         let a = start[axis];

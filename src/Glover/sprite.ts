@@ -24,7 +24,7 @@ import { Color } from "../Color";
 import { GloverTexbank } from './parsers';
 import { Flipbook, FlipbookType } from './particles';
 import { SRC_FRAME_TO_MS } from './timing';
-import { subtractAngles } from './util';
+import { subtractAngles, lerp } from './util';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -866,6 +866,8 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
     private scaleDelta: number;
     private dstScale: number;
     private scale: number;
+    private nextScale: number;
+    private lastScale: number;
 
     private alphaDelta: number;
     private dstAlpha: number;
@@ -908,10 +910,10 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
         this.active = true;
         this.lifetime = lifetimeFrames * SRC_FRAME_TO_MS;
 
-        // TODO: for the time being, still measured in frames:
         this.scaleDelta = scaleDelta;
         this.dstScale = dstScale;
-        this.scale = scale;
+        this.nextScale = scale;
+        this.lastScale = scale;
 
         this.alphaDelta = alphaDelta / SRC_FRAME_TO_MS;
         this.dstAlpha = dstAlpha;
@@ -943,24 +945,26 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
             this.alpha -= this.alphaDelta * viewerInput.deltaTime;
         }
 
-        // TODO: convert to delta time:
         if (this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
             this.lastFrameAdvance -= SRC_FRAME_TO_MS;
+            this.lastScale = this.nextScale
             if (0.0 < this.scaleDelta) {
-                this.scale += (this.dstScale - this.scale) * this.scaleDelta;
+                this.nextScale += (this.dstScale - this.nextScale) * this.scaleDelta;
             } else {
-                let scaleMidpoint = (this.dstScale - this.scale) / 2;
+                let scaleMidpoint = (this.dstScale - this.nextScale) / 2;
                 if ((scaleMidpoint < -this.scaleDelta && this.scaleDelta > 0) || scaleMidpoint < this.scaleDelta) {
                     if (scaleMidpoint < -this.scaleDelta) {
-                        this.scale += this.scaleDelta;
+                        this.nextScale += this.scaleDelta;
                     } else {
-                        this.scale -= scaleMidpoint;
+                        this.nextScale -= scaleMidpoint;
                     }
                 } else {
-                    this.scale -= this.scaleDelta;
+                    this.nextScale -= this.scaleDelta;
                 }
             }
         }
+
+        this.scale = lerp(this.lastScale, this.nextScale, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1));
 
         mat4.fromRotationTranslationScale(this.drawMatrix,
             this.rotation,

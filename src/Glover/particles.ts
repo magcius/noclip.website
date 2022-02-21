@@ -583,6 +583,8 @@ export class Particle {
     public flipbook: GloverFlipbookRenderer;
 
     private lastPosition: vec3 = vec3.create();
+    private nextPosition: vec3 = vec3.create();
+
     private position: vec3 = vec3.create();
     private velocity: vec3 = vec3.create();
 
@@ -599,7 +601,8 @@ export class Particle {
 
     public spawn(origin: vec3 | number[], velocity: vec3 | number[]) {
         const params = particleParameters[this.particleType];
-        this.position = vec3.fromValues(origin[0], origin[1], origin[2]);
+        this.nextPosition = vec3.fromValues(origin[0], origin[1], origin[2]);
+        vec3.copy(this.lastPosition, this.nextPosition);
         this.velocity = vec3.fromValues(velocity[0], velocity[1], velocity[2]);
         this.active = true;
         this.flipbook.reset();
@@ -618,42 +621,43 @@ export class Particle {
         if (Math.floor(Math.random()*3) === 1) {
             this.velocity[0] *= 0.5;
             this.velocity[2] *= 0.5;
-            this.velocity[0] += Math.cos(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
-            this.velocity[2] += Math.sin(-this.frameCount) * 0.7 / SRC_FRAME_TO_MS;
+            this.velocity[0] += Math.cos(-this.frameCount) * 0.7;
+            this.velocity[2] += Math.sin(-this.frameCount) * 0.7;
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const params = particleParameters[this.particleType];
 
-        this.lastFrameAdvance += viewerInput.deltaTime;
 
         // TODO: look into default particle physics parameters as set by
         //       initParticleSystem(), around address 0x801b6570
 
-        // TODO: this delta time implementation isn't always
-        //       playing nicely with things like, eg, bubbles.
-        //       Figure out a better way to handle this:
-        vec3.copy(this.lastPosition, this.position);
-        vec3.scaleAndAdd(this.position, this.position, this.velocity, viewerInput.deltaTime);
-        for (let x = this.lastFrameAdvance; x > SRC_FRAME_TO_MS; x -= SRC_FRAME_TO_MS) {
+        
+        if (this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
+            vec3.copy(this.lastPosition, this.nextPosition);
+
             this.lastFrameAdvance = 0;
             this.frameCount += 1;
             this.lifetime -= 1;
+
+            vec3.add(this.nextPosition, this.nextPosition, this.velocity);
             vec3.scale(this.velocity, this.velocity, params.friction);
 
             if ((params.actorFlags & 1) !== 0) {
                 const gravAccel = (params.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
                 const terminalVelocity = (params.actorFlags & 0x1000000) == 0 ? -15 : -100000;
-                this.velocity[1] = Math.max(this.velocity[1] - (gravAccel / SRC_FRAME_TO_MS), (terminalVelocity/SRC_FRAME_TO_MS));
+                this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
             }
 
             if (this.particleType === 0x14) {
                 this.advanceWaterParticle();
             }
-
-
+        } else {
+            this.lastFrameAdvance += viewerInput.deltaTime;
         }
+
+        vec3.lerp(this.position, this.lastPosition, this.nextPosition, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
         
         if (this.waterVolumes.length > 0) {
             for (let waterVolume of this.waterVolumes) {
