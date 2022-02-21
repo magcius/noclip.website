@@ -1,3 +1,4 @@
+
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::version::UnityVersion;
 use crate::unity::reader::AssetReader;
@@ -40,6 +41,14 @@ pub struct External {
 pub struct ScriptType {
     pub local_serialized_file_index: i32,
     pub local_identifier_in_file: i64,
+}
+
+// https://docs.unity3d.com/Manual/ClassIDReference.html
+#[derive(Debug)]
+#[wasm_bindgen]
+pub enum UnityClassID {
+    Texture2D = 28,
+    Mesh = 43,
 }
 
 #[derive(Debug)]

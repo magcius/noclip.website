@@ -1,14 +1,19 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
-import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxSamplerDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform';
+import { FormatCompFlags, FormatFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
 import { vec3 } from 'gl-matrix';
+import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityTexture2D, UnityTextureFormat, UnityColorSpace, UnityTextureSettings } from '../../../rust/pkg/index';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import * as Viewer from '../../viewer';
+import { decompressBC, surfaceToCanvas } from '../bc_texture';
 
-let _wasm: typeof import('../../../rust/pkg/index') | null = null;
+type RustModule = typeof import('../../../rust/pkg/index');
+
+let _wasm: RustModule | null = null;
 
 async function loadWasm() {
     if (_wasm === null) {
@@ -32,7 +37,7 @@ interface Range {
     rangeSize: number;
 }
 
-export interface MeshMetadata {
+export interface AssetMetadata {
     name: string;
     offset: number;
     size: number;
@@ -66,10 +71,79 @@ export class UnityMesh {
     }
 }
 
+function translateTextureFormat(wasm: RustModule, fmt: UnityTextureFormat, colorSpace: UnityColorSpace): GfxFormat {
+    if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.BC1;
+    else if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.BC1_SRGB;
+    else
+        throw "whoops";
+}
+
+function translateWrapMode(wasm: RustModule, v: number): GfxWrapMode {
+    if (v === wasm.UnityTextureWrapMode.Repeat)
+        return GfxWrapMode.Repeat;
+    else if (v === wasm.UnityTextureWrapMode.Clamp)
+        return GfxWrapMode.Clamp;
+    else if (v === wasm.UnityTextureWrapMode.Mirror)
+        return GfxWrapMode.Mirror;
+    else if (v === wasm.UnityTextureWrapMode.MirrorOnce)
+        return GfxWrapMode.Mirror; // TODO(jstpierre): what to do here?
+    else
+        throw "whoops";
+}
+
+function translateSampler(wasm: RustModule, header: UnityTextureSettings): GfxSamplerDescriptor {
+    const mipFilterMode = (header.filter_mode === wasm.UnityTextureFilterMode.Trilinear) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+    const texFilterMode = (header.filter_mode >= wasm.UnityTextureFilterMode.Bilinear) ? GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point;
+
+    // Mip bias needs to be handled in shader...
+
+    return {
+        magFilter: texFilterMode,
+        minFilter: texFilterMode,
+        mipFilter: mipFilterMode,
+        wrapS: translateWrapMode(wasm, header.wrap_u),
+        wrapT: translateWrapMode(wasm, header.wrap_v),
+        wrapQ: translateWrapMode(wasm, header.wrap_w),
+        maxAnisotropy: header.aniso,
+    };
+}
+
+export class UnityTexture2DData {
+    public gfxTexture: GfxTexture;
+    public gfxSampler: GfxSampler;
+
+    public viewerTexture: Viewer.Texture;
+
+    constructor(wasm: RustModule, cache: GfxRenderCache, header: UnityTexture2D, data: Uint8Array) {
+        const device = cache.device;
+        const pixelFormat = translateTextureFormat(wasm, header.texture_format, header.color_space);
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(pixelFormat, header.width, header.height, header.mipmap_count));
+
+        this.gfxSampler = cache.createSampler(translateSampler(wasm, header.texture_settings));
+
+        // Load in the actual streaming texture data... limited to first mip for now
+        // TODO(jstpierre): Full mip chain
+        device.uploadTextureData(this.gfxTexture, 0, [data]);
+
+        const canvas = document.createElement('canvas');
+        const rgbaTexture = decompressBC({ type: 'BC1', flag: (pixelFormat & FormatFlags.sRGB) ? 'SRGB' : 'UNORM', width: header.width, height: header.height, depth: 1, pixels: data });
+        surfaceToCanvas(canvas, rgbaTexture);
+        this.viewerTexture = { name: header.name, surfaces: [canvas] };
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
+}
+
 export class UnityAssetManager {
+    public cache: GfxRenderCache;
     private assetInfo: AssetInfo;
 
     constructor(public assetPath: string, private context: SceneContext, public device: GfxDevice) {
+        this.cache = new GfxRenderCache(this.device);
     }
 
     private async loadBytes(range: Range, path = this.assetPath): Promise<Uint8Array> {
@@ -77,10 +151,10 @@ export class UnityAssetManager {
         return new Uint8Array(res.arrayBuffer);
     }
 
-    private async loadStreamingData(streamingInfo: StreamingInfo): Promise<Uint8Array> {
+    private async loadStreamingData(streamingInfo: UnityStreamingInfo): Promise<Uint8Array> {
         let path = this.assetPath.split('/');
         path.pop();
-        path.push(streamingInfo.get_path());
+        path.push(streamingInfo.path);
         return await this.loadBytes({
             rangeStart: streamingInfo.offset,
             rangeSize: streamingInfo.size,
@@ -104,41 +178,62 @@ export class UnityAssetManager {
         this.assetInfo = wasm.AssetInfo.deserialize(headerBytes);
     }
 
+    private async loadAssetBytes(assetMetadata: AssetMetadata): Promise<Uint8Array> {
+        return this.loadBytes({
+            rangeStart: assetMetadata.offset,
+            rangeSize: assetMetadata.size,
+        });
+    }
+
     public async downloadMeshMetadata() {
-        let wasm = await loadWasm();
-        let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
-        let assetBytes = new Uint8Array(assetData.arrayBuffer);
-        let meshDataArray = wasm.get_mesh_metadata(this.assetInfo, assetBytes);
-        let result: MeshMetadata[] = [];
-        for (let i=0; i<meshDataArray.length; i++) {
-            let data = meshDataArray.get(i);
-            result.push({
-                name: data.get_name(),
-                offset: data.offset,
-                size: data.size,
-            })
-        }
+        const wasm = await loadWasm();
+        const assetData = await this.context.dataFetcher.fetchData(this.assetPath);
+        const assetBytes = new Uint8Array(assetData.arrayBuffer);
+        const arr = wasm.get_asset_metadata(this.assetInfo, assetBytes, wasm.UnityClassID.Mesh);
+        const result: AssetMetadata[] = [];
+        for (let i = 0; i < arr.length; i++)
+            result.push(arr.get(i));
 
         downloadBlob('meshData.json', new Blob([JSON.stringify(result, null, 2)]));
     }
 
-    public async loadMesh(meshData: MeshMetadata): Promise<UnityMesh> {
-        let wasm = await loadWasm();
-        let meshBytes = await this.loadBytes({
-            rangeStart: meshData.offset,
-            rangeSize: meshData.size,
-        });
-        let mesh = wasm.Mesh.from_bytes(meshBytes, this.assetInfo);
-        let streamingInfo: StreamingInfo | undefined = mesh.get_streaming_info();
-        if (streamingInfo !== undefined) {
-            mesh.set_vertex_data(await this.loadStreamingData(streamingInfo));
+    public async grabATextureIDontCareWhichOne() {
+        const wasm = await loadWasm();
+        const assetData = await this.context.dataFetcher.fetchData(this.assetPath);
+        const assetBytes = new Uint8Array(assetData.arrayBuffer);
+        const arr = wasm.get_asset_metadata(this.assetInfo, assetBytes, wasm.UnityClassID.Texture2D);
+        for (let i = 0; i < arr.length; i++) {
+            const item = arr.get(i);
+            if (item.name.includes('BluishGrass'))
+                return this.loadTexture2D(item);
         }
+        throw "whoops";
+    }
 
-        if (mesh.is_compressed()) {
-            return await loadCompressedMesh(this.device, mesh);
-        } else {
-            return await loadMesh(this.device, mesh);
-        }
+    public async loadMesh(assetMetadata: AssetMetadata): Promise<UnityMesh> {
+        const wasm = await loadWasm();
+        const meshBytes = await this.loadAssetBytes(assetMetadata);
+        const mesh = wasm.Mesh.from_bytes(meshBytes, this.assetInfo);
+        const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
+        if (streamingInfo !== undefined)
+            mesh.set_vertex_data(await this.loadStreamingData(streamingInfo));
+
+        if (mesh.is_compressed())
+            return loadCompressedMesh(this.device, mesh);
+        else
+            return loadMesh(this.device, mesh);
+    }
+
+    public async loadTexture2D(assetMetadata: AssetMetadata): Promise<UnityTexture2DData> {
+        const wasm = await loadWasm();
+        const textureBytes = await this.loadAssetBytes(assetMetadata);
+        const texture = wasm.UnityTexture2D.from_bytes(textureBytes, this.assetInfo);
+        const data = await this.loadStreamingData(texture.streaming_info);
+        return new UnityTexture2DData(wasm, this.cache, texture, data);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.cache.destroy();
     }
 }
 

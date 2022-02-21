@@ -194,26 +194,19 @@ impl Deserialize for CompressedMesh {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone)]
-pub struct StreamingInfo {
-    pub size: u32,
+pub struct UnityStreamingInfo {
     pub offset: u32,
-    path: String,
+    pub size: u32,
+    pub path: String,
 }
 
-#[wasm_bindgen]
-impl StreamingInfo {
-    pub fn get_path(&self) -> String {
-        return self.path.clone();
-    }
-}
-
-impl Deserialize for StreamingInfo {
+impl Deserialize for UnityStreamingInfo {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
-        Ok(StreamingInfo {
-            size: reader.read_u32()?,
+        Ok(UnityStreamingInfo {
             offset: reader.read_u32()?,
+            size: reader.read_u32()?,
             path: reader.read_char_array()?,
         })
     }
@@ -397,9 +390,9 @@ pub enum IndexFormat {
 }
 
 #[derive(Debug)]
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Mesh {
-    name: String,
+    pub name: String,
     submeshes: Vec<SubMesh>,
     mesh_compression: MeshCompression,
     is_readable: bool,
@@ -414,7 +407,7 @@ pub struct Mesh {
     hash_metrics: [f32; 2],
     baked_convex_collision_mesh: Vec<u8>,
     baked_triangle_collision_mesh: Vec<u8>,
-    streaming_info: StreamingInfo,
+    streaming_info: UnityStreamingInfo,
 }
 
 #[wasm_bindgen]
@@ -423,10 +416,6 @@ impl Mesh {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
         Mesh::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
-    }
-
-    pub fn get_name(&self) -> String {
-        self.name.clone()
     }
 
     pub fn is_compressed(&self) -> bool {
@@ -458,7 +447,7 @@ impl Mesh {
         }
     }
 
-    pub fn get_streaming_info(&self) -> Option<StreamingInfo> {
+    pub fn get_streaming_info(&self) -> Option<UnityStreamingInfo> {
         if self.streaming_info.path.is_empty() {
             None
         } else {
@@ -531,7 +520,7 @@ impl Deserialize for Mesh {
         let baked_triangle_collision_mesh = reader.read_byte_array()?;
         reader.align()?;
         let hash_metrics = [reader.read_f32()?, reader.read_f32()?];
-        let streaming_info = StreamingInfo::deserialize(reader, asset)?;
+        let streaming_info = UnityStreamingInfo::deserialize(reader, asset)?;
         //web_sys::console::log_1(&format!("{:?}", &vertex_data.channels).into());
         //web_sys::console::log_1(&format!("{:?}", &vertex_data.streams).into());
 
