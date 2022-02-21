@@ -29,11 +29,6 @@ jobs:
 
       - run: pnpm install
 
-      # wasm-pack is amazingly ridiculous and puts a binary in .config/, which
-      # won't get cached even when node_modules does. Force it to reinstall with
-      # an 'upgrade'.
-      - run: pnpm upgrade wasm-pack
-
       - run: pnpm run build
 
       - save_cache:
