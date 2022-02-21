@@ -40,6 +40,7 @@ impl MeshMetadata {
 #[wasm_bindgen]
 pub fn get_mesh_metadata(asset: &AssetInfo, data: Vec<u8>) -> MeshMetadataArray {
     let mut reader = AssetReader::new(data);
+    reader.set_endianness(asset.header.endianness);
     let mut mesh_data: Vec<MeshMetadata> = asset.objects.iter()
         .filter(|obj| obj.class_id == 43)
         .map(|obj| MeshMetadata {
