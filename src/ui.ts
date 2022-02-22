@@ -1506,7 +1506,7 @@ export class Slider implements Widget {
     }
 }
 
-class RadioButtons implements Widget {
+export class RadioButtons implements Widget {
     public elem: HTMLElement;
     public selectedIndex: number = -1;
     public onselectedchange: ((() => void) | null) = null;

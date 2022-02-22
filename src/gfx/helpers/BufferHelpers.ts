@@ -43,7 +43,7 @@ export interface GfxCoalescedBuffersCombo {
 
 export class GfxBufferCoalescerCombo {
     public coalescedBuffers: GfxCoalescedBuffersCombo[] = [];
-    private vertexBuffer: GfxBuffer | null = null;
+    public vertexBuffer: GfxBuffer | null = null;
     private indexBuffer: GfxBuffer | null = null;
 
     constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[][], indexDatas: ArrayBufferSlice[]) {

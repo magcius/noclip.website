@@ -1,10 +1,9 @@
-
 // Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
 
-import { ResourceSystem } from "./resource";
-import { assert, readString } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { InputStream } from "./stream";
+import { ResourceSystem } from './resource';
+import { assert, readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { InputStream } from './stream';
 
 export interface STRG {
     strings: string[];
@@ -25,7 +24,7 @@ function readUTF16String(buffer: ArrayBufferSlice, offs: number): string {
     return str;
 }
 
-function readNameTable(stream: InputStream) : Map<string, number> {
+function readNameTable(stream: InputStream): Map<string, number> {
     const nameTableCount = stream.readUint32();
     const nameTableSize = stream.readUint32();
     const nameTableOffs = stream.tell();
@@ -35,9 +34,9 @@ function readNameTable(stream: InputStream) : Map<string, number> {
     let nameTable = new Map<string, number>();
 
     for (let i = 0; i < nameTableCount; i++) {
-        const entryOffset = i*8;
-        const offset = view.getUint32(entryOffset+0);
-        const index = view.getUint32(entryOffset+4);
+        const entryOffset = i * 8;
+        const offset = view.getUint32(entryOffset + 0);
+        const index = view.getUint32(entryOffset + 4);
         const name = readString(stream.getBuffer(), view.byteOffset + offset);
         nameTable.set(name, index);
     }
@@ -99,10 +98,10 @@ function parse_MP3(stream: InputStream): STRG {
     const nameTable = readNameTable(stream);
 
     const languageIDTableOffs = stream.tell();
-    const languageInfoOffs = languageIDTableOffs + 4*languageCount;
-    const languageInfoSize = 4 + (4*stringCount);
+    const languageInfoOffs = languageIDTableOffs + 4 * languageCount;
+    const languageInfoSize = 4 + (4 * stringCount);
     const stringDataOffs = languageInfoOffs + languageCount * languageInfoSize;
-    
+
     const strings: string[] = [];
     const view = stream.getBuffer().createDataView();
 
@@ -111,13 +110,13 @@ function parse_MP3(stream: InputStream): STRG {
 
         // Load English for now because I am a dirty American.
         if (languageID === 'ENGL') {
-            stream.goTo(languageInfoOffs + languageInfoSize*i);
+            stream.goTo(languageInfoOffs + languageInfoSize * i);
             stream.skip(4);
 
             for (let j = 0; j < stringCount; j++) {
                 const stringOffs = stringDataOffs + stream.readUint32();
                 const stringSize = view.getUint32(stringOffs);
-                const string = utf8Decoder.decode(stream.getBuffer().createTypedArray(Uint8Array, stringOffs + 4, stringSize-1));
+                const string = utf8Decoder.decode(stream.getBuffer().createTypedArray(Uint8Array, stringOffs + 4, stringSize - 1));
                 strings.push(string);
             }
 
