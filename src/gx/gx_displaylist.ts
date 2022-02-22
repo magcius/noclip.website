@@ -470,7 +470,8 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
             srcVertexSize += getAttributeByteSizeRaw(vtxAttrib, vtxAttrFmt);
         else if (vtxAttrDesc.type === GX.AttrType.INDEX8)
             srcVertexSize += 1 * srcIndexComponentCount;
-        else if (vtxAttrDesc.type === GX.AttrType.INDEX16)
+        else if (vtxAttrDesc.type === GX.AttrType.INDEX16 ||
+                 vtxAttrDesc.type === GX.AttrType.UNRESOLVED_INDEX16)
             srcVertexSize += 2 * srcIndexComponentCount;
     }
 
@@ -530,7 +531,11 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
         let fieldFormat: GfxFormat;
         let fieldCompOffset: number = 0;
 
-        if (isVtxAttribTexMtxIdx(vtxAttrib)) {
+        if (vtxAttrDesc.type === GX.AttrType.UNRESOLVED_INDEX16) {
+            const attrInput = getAttrInputForAttr(vtxAttrib);
+            input = allocateVertexInput(attrInput, GfxFormat.U16_R);
+            fieldFormat = input.format;
+        } else if (isVtxAttribTexMtxIdx(vtxAttrib)) {
             // Allocate the base if it doesn't already exist.
             const attrInput = (vtxAttrib < GX.Attr.TEX4MTXIDX) ? VertexAttributeInput.TEX0123MTXIDX : VertexAttributeInput.TEX4567MTXIDX;
             input = allocateVertexInput(attrInput, inputFormat);
@@ -641,6 +646,12 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             const littleEndian = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
             const dstOffs = `dstVertexDataOffs + ${offs}`;
             return `dstVertexDataView.setFloat32(${dstOffs}, ${value}, ${littleEndian})`;
+        }
+
+        function compileWriteOneComponentU16(offs: number, value: string): string {
+            const littleEndian = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
+            const dstOffs = `dstVertexDataOffs + ${offs}`;
+            return `dstVertexDataView.setUint16(${dstOffs}, ${value}, ${littleEndian})`;
         }
 
         function compileWriteOneComponentU8Norm(offs: number, value: string): string {
@@ -810,6 +821,12 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), `dlView.getUint8(drawCallIdx)`, 1);
         case GX.AttrType.INDEX16:
             return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), `dlView.getUint16(drawCallIdx)`, 2);
+        case GX.AttrType.UNRESOLVED_INDEX16:
+            return `
+    // UNRESOLVED ${getAttrName(vtxAttrib)}
+    ${compileWriteOneComponentU16(dstBaseOffs, `dlView.getUint16(drawCallIdx)`)};
+    drawCallIdx += 2;
+`;
         default:
             throw "whoops";
         }
