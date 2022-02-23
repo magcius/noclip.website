@@ -3,7 +3,7 @@ import { UI, Checkbox, setElementHighlighted, createDOMFromString } from './ui';
 import { FloatingPanel } from './DebugFloaters';
 import { StudioCameraController } from './Camera';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, invlerp, Vec3UnitY, Vec3Zero } from './MathHelpers';
-import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
 import { getPointHermite } from './Spline';
 
@@ -249,6 +249,10 @@ class KeyframeIcon {
         return this.x;
     }
 
+    public getY(): number {
+        return this.y;
+    }
+
     public getT(): number {
         return this.t;
     }
@@ -267,6 +271,8 @@ class Timeline {
     static readonly DEFAULT_LENGTH_MS = 30000;
     static readonly MIN_MARKER_WIDTH_PX: number = 50;
     static readonly MARKER_COLOR: string = '#f3f3f3';
+    static readonly SELECTION_BOX_STROKE_COLOR: string = "#63BBFF";
+    static readonly SELECTION_BOX_FILL_COLOR: string = "rgba(53, 77, 255, 0.4)";
     static readonly DEFAULT_SECONDS_PER_MARKER: number = 5;
     static readonly SNAP_DISTANCE_PX: number = 10;
     static readonly HEADER_HEIGHT: number = 25;
@@ -297,11 +303,17 @@ class Timeline {
     private playhead: Playhead;
     private pixelsPerSecond: number;
     private timelineScaleFactor: number = 1;
+    private selectionBoxPath: Path2D = new Path2D();
+    private selectionBoxStartVertex: vec2 = vec2.create();
+    private selectionBoxEndVertex: vec2 = vec2.create();
+    private selectionBoxActive: boolean = false;
+    private selectionBoxIcons: KeyframeIcon[] = [];
+    private grabbedIcon: KeyframeIcon | undefined = undefined;
+    private grabbedIconInitialXPos: number = -1;
     public keyframeIcons: KeyframeIcon[] = [];
-    public selectedKeyframeIcon: KeyframeIcon | undefined;
+    public selectedKeyframeIcons: KeyframeIcon[] = [];
     public playheadGrabbed: boolean = false;
     public keyframeIconGrabbed: boolean = false;
-    private grabbedIconInitialXPos: number = -1;
     public snappingEnabled: boolean = false;
     public livePreview: boolean = false;
 
@@ -377,6 +389,13 @@ class Timeline {
         for (const kfIcon of this.keyframeIcons) {
             kfIcon.draw(this.elementsCtx);
         }
+        if (this.selectionBoxActive) {
+            this.elementsCtx.fillStyle = Timeline.SELECTION_BOX_FILL_COLOR;
+            this.elementsCtx.strokeStyle = Timeline.SELECTION_BOX_STROKE_COLOR;
+            this.elementsCtx.beginPath();
+            this.elementsCtx.fill(this.selectionBoxPath);
+            this.elementsCtx.stroke(this.selectionBoxPath);
+        }
         this.playhead.drawLine(this.elementsCtx);
         this.elementsCtx.save();
     }
@@ -390,17 +409,19 @@ class Timeline {
             this.selectKeyframeIcon(kfIcon);
     }
 
-    public deleteSelectedKeyframeIcon() {
-        if (!this.selectedKeyframeIcon)
+    public deleteSelectedKeyframeIcons() {
+        if (!this.selectedKeyframeIcons.length)
             return;
 
-        const i = this.keyframeIcons.indexOf(this.selectedKeyframeIcon);
+        for (let i = 0; i < this.selectedKeyframeIcons.length; i++) {
+            const index = this.keyframeIcons.indexOf(this.selectedKeyframeIcons[i]);
 
-        if (i === -1 || this.keyframeIcons[i].type !== KeyframeIconType.Default)
-            return;
-
-        this.keyframeIcons.splice(i, 1);
-        this.deselectKeyframeIcon();
+            if (index === -1 || this.keyframeIcons[index].type !== KeyframeIconType.Default)
+                continue;
+    
+            this.keyframeIcons.splice(index, 1);
+        }
+        this.deselectAllKeyframeIcons();
     }
 
     public deleteEndframeIcons() {
@@ -411,34 +432,52 @@ class Timeline {
 
     public onMouseDown(e: MouseEvent) {
         e.stopPropagation();
-        // Click landed on playhead, or the part of the timeline where markers are displayed
+        // Check if click landed on playhead, or the part of the timeline where markers are displayed
         if (this.elementsCtx.isPointInPath(this.playhead.playheadPath, e.offsetX, e.offsetY) ||
             this.elementsCtx.isPointInPath(this.timelineHeaderPath, e.offsetX, e.offsetY)) {
             this.playheadGrabbed = true;
-            this.deselectKeyframeIcon();
+            this.deselectAllKeyframeIcons();
             this.onMouseMove(e);
             return;
         }
-        // Check if click landed on the currently-selected keyframe icon
+        // Check if click landed on a currently-selected keyframe icon
         let selectedIconClicked = false;
-        if (this.selectedKeyframeIcon && this.selectedKeyframeIcon.type !== KeyframeIconType.Start
-            && this.elementsCtx.isPointInPath(this.selectedKeyframeIcon.iconPath, e.offsetX, e.offsetY)) {
-            selectedIconClicked = true;
-            this.keyframeIconGrabbed = true;
-            this.grabbedIconInitialXPos = this.selectedKeyframeIcon.getX();
+        for (const kfIcon of this.selectedKeyframeIcons) {
+            if (kfIcon.type !== KeyframeIconType.Start
+                && this.elementsCtx.isPointInPath(kfIcon.iconPath, e.offsetX, e.offsetY)) {
+                selectedIconClicked = true;
+                if (e.ctrlKey) {
+                    this.deselectKeyframeIcon(kfIcon);
+                } else {
+                    this.keyframeIconGrabbed = true;
+                    this.grabbedIcon = kfIcon;
+                    this.grabbedIconInitialXPos = kfIcon.getX();
+                }
+                break;
+            }
         }
         if (!selectedIconClicked) {
-            this.deselectKeyframeIcon();
             // Check if click landed on any keyframe icon.
             for (const kfIcon of this.keyframeIcons) {
                 if (this.elementsCtx.isPointInPath(kfIcon.iconPath, e.offsetX, e.offsetY)) {
+                    if (!e.ctrlKey)
+                        this.deselectAllKeyframeIcons();
                     this.selectKeyframeIcon(kfIcon);
                     if (kfIcon.type !== KeyframeIconType.Start) {
                         this.keyframeIconGrabbed = true;
-                        this.grabbedIconInitialXPos = this.selectedKeyframeIcon!.getX();
+                        this.grabbedIcon = kfIcon;
+                        this.grabbedIconInitialXPos = kfIcon.getX();
                     }
                     break;
                 }
+            }
+            if (!this.keyframeIconGrabbed) {
+                if (!e.ctrlKey)
+                    this.deselectAllKeyframeIcons();
+                this.selectionBoxActive = true;
+                this.selectionBoxStartVertex[0] = e.offsetX - Playhead.HALF_WIDTH;
+                this.selectionBoxStartVertex[1] = e.offsetY;
+                this.selectionBoxPath = new Path2D();
             }
         }
         this.draw();
@@ -447,12 +486,15 @@ class Timeline {
     public onMouseUp() {
         this.playheadGrabbed = false;
         this.keyframeIconGrabbed = false;
+        this.selectionBoxActive = false;
+        this.selectionBoxIcons = [];
+        this.grabbedIcon = undefined;
         this.grabbedIconInitialXPos = -1;
         this.draw();
     }
 
     public onMouseMove(e: MouseEvent) {
-        if (!this.playheadGrabbed && !this.keyframeIconGrabbed)
+        if (!this.playheadGrabbed && !this.keyframeIconGrabbed && !this.selectionBoxActive)
             return;
 
         let targetX = e.offsetX;
@@ -466,7 +508,7 @@ class Timeline {
 
         if (this.playheadGrabbed) {
             const snapKfIndex = this.getClosestSnappingIconIndex(targetX);
-            this.deselectKeyframeIcon();
+            this.deselectAllKeyframeIcons();
             if (snapKfIndex > -1) {
                 if (snappingEnabled)
                     targetX = this.keyframeIcons[snapKfIndex].getX();
@@ -478,37 +520,133 @@ class Timeline {
 
             const t = targetX / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
             this.playhead.updatePosition(targetX, t);
-        } else if (this.keyframeIconGrabbed && this.selectedKeyframeIcon) {
-            // Don't allow a loop keyframe icon to be moved before any other keyframes.
-            if (this.selectedKeyframeIcon.type === KeyframeIconType.End)
-                targetX = clamp(targetX, this.keyframeIcons[this.keyframeIcons.length - 2].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
-            if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
-                this.updateKeyframeIconPosition(this.selectedKeyframeIcon, this.playhead.getX());
-            else
-                this.updateKeyframeIconPosition(this.selectedKeyframeIcon, targetX);
+        } else if (this.keyframeIconGrabbed && this.selectedKeyframeIcons.length) {
+            if (this.selectedKeyframeIcons.length === 1) {
+                // Don't allow a loop keyframe icon to be moved before any other keyframes.
+                if (this.selectedKeyframeIcons[0].type === KeyframeIconType.End)
+                    targetX = clamp(targetX, this.keyframeIcons[this.keyframeIcons.length - 2].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
+                else if (this.keyframeIcons[this.keyframeIcons.length - 1].type === KeyframeIconType.End)
+                    targetX = clamp(targetX, this.keyframeIcons[0].getX() + Timeline.SNAP_DISTANCE_PX, this.keyframeIcons[this.keyframeIcons.length - 1].getX() - Timeline.SNAP_DISTANCE_PX);
+                if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+                    this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], this.playhead.getX());
+                else
+                    this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], targetX);
+            } else {
+                // Moving multiple icons. Check if moving all of them will cause
+                // any of them to be in an illegal position.
+                if (this.canMoveGroupTo(targetX)) {
+                    const grabbedX = this.grabbedIcon!.getX();
+                    for (const kfIcon of this.selectedKeyframeIcons) {
+                        this.updateKeyframeIconPosition(kfIcon, targetX + (kfIcon.getX() - grabbedX));
+                    }
+                }
+            }
+        } else if (this.selectionBoxActive) {
+            this.selectionBoxEndVertex[0] = e.offsetX - Playhead.HALF_WIDTH;
+            this.selectionBoxEndVertex[1] = e.offsetY;
+            this.selectionBoxPath = new Path2D();
+            this.selectionBoxPath.moveTo(this.selectionBoxStartVertex[0], this.selectionBoxStartVertex[1]);
+            this.selectionBoxPath.lineTo(this.selectionBoxEndVertex[0], this.selectionBoxStartVertex[1]);
+            this.selectionBoxPath.lineTo(this.selectionBoxEndVertex[0], this.selectionBoxEndVertex[1]);
+            this.selectionBoxPath.lineTo(this.selectionBoxStartVertex[0], this.selectionBoxEndVertex[1]);
+            this.selectionBoxPath.closePath();
+            for (const kfIcon of this.keyframeIcons) {
+                const kfInBox = this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST, kfIcon.getY() + KeyframeIcon.XY_DIST);
+                if (e.ctrlKey) {
+                    // When the control key is held, toggle the selection state of any icons we add/remove.
+                    if (kfInBox) {
+                        if (!this.selectionBoxIcons.includes(kfIcon)) {
+                            this.selectionBoxIcons.push(kfIcon);
+                            if (kfIcon.selected)
+                                this.deselectKeyframeIcon(kfIcon);
+                            else
+                                this.selectKeyframeIcon(kfIcon);
+                        }
+                    } else if (this.selectionBoxIcons.includes(kfIcon)) {
+                        this.selectionBoxIcons.splice(this.selectionBoxIcons.indexOf(kfIcon), 1);
+                        if (kfIcon.selected)
+                            this.deselectKeyframeIcon(kfIcon);
+                        else
+                            this.selectKeyframeIcon(kfIcon);
+                    }
+                } else {
+                    if (kfInBox) {
+                        if (!this.selectionBoxIcons.includes(kfIcon)) {
+                            this.selectionBoxIcons.push(kfIcon);
+                            this.selectKeyframeIcon(kfIcon);
+                        }
+                    } else if (this.selectionBoxIcons.includes(kfIcon)) {
+                        this.selectionBoxIcons.splice(this.selectionBoxIcons.indexOf(kfIcon), 1);
+                        this.deselectKeyframeIcon(kfIcon);
+                    }
+                }
+                
+            }
         }
 
         this.draw();
     }
 
+    /**
+     * Checks if the currently-selected group of keyframes can be moved to the target position.
+     * targetX refers to the position of the keyframe icon that the user is currently clicking.
+     * The positions of the other selected keyframes are determined as offsets from this position.
+     */
+    private canMoveGroupTo(targetX: number): boolean {
+        const grabbedIconX = this.grabbedIcon!.getX();
+        for (const selectedIcon of this.selectedKeyframeIcons) {
+            if (selectedIcon.type === KeyframeIconType.Start)
+                return false;
+            const diffFromGrabbed = selectedIcon.getX() - grabbedIconX;
+            const newX = targetX + diffFromGrabbed;
+            // Check this new position against all non-selected keyframe icons.
+            // If any of the new positions is inside a non-selected icon's snapping
+            // range, or results in any keyframe moving past a loop keyframe icon,
+            // prevent the update.
+            for (const kfIcon of this.keyframeIcons) {
+                if (kfIcon.selected)
+                    continue;
+                if (newX < Timeline.SNAP_DISTANCE_PX
+                    || (newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX
+                        && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX)
+                    || (kfIcon.type === KeyframeIconType.End
+                        && newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX)
+                    || (newX > this.width - Playhead.HALF_WIDTH)
+                    || (selectedIcon.type === KeyframeIconType.End 
+                        && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX))
+                    return false;
+            }
+        }
+        return true;
+    }
+
     public hasGrabbedIconMoved(): boolean {
-        if (!this.selectedKeyframeIcon)
+        if (!this.selectedKeyframeIcons.length || !this.grabbedIcon)
             return false;
-        return this.keyframeIconGrabbed && this.grabbedIconInitialXPos !== -1 && this.grabbedIconInitialXPos !== this.selectedKeyframeIcon.getX();
+        return this.keyframeIconGrabbed
+          && this.grabbedIconInitialXPos !== -1
+          && this.grabbedIconInitialXPos !== this.grabbedIcon.getX();
     }
 
     private selectKeyframeIcon(kfIcon: KeyframeIcon) {
+        if (this.selectedKeyframeIcons.includes(kfIcon))
+            return;
         kfIcon.selected = true;
-        this.selectedKeyframeIcon = kfIcon;
+        this.selectedKeyframeIcons.push(kfIcon);
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
+    
+    private deselectKeyframeIcon(kfIcon: KeyframeIcon) {
+        this.selectedKeyframeIcons.splice(this.selectedKeyframeIcons.indexOf(kfIcon), 1);
+        kfIcon.selected = false;
+    }
 
-    public deselectKeyframeIcon() {
-        if (this.selectedKeyframeIcon) {
-            this.selectedKeyframeIcon.selected = false;
-            this.selectedKeyframeIcon = undefined;
-            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
+    public deselectAllKeyframeIcons() {
+        for (const kfIcon of this.selectedKeyframeIcons) {
+            kfIcon.selected = false;
         }
+        this.selectedKeyframeIcons = [];
+        this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
     }
 
     private ensureIconDistance(v: number, c: number, r: number): number {
@@ -559,7 +697,7 @@ class Timeline {
                 // If the playhead is directly on a keyframe, highlight it.
                 this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
             } else {
-                this.deselectKeyframeIcon();
+                this.deselectAllKeyframeIcons();
             }
         }
         this.draw();
@@ -570,7 +708,7 @@ class Timeline {
         for (let i = 1; i < this.keyframeIcons.length; i++) {
             if (curT < this.keyframeIcons[i].getT()) {
                 const jumpIcon = this.keyframeIcons[i];
-                this.deselectKeyframeIcon();
+                this.deselectAllKeyframeIcons();
                 this.playhead.updatePosition(jumpIcon.getX(), jumpIcon.getT());
                 this.selectKeyframeIcon(jumpIcon);
                 break;
@@ -584,7 +722,7 @@ class Timeline {
         for (let i = this.keyframeIcons.length - 1; i > -1; i--) {
             if (curT > this.keyframeIcons[i].getT()) {
                 const jumpIcon = this.keyframeIcons[i];
-                this.deselectKeyframeIcon();
+                this.deselectAllKeyframeIcons();
                 this.playhead.updatePosition(jumpIcon.getX(), jumpIcon.getT());
                 this.selectKeyframeIcon(jumpIcon);
                 break;
@@ -605,6 +743,10 @@ class Timeline {
      */
     public getPlayheadTimeSeconds(): string {
         return (this.playhead.getT() / MILLISECONDS_IN_SECOND).toFixed(2);
+    }
+
+    public getPlayheadX(): number {
+        return this.playhead.getX();
     }
 
     public getLastKeyframeTimeMs(): number {
@@ -747,6 +889,7 @@ export class StudioPanel extends FloatingPanel {
 
     private studioControlsContainer: HTMLElement;
 
+    private timeLineContainerElement: HTMLElement;
     private timelineControlsContainer: HTMLElement;
     private snapBtn: HTMLButtonElement;
     private playheadTimePositionInput: HTMLInputElement;
@@ -1144,6 +1287,7 @@ export class StudioPanel extends FloatingPanel {
 
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
 
+        this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
         this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
 
         this.timelineMarkersCanvas = this.contents.querySelector('#timelineMarkersCanvas') as HTMLCanvasElement;
@@ -1203,14 +1347,7 @@ export class StudioPanel extends FloatingPanel {
             this.timeline.setScaleAndDrawMarkers(lengthVal * MILLISECONDS_IN_SECOND);
             this.timelineLengthInput.dataset.prevValue = this.timelineLengthInput.value;
 
-            // Update the playhead's position. Clamp it to the timeline length if necessary.
-            let playheadTimePosValue = parseFloat(this.playheadTimePositionInput.value);
-            if (playheadTimePosValue > lengthVal) {
-                playheadTimePosValue = lengthVal;
-                this.playheadTimePositionInput.value = lengthVal.toString();
-                this.playheadTimePositionInput.dataset.prevValue = lengthVal.toString();
-            }
-            this.timeline.setPlayheadTimeSeconds(playheadTimePosValue, false);
+            this.onTimelineScaleChanged(lengthVal);
         };
 
         this.loopAnimationBtn = this.contents.querySelector('#loopAnimationBtn') as HTMLButtonElement;
@@ -1381,22 +1518,27 @@ export class StudioPanel extends FloatingPanel {
         this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
             if (this.timeline && !this.editingKeyframe) {
                 this.timeline.onMouseDown(e);
-                if (this.timeline.livePreview && this.timeline.playheadGrabbed)
-                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+                if (this.timeline.playheadGrabbed) {
+                    this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+                    if (this.timeline.livePreview)
+                        this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+                }
             }
         });
 
-        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => { this.displayKeyframeControls(); });
+        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => { this.handleKeyframeSelected(); });
         this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => { this.hideKeyframeControls(); });
         this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
-            this.timeline.selectedKeyframeIcon!.keyframesMap.forEach((v, trackType) => {
-                this.getTrackByType(this.animation, trackType).reSort();
-            });
+            for (const kfIcon of this.timeline.selectedKeyframeIcons) {
+                kfIcon.keyframesMap.forEach((v, trackType) => {
+                    this.getTrackByType(this.animation, trackType).reSort();
+                });
+            }
         });
 
         this.timelineElementsCanvas.addEventListener('keydown', (ev: KeyboardEvent) => {
-            if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcon && !ev.repeat) {
-                this.deleteSelectedKeyframeIcon();
+            if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcons.length && !ev.repeat) {
+                this.deleteSelectedKeyframeIcons();
             } else if (ev.key === 'j') {
                 this.prevKeyframe();
             } else if (ev.key === 'k') {
@@ -1417,16 +1559,13 @@ export class StudioPanel extends FloatingPanel {
 
         this.mainPanel.addEventListener('wheel', (ev: WheelEvent) => {
             ev.preventDefault();
-            if (ev.deltaY < 0) {
-                if (ev.ctrlKey)
+            if (ev.ctrlKey) {
+                if (ev.deltaY < 0)
                     this.zoomIn();
-                //else
-                    // TODO - Scroll horizontally
-            } else {
-                if (ev.ctrlKey)
+                else if (ev.deltaY > 0)
                     this.zoomOut();
-                //else
-                    // TODO - Scroll horizontally
+            } else {
+                this.timeLineContainerElement.scrollBy(ev.deltaY, 0);
             }
         })
 
@@ -1558,7 +1697,7 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private loadState(state: StudioState) {
-        this.timeline.deselectKeyframeIcon();
+        this.timeline.deselectAllKeyframeIcons();
         const loadedAnimation = JSON.parse(JSON.stringify(state.animation));
         if (loadedAnimation.loop === undefined)
             loadedAnimation.loop = false;
@@ -1611,14 +1750,14 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private autoTangentCheckBoxOnChanged(): void {
-        if (this.timeline.selectedKeyframeIcon) {
-            const kfIconType = this.timeline.selectedKeyframeIcon.type;
+        for (const kfIcon of this.timeline.selectedKeyframeIcons) {
+            const kfIconType = kfIcon.type;
             if (this.animation.loop && (kfIconType === KeyframeIconType.Start || kfIconType === KeyframeIconType.End)) {
                 this.timeline.keyframeIcons.filter((i) => i.type === KeyframeIconType.Start || i.type === KeyframeIconType.End).forEach((kfIcon) => {
                     kfIcon.keyframesMap.forEach((k) => k.useAutoTangent = this.useAutoTangentValuesCheckbox.checked);
                 });
             } else {
-                this.timeline.selectedKeyframeIcon.keyframesMap.forEach((k) => k.useAutoTangent = this.useAutoTangentValuesCheckbox.checked);
+                kfIcon.keyframesMap.forEach((k) => k.useAutoTangent = this.useAutoTangentValuesCheckbox.checked);
             }
             if (this.useAutoTangentValuesCheckbox.checked) {
                 this.customTangentsContainer.style.display = 'none';
@@ -1670,11 +1809,11 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private onChangeTangentInput(input: HTMLInputElement): void {
-        if (this.timeline.selectedKeyframeIcon && input.value) {
+        if (this.timeline.selectedKeyframeIcons.length && input.value) {
             const val = parseFloat(input.value);
             if (!Number.isNaN(val)) {
                 const trackType = parseInt(input.dataset.track!, 10);
-                const kf = this.timeline.selectedKeyframeIcon.keyframesMap.get(trackType)!;
+                const kf = this.timeline.selectedKeyframeIcons[0].keyframesMap.get(trackType)!;
                 this.getTrackByType(this.animation, trackType).setCustomTangent(kf, val);
                 this.updatePreviewSteps();
             }
@@ -1700,10 +1839,10 @@ export class StudioPanel extends FloatingPanel {
             throw "whoops";
     }
 
-    private displayKeyframeControls() {
-        const kfIcon = this.timeline.selectedKeyframeIcon;
-        if (kfIcon) {
+    private handleKeyframeSelected() {
+        if (this.timeline.selectedKeyframeIcons.length === 1) {
             let autoTangents = true;
+            const kfIcon = this.timeline.selectedKeyframeIcons[0];
             kfIcon.keyframesMap.forEach((kf, trackType) => {
                 autoTangents = kf.useAutoTangent;
                 const input = this.getTangentInput(trackType);
@@ -1713,6 +1852,9 @@ export class StudioPanel extends FloatingPanel {
             this.autoTangentCheckBoxOnChanged();
             this.keyframeControls.removeAttribute('hidden');
             this.selectKeyframeMsg.setAttribute('hidden', '');
+        } else {
+            this.keyframeControls.setAttribute('hidden', '');
+            this.selectKeyframeMsg.removeAttribute('hidden');
         }
     }
 
@@ -1799,17 +1941,17 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    public deleteSelectedKeyframeIcon() {
-        if (this.timeline.selectedKeyframeIcon) {
-            const type = this.timeline.selectedKeyframeIcon.type;
+    public deleteSelectedKeyframeIcons() {
+        for (const kfIcon of this.timeline.selectedKeyframeIcons) {
+            const type = kfIcon.type;
             if (type === KeyframeIconType.Default) {
-                const posXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
-                const posYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
-                const posZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
-                const lookAtXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
-                const lookAtYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
-                const lookAtZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
-                const bankTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
+                const posXTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
+                const posYTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
+                const posZTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
+                const lookAtXTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
+                const lookAtYTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
+                const lookAtZTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
+                const bankTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
                 if (posXTrackKf) {
                     const index = this.animation.posXTrack.keyframes.indexOf(posXTrackKf);
                     if (index > 0)
@@ -1845,12 +1987,12 @@ export class StudioPanel extends FloatingPanel {
                     if (index > 0)
                         this.animation.bankTrack.keyframes.splice(index, 1);
                 }
-                this.timeline.deleteSelectedKeyframeIcon();
-                this.timeline.draw();
-                this.updatePreviewSteps();
-                this.saveState();
             }
         }
+        this.timeline.deleteSelectedKeyframeIcons();
+        this.timeline.draw();
+        this.updatePreviewSteps();
+        this.saveState();
     }
 
     private scratchVecPos: vec3 = vec3.create();
@@ -1861,10 +2003,10 @@ export class StudioPanel extends FloatingPanel {
         if (!this.timeline || this.timeline.keyframeIcons.length === 0)
             this.initTimeline();
 
-        if (this.timeline.selectedKeyframeIcon && !this.editingKeyframe)
+        if (this.timeline.selectedKeyframeIcons.length && !this.editingKeyframe)
             return;
 
-        if (!this.timeline.selectedKeyframeIcon && this.timeline.playheadIsOnIcon())
+        if (!this.timeline.selectedKeyframeIcons.length && this.timeline.playheadIsOnIcon())
             return;
 
         const time = this.timeline.getPlayheadTimeMs();
@@ -1896,9 +2038,9 @@ export class StudioPanel extends FloatingPanel {
         const bankKf: Keyframe = { time, value: bank, tangentIn: 0, tangentOut: 0, useAutoTangent: true };
 
         if (this.editingKeyframe) {
-            if (this.timeline.selectedKeyframeIcon) {
-                if (this.timeline.selectedKeyframeIcon.type === KeyframeIconType.Start
-                    || this.timeline.selectedKeyframeIcon.type === KeyframeIconType.End) {
+            for (const kfIcon of this.timeline.selectedKeyframeIcons) {
+                if (kfIcon.type === KeyframeIconType.Start
+                    || kfIcon.type === KeyframeIconType.End) {
                     this.animation.posXTrack.keyframes[0].value = posXKf.value;
                     this.animation.posYTrack.keyframes[0].value = posYKf.value;
                     this.animation.posZTrack.keyframes[0].value = posZKf.value;
@@ -1916,13 +2058,13 @@ export class StudioPanel extends FloatingPanel {
                         this.animation.bankTrack.keyframes[this.animation.bankTrack.keyframes.length - 1].value = bankKf.value;
                     }
                 } else {
-                    const currentPosXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
-                    const currentPosYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
-                    const currentPosZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
-                    const currentLookAtXTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
-                    const currentLookAtYTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
-                    const currentLookAtZTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
-                    const currentBankTrackKf = this.timeline.selectedKeyframeIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
+                    const currentPosXTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
+                    const currentPosYTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
+                    const currentPosZTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
+                    const currentLookAtXTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
+                    const currentLookAtYTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
+                    const currentLookAtZTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
+                    const currentBankTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
                     if (currentPosXTrackKf)
                         currentPosXTrackKf.value = posXKf.value;
                     if (currentPosYTrackKf)
@@ -2029,7 +2171,7 @@ export class StudioPanel extends FloatingPanel {
             bankTrack: new KeyframeTrack(),
             loop: false,
         };
-        this.timeline.deselectKeyframeIcon();
+        this.timeline.deselectAllKeyframeIcons();
         this.timeline.keyframeIcons = [];
         this.playheadTimePositionInput.value = '0';
         this.timelineLengthInput.value = (Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND).toFixed(2);
@@ -2217,14 +2359,27 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private rescaleTimelineContainer(): void {
-        const timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
-        const width = parseInt(getComputedStyle(timeLineContainerElement).width) * this.zoomLevel;
-        this.timelineMarkersCanvas.width = width;
-        this.timelineElementsCanvas.width = width;
-        (this.contents.querySelector('#timelineHeaderBg') as HTMLElement).style.width = (width + Playhead.WIDTH) + 'px';
-        (this.contents.querySelector('#timelineTracksBg') as HTMLElement).style.width = (width + Playhead.WIDTH) + 'px';
+        const tlContainerWidth = parseInt(getComputedStyle(this.timeLineContainerElement).width);
+        const zoomedWidth = tlContainerWidth * this.zoomLevel;
+        this.timelineMarkersCanvas.width = zoomedWidth;
+        this.timelineElementsCanvas.width = zoomedWidth;
+        (this.contents.querySelector('#timelineHeaderBg') as HTMLElement).style.width = (zoomedWidth + Playhead.WIDTH) + 'px';
+        (this.contents.querySelector('#timelineTracksBg') as HTMLElement).style.width = (zoomedWidth + Playhead.WIDTH) + 'px';
         this.timeline.setupContexts();
         this.timeline.setScaleAndDrawMarkers();
+        this.onTimelineScaleChanged(parseFloat(this.timelineLengthInput.value));
+        this.timeLineContainerElement.scroll(this.timeline.getPlayheadX() - (tlContainerWidth / 2), 0);
         this.timeline.draw();
+    }
+
+    private onTimelineScaleChanged(lengthVal: number): void {
+        // Update the playhead's position. Clamp it to the timeline length if necessary.
+        let playheadTimePosValue = parseFloat(this.playheadTimePositionInput.value);
+        if (playheadTimePosValue > lengthVal) {
+            playheadTimePosValue = lengthVal;
+            this.playheadTimePositionInput.value = lengthVal.toString();
+            this.playheadTimePositionInput.dataset.prevValue = lengthVal.toString();
+        }
+        this.timeline.setPlayheadTimeSeconds(playheadTimePosValue, false);
     }
 }
