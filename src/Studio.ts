@@ -1,6 +1,8 @@
 import * as Viewer from './viewer';
 import { UI, Checkbox, setElementHighlighted, createDOMFromString } from './ui';
 import { FloatingPanel } from './DebugFloaters';
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
+import { Blue, Color, Green, Magenta } from './Color';
 import { StudioCameraController } from './Camera';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, invlerp, Vec3UnitY, Vec3Zero } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
@@ -933,6 +935,13 @@ export class StudioPanel extends FloatingPanel {
     private prevKeyframeBtn: HTMLButtonElement;
     private nextKeyframeBtn: HTMLButtonElement;
 
+    private scratchVec: vec3 = vec3.create();
+    private scratchVecUp: vec3 = vec3.create();
+    private scratchMat: mat4 = mat4.create();
+    public previewLineColor: Color = Magenta;
+    public previewLineLookAtColor: Color = Blue;
+    public previewLineYAxisColor: Color = Green;
+
     private selectedNumericInput: HTMLInputElement | undefined;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
@@ -982,6 +991,7 @@ export class StudioPanel extends FloatingPanel {
             bBar.dataset.ob = bBar.style.bottom;
             bBar.style.bottom = (this.elem.getBoundingClientRect().height + 24) + 'px';
         }
+        document.addEventListener('keydown', this.handleGlobalInput);
     }
 
     public hide(): void {
@@ -990,6 +1000,7 @@ export class StudioPanel extends FloatingPanel {
         if (bBar && bBar.dataset.ob) {
             bBar.style.bottom = bBar.dataset.ob;
         }
+        document.removeEventListener('keydown', this.handleGlobalInput);
     }
 
     public initStudio(): void {
@@ -1415,7 +1426,6 @@ export class StudioPanel extends FloatingPanel {
         this.showPreviewLineCheckbox.onchanged = () => {
             if (this.showPreviewLineCheckbox.checked)
                 this.updatePreviewSteps();
-            this.studioCameraController.previewPath = this.showPreviewLineCheckbox.checked;
             // TODO - Customize preview line colours?
         };
         this.livePreviewCheckbox = new Checkbox('Live Preview');
@@ -1536,27 +1546,6 @@ export class StudioPanel extends FloatingPanel {
             }
         });
 
-        this.timelineElementsCanvas.addEventListener('keydown', (ev: KeyboardEvent) => {
-            if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcons.length && !ev.repeat) {
-                this.deleteSelectedKeyframeIcons();
-            } else if (ev.key === 'j') {
-                this.prevKeyframe();
-            } else if (ev.key === 'k') {
-                this.nextKeyframe();
-            } else if (ev.key === ',') {
-                this.movePlayhead(-1 / 60);
-            } else if (ev.key === '.') {
-                this.movePlayhead(1 / 60);
-            } else if (ev.key === ' ') {
-                if (this.studioCameraController.isAnimationPlaying)
-                    this.stopAnimation();
-                else
-                    this.playAnimation();
-            } else if (ev.key === 'Enter') {
-                this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
-            }
-        });
-
         this.mainPanel.addEventListener('wheel', (ev: WheelEvent) => {
             ev.preventDefault();
             if (ev.ctrlKey) {
@@ -1623,6 +1612,30 @@ export class StudioPanel extends FloatingPanel {
         this.stopAnimationBtn.setAttribute('hidden', '');
         this.ui.toggleUI(true);
         this.elem.style.display = '';
+    }
+
+    public drawWorldHelpers(clipFromWorldMatrix: mat4) {
+        if (this.showPreviewLineCheckbox.checked) {
+            for (let i = 0; i <= this.animationPreviewSteps.length - 2; i++) {
+                drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i + 1].pos, this.previewLineColor);
+                if (i % 30 === 0) {
+                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i].lookAtPos, this.previewLineLookAtColor);
+    
+                    mat4.targetTo(this.scratchMat, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i].lookAtPos, Vec3UnitY);
+                    mat4.rotateZ(this.scratchMat, this.scratchMat, -this.animationPreviewSteps[i].bank);
+                    computeEulerAngleRotationFromSRTMatrix(this.scratchVec, this.scratchMat);
+                    vec3.copy(this.scratchVecUp, Vec3UnitY);
+                    vec3.rotateZ(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[2]);
+                    vec3.rotateY(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[1]);
+                    vec3.rotateX(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[0]);
+                    this.scratchVecUp[2] = 0;
+                    vec3.normalize(this.scratchVecUp, this.scratchVecUp);
+                    vec3.scaleAndAdd(this.scratchVecUp, this.animationPreviewSteps[i].pos, this.scratchVecUp, 100);
+                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.scratchVecUp, this.previewLineYAxisColor);
+                    // TODO - draw arrow head lines or cone to better communicate direction?
+                }
+            }
+        }
     }
 
     private movePlayhead(moveAmountSeconds: number) {
@@ -2382,4 +2395,31 @@ export class StudioPanel extends FloatingPanel {
         }
         this.timeline.setPlayheadTimeSeconds(playheadTimePosValue, false);
     }
+
+    private handleGlobalInput = (ev: KeyboardEvent) => {
+        if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcons.length && !ev.repeat) {
+            this.deleteSelectedKeyframeIcons();
+        } else if (ev.key === 'j') {
+            this.prevKeyframe();
+        } else if (ev.key === 'k') {
+            this.nextKeyframe();
+        } else if (ev.key === ',') {
+            this.movePlayhead(-1 / 60);
+        } else if (ev.key === '.') {
+            this.movePlayhead(1 / 60);
+        } else if (ev.key === ' ') {
+            if (this.studioCameraController.isAnimationPlaying)
+                this.stopAnimation();
+            else
+                this.playAnimation();
+        } else if (ev.key === 'Enter') {
+            this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
+        } else if (ev.key === 'Escape') {
+            this.stopAnimation();
+            this.endEditKeyframePosition();
+        } else if (ev.key === 'p') {
+            console.log('test');
+        }
+    }
+
 }
