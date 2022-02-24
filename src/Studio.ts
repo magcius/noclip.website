@@ -1,8 +1,8 @@
 import * as Viewer from './viewer';
 import { UI, Checkbox, setElementHighlighted, createDOMFromString } from './ui';
 import { FloatingPanel } from './DebugFloaters';
-import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
-import { Blue, Color, Green, Magenta } from './Color';
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
+import { Blue, Color, Green, Red, Magenta } from './Color';
 import { StudioCameraController } from './Camera';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, invlerp, Vec3UnitY, Vec3Zero } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
@@ -938,9 +938,10 @@ export class StudioPanel extends FloatingPanel {
     private scratchVec: vec3 = vec3.create();
     private scratchVecUp: vec3 = vec3.create();
     private scratchMat: mat4 = mat4.create();
-    public previewLineColor: Color = Magenta;
-    public previewLineLookAtColor: Color = Blue;
-    public previewLineYAxisColor: Color = Green;
+    private previewLineColor: Color = Magenta;
+    private previewLineLookAtColor: Color = Blue;
+    private previewLineYAxisColor: Color = Green;
+    private previewLineKfDotColor: Color = Red;
 
     private selectedNumericInput: HTMLInputElement | undefined;
 
@@ -1634,6 +1635,11 @@ export class StudioPanel extends FloatingPanel {
                     drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.scratchVecUp, this.previewLineYAxisColor);
                     // TODO - draw arrow head lines or cone to better communicate direction?
                 }
+            }
+
+            for (const kfIcon of this.timeline.keyframeIcons) {
+                const stepIndex = Math.floor(kfIcon.getT() / 16);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[stepIndex].pos, this.previewLineKfDotColor, 16);
             }
         }
     }
