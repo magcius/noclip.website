@@ -4212,7 +4212,7 @@ export class MaterialCache {
     public async createMaterialInstance(path: string): Promise<BaseMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
-        if (vmt['%compilesky'] || vmt['%compiletrigger'] || vmt['%compile2dsky'])
+        if (vmt['%compiletrigger'])
             materialInstance.isToolMaterial = true;
         return materialInstance;
     }

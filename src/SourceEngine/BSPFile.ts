@@ -1064,8 +1064,6 @@ export class BSPFile {
             plane: ReadonlyVec3;
         }
 
-        const faces: Face[] = [];
-
         // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
         let vertnormalIdx = 0;
 
@@ -1078,12 +1076,18 @@ export class BSPFile {
             }
         };
 
+        const faces: Face[] = [];
+        let numfaces = 0;
+
         // Do some initial surface parsing, pack lightmaps.
-        for (let i = 0, idx = 0x00; idx < facelist.byteLength; i++, idx += 0x38) {
+        for (let i = 0, idx = 0x00; idx < facelist.byteLength; i++, idx += 0x38, numfaces++) {
             const planenum = facelist.getUint16(idx + 0x00, true);
             const numedges = facelist.getUint16(idx + 0x08, true);
             const texinfo = facelist.getUint16(idx + 0x0A, true);
             const tex = texinfoa[texinfo];
+
+            if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
+                continue;
 
             // Normals are stored in the data for all surfaces, even for displacements.
             const vertnormalBase = vertnormalIdx;
@@ -1182,7 +1186,7 @@ export class BSPFile {
         }
 
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
-        const faceToLeafIdx: number[][] = nArray(faces.length, () => []);
+        const faceToLeafIdx: number[][] = nArray(numfaces, () => []);
         for (let i = 0, idx = 0x00; idx < leafs.byteLength; i++) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
@@ -1306,7 +1310,7 @@ export class BSPFile {
         // Sort faces by texinfo to prepare for splitting into surfaces.
         faces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
-        const faceToSurfaceInfo: FaceToSurfaceInfo[] = nArray(faces.length, () => new FaceToSurfaceInfo());
+        const faceToSurfaceInfo: FaceToSurfaceInfo[] = nArray(numfaces, () => new FaceToSurfaceInfo());
 
         const vertexBuffer = new ResizableArrayBuffer();
         const indexBuffer = new ResizableArrayBuffer();
