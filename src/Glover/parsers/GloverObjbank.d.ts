@@ -189,7 +189,7 @@ declare namespace GloverObjbank {
     _io: any;
 
     textureId: number;
-    u2: number;
+    runtimeDataPtr: number;
     x: number;
     y: number;
     z: number;
@@ -197,11 +197,11 @@ declare namespace GloverObjbank {
     height: number;
     u5: number;
     u6: number;
-    u7: number;
+    flags: number;
 
     _debug: {
       textureId: DebugPosition;
-      u2: DebugPosition;
+      runtimeDataPtr: DebugPosition;
       x: DebugPosition;
       y: DebugPosition;
       z: DebugPosition;
@@ -209,7 +209,7 @@ declare namespace GloverObjbank {
       height: DebugPosition;
       u5: DebugPosition;
       u6: DebugPosition;
-      u7: DebugPosition;
+      flags: DebugPosition;
     };
   }
 }
@@ -269,6 +269,7 @@ declare namespace GloverObjbank {
     sprites: GloverObjbank.Sprite[];
     id: number;
     name: string;
+    unused: number;
     alpha: number;
     numScale: number;
     numTranslation: number;
@@ -289,6 +290,7 @@ declare namespace GloverObjbank {
     _debug: {
       id: DebugPosition;
       name: DebugPosition;
+      unused: DebugPosition;
       alpha: DebugPosition;
       numScale: DebugPosition;
       numTranslation: DebugPosition;

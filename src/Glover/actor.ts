@@ -4,6 +4,7 @@ import * as RDP from '../Common/N64/RDP';
 import * as RSP from '../Common/N64/RSP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as Shadows from './shadows';
+import * as Sprite from './sprite';
 import * as Render from './render';
 import * as RDPRenderModes from './rdp_render_modes';
 
@@ -27,6 +28,7 @@ import { SRC_FRAME_TO_MS } from './timing';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
+const spriteMatrixScratch = mat4.create();
 
 interface ActorKeyframeSet {
     scale: number;
@@ -163,7 +165,9 @@ class ActorMeshNode {
                     nextKeyframes.scale = this.keyframeState.scale;
                 }
                 if (this.keyframeState.scale == startIdx) {
-                    console.error("WARNING: Couldn't find keyframe covering time " + curAnimTime);
+                    // TODO: confirm this is the right behavior:
+                    this.keyframeState.scale = this.mesh.scale.length - 1;
+                    nextKeyframes.scale = this.keyframeState.scale;
                     break;
                 }
             }
@@ -178,7 +182,9 @@ class ActorMeshNode {
                     nextKeyframes.translation = this.keyframeState.translation;
                 }
                 if (this.keyframeState.translation == startIdx) {
-                    console.error("WARNING: Couldn't find keyframe covering time " + curAnimTime);
+                    // TODO: confirm this is the right behavior:
+                    this.keyframeState.translation = this.mesh.translation.length - 1;
+                    nextKeyframes.translation = this.keyframeState.translation;
                     break;
                 }
             }
@@ -193,7 +199,9 @@ class ActorMeshNode {
                     nextKeyframes.rotation = this.keyframeState.rotation;
                 }
                 if (this.keyframeState.rotation == startIdx) {
-                    console.error("WARNING: Couldn't find keyframe covering time " + curAnimTime);
+                    // TODO: confirm this is the right behavior:
+                    this.keyframeState.rotation = this.mesh.rotation.length - 1;
+                    nextKeyframes.rotation = this.keyframeState.rotation;
                     break;
                 }
             }
@@ -322,6 +330,9 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             // TODO: this function is very inaccurate,
             //       use skeletal matrices to position child
             //       meshes properly
+            if (node.mesh.geometry === null || node.mesh.geometry.numFaces === 0) {
+                return;
+            }
             for (let vertex of node.mesh.geometry.vertices) {
                 const extent = Math.sqrt(vertex.x*vertex.x + vertex.y*vertex.y + vertex.z*vertex.z);
                 this.greatestExtent = Math.max(this.greatestExtent, extent);
@@ -544,6 +555,9 @@ class GloverMeshRenderer {
     private backfaceCullingEnabled = false;
     private drawCallInstances: Render.DrawCallInstance[] = [];
 
+    private sprites: Sprite.GloverSpriteRenderer[] = [];
+    private spriteMatrices: mat4[] = [];
+
     // UV animation
     private lastRender: number = 0;
     private lastFrameAdvance: number = 0;
@@ -591,7 +605,6 @@ class GloverMeshRenderer {
         }
         try {
             if (meshData.displayListPtr != 0) {
-                // TODO: incorporate mesh alpha here
                 const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
                 rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
 
@@ -634,6 +647,28 @@ class GloverMeshRenderer {
             for (let drawCall of this.rspOutput.drawCalls) {
                 drawCall.renderData = new Render.DrawCallRenderData(device, cache, this.rspOutput.textureCache, this.segments, drawCall);
                 this.drawCallInstances.push(new Render.DrawCallInstance(drawCall, this.rspOutput.textureCache, this.sceneLights);)
+            }
+        }
+
+        if (this.meshData.numSprites > 0) {
+            for (let spriteData of this.meshData.sprites) {
+                const sprite = new Sprite.GloverSpriteRenderer(
+                    device, cache, textures, [spriteData.textureId], this.meshData.alpha != 0xFF);
+                const spriteMatrix = mat4.create();
+                mat4.translate(spriteMatrix, spriteMatrix, [spriteData.x, spriteData.y, spriteData.z]);
+                mat4.scale(spriteMatrix, spriteMatrix, [spriteData.width/3, spriteData.height/3, 1]);
+                this.sprites.push(sprite);
+                this.spriteMatrices.push(spriteMatrix);
+                // if ((spriteData.flags & 0x8) == 0) {
+                // TODO: weird special-case 0x10 sprite scaling:
+                //     spriteData.flags |= 0x8;
+                //     if (spriteData->tex->width == 0x10) {
+                //         sprite.width *= 2;
+                //     }
+                //     if (spriteData->tex->height == 0x10) {
+                //         sprite.height *= 2;
+                //     }
+                // }
             }
         }
     }
@@ -786,6 +821,11 @@ class GloverMeshRenderer {
         }
         this.lastRender = viewerInput.time;
 
+        for (let spriteIdx = 0; spriteIdx < this.sprites.length; spriteIdx++) {
+            mat4.multiply(spriteMatrixScratch,  drawMatrix, this.spriteMatrices[spriteIdx]);
+            this.sprites[spriteIdx].prepareToRender(device, renderInstManager, viewerInput, spriteMatrixScratch, 0);
+        }
+
         if (this.rspOutput !== null) {
             for (let drawCallIdx = 0; drawCallIdx < this.rspOutput.drawCalls.length; drawCallIdx += 1) {
                 const drawCall = this.rspOutput.drawCalls[drawCallIdx];
@@ -815,6 +855,9 @@ class GloverMeshRenderer {
             for (let drawCall of this.rspOutput.drawCalls) {
                 drawCall.destroy(device);
             }
+        }
+        for (let sprite of this.sprites) {
+            sprite.destroy(device);
         }
     }
 
@@ -1263,5 +1306,53 @@ export class GloverElectricityRenderer implements Render.GenericRenderable {
         this.drawCall.destroy(device);
     }
 
+}
+
+export class SpawnableActorRenderer extends GloverActorRenderer {
+    public inUse: boolean = false;
+}
+
+export class SpawnableActorPool implements Render.GenericRenderable {
+    private actors: SpawnableActorRenderer[] = [];
+
+    public visible: boolean = true;
+
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder,
+        public actorObject: GloverObjbank.ObjectRoot, public sceneLights: Render.SceneLighting) {
+    }
+
+    public spawn(position: vec3): SpawnableActorRenderer {
+        let newActor = null;
+        for (let actor of this.actors) {
+            if (!actor.inUse) {
+                newActor = actor;
+                break;
+            }
+        }
+        if (newActor === null) {
+            newActor = new SpawnableActorRenderer(this.device, this.cache, this.textureHolder, this.actorObject, this.sceneLights);
+            this.actors.push(newActor);
+        }
+        newActor.inUse = true;
+        mat4.fromTranslation(newActor.modelMatrix, position);
+        return newActor
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible) {
+            return;
+        }
+        for (let actor of this.actors) {
+            if (actor.inUse) {
+                actor.prepareToRender(device, renderInstManager, viewerInput);
+            }
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let actor of this.actors) {
+            actor.destroy(device)
+        }
+    }
 }
 

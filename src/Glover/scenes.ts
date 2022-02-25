@@ -14,6 +14,7 @@ import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT
 import { GenericRenderable, SceneLighting } from './render';
 import { GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer, ElectricityThicknessStyle, ElectricityRandStyle } from './actor';
 import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFootprintRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
+import { GloverEnemy } from './enemy';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { TextureHolder } from '../TextureHolder';
@@ -63,6 +64,18 @@ const powerup_objects = [
     0xFA9272E0, // boomer.ndo
     0xAB3EA4DB, // vanish.ndo
 ];
+
+export type ObjectDirectory = Map<number, GloverObjbank.ObjectRoot>;
+
+////////////////////////
+// TODO: use these:
+export class InitContext {
+    constructor (public device: GfxDevice, public cache: GfxRenderCache, public textures: GloverTextureHolder) {}
+}
+export class RenderContext {
+    constructor (public device: GfxDevice, public renderInstManager: GfxRenderInstManager, public viewerInput: Viewer.ViewerRenderInput) {}
+}
+////////////////////////
 
 export class GloverWaterVolume implements GenericRenderable {
     public visible: boolean = true;
@@ -167,7 +180,7 @@ class GloverVent implements GenericRenderable {
 
     private scratchVec3: vec3 = vec3.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, private position: vec3, private velocity: vec3, private type: number, private parent: GloverPlatform | null, waterVolumes: GloverWaterVolume[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: GloverTextureHolder, objects: ObjectDirectory, sceneLights: SceneLighting, private position: vec3, private velocity: vec3, private type: number, private parent: GloverPlatform | null, waterVolumes: GloverWaterVolume[]) {
         // TODO: manual scaling for fire vent in Carnival 2
 
         if (type === 8) {
@@ -186,7 +199,7 @@ class GloverVent implements GenericRenderable {
                 10: 13
             }[type];
             if (bulletType !== undefined) {
-                this.bullets = new BulletPool(device, cache, textureHolder, bulletType, waterVolumes);
+                this.bullets = new BulletPool(device, cache, textureHolder, objects, sceneLights, bulletType, waterVolumes);
                 // TODO: particle pool for bullet type 24/0x18
             }
         }
@@ -418,7 +431,6 @@ type PathCallbackFunc = (plat: GloverPlatform, idx: number) => void;
 
 export class GloverPlatform implements Shadows.ShadowCaster {
 
-    private scratchQuat = quat.create();
     private scratchMatrix = mat4.create();
     private scratchVec3 = vec3.create();
     private scratchVec3_2 = vec3.create();
@@ -1433,12 +1445,12 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
 
     ["08", {
         landscape: "08.CAVEln.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "CAVE.obj.fla"],
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "CAVE.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Castle Cave"),
     ["09", {
         landscape: "09.ACOURSE.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "ASSAULT COURSE.obj.fla"],
+        object_banks: ["GENERIC.obj.fla", "HUB_SHARED.obj.fla", "ASSAULT COURSE.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], //"Assault Course"),
     ["2a", {
@@ -1864,10 +1876,16 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     break;
                 }
+                case 'Enemy': {
+                    let pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z)
+                    const enemy = new GloverEnemy(device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights, cmd.params.enemyType, pos, cmd.params.yRotation);
+                    sceneRenderer.miscRenderers.push(enemy);
+                    break;
+                }
                 case 'Vent': {
                     console.log("vent:", cmd.params);
                     currentVent = new GloverVent(
-                        device, cache, textureHolder,
+                        device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights,
                         [cmd.params.originX, cmd.params.originY, cmd.params.originZ],
                         [cmd.params.particleVelocityX, cmd.params.particleVelocityY, cmd.params.particleVelocityZ],
                         cmd.params.type,

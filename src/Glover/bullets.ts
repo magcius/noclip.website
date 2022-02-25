@@ -1,12 +1,13 @@
 import * as Textures from './textures';
 import * as Viewer from '../viewer';
 
-import { GenericRenderable } from './render';
+import { GenericRenderable, SceneLighting } from './render';
 import { Flipbook, ParticlePool, framesets } from './particles';
 import { GloverFlipbookRenderer } from './sprite';
 import { GloverActorRenderer } from './actor';
-import { GloverWaterVolume } from './scenes';
+import { ObjectDirectory, GloverWaterVolume } from './scenes';
 import { SRC_FRAME_TO_MS } from './timing';
+import { hashStr } from './util';
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -169,6 +170,8 @@ export class Bullet {
 
     public flipbooks: GloverFlipbookRenderer[] = [];
 
+    public actor: GloverActorRenderer | null = null;
+
     public lastPosition: vec3 = vec3.create();
     public nextPosition: vec3 = vec3.create();
 
@@ -183,7 +186,7 @@ export class Bullet {
 
     private callbackRequestedDestruct: boolean;
 
-    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, protected pool: BulletPool, protected waterVolumes: GloverWaterVolume[]) {
+    constructor (device: GfxDevice, cache: GfxRenderCache, textureHolder: Textures.GloverTextureHolder, objects: ObjectDirectory, sceneLights: SceneLighting, protected pool: BulletPool, protected waterVolumes: GloverWaterVolume[]) {
         const params = bulletParameters[this.pool.bulletType];
 
         assert(params.numBillboards < 3);
@@ -199,6 +202,18 @@ export class Bullet {
             flipbook.setPrimColor(params.flipbook2Color.r, params.flipbook2Color.g, params.flipbook2Color.b);
             this.flipbooks.push(flipbook);
         }
+        
+        // TODO: hold off on this until there is sufficient
+        //       collision implemented so they don't just fall
+        //       through the floor:
+        // if (params.name !== "") {
+        //     const objId = hashStr(params.name);
+        //     const objRoot = objects.get(objId);
+        //     if (objRoot === undefined) {
+        //         throw `Object 0x${objId.toString(16)} is not loaded!`;
+        //     }
+        //     this.actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, sceneLights);
+        // }
     } 
 
     public spawn(position: vec3) {
@@ -291,10 +306,14 @@ export class Bullet {
             this.active = false;
         }
 
-
         for (let flipbook of this.flipbooks) {
             mat4.fromRotationTranslationScale(flipbook.drawMatrix, identityRotation, this.position, this.scale);
             flipbook.prepareToRender(device, renderInstManager, viewerInput);
+        }
+
+        if (this.actor !== null) {
+            mat4.fromRotationTranslationScale(this.actor.modelMatrix, identityRotation, this.position, this.scale);
+            this.actor.prepareToRender(device, renderInstManager, viewerInput);
         }
     }
 
@@ -310,6 +329,9 @@ export class Bullet {
     public destroy(device: GfxDevice): void {
         for (let flipbook of this.flipbooks) {
             flipbook.destroy(device);
+        }
+        if (this.actor !== null) {
+            this.actor.destroy(device);
         }
     }
 
@@ -355,7 +377,7 @@ export class BulletPool implements GenericRenderable {
 
     public visible: boolean = true;
 
-    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, public readonly bulletType: number, private waterVolumes: GloverWaterVolume[]) {
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private objects: ObjectDirectory, private sceneLights: SceneLighting, public readonly bulletType: number, private waterVolumes: GloverWaterVolume[]) {
     }
 
     public spawn(position: vec3): Bullet {
@@ -368,9 +390,9 @@ export class BulletPool implements GenericRenderable {
         }
         if (newBullet === null) {
             if (bulletSubclasses.has(this.bulletType) {
-                newBullet = new (bulletSubclasses.get(this.bulletType)!)(this.device, this.cache, this.textureHolder, this, this.waterVolumes);
+                newBullet = new (bulletSubclasses.get(this.bulletType)!)(this.device, this.cache, this.textureHolder, this.objects, this.sceneLights, this, this.waterVolumes);
             } else {
-                newBullet = new Bullet(this.device, this.cache, this.textureHolder, this, this.waterVolumes);
+                newBullet = new Bullet(this.device, this.cache, this.textureHolder, this.objects, this.sceneLights, this, this.waterVolumes);
             }
             this.bullets.push(newBullet);
         }
