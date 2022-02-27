@@ -143,6 +143,12 @@ class KeyframeTrack {
         }
     }
 
+    public setValue(kf: Keyframe, v: number) {
+        const index = this.keyframes.indexOf(kf);
+        if (index > -1)
+            this.keyframes[index].value = v;
+    }
+
     public reSort(): void {
         this.keyframes.sort((a, b) => a.time - b.time);
     }
@@ -641,6 +647,7 @@ class Timeline {
     private deselectKeyframeIcon(kfIcon: KeyframeIcon) {
         this.selectedKeyframeIcons.splice(this.selectedKeyframeIcons.indexOf(kfIcon), 1);
         kfIcon.selected = false;
+        this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
     }
 
     public deselectAllKeyframeIcons() {
@@ -697,9 +704,8 @@ class Timeline {
             const snapKfIndex = this.getClosestSnappingIconIndex(x);
             if (snapKfIndex > -1 && x === this.keyframeIcons[snapKfIndex].getX()) {
                 // If the playhead is directly on a keyframe, highlight it.
-                this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
-            } else {
                 this.deselectAllKeyframeIcons();
+                this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
             }
         }
         this.draw();
@@ -881,8 +887,8 @@ export class StudioPanel extends FloatingPanel {
     private undoBtn: HTMLButtonElement;
     private redoBtn: HTMLButtonElement;
 
-    private studioDataBtn: HTMLButtonElement;
-    private studioSaveLoadControls: HTMLElement;
+    private studioDataTabBtn: HTMLButtonElement;
+    private optionsTabBtn: HTMLButtonElement;
     private newAnimationBtn: HTMLButtonElement;
     private loadAnimationBtn: HTMLButtonElement;
     private saveAnimationBtn: HTMLButtonElement;
@@ -900,20 +906,26 @@ export class StudioPanel extends FloatingPanel {
     private timelineMarkersCanvas: HTMLCanvasElement;
     private timelineElementsCanvas: HTMLCanvasElement;
 
+    private keyframeControlsDock: HTMLElement;
+    private keyframeControlsContents: HTMLElement;
+    private valuesTabBtn: HTMLButtonElement;
+    private interpTabBtn: HTMLButtonElement;
     private selectKeyframeMsg: HTMLElement;
-    private keyframeControls: HTMLElement;
-    private editKeyframePositionBtn: HTMLButtonElement;
-    private useAutoTangentValuesCheckbox: Checkbox;
-    private interpolationSettings: HTMLElement;
+    private editKeyframeWithCamBtn: HTMLButtonElement;
+    private interpolationTab: HTMLElement;
 
-    private customTangentsContainer: HTMLElement;
-    private posXTangentInput: HTMLInputElement;
-    private posYTangentInput: HTMLInputElement;
-    private posZTangentInput: HTMLInputElement;
-    private lookAtXTangentInput: HTMLInputElement;
-    private lookAtYTangentInput: HTMLInputElement;
-    private lookAtZTangentInput: HTMLInputElement;
-    private bankTangentInput: HTMLInputElement;
+    private customValuesContainer: HTMLElement;
+    private posXValueInput: HTMLInputElement;
+    private posYValueInput: HTMLInputElement;
+    private posZValueInput: HTMLInputElement;
+    private lookAtXValueInput: HTMLInputElement;
+    private lookAtYValueInput: HTMLInputElement;
+    private lookAtZValueInput: HTMLInputElement;
+    private bankValueInput: HTMLInputElement;
+    private lockPerspectiveBracket: HTMLElement;
+    private lockPerspectiveDiv: HTMLElement;
+    private lockPerspectiveBtn: HTMLButtonElement;
+    private lockPerspective: boolean = true;
 
     private editingKeyframe: boolean = false;
     private persistHelpText: boolean = false;
@@ -949,7 +961,7 @@ export class StudioPanel extends FloatingPanel {
         super();
 
         this.mainPanel.parentElement!.style.minWidth = '100%';
-        this.mainPanel.parentElement!.style.height = '330px';
+        this.mainPanel.parentElement!.style.height = '350px';
         this.mainPanel.parentElement!.style.left = '0px';
         this.mainPanel.parentElement!.style.bottom = '0px';
         this.mainPanel.parentElement!.style.top = '';
@@ -975,6 +987,7 @@ export class StudioPanel extends FloatingPanel {
 
         this.contents.style.maxHeight = '';
         this.contents.style.overflow = '';
+        this.contents.style.height='100%';
         this.setTitle(CLAPBOARD_ICON, 'Studio');
         this.contents.insertAdjacentHTML('beforeend', `
         <div id="studioPanelContents" hidden></div>
@@ -1017,9 +1030,14 @@ export class StudioPanel extends FloatingPanel {
                 font: 16px monospace;
                 color: #fefefe;
             }
+            #studioPanel .disabled,
+            .SettingsButton.disabled {
+                cursor: not-allowed!important;
+                opacity: 0.5;
+            }
             #studioPanelContents {
+                height: 100%;
                 display: grid;
-                grid-gap: 9px;
                 grid-auto-flow: column;
                 grid-template-columns: 1fr 4fr 1fr;
             }
@@ -1031,10 +1049,9 @@ export class StudioPanel extends FloatingPanel {
                 font: 16px monospace;
                 color: #fefefe;
             }
-            #studioDataBtn {
-                width: 40%;
-                display: block;
-                margin: 0.25rem auto;
+            #undoRedoBtnContainer .SettingsButton,
+            #saveAnimationBtn {
+                width: 5rem;
             }
             #studioSaveLoadControls {
                 width: 85%;
@@ -1110,8 +1127,16 @@ export class StudioPanel extends FloatingPanel {
                 grid-gap: 10px;
                 grid-template-columns: 3rem 3rem;
             }
-            #keyframeControls {
+            #keyframeControlsDock {
+                min-width: 360px;
                 line-height: 1.2;
+                border-left: 2px dotted #696969;
+                padding: 0 0.5rem;
+            }
+            #customValuesContainer {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                text-align: center;
             }
             #keyframeControls input {
                 background: #000;
@@ -1132,16 +1157,36 @@ export class StudioPanel extends FloatingPanel {
                 font: 16px monospace;
                 color: #fefefe;
             }
+            #customValuesContainer .StudioNumericInput {
+                width: 5rem;
+            }
+            #lockPerspective {
+                grid-column-start: 1;
+                grid-column-end: 3;
+                position: relative;
+            }
+            #lockPerspectiveBracket {
+                grid-column-start: 1;
+                grid-column-end: 3;
+                margin: -10px 16px 0 16px;
+                height: 20px;
+                border-bottom: 1px solid #ffffff;
+                border-radius: 20px;
+                margin-bottom: 0.7rem;
+                position: relative;
+            }
+            #lockPerspectiveBracket::after {
+                content: '\\25BC';
+                position: absolute;
+                left: 50%;
+                transform: translate(-50%, 15px);
+                margin: auto;
+            }
             .SettingsButton.IconButton {
                 width: 36px;
                 height: 36px;
                 padding: 0 0 0 0.05rem;
                 line-height: 2.4;
-            }
-            #studioControlsContainer .disabled,
-            .SettingsButton.disabled {
-                cursor: not-allowed!important;
-                opacity: 0.5;
             }
             #playbackControls {
                 display: grid;
@@ -1149,29 +1194,32 @@ export class StudioPanel extends FloatingPanel {
                 grid-template-columns: 3rem 10rem 3rem;
             }
         </style>
-        <div>
-            <div style="position: relative;">
-                <div id="undoRedoBtnContainer" style="position: absolute; left: 1rem; top: -0.25rem; white-space: nowrap;" hidden>
+        <div style="padding: 0.5rem; border-right: 2px dotted #696969">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <div id="undoRedoBtnContainer" hidden>
                     <button type="button" id="undoBtn" class="SettingsButton disabled" disabled></button>
                     <button type="button" id="redoBtn" class="SettingsButton disabled" disabled></button>
                 </div>
+                <button type="button" id="saveAnimationBtn" class="SettingsButton" hidden>Save</button>
             </div>
-            <div style="position: relative;">
-                <div style="position: absolute; right: 1rem;top: -0.25rem; width: 5rem;">
-                    <button type="button" id="saveAnimationBtn" class="SettingsButton" hidden>Save</button>
+            <div style="display: flex;">
+                <button id="studioDataTabBtn" class="SettingsButton TabBtn" data-tab-group="StudioPanelTab" data-target="#studioSaveLoadControls">📁</button>
+                <button id="optionsTabBtn" class="SettingsButton TabBtn" data-tab-group="StudioPanelTab" data-target="#optionsTab">⚙</button>
+            </div>
+            <div>
+                <div id="studioSaveLoadControls" class="StudioPanelTab" hidden>
+                    <div style="display: grid;grid-template-columns: 1fr 1fr; gap: 0.25rem 1rem; margin-top: 0.5rem;">
+                        <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
+                        <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
+                        <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
+                        <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
+                    </div>
                 </div>
-            </div>
-            <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
-            <div id="studioSaveLoadControls" hidden>
-                <div style="display: grid;grid-template-columns: 1fr 1fr; gap: 0.25rem 1rem;">
-                    <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
-                    <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
-                    <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
-                    <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
+                <div id="optionsTab" class="StudioPanelTab" hidden>
+                    <div id="previewOptionsContainer">
+                        <div style="text-align: center;">Preview Options</div>
+                    </div>
                 </div>
-            </div>
-            <div id="previewOptionsContainer">
-                <div style="text-align: center;">Preview Options</div>
             </div>
         </div>
         <div>
@@ -1235,30 +1283,41 @@ export class StudioPanel extends FloatingPanel {
                 </div>
             </div>
         </div>
-        <div style="display: grid;grid-template-columns: 1.25fr 1fr;">
-            <div>
-                <div style="text-align: center;">Keyframe Settings</div>
-                <div id="selectKeyframeMsg">Select a keyframe.</div>
-                <div id="keyframeControls" hidden>
-                    <div style="width: 50%; margin: 0 auto 0.5rem;">
-                        <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Keyframe</button>
-                    </div>
-                    <div id="interpolationSettings">
-                        <div id="customTangentsContainer" style="display: grid; grid-auto-flow: column; text-align: center;">
+        <div id="keyframeControlsDock" hidden>
+            <div style="text-align: center; border-bottom: 1px solid #696969;">Keyframe Settings</div>
+            <div id="selectKeyframeMsg" style="text-align: center;">Select a keyframe.</div>
+            <div id="keyframeControlsContents" hidden>
+                <div style="display: flex;">
+                    <button id="valuesTabBtn" class="SettingsButton TabBtn" data-tab-group="KeyframeControlsTab" data-target="#valuesTab">Values</button>
+                    <button id="interpTabBtn" class="SettingsButton TabBtn" data-tab-group="KeyframeControlsTab" data-target="#interpolationTab">Interpolation</button>
+                </div>
+                <div>
+                    <div id="valuesTab" class="KeyframeControlsTab">
+                        <div style="width: 33%;margin: 0.5rem auto;">
+                            <button type="button" id="editKeyframeWithCamBtn" class="SettingsButton">Re-Place Keyframe</button>
+                        </div>
+                        <div id="customValuesContainer">
                             <div>
-                                <div><span>X Position:</span> <input id="posXTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>Y Position:</span> <input id="posYTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>Z Position:</span> <input id="posZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>X Position:</span> <input id="posXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>Y Position:</span> <input id="posYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>Z Position:</span> <input id="posZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
                             </div>
                             <div>
-                                <div><span>LookAt X:</span> <input id="lookAtXTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>LookAt Y:</span> <input id="lookAtYTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>LookAt Z:</span> <input id="lookAtZTangentInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>LookAt X:</span> <input id="lookAtXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>LookAt Y:</span> <input id="lookAtYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div><span>LookAt Z:</span> <input id="lookAtZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
                             </div>
                             <div>
-                                <span>Bank rotation:</span> <input id="bankTangentInput" class="StudioNumericInput" type="number" step="0.01" value="0">
+                                <span>Bank rotation:</span> <input id="bankValueInput" class="StudioNumericInput" type="number" step="0.01" value="0">
+                            </div>
+                            <div id="lockPerspectiveBracket" hidden></div>
+                            <div id="lockPerspective" hidden>
+                                <button id="lockPerspectiveBtn" class="SettingsButton IconButton">🔒</button>
+                                <span style="position: absolute; white-space: nowrap; top: 9px; margin-left: 0.2rem;">Lock Perspective</span>
                             </div>
                         </div>
+                    </div>
+                    <div id="interpolationTab" class="KeyframeControlsTab" hidden>
                     </div>
                 </div>
             </div>
@@ -1277,10 +1336,10 @@ export class StudioPanel extends FloatingPanel {
         this.redoBtn.onclick = () => this.redo();
         this.redoBtn.insertAdjacentElement('afterbegin', createDOMFromString(REDO_ICON).querySelector('svg')!);
 
-        this.studioDataBtn = this.contents.querySelector('#studioDataBtn') as HTMLButtonElement;
-        this.studioDataBtn.title = 'Save the current animation, or load a previously-saved animation.';
-
-        this.studioSaveLoadControls = this.contents.querySelector('#studioSaveLoadControls') as HTMLElement;
+        this.studioDataTabBtn = this.contents.querySelector('#studioDataTabBtn') as HTMLButtonElement;
+        this.studioDataTabBtn.title = 'Save the current animation, or load a previously-saved animation.';
+        this.optionsTabBtn = this.contents.querySelector('#optionsTabBtn') as HTMLButtonElement;
+        this.optionsTabBtn.title = 'Options';
 
         this.newAnimationBtn = this.contents.querySelector('#newAnimationBtn') as HTMLButtonElement;
         this.newAnimationBtn.title = 'Clear the current keyframes and create a new animation.';
@@ -1384,44 +1443,64 @@ export class StudioPanel extends FloatingPanel {
         };
         setElementHighlighted(this.loopAnimationBtn, false);
 
-        this.keyframeControls = this.contents.querySelector('#keyframeControls') as HTMLElement;
+        this.keyframeControlsDock = this.contents.querySelector('#keyframeControlsDock') as HTMLElement;
+        this.keyframeControlsContents = this.contents.querySelector('#keyframeControlsContents') as HTMLElement;
+        this.valuesTabBtn = this.contents.querySelector('#valuesTabBtn') as HTMLButtonElement;
+        this.interpTabBtn = this.contents.querySelector('#interpTabBtn') as HTMLButtonElement;
+        
+        this.valuesTabBtn.addEventListener('click', this.onTabBtnClick);
+        this.interpTabBtn.addEventListener('click', this.onTabBtnClick);
+        setElementHighlighted(this.valuesTabBtn, true);
+        setElementHighlighted(this.interpTabBtn, false);
+
         this.selectKeyframeMsg = this.contents.querySelector('#selectKeyframeMsg') as HTMLElement;
 
-        this.editKeyframePositionBtn = this.contents.querySelector('#editKeyframePositionBtn') as HTMLButtonElement;
-        this.editKeyframePositionBtn.title = 'Edit the camera position represented by this keyframe.';
-        setElementHighlighted(this.editKeyframePositionBtn, false);
-        this.editKeyframePositionBtn.onclick = () => { this.beginEditKeyframePosition(); };
+        this.editKeyframeWithCamBtn = this.contents.querySelector('#editKeyframeWithCamBtn') as HTMLButtonElement;
+        this.editKeyframeWithCamBtn.title = 'Edit the camera position represented by this keyframe.';
+        setElementHighlighted(this.editKeyframeWithCamBtn, false);
+        this.editKeyframeWithCamBtn.onclick = () => { this.beginEditKeyframePosition(); };
 
-        this.interpolationSettings = this.contents.querySelector('#interpolationSettings') as HTMLElement;
+        this.interpolationTab = this.contents.querySelector('#interpolationTab') as HTMLElement;
 
-        this.customTangentsContainer = this.contents.querySelector('#customTangentsContainer') as HTMLElement;
-        this.posXTangentInput = this.contents.querySelector('#posXTangentInput') as HTMLInputElement;
-        this.posXTangentInput.dataset.track = KeyframeTrackType.posXTrack.toString();
-        this.posYTangentInput = this.contents.querySelector('#posYTangentInput') as HTMLInputElement;
-        this.posYTangentInput.dataset.track = KeyframeTrackType.posYTrack.toString();
-        this.posZTangentInput = this.contents.querySelector('#posZTangentInput') as HTMLInputElement;
-        this.posZTangentInput.dataset.track = KeyframeTrackType.posZTrack.toString();
-        this.lookAtXTangentInput = this.contents.querySelector('#lookAtXTangentInput') as HTMLInputElement;
-        this.lookAtXTangentInput.dataset.track = KeyframeTrackType.lookAtXTrack.toString();
-        this.lookAtYTangentInput = this.contents.querySelector('#lookAtYTangentInput') as HTMLInputElement;
-        this.lookAtYTangentInput.dataset.track = KeyframeTrackType.lookAtYTrack.toString();
-        this.lookAtZTangentInput = this.contents.querySelector('#lookAtZTangentInput') as HTMLInputElement;
-        this.lookAtZTangentInput.dataset.track = KeyframeTrackType.lookAtZTrack.toString();
-        this.bankTangentInput = this.contents.querySelector('#bankTangentInput') as HTMLInputElement;
-        this.bankTangentInput.dataset.track = KeyframeTrackType.bankTrack.toString();
+        this.customValuesContainer = this.contents.querySelector('#customValuesContainer') as HTMLElement;
+        this.posXValueInput = this.contents.querySelector('#posXValueInput') as HTMLInputElement;
+        this.posXValueInput.dataset.track = KeyframeTrackType.posXTrack.toString();
+        this.posYValueInput = this.contents.querySelector('#posYValueInput') as HTMLInputElement;
+        this.posYValueInput.dataset.track = KeyframeTrackType.posYTrack.toString();
+        this.posZValueInput = this.contents.querySelector('#posZValueInput') as HTMLInputElement;
+        this.posZValueInput.dataset.track = KeyframeTrackType.posZTrack.toString();
+        this.lookAtXValueInput = this.contents.querySelector('#lookAtXValueInput') as HTMLInputElement;
+        this.lookAtXValueInput.dataset.track = KeyframeTrackType.lookAtXTrack.toString();
+        this.lookAtYValueInput = this.contents.querySelector('#lookAtYValueInput') as HTMLInputElement;
+        this.lookAtYValueInput.dataset.track = KeyframeTrackType.lookAtYTrack.toString();
+        this.lookAtZValueInput = this.contents.querySelector('#lookAtZValueInput') as HTMLInputElement;
+        this.lookAtZValueInput.dataset.track = KeyframeTrackType.lookAtZTrack.toString();
+        this.bankValueInput = this.contents.querySelector('#bankValueInput') as HTMLInputElement;
+        this.bankValueInput.dataset.track = KeyframeTrackType.bankTrack.toString();
 
-        this.useAutoTangentValuesCheckbox = new Checkbox('Auto-Calculate Tangents');
-        this.useAutoTangentValuesCheckbox.elem.style.display = 'flex';
-        this.useAutoTangentValuesCheckbox.elem.style.justifyContent = 'center';
-        this.useAutoTangentValuesCheckbox.elem.style.alignItems = '';
-        this.useAutoTangentValuesCheckbox.elem.style.gridTemplateColumns = '';
-        this.useAutoTangentValuesCheckbox.elem.title = 'Automatically calculate the tangent values for this keyframe using the Catmull-Rom spline formula.';
-        this.useAutoTangentValuesCheckbox.onchanged = () => {
-            this.autoTangentCheckBoxOnChanged();
+        this.lockPerspectiveDiv = this.contents.querySelector('#lockPerspective') as HTMLElement;
+        this.lockPerspectiveBracket = this.contents.querySelector('#lockPerspectiveBracket') as HTMLElement;
+        this.lockPerspectiveBtn = this.contents.querySelector('#lockPerspectiveBtn') as HTMLButtonElement;
+        this.lockPerspectiveBtn.title = 'Maintain this keyframe\'s rotation when modifying its position.'
+        this.lockPerspectiveBtn.onclick = () => {
+            this.lockPerspective = !this.lockPerspective;
+            setElementHighlighted(this.lockPerspectiveBtn, this.lockPerspective);
+        }
+        setElementHighlighted(this.lockPerspectiveBtn, this.lockPerspective);
+
+        this.studioDataTabBtn.addEventListener('click', this.onTabBtnClick);
+        setElementHighlighted(this.studioDataTabBtn, false);
+        this.newAnimationBtn.onclick = () => {
+            this.newAnimation();
             this.saveState();
         }
-        this.interpolationSettings.insertAdjacentElement('afterbegin', this.useAutoTangentValuesCheckbox.elem);
+        this.loadAnimationBtn.onclick = () => this.loadAnimation();
+        this.saveAnimationBtn.onclick = () => this.saveAnimation();
+        this.exportAnimationBtn.onclick = () => this.exportAnimation();
+        this.importAnimationBtn.onclick = () => this.importAnimation();
 
+        this.optionsTabBtn.addEventListener('click', this.onTabBtnClick);
+        setElementHighlighted(this.optionsTabBtn, false);
         this.showPreviewLineCheckbox = new Checkbox('Show Animation Preview Line', true);
         this.showPreviewLineCheckbox.elem.title = 'Show/Hide the line indicating the path of the animation.';
         this.showPreviewLineCheckbox.onchanged = () => {
@@ -1441,23 +1520,13 @@ export class StudioPanel extends FloatingPanel {
         this.previewOptionsContainer.insertAdjacentElement('beforeend', this.showPreviewLineCheckbox.elem);
         this.previewOptionsContainer.insertAdjacentElement('beforeend', this.livePreviewCheckbox.elem);
 
-        this.studioDataBtn.onclick = () => this.studioSaveLoadControls.toggleAttribute('hidden');
-        this.newAnimationBtn.onclick = () => {
-            this.newAnimation();
-            this.saveState();
-        }
-        this.loadAnimationBtn.onclick = () => this.loadAnimation();
-        this.saveAnimationBtn.onclick = () => this.saveAnimation();
-        this.exportAnimationBtn.onclick = () => this.exportAnimation();
-        this.importAnimationBtn.onclick = () => this.importAnimation();
-
-        this.posXTangentInput.onchange = () => this.onChangeTangentInput(this.posXTangentInput);
-        this.posYTangentInput.onchange = () => this.onChangeTangentInput(this.posYTangentInput);
-        this.posZTangentInput.onchange = () => this.onChangeTangentInput(this.posZTangentInput);
-        this.lookAtXTangentInput.onchange = () => this.onChangeTangentInput(this.lookAtXTangentInput);
-        this.lookAtYTangentInput.onchange = () => this.onChangeTangentInput(this.lookAtYTangentInput);
-        this.lookAtZTangentInput.onchange = () => this.onChangeTangentInput(this.lookAtZTangentInput);
-        this.bankTangentInput.onchange = () => this.onChangeTangentInput(this.bankTangentInput);
+        this.posXValueInput.onchange = () => this.onChangeValueInput(this.posXValueInput);
+        this.posYValueInput.onchange = () => this.onChangeValueInput(this.posYValueInput);
+        this.posZValueInput.onchange = () => this.onChangeValueInput(this.posZValueInput);
+        this.lookAtXValueInput.onchange = () => this.onChangeValueInput(this.lookAtXValueInput);
+        this.lookAtYValueInput.onchange = () => this.onChangeValueInput(this.lookAtYValueInput);
+        this.lookAtZValueInput.onchange = () => this.onChangeValueInput(this.lookAtZValueInput);
+        this.bankValueInput.onchange = () => this.onChangeValueInput(this.bankValueInput);
 
         this.zoomOutBtn = this.contents.querySelector('#zoomOutBtn') as HTMLButtonElement;
         this.zoomOutBtn.insertAdjacentElement('afterbegin', createDOMFromString(ZOOM_OUT_ICON).querySelector('svg')!);
@@ -1537,8 +1606,8 @@ export class StudioPanel extends FloatingPanel {
             }
         });
 
-        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => { this.handleKeyframeSelected(); });
-        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => { this.hideKeyframeControls(); });
+        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeSelected());
+        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeDeselected());
         this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
             for (const kfIcon of this.timeline.selectedKeyframeIcons) {
                 kfIcon.keyframesMap.forEach((v, trackType) => {
@@ -1582,7 +1651,7 @@ export class StudioPanel extends FloatingPanel {
 
     public playAnimation(theater?: boolean) {
         if (this.timeline.keyframeIcons.length > 1) {
-            this.disableKeyframeControls();
+            this.disableControls();
             this.playAnimationBtn.setAttribute('hidden', '');
             this.stopAnimationBtn.removeAttribute('disabled');
             this.stopAnimationBtn.classList.remove('disabled');
@@ -1608,7 +1677,7 @@ export class StudioPanel extends FloatingPanel {
 
     public stopAnimation() {
         this.studioCameraController.isAnimationPlaying = false;
-        this.enableKeyframeControls();
+        this.enableControls();
         this.playAnimationBtn.removeAttribute('hidden');
         this.stopAnimationBtn.setAttribute('hidden', '');
         this.ui.toggleUI(true);
@@ -1726,9 +1795,7 @@ export class StudioPanel extends FloatingPanel {
             return;
         }
         // If loading out of a "new timeline" state, we'll need to unhide the UI.
-        this.studioControlsContainer.removeAttribute('hidden');
-        this.undoRedoBtnContainer.removeAttribute('hidden');
-        this.saveAnimationBtn.removeAttribute('hidden');
+        this.showEditingUI();
         this.rescaleTimelineContainer();
         this.studioHelpText.dataset.default = 'Move the playhead to the desired time, then move the camera and press Enter to place a keyframe.';
         this.animation.posXTrack.keyframes = loadedAnimation.posXTrack.keyframes;
@@ -1768,46 +1835,6 @@ export class StudioPanel extends FloatingPanel {
         this.updatePreviewSteps();
     }
 
-    private autoTangentCheckBoxOnChanged(): void {
-        for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-            const kfIconType = kfIcon.type;
-            if (this.animation.loop && (kfIconType === KeyframeIconType.Start || kfIconType === KeyframeIconType.End)) {
-                this.timeline.keyframeIcons.filter((i) => i.type === KeyframeIconType.Start || i.type === KeyframeIconType.End).forEach((kfIcon) => {
-                    kfIcon.keyframesMap.forEach((k) => k.useAutoTangent = this.useAutoTangentValuesCheckbox.checked);
-                });
-            } else {
-                kfIcon.keyframesMap.forEach((k) => k.useAutoTangent = this.useAutoTangentValuesCheckbox.checked);
-            }
-            if (this.useAutoTangentValuesCheckbox.checked) {
-                this.customTangentsContainer.style.display = 'none';
-                this.posXTangentInput.setAttribute('hidden', '');
-                this.posYTangentInput.setAttribute('hidden', '');
-                this.posZTangentInput.setAttribute('hidden', '');
-                this.lookAtXTangentInput.setAttribute('hidden', '');
-                this.lookAtYTangentInput.setAttribute('hidden', '');
-                this.lookAtZTangentInput.setAttribute('hidden', '');
-                this.bankTangentInput.setAttribute('hidden', '');
-                this.updatePreviewSteps();
-            } else {
-                if (this.posXTangentInput.value)
-                    this.posXTangentInput.removeAttribute('hidden');
-                if (this.posYTangentInput.value)
-                    this.posYTangentInput.removeAttribute('hidden');
-                if (this.posZTangentInput.value)
-                    this.posZTangentInput.removeAttribute('hidden');
-                if (this.lookAtXTangentInput.value)
-                    this.lookAtXTangentInput.removeAttribute('hidden');
-                if (this.lookAtYTangentInput.value)
-                    this.lookAtYTangentInput.removeAttribute('hidden');
-                if (this.lookAtZTangentInput.value)
-                    this.lookAtZTangentInput.removeAttribute('hidden');
-                if (this.bankTangentInput.value)
-                    this.bankTangentInput.removeAttribute('hidden');
-                this.customTangentsContainer.style.display = 'grid';
-            }
-        }
-    }
-
     private getTrackByType(animation: CameraAnimation, trackType: KeyframeTrackType): KeyframeTrack {
         if (trackType === KeyframeTrackType.posXTrack)
             return animation.posXTrack;
@@ -1827,74 +1854,106 @@ export class StudioPanel extends FloatingPanel {
             throw "whoops";
     }
 
-    private onChangeTangentInput(input: HTMLInputElement): void {
+    private onChangeValueInput(input: HTMLInputElement): void {
         if (this.timeline.selectedKeyframeIcons.length && input.value) {
             const val = parseFloat(input.value);
             if (!Number.isNaN(val)) {
                 const trackType = parseInt(input.dataset.track!, 10);
                 const kf = this.timeline.selectedKeyframeIcons[0].keyframesMap.get(trackType)!;
-                this.getTrackByType(this.animation, trackType).setCustomTangent(kf, val);
+                if (this.lockPerspective) {
+                    const diff = val - parseInt(input.dataset.prevValue!);
+                    if (trackType === KeyframeTrackType.posXTrack) {
+                        const corVal = parseInt(this.lookAtXValueInput.value) + diff;
+                        this.lookAtXValueInput.value = corVal.toString();
+                        this.lookAtXValueInput.dispatchEvent(new Event('change', {bubbles: true}));
+                    } else if (trackType === KeyframeTrackType.posYTrack) {
+                        const corVal = parseInt(this.lookAtYValueInput.value) + diff;
+                        this.lookAtYValueInput.value = corVal.toString();
+                        this.lookAtYValueInput.dispatchEvent(new Event('change', {bubbles: true}));
+                    } else if (trackType === KeyframeTrackType.posZTrack) {
+                        const corVal = parseInt(this.lookAtZValueInput.value) + diff;
+                        this.lookAtZValueInput.value = corVal.toString();
+                        this.lookAtZValueInput.dispatchEvent(new Event('change', {bubbles: true}));
+                    }
+                }
+                this.getTrackByType(this.animation, trackType).setValue(kf, val);
                 this.updatePreviewSteps();
+                input.dataset.prevValue = input.value.toString();
             }
         }
     }
 
-    private getTangentInput(trackType: KeyframeTrackType): HTMLInputElement {
+    private getValueInput(trackType: KeyframeTrackType): HTMLInputElement {
         if (trackType === KeyframeTrackType.posXTrack)
-            return this.posXTangentInput;
+            return this.posXValueInput;
         else if (trackType === KeyframeTrackType.posYTrack)
-            return this.posYTangentInput;
+            return this.posYValueInput;
         else if (trackType === KeyframeTrackType.posZTrack)
-            return this.posZTangentInput;
+            return this.posZValueInput;
         else if (trackType === KeyframeTrackType.lookAtXTrack)
-            return this.lookAtXTangentInput;
+            return this.lookAtXValueInput;
         else if (trackType === KeyframeTrackType.lookAtYTrack)
-            return this.lookAtYTangentInput;
+            return this.lookAtYValueInput;
         else if (trackType === KeyframeTrackType.lookAtZTrack)
-            return this.lookAtZTangentInput;
+            return this.lookAtZValueInput;
         else if (trackType === KeyframeTrackType.bankTrack)
-            return this.bankTangentInput;
+            return this.bankValueInput;
         else
             throw "whoops";
     }
 
-    private handleKeyframeSelected() {
+    private onKeyframeSelected() {
         if (this.timeline.selectedKeyframeIcons.length === 1) {
-            let autoTangents = true;
             const kfIcon = this.timeline.selectedKeyframeIcons[0];
             kfIcon.keyframesMap.forEach((kf, trackType) => {
-                autoTangents = kf.useAutoTangent;
-                const input = this.getTangentInput(trackType);
-                input.value = kf.tangentOut.toString();
+                const input = this.getValueInput(trackType);
+                input.value = kf.value.toFixed(0).toString();
+                input.dataset.prevValue = input.value;
             });
-            this.useAutoTangentValuesCheckbox.setChecked(autoTangents);
-            this.autoTangentCheckBoxOnChanged();
-            this.keyframeControls.removeAttribute('hidden');
+            this.keyframeControlsContents.removeAttribute('hidden');
+            if (kfIcon.keyframesMap.has(KeyframeTrackType.posXTrack)
+              && kfIcon.keyframesMap.has(KeyframeTrackType.lookAtXTrack)) {
+                this.lockPerspectiveBracket.removeAttribute('hidden');
+                this.lockPerspectiveDiv.removeAttribute('hidden');
+            }
             this.selectKeyframeMsg.setAttribute('hidden', '');
         } else {
-            this.keyframeControls.setAttribute('hidden', '');
-            this.selectKeyframeMsg.removeAttribute('hidden');
+            this.hideKeyframeControls();
+        }
+    }
+    
+    private onKeyframeDeselected(): void {
+        if (this.timeline.selectedKeyframeIcons.length === 0) {
+            this.hideKeyframeControls();
+        } else if (this.timeline.selectedKeyframeIcons.length === 1) {
+            const kfIcon = this.timeline.selectedKeyframeIcons[0];
+            kfIcon.keyframesMap.forEach((kf, trackType) => {
+                const input = this.getValueInput(trackType);
+                input.value = kf.value.toString();
+            });
+            this.keyframeControlsContents.removeAttribute('hidden');
+            this.selectKeyframeMsg.setAttribute('hidden', '');
         }
     }
 
     private hideKeyframeControls() {
-        this.posXTangentInput.value = '';
-        this.posYTangentInput.value = '';
-        this.posZTangentInput.value = '';
-        this.lookAtXTangentInput.value = '';
-        this.lookAtYTangentInput.value = '';
-        this.lookAtZTangentInput.value = '';
-        this.bankTangentInput.value = '';
-        this.keyframeControls.setAttribute('hidden', '');
+        this.posXValueInput.value = '';
+        this.posYValueInput.value = '';
+        this.posZValueInput.value = '';
+        this.lookAtXValueInput.value = '';
+        this.lookAtYValueInput.value = '';
+        this.lookAtZValueInput.value = '';
+        this.bankValueInput.value = '';
+        this.keyframeControlsContents.setAttribute('hidden', '');
+        this.lockPerspectiveBracket.setAttribute('hidden', '');
+        this.lockPerspectiveDiv.setAttribute('hidden', '');
         this.selectKeyframeMsg.removeAttribute('hidden');
     }
 
     private initTimeline() {
         this.studioHelpText.dataset.default = 'Move the playhead to the desired time, then move the camera and press Enter to place a keyframe.';
         this.studioHelpText.innerText = this.studioHelpText.dataset.default;
-        this.studioControlsContainer.removeAttribute('hidden');
-        this.undoRedoBtnContainer.removeAttribute('hidden');
-        this.saveAnimationBtn.removeAttribute('hidden');
+        this.showEditingUI();
         this.rescaleTimelineContainer();
         this.timeline.draw();
     }
@@ -1902,12 +1961,14 @@ export class StudioPanel extends FloatingPanel {
     private getPreviewSteps(): InterpolationStep[] {
         const steps: InterpolationStep[] = [];
 
-        // TODO(jstpierre): Don't rely on animationManager for this.
-        const PREVIEW_STEP_TIME_MS = 16;
-        for (let time = 0; time <= this.animationManager.durationMs; time += PREVIEW_STEP_TIME_MS) {
-            const step = new InterpolationStep();
-            this.animationManager.getAnimFrame(step, time);
-            steps.push(step);
+        if (this.timeline.keyframeIcons.length > 1) {
+            // TODO(jstpierre): Don't rely on animationManager for this.
+            const PREVIEW_STEP_TIME_MS = 16;
+            for (let time = 0; time <= this.animationManager.durationMs; time += PREVIEW_STEP_TIME_MS) {
+                const step = new InterpolationStep();
+                this.animationManager.getAnimFrame(step, time);
+                steps.push(step);
+            }
         }
 
         return steps;
@@ -1946,17 +2007,17 @@ export class StudioPanel extends FloatingPanel {
 
     private beginEditKeyframePosition() {
         this.editingKeyframe = true;
-        setElementHighlighted(this.editKeyframePositionBtn, true);
+        setElementHighlighted(this.editKeyframeWithCamBtn, true);
         this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
-        this.disableKeyframeControls();
+        this.disableControls();
     }
 
     public endEditKeyframePosition() {
         if (this.editingKeyframe) {
             this.editingKeyframe = false;
-            setElementHighlighted(this.editKeyframePositionBtn, false);
+            setElementHighlighted(this.editKeyframeWithCamBtn, false);
             this.resetHelpText();
-            this.enableKeyframeControls();
+            this.enableControls();
         }
     }
 
@@ -2198,8 +2259,7 @@ export class StudioPanel extends FloatingPanel {
         this.livePreviewCheckbox.setChecked(false);
         this.showPreviewLineCheckbox.setChecked(true);
         this.selectedTracks |= KeyframeTrackType.allTracks;
-        this.saveAnimationBtn.setAttribute('hidden', '');
-        this.studioControlsContainer.setAttribute('hidden', '');
+        this.hideEditingUI();
         this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
         this.resetHelpText();
     }
@@ -2337,17 +2397,19 @@ export class StudioPanel extends FloatingPanel {
         this.viewer.setCameraController(this.studioCameraController);
     }
 
-    private disableKeyframeControls(): void {
+    private disableControls(): void {
         this.studioControlsContainer.querySelectorAll(`button, input`).forEach((e) => {
             e.setAttribute('disabled', '');
             e.classList.add('disabled');
         });
     }
 
-    private enableKeyframeControls(): void {
+    private enableControls(): void {
         this.studioControlsContainer.querySelectorAll(`button, input`).forEach((e) => {
-            e.removeAttribute('disabled');
-            e.classList.remove('disabled');
+            if (!e.classList.contains('keep-disabled')) {
+                e.removeAttribute('disabled');
+                e.classList.remove('disabled');
+            }
         });
     }
 
@@ -2357,10 +2419,10 @@ export class StudioPanel extends FloatingPanel {
             this.rescaleTimelineContainer();
             if (this.zoomLevel === MAX_ZOOM_LEVEL) {
                 this.zoomInBtn.setAttribute('disabled', '');
-                this.zoomInBtn.classList.add('disabled');
+                this.zoomInBtn.classList.add('disabled', 'keep-disabled');
             }
             this.zoomOutBtn.removeAttribute('disabled');
-            this.zoomOutBtn.classList.remove('disabled');
+            this.zoomOutBtn.classList.remove('disabled', 'keep-disabled');
         }
     }
 
@@ -2370,10 +2432,10 @@ export class StudioPanel extends FloatingPanel {
             this.rescaleTimelineContainer();
             if (this.zoomLevel === 1) {
                 this.zoomOutBtn.setAttribute('disabled', '');
-                this.zoomOutBtn.classList.add('disabled');
+                this.zoomOutBtn.classList.add('disabled', 'keep-disabled');
             }
             this.zoomInBtn.removeAttribute('disabled');
-            this.zoomInBtn.classList.remove('disabled');
+            this.zoomInBtn.classList.remove('disabled', 'keep-disabled');
         }
     }
 
@@ -2401,6 +2463,37 @@ export class StudioPanel extends FloatingPanel {
         }
         this.timeline.setPlayheadTimeSeconds(playheadTimePosValue, false);
     }
+
+    private hideEditingUI(): void {
+        this.saveAnimationBtn.setAttribute('hidden', '');
+        this.keyframeControlsContents.setAttribute('hidden', '');
+        this.studioControlsContainer.setAttribute('hidden', '');
+        this.keyframeControlsDock.setAttribute('hidden', '');
+    }
+
+    private showEditingUI(): void {
+        this.studioControlsContainer.removeAttribute('hidden');
+        this.undoRedoBtnContainer.removeAttribute('hidden');
+        this.saveAnimationBtn.removeAttribute('hidden');
+        this.keyframeControlsDock.removeAttribute('hidden');
+    }
+
+    private onTabBtnClick = function(this: HTMLButtonElement, ev:MouseEvent) {
+        const studioPanel = document.querySelector('#studioPanel');
+        const targetId = this.dataset.target;
+        const tabGroup = this.dataset.tabGroup;
+        if (studioPanel && targetId && tabGroup) {
+            const targetElement = studioPanel.querySelector(targetId);
+            (this.parentElement?.querySelectorAll('button.TabBtn') as NodeListOf<HTMLElement>)
+              .forEach((e) => setElementHighlighted(e, false));
+            const clickedActive = !targetElement?.hasAttribute('hidden');
+            studioPanel.querySelectorAll('.' + tabGroup).forEach((e) => e.setAttribute('hidden',''));
+            if (!clickedActive) {
+                targetElement?.removeAttribute('hidden');
+                setElementHighlighted(this, true);
+            }
+        }
+    };
 
     private handleGlobalInput = (ev: KeyboardEvent) => {
         if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcons.length && !ev.repeat) {
