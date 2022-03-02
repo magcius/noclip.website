@@ -934,7 +934,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
         this.lastFrameAdvance += viewerInput.deltaTime;
         this.lifetime -= viewerInput.deltaTime;
 
-        if (this.lifetime <= 0 || (this.dstAlpha == 0 && this.alpha ==0)) {
+        if (this.lifetime <= 0 || (this.dstAlpha == 0 && this.alpha == 0)) {
             this.active = false;
             return;
         }
@@ -946,7 +946,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
         }
 
         if (this.lastFrameAdvance >= SRC_FRAME_TO_MS) {
-            this.lastFrameAdvance -= SRC_FRAME_TO_MS;
+            this.lastFrameAdvance = 0;
             this.lastScale = this.nextScale
             if (0.0 < this.scaleDelta) {
                 this.nextScale += (this.dstScale - this.nextScale) * this.scaleDelta;

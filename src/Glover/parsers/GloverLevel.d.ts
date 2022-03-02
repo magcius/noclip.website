@@ -505,40 +505,6 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
-  class EnemyInstructionB {
-    constructor(io: any, parent?: any, root?: any);
-    __type: 'EnemyInstructionB';
-    _io: any;
-
-    u320x02: number;
-    u320x06: number;
-    u320x0a: number;
-    u320x08: number;
-    u320x0c: number;
-    u320x10: number;
-    u320x0e: number;
-    u320x18: number;
-    u320x1e: number;
-    u320x14: number;
-    u320x16: number;
-
-    _debug: {
-      u320x02: DebugPosition;
-      u320x06: DebugPosition;
-      u320x0a: DebugPosition;
-      u320x08: DebugPosition;
-      u320x0c: DebugPosition;
-      u320x10: DebugPosition;
-      u320x0e: DebugPosition;
-      u320x18: DebugPosition;
-      u320x1e: DebugPosition;
-      u320x14: DebugPosition;
-      u320x16: DebugPosition;
-    };
-  }
-}
-
-declare namespace GloverLevel {
   class Actor0xbf {
     constructor(io: any, parent?: any, root?: any);
     __type: 'Actor0xbf';
@@ -564,6 +530,18 @@ declare namespace GloverLevel {
 
     _debug: {
       velocity: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
+  class EnemyFinalize {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyFinalize';
+    _io: any;
+
+
+    _debug: {
     };
   }
 }
@@ -751,6 +729,26 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
+  class EnemyInstructionTurn {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyInstructionTurn';
+    _io: any;
+
+    lookatX: number;
+    lookatY: number;
+    lookatZ: number;
+    chooseRandomDirection: number;
+
+    _debug: {
+      lookatX: DebugPosition;
+      lookatY: DebugPosition;
+      lookatZ: DebugPosition;
+      chooseRandomDirection: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
   class PuzzleAction0x4a {
     constructor(io: any, parent?: any, root?: any);
     __type: 'PuzzleAction0x4a';
@@ -804,30 +802,6 @@ declare namespace GloverLevel {
 
 
     _debug: {
-    };
-  }
-}
-
-declare namespace GloverLevel {
-  class Enemy0xa1 {
-    constructor(io: any, parent?: any, root?: any);
-    __type: 'Enemy0xa1';
-    _io: any;
-
-    u321: number;
-    u322: number;
-    u323: number;
-    u324: number;
-    u325: number;
-    u326: number;
-
-    _debug: {
-      u321: DebugPosition;
-      u322: DebugPosition;
-      u323: DebugPosition;
-      u324: DebugPosition;
-      u325: DebugPosition;
-      u326: DebugPosition;
     };
   }
 }
@@ -1038,18 +1012,10 @@ declare namespace GloverLevel {
 
     u320x02: number;
     u320x0e: number;
-    u320x18: number;
-    u320x1e: number;
-    u320x14: number;
-    u320x16: number;
 
     _debug: {
       u320x02: DebugPosition;
       u320x0e: DebugPosition;
-      u320x18: DebugPosition;
-      u320x1e: DebugPosition;
-      u320x14: DebugPosition;
-      u320x16: DebugPosition;
     };
   }
 }
@@ -1325,7 +1291,7 @@ declare namespace GloverLevel {
     _io: any;
 
     typeCode: number;
-    params: GloverLevel.Plat0x78 | GloverLevel.Rope | GloverLevel.NullPlatform | GloverLevel.PlatOrbitPause | GloverLevel.Plat0x9f | GloverLevel.PlatSound0xc2 | GloverLevel.PlatSpecial0xb8 | GloverLevel.PlatCat0x69 | GloverLevel.PlatSpecial0x8e | GloverLevel.PlatRocking | GloverLevel.VentDutyCycle | GloverLevel.Enemy | GloverLevel.PlatPos0xa7 | GloverLevel.LandActor | GloverLevel.Puzzle | GloverLevel.Unknown0xa9 | GloverLevel.Vent | GloverLevel.PlatMvspn0x74 | GloverLevel.PlatOrbitFlip0x77 | GloverLevel.PuzzleOr | GloverLevel.PuzzleNumtimes | GloverLevel.PlatSetParent | GloverLevel.PlatScale | GloverLevel.LookAtHand0x60 | GloverLevel.Actor0xbf | GloverLevel.GloverSpawnPoint | GloverLevel.PuzzleAction | GloverLevel.LookAtBall0x61 | GloverLevel.PlatActorSurfaceType | GloverLevel.BackgroundActor | GloverLevel.PlatDestructible | GloverLevel.PlatSine | GloverLevel.PlatConstantSpin | GloverLevel.PlatNoClip | GloverLevel.PuzzleCond | GloverLevel.PlatMvspn0x73 | GloverLevel.PlatPush0x5b | GloverLevel.PlatPathPoint | GloverLevel.PlatOrbit | GloverLevel.PlatMvspn0x59 | GloverLevel.PlatformConveyor | GloverLevel.Platform | GloverLevel.PlatSpinSound0xc5 | GloverLevel.PlatGoForwards0x5f | GloverLevel.SetTeleport | GloverLevel.PlatMvspn0x58 | GloverLevel.Enemy0xa1 | GloverLevel.PlatFan0x8a | GloverLevel.CameraSpawnPoint | GloverLevel.PlatPlayObjectAnimation | GloverLevel.Plat0x7e | GloverLevel.FogConfiguration | GloverLevel.PuzzleAnd | GloverLevel.PlatCrumb0x67 | GloverLevel.PlatCheckpoint | GloverLevel.PlatSpecial0xb9 | GloverLevel.SetObjectSparkle | GloverLevel.EnemyAttackInstruction | GloverLevel.PlatSpinFlip | GloverLevel.Enemy0xba | GloverLevel.AnimatedBackgroundActor | GloverLevel.Backdrop | GloverLevel.PlatCopySpinFromParent | GloverLevel.Water | GloverLevel.PuzzleAny | GloverLevel.PlatSetInitialPos | GloverLevel.PlatConf0x72 | GloverLevel.Buzzer | GloverLevel.SetActorScale | GloverLevel.PlatSpecial0x9e | GloverLevel.PlatOrbitAroundPoint | GloverLevel.AmbientLight | GloverLevel.Unrecognized | GloverLevel.PlatPathAcceleration | GloverLevel.EndLevelData | GloverLevel.Wind | GloverLevel.PlatStr0x7a | GloverLevel.PlatActorEnableWaterAnimation | GloverLevel.Plat0xc3 | GloverLevel.PlatSpike | GloverLevel.MrTip | GloverLevel.Cameo | GloverLevel.PlatSpecial0xc7 | GloverLevel.Plat0xa4 | GloverLevel.BuzzerDutyCycle | GloverLevel.PlatMaxVelocity | GloverLevel.UnknownSound0xbd | GloverLevel.SetExit | GloverLevel.CameoInst | GloverLevel.PlatSound0xc1 | GloverLevel.GaribGroup | GloverLevel.PlatTopple0x81 | GloverLevel.DiffuseLight | GloverLevel.Plat0x9d | GloverLevel.SetActorRotation | GloverLevel.Garib | GloverLevel.Plat0x66 | GloverLevel.PlatSpecial0x6e | GloverLevel.PlatMagnet0x8b | GloverLevel.EnemyConditionalInstruction | GloverLevel.BallSpawnPoint | GloverLevel.Powerup | GloverLevel.PlatSpinPause0x7c | GloverLevel.PlatDestructibleSound | GloverLevel.Enemy0x84 | GloverLevel.PlatVentAdvanceFrames | GloverLevel.Plat0xc6 | GloverLevel.PlatSetTag | GloverLevel.EnvironmentalSound | GloverLevel.PlatOrbitSound0xc4 | GloverLevel.SetGlobal0xb7 | GloverLevel.PlatSpin0x80 | GloverLevel.PlatMvspn0x5a | GloverLevel.EnemyNormalInstruction | undefined;
+    params: GloverLevel.Plat0x78 | GloverLevel.Rope | GloverLevel.NullPlatform | GloverLevel.PlatOrbitPause | GloverLevel.Plat0x9f | GloverLevel.PlatSound0xc2 | GloverLevel.PlatSpecial0xb8 | GloverLevel.PlatCat0x69 | GloverLevel.PlatSpecial0x8e | GloverLevel.PlatRocking | GloverLevel.VentDutyCycle | GloverLevel.Enemy | GloverLevel.PlatPos0xa7 | GloverLevel.LandActor | GloverLevel.Puzzle | GloverLevel.Unknown0xa9 | GloverLevel.Vent | GloverLevel.PlatMvspn0x74 | GloverLevel.PlatOrbitFlip0x77 | GloverLevel.PuzzleOr | GloverLevel.PuzzleNumtimes | GloverLevel.PlatSetParent | GloverLevel.PlatScale | GloverLevel.LookAtHand0x60 | GloverLevel.Actor0xbf | GloverLevel.GloverSpawnPoint | GloverLevel.PuzzleAction | GloverLevel.LookAtBall0x61 | GloverLevel.PlatActorSurfaceType | GloverLevel.BackgroundActor | GloverLevel.PlatDestructible | GloverLevel.PlatSine | GloverLevel.PlatConstantSpin | GloverLevel.PlatNoClip | GloverLevel.PuzzleCond | GloverLevel.PlatMvspn0x73 | GloverLevel.PlatPush0x5b | GloverLevel.PlatPathPoint | GloverLevel.PlatOrbit | GloverLevel.PlatMvspn0x59 | GloverLevel.PlatformConveyor | GloverLevel.Platform | GloverLevel.PlatSpinSound0xc5 | GloverLevel.PlatGoForwards0x5f | GloverLevel.SetTeleport | GloverLevel.PlatMvspn0x58 | GloverLevel.EnemySetAttentionBbox | GloverLevel.PlatFan0x8a | GloverLevel.CameraSpawnPoint | GloverLevel.PlatPlayObjectAnimation | GloverLevel.Plat0x7e | GloverLevel.FogConfiguration | GloverLevel.PuzzleAnd | GloverLevel.PlatCrumb0x67 | GloverLevel.PlatCheckpoint | GloverLevel.PlatSpecial0xb9 | GloverLevel.SetObjectSparkle | GloverLevel.EnemyAttackInstruction | GloverLevel.PlatSpinFlip | GloverLevel.Enemy0xba | GloverLevel.AnimatedBackgroundActor | GloverLevel.Backdrop | GloverLevel.PlatCopySpinFromParent | GloverLevel.Water | GloverLevel.PuzzleAny | GloverLevel.PlatSetInitialPos | GloverLevel.PlatConf0x72 | GloverLevel.Buzzer | GloverLevel.SetActorScale | GloverLevel.PlatSpecial0x9e | GloverLevel.PlatOrbitAroundPoint | GloverLevel.AmbientLight | GloverLevel.Unrecognized | GloverLevel.PlatPathAcceleration | GloverLevel.EndLevelData | GloverLevel.Wind | GloverLevel.PlatStr0x7a | GloverLevel.PlatActorEnableWaterAnimation | GloverLevel.Plat0xc3 | GloverLevel.PlatSpike | GloverLevel.MrTip | GloverLevel.Cameo | GloverLevel.PlatSpecial0xc7 | GloverLevel.Plat0xa4 | GloverLevel.BuzzerDutyCycle | GloverLevel.PlatMaxVelocity | GloverLevel.UnknownSound0xbd | GloverLevel.SetExit | GloverLevel.CameoInst | GloverLevel.PlatSound0xc1 | GloverLevel.GaribGroup | GloverLevel.PlatTopple0x81 | GloverLevel.DiffuseLight | GloverLevel.Plat0x9d | GloverLevel.SetActorRotation | GloverLevel.Garib | GloverLevel.Plat0x66 | GloverLevel.PlatSpecial0x6e | GloverLevel.PlatMagnet0x8b | GloverLevel.EnemyConditionalInstruction | GloverLevel.BallSpawnPoint | GloverLevel.Powerup | GloverLevel.PlatSpinPause0x7c | GloverLevel.PlatDestructibleSound | GloverLevel.EnemyFinalize | GloverLevel.PlatVentAdvanceFrames | GloverLevel.Plat0xc6 | GloverLevel.PlatSetTag | GloverLevel.EnvironmentalSound | GloverLevel.PlatOrbitSound0xc4 | GloverLevel.SetGlobal0xb7 | GloverLevel.PlatSpin0x80 | GloverLevel.PlatMvspn0x5a | GloverLevel.EnemyNormalInstruction | undefined;
 
     _debug: {
       typeCode: DebugPosition;
@@ -1702,7 +1668,7 @@ declare namespace GloverLevel {
     __type: 'Enemy';
     _io: any;
 
-    enemyType: number;
+    type: GloverLevel.Enemy.EnemyType;
     u1: number;
     x: number;
     y: number;
@@ -1710,13 +1676,72 @@ declare namespace GloverLevel {
     yRotation: number;
 
     _debug: {
-      enemyType: DebugPosition;
+      type: DebugPosition & { enumName: string; };
       u1: DebugPosition;
       x: DebugPosition;
       y: DebugPosition;
       z: DebugPosition;
       yRotation: DebugPosition;
     };
+  }
+}
+
+declare namespace GloverLevel {
+  namespace Enemy {
+    enum EnemyType {
+      BOVVA = 7,
+      CANNON = 8,
+      SAMTEX = 9,
+      MALLET = 10,
+      GENERALW = 11,
+      LIONFISH = 12,
+      CHESTER = 13,
+      KEG = 14,
+      REGGIE = 15,
+      SWISH = 16,
+      THRICE = 17,
+      ROBES = 18,
+      FUMBLE = 19,
+      MIKE = 20,
+      RAPTOR = 21,
+      CRUMPET = 22,
+      TRACEY = 23,
+      YOOFOW = 24,
+      OPEC = 25,
+      CYMON = 26,
+      SUCKER = 27,
+      BUGLE = 28,
+      DENNIS = 29,
+      CHUCK = 30,
+      HUBCHICKEN1 = 31,
+      FRANKIE2 = 32,
+      KLOSET = 33,
+      WILLY = 34,
+      JOFF = 35,
+      CANCER = 36,
+      KIRK = 37,
+      ROBOT = 38,
+      EVILROBOT = 39,
+      SPANK = 40,
+      BABYSPK2 = 41,
+      EVILGLOVE = 42,
+      DIBBER = 43,
+      BRUNDLE = 44,
+      MALCOM = 45,
+      SPOTTY = 46,
+      GORDON = 47,
+      SIDNEY = 48,
+      WEEVIL = 49,
+      CHOPSTIK = 50,
+      BUTTERFLY = 51,
+      SPIDER = 52,
+      BAT = 53,
+      FROG = 54,
+      DRAGFLY = 55,
+      BOXTHING = 56,
+      BUG = 57,
+      NMEFROG = 58,
+    }
   }
 }
 
@@ -1884,6 +1909,26 @@ declare namespace GloverLevel {
       x: DebugPosition;
       y: DebugPosition;
       z: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
+  class EnemyInstructionMove {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyInstructionMove';
+    _io: any;
+
+    destinationX: number;
+    destinationY: number;
+    destinationZ: number;
+    velMagnitude: number;
+
+    _debug: {
+      destinationX: DebugPosition;
+      destinationY: DebugPosition;
+      destinationZ: DebugPosition;
+      velMagnitude: DebugPosition;
     };
   }
 }
@@ -2257,6 +2302,32 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
+  class EnemyInstructionRandomWalk {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyInstructionRandomWalk';
+    _io: any;
+
+    homeX: number;
+    homeY: number;
+    homeZ: number;
+    extentX: number;
+    extentY: number;
+    extentZ: number;
+    minTravelDistance: number;
+
+    _debug: {
+      homeX: DebugPosition;
+      homeY: DebugPosition;
+      homeZ: DebugPosition;
+      extentX: DebugPosition;
+      extentY: DebugPosition;
+      extentZ: DebugPosition;
+      minTravelDistance: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
   class PuzzleAction0x55 {
     constructor(io: any, parent?: any, root?: any);
     __type: 'PuzzleAction0x55';
@@ -2338,15 +2409,63 @@ declare namespace GloverLevel {
     __type: 'EnemyInstruction';
     _io: any;
 
-    typeCode: number;
-    u160x02: number;
-    body: GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionB | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionError | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | undefined;
+    instrType: number;
+    lifetime: number;
+    params: GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionMove | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionRandomWalk | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionError | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionGoto | GloverLevel.EnemyInstructionTurn | GloverLevel.EnemyInstructionA | undefined;
+    executionConditionParamA: number;
+    executionConditionParamB: number;
+    flags: GloverLevel.EnemyInstruction.InstructionFlags;
+    executionCondition: GloverLevel.EnemyInstruction.ExecutionConditionType;
 
     _debug: {
-      typeCode: DebugPosition;
-      u160x02: DebugPosition;
-      body: DebugPosition;
+      instrType: DebugPosition;
+      lifetime: DebugPosition;
+      params: DebugPosition;
+      executionConditionParamA: DebugPosition;
+      executionConditionParamB: DebugPosition;
+      flags: DebugPosition & { enumName: string; };
+      executionCondition: DebugPosition & { enumName: string; };
     };
+  }
+}
+
+declare namespace GloverLevel {
+  namespace EnemyInstruction {
+    enum ExecutionConditionType {
+      BALL_WITHIN_RANGE = 0,
+      BALL_WITHIN_GROUND_RANGE = 1,
+      GLOVER_WITHIN_RANGE = 2,
+      GLOVER_WITHIN_GROUND_RANGE = 3,
+      BALL_OR_GLOVER_WITHIN_RANGE = 4,
+      BALL_OR_GLOVER_WITHIN_GROUND_RANGE = 5,
+      BALL_WITHIN_ANGLE_OF_VIEW = 6,
+      GLOVER_WITHIN_ANGLE_OF_VIEW = 7,
+      BALL_OR_GLOVER_WITHIN_ANGLE_OF_VIEW = 8,
+      PERIODIC = 9,
+      ROLL_ANGLE_WITHIN_RANGE_AND_PERIODIC = 10,
+      GLOVER_HOLDING_BALL = 11,
+      GLOVER_NOT_HOLDING_BALL = 12,
+      ENEMY_HOLDING_BALL = 13,
+      ENEMY_NOT_HOLDING_BALL = 14,
+      GLOVER_HOLDING_ENEMY = 15,
+      GLOVER_NOT_HOLDING_ENEMY = 16,
+      ON_BALL = 17,
+      ON_GLOVER = 18,
+      ENEMY_WITHIN_ATTENTION_BBOX = 19,
+      ALWAYS = 20,
+      NEVER = 21,
+      RANDOM_CHANCE_PARAM_A_OVER_1000 = 22,
+    }
+  }
+}
+
+declare namespace GloverLevel {
+  namespace EnemyInstruction {
+    enum InstructionFlags {
+      FACE_PLAYER = 1048576,
+      FACE_BALL = 2097152,
+      FACE_CLOSER_OF_PLAYER_OR_BALL = 4194304,
+    }
   }
 }
 
@@ -2615,13 +2734,17 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
-  class Enemy0x84 {
+  class EnemyInstructionGoto {
     constructor(io: any, parent?: any, root?: any);
-    __type: 'Enemy0x84';
+    __type: 'EnemyInstructionGoto';
     _io: any;
 
+    instrIdx: number;
+    unused: number;
 
     _debug: {
+      instrIdx: DebugPosition;
+      unused: DebugPosition;
     };
   }
 }
@@ -2636,20 +2759,12 @@ declare namespace GloverLevel {
     u320x06: number;
     u320x0a: number;
     u320x0e: number;
-    u320x18: number;
-    u320x1e: number;
-    u320x14: number;
-    u320x16: number;
 
     _debug: {
       u320x02: DebugPosition;
       u320x06: DebugPosition;
       u320x0a: DebugPosition;
       u320x0e: DebugPosition;
-      u320x18: DebugPosition;
-      u320x1e: DebugPosition;
-      u320x14: DebugPosition;
-      u320x16: DebugPosition;
     };
   }
 }
@@ -2800,6 +2915,30 @@ declare namespace GloverLevel {
     _debug: {
       cooldownTimer: DebugPosition;
       theta: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
+  class EnemySetAttentionBbox {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemySetAttentionBbox';
+    _io: any;
+
+    left: number;
+    top: number;
+    front: number;
+    width: number;
+    height: number;
+    depth: number;
+
+    _debug: {
+      left: DebugPosition;
+      top: DebugPosition;
+      front: DebugPosition;
+      width: DebugPosition;
+      height: DebugPosition;
+      depth: DebugPosition;
     };
   }
 }

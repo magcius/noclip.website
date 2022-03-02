@@ -743,55 +743,6 @@ var GloverLevel = (function() {
     return PlatSetInitialPos;
   })();
 
-  var EnemyInstructionB = GloverLevel.EnemyInstructionB = (function() {
-    function EnemyInstructionB(_io, _parent, _root) {
-      this.__type = 'EnemyInstructionB';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    EnemyInstructionB.prototype._read = function() {
-      this._debug.u320x02 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x02 = this._io.readU4be();
-      this._debug.u320x02.end = this._io.pos;
-      this._debug.u320x06 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x06 = this._io.readU4be();
-      this._debug.u320x06.end = this._io.pos;
-      this._debug.u320x0a = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x0a = this._io.readU4be();
-      this._debug.u320x0a.end = this._io.pos;
-      this._debug.u320x08 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x08 = this._io.readU4be();
-      this._debug.u320x08.end = this._io.pos;
-      this._debug.u320x0c = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x0c = this._io.readU4be();
-      this._debug.u320x0c.end = this._io.pos;
-      this._debug.u320x10 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x10 = this._io.readU4be();
-      this._debug.u320x10.end = this._io.pos;
-      this._debug.u320x0e = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x0e = this._io.readU4be();
-      this._debug.u320x0e.end = this._io.pos;
-      this._debug.u320x18 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x18 = this._io.readU4be();
-      this._debug.u320x18.end = this._io.pos;
-      this._debug.u320x1e = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x1e = this._io.readU4be();
-      this._debug.u320x1e.end = this._io.pos;
-      this._debug.u320x14 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x14 = this._io.readU4be();
-      this._debug.u320x14.end = this._io.pos;
-      this._debug.u320x16 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x16 = this._io.readU2be();
-      this._debug.u320x16.end = this._io.pos;
-    }
-
-    return EnemyInstructionB;
-  })();
-
   var Actor0xbf = GloverLevel.Actor0xbf = (function() {
     function Actor0xbf(_io, _parent, _root) {
       this.__type = 'Actor0xbf';
@@ -831,6 +782,22 @@ var GloverLevel = (function() {
     }
 
     return PlatMaxVelocity;
+  })();
+
+  var EnemyFinalize = GloverLevel.EnemyFinalize = (function() {
+    function EnemyFinalize(_io, _parent, _root) {
+      this.__type = 'EnemyFinalize';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyFinalize.prototype._read = function() {
+    }
+
+    return EnemyFinalize;
   })();
 
   var PlatMvspn0x59 = GloverLevel.PlatMvspn0x59 = (function() {
@@ -1086,6 +1053,34 @@ var GloverLevel = (function() {
     return PuzzleCondC;
   })();
 
+  var EnemyInstructionTurn = GloverLevel.EnemyInstructionTurn = (function() {
+    function EnemyInstructionTurn(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionTurn';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyInstructionTurn.prototype._read = function() {
+      this._debug.lookatX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.lookatX = this._io.readF4be();
+      this._debug.lookatX.end = this._io.pos;
+      this._debug.lookatY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.lookatY = this._io.readF4be();
+      this._debug.lookatY.end = this._io.pos;
+      this._debug.lookatZ = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.lookatZ = this._io.readF4be();
+      this._debug.lookatZ.end = this._io.pos;
+      this._debug.chooseRandomDirection = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.chooseRandomDirection = this._io.readU4be();
+      this._debug.chooseRandomDirection.end = this._io.pos;
+    }
+
+    return EnemyInstructionTurn;
+  })();
+
   var PuzzleAction0x4a = GloverLevel.PuzzleAction0x4a = (function() {
     function PuzzleAction0x4a(_io, _parent, _root) {
       this.__type = 'PuzzleAction0x4a';
@@ -1163,40 +1158,6 @@ var GloverLevel = (function() {
     }
 
     return PlatCopySpinFromParent;
-  })();
-
-  var Enemy0xa1 = GloverLevel.Enemy0xa1 = (function() {
-    function Enemy0xa1(_io, _parent, _root) {
-      this.__type = 'Enemy0xa1';
-      this._io = _io;
-      this._parent = _parent;
-      this._root = _root || this;
-      this._debug = {};
-
-      this._read();
-    }
-    Enemy0xa1.prototype._read = function() {
-      this._debug.u321 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u321 = this._io.readU4be();
-      this._debug.u321.end = this._io.pos;
-      this._debug.u322 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u322 = this._io.readU4be();
-      this._debug.u322.end = this._io.pos;
-      this._debug.u323 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u323 = this._io.readU4be();
-      this._debug.u323.end = this._io.pos;
-      this._debug.u324 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u324 = this._io.readU4be();
-      this._debug.u324.end = this._io.pos;
-      this._debug.u325 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u325 = this._io.readU4be();
-      this._debug.u325.end = this._io.pos;
-      this._debug.u326 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u326 = this._io.readU4be();
-      this._debug.u326.end = this._io.pos;
-    }
-
-    return Enemy0xa1;
   })();
 
   var Vent = GloverLevel.Vent = (function() {
@@ -1519,18 +1480,6 @@ var GloverLevel = (function() {
       this._debug.u320x0e = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u320x0e = this._io.readU4be();
       this._debug.u320x0e.end = this._io.pos;
-      this._debug.u320x18 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x18 = this._io.readU4be();
-      this._debug.u320x18.end = this._io.pos;
-      this._debug.u320x1e = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x1e = this._io.readU4be();
-      this._debug.u320x1e.end = this._io.pos;
-      this._debug.u320x14 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x14 = this._io.readU4be();
-      this._debug.u320x14.end = this._io.pos;
-      this._debug.u320x16 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x16 = this._io.readU2be();
-      this._debug.u320x16.end = this._io.pos;
     }
 
     return EnemyInstructionC;
@@ -2057,7 +2006,7 @@ var GloverLevel = (function() {
         this.params = new PlatMvspn0x58(this._io, this, this._root);
         break;
       case 161:
-        this.params = new Enemy0xa1(this._io, this, this._root);
+        this.params = new EnemySetAttentionBbox(this._io, this, this._root);
         break;
       case 138:
         this.params = new PlatFan0x8a(this._io, this, this._root);
@@ -2228,7 +2177,7 @@ var GloverLevel = (function() {
         this.params = new PlatDestructibleSound(this._io, this, this._root);
         break;
       case 132:
-        this.params = new Enemy0x84(this._io, this, this._root);
+        this.params = new EnemyFinalize(this._io, this, this._root);
         break;
       case 92:
         this.params = new PlatVentAdvanceFrames(this._io, this, this._root);
@@ -2834,6 +2783,114 @@ var GloverLevel = (function() {
   })();
 
   var Enemy = GloverLevel.Enemy = (function() {
+    Enemy.EnemyType = Object.freeze({
+      BOVVA: 7,
+      CANNON: 8,
+      SAMTEX: 9,
+      MALLET: 10,
+      GENERALW: 11,
+      LIONFISH: 12,
+      CHESTER: 13,
+      KEG: 14,
+      REGGIE: 15,
+      SWISH: 16,
+      THRICE: 17,
+      ROBES: 18,
+      FUMBLE: 19,
+      MIKE: 20,
+      RAPTOR: 21,
+      CRUMPET: 22,
+      TRACEY: 23,
+      YOOFOW: 24,
+      OPEC: 25,
+      CYMON: 26,
+      SUCKER: 27,
+      BUGLE: 28,
+      DENNIS: 29,
+      CHUCK: 30,
+      HUBCHICKEN1: 31,
+      FRANKIE2: 32,
+      KLOSET: 33,
+      WILLY: 34,
+      JOFF: 35,
+      CANCER: 36,
+      KIRK: 37,
+      ROBOT: 38,
+      EVILROBOT: 39,
+      SPANK: 40,
+      BABYSPK2: 41,
+      EVILGLOVE: 42,
+      DIBBER: 43,
+      BRUNDLE: 44,
+      MALCOM: 45,
+      SPOTTY: 46,
+      GORDON: 47,
+      SIDNEY: 48,
+      WEEVIL: 49,
+      CHOPSTIK: 50,
+      BUTTERFLY: 51,
+      SPIDER: 52,
+      BAT: 53,
+      FROG: 54,
+      DRAGFLY: 55,
+      BOXTHING: 56,
+      BUG: 57,
+      NMEFROG: 58,
+
+      7: "BOVVA",
+      8: "CANNON",
+      9: "SAMTEX",
+      10: "MALLET",
+      11: "GENERALW",
+      12: "LIONFISH",
+      13: "CHESTER",
+      14: "KEG",
+      15: "REGGIE",
+      16: "SWISH",
+      17: "THRICE",
+      18: "ROBES",
+      19: "FUMBLE",
+      20: "MIKE",
+      21: "RAPTOR",
+      22: "CRUMPET",
+      23: "TRACEY",
+      24: "YOOFOW",
+      25: "OPEC",
+      26: "CYMON",
+      27: "SUCKER",
+      28: "BUGLE",
+      29: "DENNIS",
+      30: "CHUCK",
+      31: "HUBCHICKEN1",
+      32: "FRANKIE2",
+      33: "KLOSET",
+      34: "WILLY",
+      35: "JOFF",
+      36: "CANCER",
+      37: "KIRK",
+      38: "ROBOT",
+      39: "EVILROBOT",
+      40: "SPANK",
+      41: "BABYSPK2",
+      42: "EVILGLOVE",
+      43: "DIBBER",
+      44: "BRUNDLE",
+      45: "MALCOM",
+      46: "SPOTTY",
+      47: "GORDON",
+      48: "SIDNEY",
+      49: "WEEVIL",
+      50: "CHOPSTIK",
+      51: "BUTTERFLY",
+      52: "SPIDER",
+      53: "BAT",
+      54: "FROG",
+      55: "DRAGFLY",
+      56: "BOXTHING",
+      57: "BUG",
+      58: "NMEFROG",
+    });
+
     function Enemy(_io, _parent, _root) {
       this.__type = 'Enemy';
       this._io = _io;
@@ -2844,9 +2901,9 @@ var GloverLevel = (function() {
       this._read();
     }
     Enemy.prototype._read = function() {
-      this._debug.enemyType = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.enemyType = this._io.readU2be();
-      this._debug.enemyType.end = this._io.pos;
+      this._debug.type = { start: this._io.pos, ioOffset: this._io.byteOffset, enumName: "GloverLevel.Enemy.EnemyType" };
+      this.type = this._io.readU2be();
+      this._debug.type.end = this._io.pos;
       this._debug.u1 = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u1 = this._io.readU2be();
       this._debug.u1.end = this._io.pos;
@@ -3099,6 +3156,34 @@ var GloverLevel = (function() {
     }
 
     return BackgroundActor;
+  })();
+
+  var EnemyInstructionMove = GloverLevel.EnemyInstructionMove = (function() {
+    function EnemyInstructionMove(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionMove';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyInstructionMove.prototype._read = function() {
+      this._debug.destinationX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.destinationX = this._io.readF4be();
+      this._debug.destinationX.end = this._io.pos;
+      this._debug.destinationY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.destinationY = this._io.readF4be();
+      this._debug.destinationY.end = this._io.pos;
+      this._debug.destinationZ = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.destinationZ = this._io.readF4be();
+      this._debug.destinationZ.end = this._io.pos;
+      this._debug.velMagnitude = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.velMagnitude = this._io.readF4be();
+      this._debug.velMagnitude.end = this._io.pos;
+    }
+
+    return EnemyInstructionMove;
   })();
 
   var PlatPathPoint = GloverLevel.PlatPathPoint = (function() {
@@ -3615,6 +3700,43 @@ var GloverLevel = (function() {
     return PlatTopple0x81;
   })();
 
+  var EnemyInstructionRandomWalk = GloverLevel.EnemyInstructionRandomWalk = (function() {
+    function EnemyInstructionRandomWalk(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionRandomWalk';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyInstructionRandomWalk.prototype._read = function() {
+      this._debug.homeX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.homeX = this._io.readF4be();
+      this._debug.homeX.end = this._io.pos;
+      this._debug.homeY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.homeY = this._io.readF4be();
+      this._debug.homeY.end = this._io.pos;
+      this._debug.homeZ = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.homeZ = this._io.readF4be();
+      this._debug.homeZ.end = this._io.pos;
+      this._debug.extentX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.extentX = this._io.readF4be();
+      this._debug.extentX.end = this._io.pos;
+      this._debug.extentY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.extentY = this._io.readF4be();
+      this._debug.extentY.end = this._io.pos;
+      this._debug.extentZ = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.extentZ = this._io.readF4be();
+      this._debug.extentZ.end = this._io.pos;
+      this._debug.minTravelDistance = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.minTravelDistance = this._io.readF4be();
+      this._debug.minTravelDistance.end = this._io.pos;
+    }
+
+    return EnemyInstructionRandomWalk;
+  })();
+
   var PuzzleAction0x55 = GloverLevel.PuzzleAction0x55 = (function() {
     function PuzzleAction0x55(_io, _parent, _root) {
       this.__type = 'PuzzleAction0x55';
@@ -3722,6 +3844,66 @@ var GloverLevel = (function() {
   })();
 
   var EnemyInstruction = GloverLevel.EnemyInstruction = (function() {
+    EnemyInstruction.ExecutionConditionType = Object.freeze({
+      BALL_WITHIN_RANGE: 0,
+      BALL_WITHIN_GROUND_RANGE: 1,
+      GLOVER_WITHIN_RANGE: 2,
+      GLOVER_WITHIN_GROUND_RANGE: 3,
+      BALL_OR_GLOVER_WITHIN_RANGE: 4,
+      BALL_OR_GLOVER_WITHIN_GROUND_RANGE: 5,
+      BALL_WITHIN_ANGLE_OF_VIEW: 6,
+      GLOVER_WITHIN_ANGLE_OF_VIEW: 7,
+      BALL_OR_GLOVER_WITHIN_ANGLE_OF_VIEW: 8,
+      PERIODIC: 9,
+      ROLL_ANGLE_WITHIN_RANGE_AND_PERIODIC: 10,
+      GLOVER_HOLDING_BALL: 11,
+      GLOVER_NOT_HOLDING_BALL: 12,
+      ENEMY_HOLDING_BALL: 13,
+      ENEMY_NOT_HOLDING_BALL: 14,
+      GLOVER_HOLDING_ENEMY: 15,
+      GLOVER_NOT_HOLDING_ENEMY: 16,
+      ON_BALL: 17,
+      ON_GLOVER: 18,
+      ENEMY_WITHIN_ATTENTION_BBOX: 19,
+      ALWAYS: 20,
+      NEVER: 21,
+      RANDOM_CHANCE_PARAM_A_OVER_1000: 22,
+
+      0: "BALL_WITHIN_RANGE",
+      1: "BALL_WITHIN_GROUND_RANGE",
+      2: "GLOVER_WITHIN_RANGE",
+      3: "GLOVER_WITHIN_GROUND_RANGE",
+      4: "BALL_OR_GLOVER_WITHIN_RANGE",
+      5: "BALL_OR_GLOVER_WITHIN_GROUND_RANGE",
+      6: "BALL_WITHIN_ANGLE_OF_VIEW",
+      7: "GLOVER_WITHIN_ANGLE_OF_VIEW",
+      8: "BALL_OR_GLOVER_WITHIN_ANGLE_OF_VIEW",
+      9: "PERIODIC",
+      10: "ROLL_ANGLE_WITHIN_RANGE_AND_PERIODIC",
+      11: "GLOVER_HOLDING_BALL",
+      12: "GLOVER_NOT_HOLDING_BALL",
+      13: "ENEMY_HOLDING_BALL",
+      14: "ENEMY_NOT_HOLDING_BALL",
+      15: "GLOVER_HOLDING_ENEMY",
+      16: "GLOVER_NOT_HOLDING_ENEMY",
+      17: "ON_BALL",
+      18: "ON_GLOVER",
+      19: "ENEMY_WITHIN_ATTENTION_BBOX",
+      20: "ALWAYS",
+      21: "NEVER",
+      22: "RANDOM_CHANCE_PARAM_A_OVER_1000",
+    });
+
+    EnemyInstruction.InstructionFlags = Object.freeze({
+      FACE_PLAYER: 1048576,
+      FACE_BALL: 2097152,
+      FACE_CLOSER_OF_PLAYER_OR_BALL: 4194304,
+
+      1048576: "FACE_PLAYER",
+      2097152: "FACE_BALL",
+      4194304: "FACE_CLOSER_OF_PLAYER_OR_BALL",
+    });
+
     function EnemyInstruction(_io, _parent, _root) {
       this.__type = 'EnemyInstruction';
       this._io = _io;
@@ -3732,94 +3914,106 @@ var GloverLevel = (function() {
       this._read();
     }
     EnemyInstruction.prototype._read = function() {
-      this._debug.typeCode = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.typeCode = this._io.readU2be();
-      this._debug.typeCode.end = this._io.pos;
-      this._debug.u160x02 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u160x02 = this._io.readU2be();
-      this._debug.u160x02.end = this._io.pos;
-      this._debug.body = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      switch (this.typeCode) {
+      this._debug.instrType = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.instrType = this._io.readU2be();
+      this._debug.instrType.end = this._io.pos;
+      this._debug.lifetime = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.lifetime = this._io.readS2be();
+      this._debug.lifetime.end = this._io.pos;
+      this._debug.params = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      switch (this.instrType) {
       case 14:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 10:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       case 17:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 0:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionMove(this._io, this, this._root);
         break;
       case 4:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 24:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 6:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 20:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 7:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 1:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       case 13:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       case 11:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       case 12:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 3:
-        this.body = new EnemyInstructionB(this._io, this, this._root);
+        this.params = new EnemyInstructionRandomWalk(this._io, this, this._root);
         break;
       case 5:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 19:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 23:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       case 15:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 8:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 9:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       case 21:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 16:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 18:
-        this.body = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionGoto(this._io, this, this._root);
         break;
       case 2:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionTurn(this._io, this, this._root);
         break;
       case 22:
-        this.body = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionA(this._io, this, this._root);
         break;
       default:
-        this.body = new EnemyInstructionError(this._io, this, this._root);
+        this.params = new EnemyInstructionError(this._io, this, this._root);
         break;
       }
-      this._debug.body.end = this._io.pos;
+      this._debug.params.end = this._io.pos;
+      this._debug.executionConditionParamA = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.executionConditionParamA = this._io.readF4be();
+      this._debug.executionConditionParamA.end = this._io.pos;
+      this._debug.executionConditionParamB = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.executionConditionParamB = this._io.readF4be();
+      this._debug.executionConditionParamB.end = this._io.pos;
+      this._debug.flags = { start: this._io.pos, ioOffset: this._io.byteOffset, enumName: "GloverLevel.EnemyInstruction.InstructionFlags" };
+      this.flags = this._io.readU4be();
+      this._debug.flags.end = this._io.pos;
+      this._debug.executionCondition = { start: this._io.pos, ioOffset: this._io.byteOffset, enumName: "GloverLevel.EnemyInstruction.ExecutionConditionType" };
+      this.executionCondition = this._io.readU2be();
+      this._debug.executionCondition.end = this._io.pos;
     }
 
     return EnemyInstruction;
@@ -4197,9 +4391,9 @@ var GloverLevel = (function() {
     return PlatStr0x7a;
   })();
 
-  var Enemy0x84 = GloverLevel.Enemy0x84 = (function() {
-    function Enemy0x84(_io, _parent, _root) {
-      this.__type = 'Enemy0x84';
+  var EnemyInstructionGoto = GloverLevel.EnemyInstructionGoto = (function() {
+    function EnemyInstructionGoto(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionGoto';
       this._io = _io;
       this._parent = _parent;
       this._root = _root || this;
@@ -4207,10 +4401,16 @@ var GloverLevel = (function() {
 
       this._read();
     }
-    Enemy0x84.prototype._read = function() {
+    EnemyInstructionGoto.prototype._read = function() {
+      this._debug.instrIdx = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.instrIdx = this._io.readU4be();
+      this._debug.instrIdx.end = this._io.pos;
+      this._debug.unused = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.unused = this._io.readU4be();
+      this._debug.unused.end = this._io.pos;
     }
 
-    return Enemy0x84;
+    return EnemyInstructionGoto;
   })();
 
   var EnemyInstructionA = GloverLevel.EnemyInstructionA = (function() {
@@ -4236,18 +4436,6 @@ var GloverLevel = (function() {
       this._debug.u320x0e = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.u320x0e = this._io.readU4be();
       this._debug.u320x0e.end = this._io.pos;
-      this._debug.u320x18 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x18 = this._io.readU4be();
-      this._debug.u320x18.end = this._io.pos;
-      this._debug.u320x1e = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x1e = this._io.readU4be();
-      this._debug.u320x1e.end = this._io.pos;
-      this._debug.u320x14 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x14 = this._io.readU4be();
-      this._debug.u320x14.end = this._io.pos;
-      this._debug.u320x16 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u320x16 = this._io.readU2be();
-      this._debug.u320x16.end = this._io.pos;
     }
 
     return EnemyInstructionA;
@@ -4460,6 +4648,40 @@ var GloverLevel = (function() {
     }
 
     return PlatSpinFlip;
+  })();
+
+  var EnemySetAttentionBbox = GloverLevel.EnemySetAttentionBbox = (function() {
+    function EnemySetAttentionBbox(_io, _parent, _root) {
+      this.__type = 'EnemySetAttentionBbox';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemySetAttentionBbox.prototype._read = function() {
+      this._debug.left = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.left = this._io.readF4be();
+      this._debug.left.end = this._io.pos;
+      this._debug.top = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.top = this._io.readF4be();
+      this._debug.top.end = this._io.pos;
+      this._debug.front = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.front = this._io.readF4be();
+      this._debug.front.end = this._io.pos;
+      this._debug.width = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.width = this._io.readF4be();
+      this._debug.width.end = this._io.pos;
+      this._debug.height = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.height = this._io.readF4be();
+      this._debug.height.end = this._io.pos;
+      this._debug.depth = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.depth = this._io.readF4be();
+      this._debug.depth.end = this._io.pos;
+    }
+
+    return EnemySetAttentionBbox;
   })();
 
   return GloverLevel;

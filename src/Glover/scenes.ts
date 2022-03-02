@@ -1700,6 +1700,7 @@ class SceneDesc implements Viewer.SceneDesc {
         Shadows.Shadow.initializeRenderer(device, cache, textureHolder);
 
         let scratchMatrix = mat4.create();
+        let currentEnemy: GloverEnemy | null = null;
         let currentActor: GloverActorRenderer | null = null; 
         let currentPlatform: GloverPlatform | null = null; 
         let currentObject: GloverActorRenderer | GloverPlatform | GloverVent | null = null;
@@ -1878,8 +1879,15 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 case 'Enemy': {
                     let pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z)
-                    const enemy = new GloverEnemy(device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights, cmd.params.enemyType, pos, cmd.params.yRotation);
-                    sceneRenderer.miscRenderers.push(enemy);
+                    currentEnemy = new GloverEnemy(device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights, cmd.params.type as number, pos, cmd.params.yRotation);
+                    sceneRenderer.miscRenderers.push(currentEnemy);
+                    break;
+                }
+                case 'EnemyNormalInstruction': {
+                    if (currentEnemy === null) {
+                        throw `No active enemy for ${cmd.params.__type}!`;
+                    }
+                    currentEnemy.pushNormalInstruction(cmd.params.instr);
                     break;
                 }
                 case 'Vent': {
