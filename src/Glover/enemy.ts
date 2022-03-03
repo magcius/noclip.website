@@ -740,7 +740,7 @@ export class GloverEnemy implements GenericRenderable {
             this.curInstrExecCount += 1;
             if (this.curInstrLifetime > 0) {
                 this.curInstrLifetime -= 1;
-                if (this.curInstrLifetime == 0) {
+                if (this.curInstrLifetime == 0 && !advanceInstr) {
                     this.curInstrIdx++
                     advanceInstr = true;
                 }
@@ -760,6 +760,7 @@ export class GloverEnemy implements GenericRenderable {
             } else {
                 this.curInstr = null;
             }
+            console.log(this.curInstr);
         }
 
         const bobble = enemy_bobble[this.enemyType];
@@ -805,6 +806,9 @@ export class GloverEnemy implements GenericRenderable {
         const beh = enemy_beh[this.enemyType];
 
         vec3.add(this.nextPosition, this.nextPosition, this.velocity);
+
+        vec3.scale(this.velocity, this.velocity, 1-(1-beh.decel0x18)/4);
+
 
         if (beh.spinTweenX !== 0) {
             this.advanceEulerAngle(0);
