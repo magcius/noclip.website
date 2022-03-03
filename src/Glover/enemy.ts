@@ -6,7 +6,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert } from "../util";
 
 import { SRC_FRAME_TO_MS } from './timing';
-import { angularDistance, subtractAngles, radianModulo } from "./util";
+import { angularDistance, subtractAngles, radianModulo, radianLerp } from "./util";
 
 import { vec3, quat, mat4 } from "gl-matrix";
 
@@ -538,7 +538,6 @@ export class GloverEnemy implements GenericRenderable {
 
     public pushNormalInstruction(instr: Instruction) {
         this.normalInstructions.push(instr);
-        console.log(instr)
     }
 
     private updateActorModelview() {
@@ -638,7 +637,93 @@ export class GloverEnemy implements GenericRenderable {
     }
 
     private walkTo(dst: vec3, velMagnitude: number, instrFlags: number): boolean {
-        // TODO
+
+        //   // TODO: enemyCollisionCheck()
+
+        //   // uVar6 = (undefined4)((ulonglong)in_f2 >> 0x20);
+        //   // (enemy->actor).dstEulers.z = 0.0;
+        //   // uVar2 = 1;
+        //   //   a = &(enemy->actor).pos;
+        //   //   fVar5 = distXZ(a,dst);
+        //   //   uVar2 = 1;
+        
+        // const journeyVec = scratchVec3;
+        // vec3.sub(journeyVec, this.nextPosition, dst);
+
+        // let distXZ = Math.sqrt(journeyVec[0]*journeyVec[0] + journeyVec[2]*journeyVec[2]);
+        // if (distXZ < velMagnitude) {
+        //     this.velocity[0] *= 0.5;
+        //     this.velocity[2] *= 0.5;
+        //     return true;
+        // } else {
+
+        //     if ((instrFlags & 0x1) != 0) {
+        //         journeyVec[0] /= distXZ;
+        //         journeyVec[2] /= distXZ;
+        //         journeyVec[0] *= enemy_beh[this.enemyType].walkSpeed;
+        //         journeyVec[2] *= enemy_beh[this.enemyType].walkSpeed;
+        //         if ((instrFlags & 0x1000) != 0) {
+        //             this.dstEulers[1] = radianModulo(Math.atan2(journeyVec[0], journeyVec[2]) + Math.PI);
+        //         }
+        //         this.setXZVelocityBasedOnRotation(enemy_beh[this.enemyType].walkSpeed, enemy_beh[this.enemyType].maxVelocity);
+        //     }
+
+        //     if ((instrFlags & 0x2) != 0) {
+        //         if ((enemy_beh[this.enemyType].actorFlags & 0x1000000) === 0) {
+        //             const xz_speed = Math.sqrt(this.velocity[0]*this.velocity[0] + this.velocity[2]*this.velocity[2]);
+        //             if (xz_speed >= enemy_beh[this.enemyType].maxVelocity) {
+        //                 return false;
+        //             }
+                    
+        //         }
+
+        //     }
+        //   //     if ((flags & INSTR_FLAG_MODULATE_ACCELERATION) != 0) {
+        //   //       if (((enemy->actor).flags & ACTOR_DONT_THROTTLE_VELOCITY) == 0) {
+        //   //         fVar9 = (enemy->actor).vel.x;
+        //   //         fVar5 = (enemy->actor).vel.z;
+        //   //         fVar9 = fVar9 * fVar9 + fVar5 * fVar5;
+        //   //         fVar5 = SQRT(fVar9);
+        //   //         if (false) {
+        //   //           dVar4 = sqrt((double)CONCAT44(in_register_00001060,fVar9));
+        //   //           fVar5 = SUB84(dVar4,0);
+        //   //         }
+        //   //         if (((enemy->actor).act_beh)->max_velocity <= fVar5) {
+        //   //           return 0;
+        //   //         }
+        //   //       }
+        //   //       aPStack48[0].x = (enemy->actor).pos.x - dst->x;
+        //   //       aPStack48[0].z = (enemy->actor).pos.z - dst->z;
+        //   //       aPStack48[0].y = 0.0;
+        //   //       normalizeVec3(aPStack48);
+        //   //       aPStack48[0].x = aPStack48[0].x * ((enemy->actor).act_beh)->walk_speed;
+        //   //       aPStack48[0].y = aPStack48[0].y * ((enemy->actor).act_beh)->walk_speed;
+        //   //       aPStack48[0].z = aPStack48[0].z * ((enemy->actor).act_beh)->walk_speed;
+        //   //       (enemy->actor).vel.x = (enemy->actor).vel.x - aPStack48[0].x;
+        //   //       uVar6 = 0;
+        //   //       (enemy->actor).vel.z = (enemy->actor).vel.z - aPStack48[0].z;
+        //   //     }
+
+        // }
+
+
+        //   //     if ((flags & INSTR_FLAG_MOVEMENT_ROLL_INTO_TURN) != 0) {
+        //   //       fVar9 = subtractAngles((enemy->actor).dstEulers.y,(enemy->actor).eulers.y);
+        //   //       fVar9 = fVar9 * enemy->roll_modulation;
+        //   //       fVar5 = fVar9;
+        //   //       if (fVar9 <= 0.0) {
+        //   //         fVar5 = -fVar9;
+        //   //       }
+        //   //       if ((double)CONCAT44(uVar6,D_0_DOT_08_a188._4_4_) < (double)fVar5) {
+        //   //         (enemy->actor).dstEulers.z = fVar9;
+        //   //       }
+        //   //       else {
+        //   //         (enemy->actor).dstEulers.z = 0.0;
+        //   //       }
+        //   //       uVar2 = 0;
+        //   //     }
+        //   //   }
+
         return false;
     }
 
@@ -725,6 +810,13 @@ export class GloverEnemy implements GenericRenderable {
                     break;
                 }
                 case 'EnemyInstructionTurn': {
+
+                    // TODO: this is a hack to keep dibbers from flipping out.
+                    //       figure out why, in game, they don't need this:
+                    // TODO: even with this, a dibber near the beginning of PH2 flips out. investigate
+                    if (this.curInstrExecCount == 0) {
+                        vec3.zero(this.velocity);
+                    }
                     advanceInstr = this.instrTurn();
                     if (advanceInstr) {
                         this.curInstrIdx++;
@@ -753,6 +845,7 @@ export class GloverEnemy implements GenericRenderable {
                     break;
                 }
             }
+
             this.curInstrExecCount = 0;
             if (this.curInstrIdx <= this.normalInstructions.length) {
                 this.curInstr = this.normalInstructions[this.curInstrIdx];
@@ -760,7 +853,6 @@ export class GloverEnemy implements GenericRenderable {
             } else {
                 this.curInstr = null;
             }
-            console.log(this.curInstr);
         }
 
         const bobble = enemy_bobble[this.enemyType];
@@ -848,7 +940,7 @@ export class GloverEnemy implements GenericRenderable {
         }
 
         vec3.lerp(this.position, this.lastPosition, this.nextPosition, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
-        vec3.lerp(this.eulers, this.lastEulers, this.nextEulers, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
+        radianLerp(this.eulers, this.lastEulers, this.nextEulers, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
 
         this.updateActorModelview();
 
