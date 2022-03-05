@@ -1621,13 +1621,13 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
 
     ["2c", {
         landscape: "44.FLYTHRU.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART8.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART8.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla", "CAMEO_TEX_BANK.tex.fla"]
     }], // "Flythru (title)"
     ["2d", {
         landscape: "45.FLYTHRU.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART8.obj.fla"],
-        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_SHARED.obj.fla", "HUB_PART8.obj.fla"],
+        texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla", "CAMEO_TEX_BANK.tex.fla"]
     }], // "Flythru (credits)"
     ["2e", {
         landscape: "46.INTROl.n64.lev",
