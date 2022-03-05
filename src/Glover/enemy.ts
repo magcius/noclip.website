@@ -631,17 +631,17 @@ export class GloverEnemy implements GenericRenderable {
                 scratchVec3[1] = 0;
                 vec3.normalize(scratchVec3, scratchVec3);
                 vec3.add(scratchVec3, scratchVec3, this.nextPosition);
-                const groundCollision = projectOntoTerrain(scratchVec3, null, this.terrain);
-                if (groundCollision !== null) {
-                    const collisionDistance = vec3.distance(groundCollision.position, this.nextPosition);
-                    if (!this.flying &&
-                        collisionDistance >= this.minCollisionDistance &&
-                        collisionDistance <= this.maxCollisionDistance)
-                    {
-                        collided = true;
-                        vec3.zero(this.velocity);
-                    }
-                }
+                // const groundCollision = projectOntoTerrain(scratchVec3, null, this.terrain);
+                // if (groundCollision !== null) {
+                //     const collisionDistance = vec3.distance(groundCollision.position, this.nextPosition);
+                //     if (!this.flying &&
+                //         collisionDistance >= this.minCollisionDistance &&
+                //         collisionDistance <= this.maxCollisionDistance)
+                //     {
+                //         collided = true;
+                //         vec3.zero(this.velocity);
+                //     }
+                // }
 
                 // TODO:
                 //     iVar5 = 0;
@@ -1000,11 +1000,16 @@ export class GloverEnemy implements GenericRenderable {
             this.advanceEulerAngle(2);
         }
 
-        // TODO: need floor collision, first:
         if ((beh.actorFlags & 1) !== 0) {
-            const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
-            const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
-            this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
+            // TODO: need floor collision, first:
+            // const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
+            // const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+            // this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
+
+            const groundCollision = projectOntoTerrain(this.position, null, this.terrain);
+            if (groundCollision !== null) {
+                this.nextPosition[1] = groundCollision.position[1] + this.maxCollisionDistance;
+            }
         }
 
 
@@ -1016,7 +1021,7 @@ export class GloverEnemy implements GenericRenderable {
                 // TODO:
                 // actor.alpha = Math.sin(this.frameCount/8.0);
                 const ether_spawn_period = (this.level_id === '1e') ? 3 : 1;
-                const ether_lifetime = (this.level_id === '1e') ? 0x28 : 1;
+                const ether_lifetime = (this.level_id === '1e') ? 0x28 : 0x10 // 1; technically it's supposed to be 1 but that makes my eyes bleed
                 const ether_alpha_center = (this.level_id === '1e') ? 0x3c : 0x78;
                 const ether_alpha_spread = (this.level_id === '1e') ? 0xa : 0x1e;
                 if ((this.frameCount % ether_spawn_period) === 0) {
@@ -1026,7 +1031,7 @@ export class GloverEnemy implements GenericRenderable {
                     particle.flipbook.endAlpha = ether_alpha_center + Math.sin(this.frameCount / 10) * ether_alpha_spread;
                     particle.flipbook.startSize = particle.flipbook.flipbookMetadata.startSize * 3; 
                     particle.flipbook.endSize = particle.flipbook.flipbookMetadata.endSize * 3; 
-                    particle.setLifetime(ether_lifetime * 10);
+                    particle.setLifetime(ether_lifetime);
                 }
                 break;
             }
