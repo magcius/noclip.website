@@ -13,6 +13,8 @@ import { vec3, quat, mat4 } from "gl-matrix";
 import { GenericRenderable, SceneLighting } from './render';
 import { ObjectDirectory } from './scenes';
 import { GloverActorRenderer } from './actor';
+import { ParticlePool } from './particles';
+import { Collidable, projectOntoTerrain } from './shadows';
 
 import { GloverLevel } from './parsers';
 
@@ -41,7 +43,7 @@ export const enum EnemyType {
     bugle, // pink elephant balloon
     dennis, // dennis!
     chuck, // egg-juggling chicken
-    hubchicken1, // hub world swing chicken
+    hubchicken, // hub world swing chicken
     frankie2, // frankenstein (FF boss)
     kloset, // evil clown (CK boss)
     willy, // t-rex (PH boss)
@@ -384,71 +386,72 @@ const enemy_roll_modulation = [
 ]
 
 const enemy_beh = [
-  { "actorFlags": 0x60493d, "decel0x18":  0.94, "maxVelocity": 13, "mobility": 26, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.8, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.5, "u0x30": 0.4, "u0x34": 0.9, "u0x38": 0.1, "u0x3c": 10, "u0x40":  0.88, "u0x48": 9, "u0x4c": 4, "walkSpeed": 0.5 },  // 0
-  { "actorFlags": 0x40493d, "decel0x18":  0.97, "maxVelocity": 13, "mobility": 26, "spinDeceleration":  0.97, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 14, "u0x10": 0.1, "u0x14":  0.99, "u0x20": -1, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 14, "u0x4c": 4, "walkSpeed": 0.26455 },  // 1
-  { "actorFlags": 0x60493d, "decel0x18": 0.9, "maxVelocity": 13, "mobility": 26, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 7, "u0x10": 0.1, "u0x14":  0.99, "u0x20":  0.99, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.2000000476837158, "u0x30":  0.45, "u0x34": 1.2000000476837158, "u0x38":  0.12, "u0x3c": 8, "u0x40":  0.88, "u0x48": 6, "u0x4c": 4, "walkSpeed":  0.75 },  // 2
-  { "actorFlags": 0x404d3d, "decel0x18":  0.95, "maxVelocity": 18.200000762939453, "mobility": 36.400001525878906, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.6, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 6, "u0x4c": 4, "walkSpeed": 0.5 },  // 3
-  { "actorFlags": 0x60497d, "decel0x18": 0.7, "maxVelocity": 13, "mobility": 26, "spinDeceleration": 0.9, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 3, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.7, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.399999976158142, "u0x30": 0.3, "u0x34": 0.7, "u0x38":  0.01, "u0x3c": -30, "u0x40": 0.9, "u0x48": 25, "u0x4c": 4, "walkSpeed": 0.5 },  // 4
-  { "actorFlags": 0x60493d, "decel0x18":  0.94, "maxVelocity": 13, "mobility": 26, "spinDeceleration": 0.9, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 12, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.6, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1, "u0x30": 0.1, "u0x34": 0.7, "u0x38":  0.01, "u0x3c": 10, "u0x40":  0.88, "u0x48": 9, "u0x4c": 4, "walkSpeed": 0.5 },  // 5
-  { "actorFlags": 0x60493d, "decel0x18":  0.94, "maxVelocity": 13, "mobility": 36.400001525878906, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 9, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.6, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 9, "u0x4c": 4, "walkSpeed": 0.5 },  // 6
-  { "actorFlags": 0x840091c, "decel0x18": 0.6, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.08, "u0x2c": 2.5, "u0x30": 0.3, "u0x34": 3, "u0x38":  0.01, "u0x3c": -30, "u0x40":  0.95, "u0x48": 17, "u0x4c": 4, "walkSpeed": 1 },  // 7 // bovva.ndo
-  { "actorFlags": 0x840493d, "decel0x18":  0.92, "maxVelocity": 12, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 16, "u0x10": 0, "u0x14": 0, "u0x20": 0.8, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 1.2000000476837158 },  // 8 // cannon.ndo
-  { "actorFlags": 0x40091d, "decel0x18": 0.9, "maxVelocity": 20, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 10, "u0x4c": 4, "walkSpeed": 5 },  // 9 // samtex.ndo
-  { "actorFlags": 0x46091d, "decel0x18":  0.85, "maxVelocity": 18, "mobility": 30, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 1.2000000476837158 },  // 10 // mallet.ndo
-  { "actorFlags": 0x42081d, "decel0x18": 0.8, "maxVelocity": 4, "mobility": 10, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 1000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 15, "u0x4c": 4, "walkSpeed": 0.8 },  // 11 // generalw.ndo
-  { "actorFlags": 0x1066090d, "decel0x18":  0.85, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 999999, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 15, "u0x4c": 4, "walkSpeed": 0.2 },  // 12 // lionfish.ndo
-  { "actorFlags": 0x40091d, "decel0x18": 0.7, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10000, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.6, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 0.7 },  // 13 // chester.ndo
-  { "actorFlags": 0x42091d, "decel0x18": 0.9, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 200, "u0x10": 0.2, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 5 },  // 14 // keg.ndo
-  { "actorFlags": 0x46081d, "decel0x18": 0.3, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 5, "u0x4c": 4, "walkSpeed": 1.5 },  // 15 // reggie.ndo
-  { "actorFlags": 0x46091d, "decel0x18":  0.85, "maxVelocity": 1.2999999523162842, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 14, "u0x4c": 4, "walkSpeed": 1 },  // 16 // swish.ndo
-  { "actorFlags": 0x52080c, "decel0x18": 0.3, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 10, "u0x4c": 4, "walkSpeed": 5 },  // 17 // thrice.ndo
-  { "actorFlags": 0x400104, "decel0x18": 0.9, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.05, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 0.1 },  // 18 // robes.ndo
-  { "actorFlags": 0x42091d, "decel0x18": 0.8, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 8, "u0x4c": 4, "walkSpeed": 1 },  // 19 // fumble.ndo
-  { "actorFlags": 0x52011d, "decel0x18": 0.6, "maxVelocity": 1.7999999523162842, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 500, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 8 },  // 20 // mike.ndo
-  { "actorFlags": 0x46091d, "decel0x18": 0.7, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 15, "u0x4c": 4, "walkSpeed": 2.299999952316284 },  // 21 // raptor.ndo
-  { "actorFlags": 0x40090c, "decel0x18": 0.1, "maxVelocity": 20, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 2, "spinTweenY": 2, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.9, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 10, "u0x4c": 4, "walkSpeed": 16 },  // 22 // crumpet.ndo
-  { "actorFlags": 0x8040091d, "decel0x18":  0.85, "maxVelocity": 7, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 1000, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 30, "u0x4c": 4, "walkSpeed": 1 },  // 23 // tracey.ndo
-  { "actorFlags": 0x400d0c, "decel0x18": 0.5, "maxVelocity": 6, "mobility": 10, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.3, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 14, "u0x4c": 4, "walkSpeed": 1 },  // 24 // yoofow.ndo
-  { "actorFlags": 0x400d1c, "decel0x18": 0.8, "maxVelocity": 5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 100, "u0x10": 0, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 15, "u0x4c": 4, "walkSpeed": 1 },  // 25 // opec.ndo
-  { "actorFlags": 0x400d1d, "decel0x18": 0.8, "maxVelocity": 12, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 9, "u0x4c": 4, "walkSpeed": 1 },  // 26 // cymon.ndo
-  { "actorFlags": 0x40091d, "decel0x18": 0.8, "maxVelocity": 2, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 1 },  // 27 // sucker.ndo
-  { "actorFlags": 0x40491c, "decel0x18":  0.93, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20":  0.99, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0.3, "u0x34": 3, "u0x38":  0.01, "u0x3c": -30, "u0x40":  0.95, "u0x48": 27, "u0x4c": 4, "walkSpeed":  0.08 },  // 28 // bugle.ndo
-  { "actorFlags": 0xa40091d, "decel0x18": 0.9, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20": 0.4, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0.3, "u0x34": 1, "u0x38":  0.02, "u0x3c": 10, "u0x40":  0.88, "u0x48": 16, "u0x4c": 4, "walkSpeed": 5 },  // 29 // dennis.ndo
-  { "actorFlags": 0x40091d, "decel0x18": 0.6, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.2, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 0.5 },  // 30 // chuck.ndo
-  { "actorFlags": 0x10c, "decel0x18": -3, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 999999, "u0x10": 0.2, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 12, "u0x4c": 4, "walkSpeed": 0.5 },  // 31 // hubchicken1.ndo
-  { "actorFlags": 0x2001d, "decel0x18": 0.9, "maxVelocity": 1.2000000476837158, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.05, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 15, "u0x4c": 4, "walkSpeed": 2.200000047683716 },  // 32 // frankie2.ndo
-  { "actorFlags": 0x2011d, "decel0x18": 0.7, "maxVelocity": 1.600000023841858, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.08, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 45, "u0x4c": 4, "walkSpeed": 0.9 },  // 33 // kloset.ndo
-  { "actorFlags": 0x8091d, "decel0x18": 0.7, "maxVelocity": 2, "mobility": 40, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 75, "u0x4c": 4, "walkSpeed": 4.599999904632568 },  // 34 // willy.ndo
-  { "actorFlags": 0x8002011d, "decel0x18": 0.8, "maxVelocity": 4, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.07, "u0x2c": 1, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 38, "u0x4c": 4, "walkSpeed": 0.8 },  // 35 // joff.ndo
-  { "actorFlags": 0x6000c, "decel0x18": 0.9, "maxVelocity": 1.7999999523162842, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.08, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 13, "u0x4c": 4, "walkSpeed": 1.7999999523162842 },  // 36 // cancer.ndo
-  { "actorFlags": 0xc, "decel0x18": 0.9, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.15, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 25, "u0x4c": 4, "walkSpeed": 1 },  // 37 // kirk.ndo
-  { "actorFlags": 0xc, "decel0x18": -3, "maxVelocity": 3.4000000953674316, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.07, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 250, "u0x4c": 4, "walkSpeed": 3.4000000953674316 },  // 38 // robot.ndo
-  { "actorFlags": 0xc, "decel0x18": 0.8, "maxVelocity": 15, "mobility": 40, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.12, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 250, "u0x4c": 4, "walkSpeed": 5 },  // 39 // evilrobot.ndo
-  { "actorFlags": 0x2011d, "decel0x18": 0.8, "maxVelocity": 3, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.11, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 32, "u0x4c": 4, "walkSpeed":  0.95 },  // 40 // spank.ndo
-  { "actorFlags": 0x11d, "decel0x18": 0.8, "maxVelocity": 2, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 20, "u0x4c": 4, "walkSpeed":  0.95 },  // 41 // babyspk2.ndo
-  { "actorFlags": 0x104, "decel0x18": 0.5, "maxVelocity": 20, "mobility": 20, "spinDeceleration": 0.995, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.3, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 18.799999237060547, "u0x4c": 4, "walkSpeed": 1 },  // 42 // evilglove.ndo
-  { "actorFlags": 0x6010c, "decel0x18": 0.5, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.3, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 7, "u0x4c": 4, "walkSpeed": 1 },  // 43 // dibber.ndo
-  { "actorFlags": 0x4, "decel0x18": 0.6, "maxVelocity": 8, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.6, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 6, "u0x4c": 4, "walkSpeed": 4 },  // 44 // brundle.ndo
-  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 0.3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.02, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 5, "u0x4c": 4, "walkSpeed": 0.1 },  // 45 // malcom.ndo
-  { "actorFlags": 0x4, "decel0x18": 0.9, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.02, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 6, "u0x4c": 4, "walkSpeed": 0.2 },  // 46 // spotty.ndo
-  { "actorFlags": 0x4, "decel0x18": 0.9, "maxVelocity": 2.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.3, "u0x27": 0, "maxRotationSpeed":  0.04, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 6, "u0x4c": 4, "walkSpeed": 0.2 },  // 47 // gordon.ndo
-  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 3, "u0x4c": 4, "walkSpeed": 3 },  // 48 // sidney.ndo
-  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 3, "u0x4c": 4, "walkSpeed": 3 },  // 49 // weevil.ndo
-  { "actorFlags": 0x15, "decel0x18": 0.5, "maxVelocity": 0.4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.05, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 1.5, "u0x4c": 4, "walkSpeed": 0.2 },  // 50 // chopstik.ndo
-  { "actorFlags": 0x104, "decel0x18": 0.8, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 8, "u0x4c": 4, "walkSpeed": 1 },  // 51 // butterfly.ndo
-  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 0.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 3, "u0x4c": 4, "walkSpeed":  0.05 },  // 52 // spider.ndo
-  { "actorFlags": 0x4, "decel0x18": 0.8, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 8, "u0x4c": 4, "walkSpeed": 1 },  // 53 // bat.ndo
-  { "actorFlags": 0x115, "decel0x18": 0.9, "maxVelocity": 0.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 5, "u0x4c": 4, "walkSpeed":  0.05 },  // 54 // frog.ndo
-  { "actorFlags": 0x4, "decel0x18": -1, "maxVelocity": 10, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 8, "u0x4c": 4, "walkSpeed": 10 },  // 55 // dragfly.ndo
-  { "actorFlags": 0x15, "decel0x18":  0.85, "maxVelocity": 5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 3, "u0x4c": 4, "walkSpeed": 0.8 },  // 56 // boxthing.ndo
-  { "actorFlags": 0x15, "decel0x18":  0.85, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 3, "u0x4c": 4, "walkSpeed": 0.8 },  // 57 // bug.ndo
-  { "actorFlags": 0x11d, "decel0x18": 0.9, "maxVelocity": 0.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "u0x48": 7, "u0x4c": 4, "walkSpeed":  0.05 }, // 58 // nmefrog.ndo
+  { "actorFlags": 0x60493d, "decel0x18":  0.94, "maxVelocity": 13, "mobility": 26, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.8, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.5, "u0x30": 0.4, "u0x34": 0.9, "u0x38": 0.1, "u0x3c": 10, "u0x40":  0.88, "collisionRadius": 9, "u0x4c": 4, "walkSpeed": 0.5 },  // 0
+  { "actorFlags": 0x40493d, "decel0x18":  0.97, "maxVelocity": 13, "mobility": 26, "spinDeceleration":  0.97, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 14, "u0x10": 0.1, "u0x14":  0.99, "u0x20": -1, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 14, "u0x4c": 4, "walkSpeed": 0.26455 },  // 1
+  { "actorFlags": 0x60493d, "decel0x18": 0.9, "maxVelocity": 13, "mobility": 26, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 7, "u0x10": 0.1, "u0x14":  0.99, "u0x20":  0.99, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.2000000476837158, "u0x30":  0.45, "u0x34": 1.2000000476837158, "u0x38":  0.12, "u0x3c": 8, "u0x40":  0.88, "collisionRadius": 6, "u0x4c": 4, "walkSpeed":  0.75 },  // 2
+  { "actorFlags": 0x404d3d, "decel0x18":  0.95, "maxVelocity": 18.200000762939453, "mobility": 36.400001525878906, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.6, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 6, "u0x4c": 4, "walkSpeed": 0.5 },  // 3
+  { "actorFlags": 0x60497d, "decel0x18": 0.7, "maxVelocity": 13, "mobility": 26, "spinDeceleration": 0.9, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 3, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.7, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.399999976158142, "u0x30": 0.3, "u0x34": 0.7, "u0x38":  0.01, "u0x3c": -30, "u0x40": 0.9, "collisionRadius": 25, "u0x4c": 4, "walkSpeed": 0.5 },  // 4
+  { "actorFlags": 0x60493d, "decel0x18":  0.94, "maxVelocity": 13, "mobility": 26, "spinDeceleration": 0.9, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 12, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.6, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1, "u0x30": 0.1, "u0x34": 0.7, "u0x38":  0.01, "u0x3c": 10, "u0x40":  0.88, "collisionRadius": 9, "u0x4c": 4, "walkSpeed": 0.5 },  // 5
+  { "actorFlags": 0x60493d, "decel0x18":  0.94, "maxVelocity": 13, "mobility": 36.400001525878906, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 0, "spinTweenZ": 0, "u0x0": 9, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.6, "u0x27": 0, "maxRotationSpeed": 1, "u0x2c": 1.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 9, "u0x4c": 4, "walkSpeed": 0.5 },  // 6
+  { "actorFlags": 0x840091c, "decel0x18": 0.6, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.08, "u0x2c": 2.5, "u0x30": 0.3, "u0x34": 3, "u0x38":  0.01, "u0x3c": -30, "u0x40":  0.95, "collisionRadius": 17, "u0x4c": 4, "walkSpeed": 1 },  // 7 // bovva.ndo
+  { "actorFlags": 0x840493d, "decel0x18":  0.92, "maxVelocity": 12, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 16, "u0x10": 0, "u0x14": 0, "u0x20": 0.8, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 1.2000000476837158 },  // 8 // cannon.ndo
+  { "actorFlags": 0x40091d, "decel0x18": 0.9, "maxVelocity": 20, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 10, "u0x4c": 4, "walkSpeed": 5 },  // 9 // samtex.ndo
+  { "actorFlags": 0x46091d, "decel0x18":  0.85, "maxVelocity": 18, "mobility": 30, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 1.2000000476837158 },  // 10 // mallet.ndo
+  { "actorFlags": 0x42081d, "decel0x18": 0.8, "maxVelocity": 4, "mobility": 10, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 1000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 15, "u0x4c": 4, "walkSpeed": 0.8 },  // 11 // generalw.ndo
+  { "actorFlags": 0x1066090d, "decel0x18":  0.85, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 999999, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 15, "u0x4c": 4, "walkSpeed": 0.2 },  // 12 // lionfish.ndo
+  { "actorFlags": 0x40091d, "decel0x18": 0.7, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10000, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.6, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 0.7 },  // 13 // chester.ndo
+  { "actorFlags": 0x42091d, "decel0x18": 0.9, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 200, "u0x10": 0.2, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 5 },  // 14 // keg.ndo
+  { "actorFlags": 0x46081d, "decel0x18": 0.3, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.1, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 5, "u0x4c": 4, "walkSpeed": 1.5 },  // 15 // reggie.ndo
+  { "actorFlags": 0x46091d, "decel0x18":  0.85, "maxVelocity": 1.2999999523162842, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 14, "u0x4c": 4, "walkSpeed": 1 },  // 16 // swish.ndo
+  { "actorFlags": 0x52080c, "decel0x18": 0.3, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 10, "u0x4c": 4, "walkSpeed": 5 },  // 17 // thrice.ndo
+  { "actorFlags": 0x400104, "decel0x18": 0.9, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.05, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 0.1 },  // 18 // robes.ndo
+  { "actorFlags": 0x42091d, "decel0x18": 0.8, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 8, "u0x4c": 4, "walkSpeed": 1 },  // 19 // fumble.ndo
+  { "actorFlags": 0x52011d, "decel0x18": 0.6, "maxVelocity": 1.7999999523162842, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 500, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 8 },  // 20 // mike.ndo
+  { "actorFlags": 0x46091d, "decel0x18": 0.7, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 15, "u0x4c": 4, "walkSpeed": 2.299999952316284 },  // 21 // raptor.ndo
+  { "actorFlags": 0x40090c, "decel0x18": 0.1, "maxVelocity": 20, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 2, "spinTweenY": 2, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.9, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 10, "u0x4c": 4, "walkSpeed": 16 },  // 22 // crumpet.ndo
+  { "actorFlags": 0x8040091d, "decel0x18":  0.85, "maxVelocity": 7, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 1000, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 30, "u0x4c": 4, "walkSpeed": 1 },  // 23 // tracey.ndo
+  { "actorFlags": 0x400d0c, "decel0x18": 0.5, "maxVelocity": 6, "mobility": 10, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.3, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 14, "u0x4c": 4, "walkSpeed": 1 },  // 24 // yoofow.ndo
+  { "actorFlags": 0x400d1c, "decel0x18": 0.8, "maxVelocity": 5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 100, "u0x10": 0, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 15, "u0x4c": 4, "walkSpeed": 1 },  // 25 // opec.ndo
+  { "actorFlags": 0x400d1d, "decel0x18": 0.8, "maxVelocity": 12, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.25, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 9, "u0x4c": 4, "walkSpeed": 1 },  // 26 // cymon.ndo
+  { "actorFlags": 0x40091d, "decel0x18": 0.8, "maxVelocity": 2, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.5, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 1 },  // 27 // sucker.ndo
+  { "actorFlags": 0x40491c, "decel0x18":  0.93, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20":  0.99, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0.3, "u0x34": 3, "u0x38":  0.01, "u0x3c": -30, "u0x40":  0.95, "collisionRadius": 27, "u0x4c": 4, "walkSpeed":  0.08 },  // 28 // bugle.ndo
+  { "actorFlags": 0xa40091d, "decel0x18": 0.9, "maxVelocity": 4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 100, "u0x10": 0, "u0x14": 0, "u0x20": 0.4, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0.3, "u0x34": 1, "u0x38":  0.02, "u0x3c": 10, "u0x40":  0.88, "collisionRadius": 16, "u0x4c": 4, "walkSpeed": 5 },  // 29 // dennis.ndo
+  { "actorFlags": 0x40091d, "decel0x18": 0.6, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0.2, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 0.5 },  // 30 // chuck.ndo
+  { "actorFlags": 0x10c, "decel0x18": -3, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 999999, "u0x10": 0.2, "u0x14":  0.99, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 12, "u0x4c": 4, "walkSpeed": 0.5 },  // 31 // hubchicken1.ndo
+  { "actorFlags": 0x2001d, "decel0x18": 0.9, "maxVelocity": 1.2000000476837158, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.05, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 15, "u0x4c": 4, "walkSpeed": 2.200000047683716 },  // 32 // frankie2.ndo
+  { "actorFlags": 0x2011d, "decel0x18": 0.7, "maxVelocity": 1.600000023841858, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.08, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 45, "u0x4c": 4, "walkSpeed": 0.9 },  // 33 // kloset.ndo
+  { "actorFlags": 0x8091d, "decel0x18": 0.7, "maxVelocity": 2, "mobility": 40, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 75, "u0x4c": 4, "walkSpeed": 4.599999904632568 },  // 34 // willy.ndo
+  { "actorFlags": 0x8002011d, "decel0x18": 0.8, "maxVelocity": 4, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.07, "u0x2c": 1, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 38, "u0x4c": 4, "walkSpeed": 0.8 },  // 35 // joff.ndo
+  { "actorFlags": 0x6000c, "decel0x18": 0.9, "maxVelocity": 1.7999999523162842, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.08, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 13, "u0x4c": 4, "walkSpeed": 1.7999999523162842 },  // 36 // cancer.ndo
+  { "actorFlags": 0xc, "decel0x18": 0.9, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 1, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.15, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 25, "u0x4c": 4, "walkSpeed": 1 },  // 37 // kirk.ndo
+  { "actorFlags": 0xc, "decel0x18": -3, "maxVelocity": 3.4000000953674316, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.07, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 250, "u0x4c": 4, "walkSpeed": 3.4000000953674316 },  // 38 // robot.ndo
+  { "actorFlags": 0xc, "decel0x18": 0.8, "maxVelocity": 15, "mobility": 40, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.12, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 250, "u0x4c": 4, "walkSpeed": 5 },  // 39 // evilrobot.ndo
+  { "actorFlags": 0x2011d, "decel0x18": 0.8, "maxVelocity": 3, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed":  0.11, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 32, "u0x4c": 4, "walkSpeed":  0.95 },  // 40 // spank.ndo
+  { "actorFlags": 0x11d, "decel0x18": 0.8, "maxVelocity": 2, "mobility": 20, "spinDeceleration":  0.95, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 20, "u0x4c": 4, "walkSpeed":  0.95 },  // 41 // babyspk2.ndo
+  { "actorFlags": 0x104, "decel0x18": 0.5, "maxVelocity": 20, "mobility": 20, "spinDeceleration": 0.995, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.3, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 18.799999237060547, "u0x4c": 4, "walkSpeed": 1 },  // 42 // evilglove.ndo
+  { "actorFlags": 0x6010c, "decel0x18": 0.5, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10000, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.3, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 7, "u0x4c": 4, "walkSpeed": 1 },  // 43 // dibber.ndo
+  { "actorFlags": 0x4, "decel0x18": 0.6, "maxVelocity": 8, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.6, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 6, "u0x4c": 4, "walkSpeed": 4 },  // 44 // brundle.ndo
+  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 0.3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.02, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 5, "u0x4c": 4, "walkSpeed": 0.1 },  // 45 // malcom.ndo
+  { "actorFlags": 0x4, "decel0x18": 0.9, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.02, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 6, "u0x4c": 4, "walkSpeed": 0.2 },  // 46 // spotty.ndo
+  { "actorFlags": 0x4, "decel0x18": 0.9, "maxVelocity": 2.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.3, "u0x27": 0, "maxRotationSpeed":  0.04, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 6, "u0x4c": 4, "walkSpeed": 0.2 },  // 47 // gordon.ndo
+  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 3, "u0x4c": 4, "walkSpeed": 3 },  // 48 // sidney.ndo
+  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 6, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 3, "u0x4c": 4, "walkSpeed": 3 },  // 49 // weevil.ndo
+  { "actorFlags": 0x15, "decel0x18": 0.5, "maxVelocity": 0.4, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed":  0.05, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 1.5, "u0x4c": 4, "walkSpeed": 0.2 },  // 50 // chopstik.ndo
+  { "actorFlags": 0x104, "decel0x18": 0.8, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 8, "u0x4c": 4, "walkSpeed": 1 },  // 51 // butterfly.ndo
+  { "actorFlags": 0x15, "decel0x18": 0.8, "maxVelocity": 0.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 3, "u0x4c": 4, "walkSpeed":  0.05 },  // 52 // spider.ndo
+  { "actorFlags": 0x4, "decel0x18": 0.8, "maxVelocity": 3, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 1, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 8, "u0x4c": 4, "walkSpeed": 1 },  // 53 // bat.ndo
+  { "actorFlags": 0x115, "decel0x18": 0.9, "maxVelocity": 0.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 5, "u0x4c": 4, "walkSpeed":  0.05 },  // 54 // frog.ndo
+  { "actorFlags": 0x4, "decel0x18": -1, "maxVelocity": 10, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 2, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 8, "u0x4c": 4, "walkSpeed": 10 },  // 55 // dragfly.ndo
+  { "actorFlags": 0x15, "decel0x18":  0.85, "maxVelocity": 5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 3, "u0x4c": 4, "walkSpeed": 0.8 },  // 56 // boxthing.ndo
+  { "actorFlags": 0x15, "decel0x18":  0.85, "maxVelocity": 1, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0.1, "u0x27": 0, "maxRotationSpeed": 0.4, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 3, "u0x4c": 4, "walkSpeed": 0.8 },  // 57 // bug.ndo
+  { "actorFlags": 0x11d, "decel0x18": 0.9, "maxVelocity": 0.5, "mobility": 20, "spinDeceleration": 0.8, "spinTweenX": 0, "spinTweenY": 1, "spinTweenZ": 0, "u0x0": 10, "u0x10": 0, "u0x14": 0, "u0x20": 0, "u0x27": 0, "maxRotationSpeed": 0.1, "u0x2c": 2.5, "u0x30": 0, "u0x34": 0, "u0x38": 0, "u0x3c": 0, "u0x40": 0, "collisionRadius": 7, "u0x4c": 4, "walkSpeed":  0.05 }, // 58 // nmefrog.ndo
 ]
 
 const ExecutionCondition = GloverLevel.EnemyInstruction.ExecutionConditionType;
 type Instruction = GloverLevel.EnemyInstruction;
 
 const scratchVec3 = vec3.create();
+const scratchVec3_2 = vec3.create();
 
 export class GloverEnemy implements GenericRenderable {
     private actor: GloverActorRenderer;
@@ -457,6 +460,10 @@ export class GloverEnemy implements GenericRenderable {
     private frameCount: number = 0;
 
     public visible: boolean = true;
+
+    public terrain: readonly Collidable[] = [];
+
+    private particles: ParticlePool | null = null;
 
     // Physics
 
@@ -475,6 +482,9 @@ export class GloverEnemy implements GenericRenderable {
 
     private flying = false;
 
+    private minCollisionDistance: number;
+    private maxCollisionDistance: number;
+
     // AI
 
     private normalInstructions: Instruction[] = [];
@@ -482,23 +492,42 @@ export class GloverEnemy implements GenericRenderable {
     private curInstr: Instruction | null = null;
     private curInstrExecCount: number = 0;
     private curInstrLifetime: number = -1;
+    private instrCooldownCounter: number = 0;
 
     private dstPos: vec3 = vec3.create();
     private dstEulers: vec3 = vec3.create();
 
-
-    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private objects: ObjectDirectory, private sceneLights: SceneLighting, private enemyType: EnemyType, position: vec3, y_rotation: number) {
+    constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private objects: ObjectDirectory, private sceneLights: SceneLighting, private enemyType: EnemyType, position: vec3, y_rotation: number, private level_id: string) {
         vec3.copy(this.lastPosition, position);
         vec3.copy(this.nextPosition, position);
         this.lastEulers[1] = y_rotation;
         this.nextEulers[1] = y_rotation;
+        this.dstEulers[1] = y_rotation;
 
         this.flying = (enemy_beh[enemyType].actorFlags & 1) === 0;
 
         const scale = enemy_scales[enemyType];
         vec3.set(this.scale, scale, scale, scale);
 
-        const objId = enemy_objects[enemyType];
+        let objId = enemy_objects[enemyType];
+
+        if (this.enemyType === EnemyType.hubchicken) {
+            switch(level_id) {
+                case '00':
+                case '01':
+                case '02':
+                    objId = 0x11CD1E6C // hubchicken3.ndo
+                    break;
+                case '03':
+                case '04':
+                    objId = 0x58C079E1 // hubchicken2.ndo
+                    break;
+                default:
+                    objId = 0x83D7D176; // hubchicken1.ndo
+                    break;
+            }
+        }
+
         const objRoot = objects.get(objId);
         if (objRoot === undefined) {
             throw `Object 0x${objId.toString(16)} is not loaded!`;
@@ -506,6 +535,23 @@ export class GloverEnemy implements GenericRenderable {
         this.actor = new GloverActorRenderer(device, cache, textureHolder, objRoot, sceneLights);
         this.actor.playSkeletalAnimation(5, true, false);
         this.updateActorModelview();
+
+        // TODO: per-enemy tweaks
+        this.minCollisionDistance = 1.0;
+        this.maxCollisionDistance = enemy_beh[this.enemyType].collisionRadius;
+
+        switch (enemyType) {
+            case EnemyType.robes: {
+                this.particles = new ParticlePool(device, cache, textureHolder, 0xc);
+                break;
+            }
+            case EnemyType.sucker: {
+                this.particles = new ParticlePool(device, cache, textureHolder, 1);
+                break;
+            }
+
+            // TODO: mike, raptor, opec, and then audit from kloset onward
+        }
     }
 
     private instructionConditionsMet(instr: Instruction) {
@@ -550,6 +596,10 @@ export class GloverEnemy implements GenericRenderable {
 
     public destroy(device: GfxDevice): void {
         this.actor.destroy(device);
+
+        if (this.particles !== null) {
+            this.particles.destroy(device);
+        }
     }
 
     private throttleVelocity(speedCap: number) {
@@ -571,8 +621,76 @@ export class GloverEnemy implements GenericRenderable {
         }
     }
 
+    private groundCollisionCheck(): boolean {
+        assert(this.curInstr !== null);
+        if (this.instrCooldownCounter === 0) {
+            if ((enemy_init_flags[this.enemyType] & 4) === 0) {
+                let collided: boolean = false;
+
+                vec3.scale(scratchVec3, this.velocity, 20);
+                scratchVec3[1] = 0;
+                vec3.normalize(scratchVec3, scratchVec3);
+                vec3.add(scratchVec3, scratchVec3, this.nextPosition);
+                const groundCollision = projectOntoTerrain(scratchVec3, null, this.terrain);
+                if (groundCollision !== null) {
+                    const collisionDistance = vec3.distance(groundCollision.position, this.nextPosition);
+                    if (!this.flying &&
+                        collisionDistance >= this.minCollisionDistance &&
+                        collisionDistance <= this.maxCollisionDistance)
+                    {
+                        collided = true;
+                        vec3.zero(this.velocity);
+                    }
+                }
+
+                // TODO:
+                //     iVar5 = 0;
+                //     do {
+                //       pCVar2 = ((enemy->actor).collisionCache)->collisionSurfaces[iVar5];
+                //       if ((pCVar2 != (CollisionSurface *)0x0) &&
+                //          ((double)*(float *)&pCVar2->norm <
+                //           (double)CONCAT44(in_register_00001020,D_0_DOT_8_a0f8._4_4_))) {
+                //         EVar1 = (enemy->actor).type;
+                //         (enemy->actor).vel.z = 0.0;
+                //         (enemy->actor).vel.y = 0.0;
+                //         (enemy->actor).vel.x = 0.0;
+                //         if (EVar1 == NME_BUGLE) {
+                //           next_pos.x = (pCVar2->norm).x;
+                //           next_pos.x = next_pos.x + next_pos.x;
+                //           next_pos.y = *(float *)&pCVar2->norm + *(float *)&pCVar2->norm;
+                //           next_pos.z = *(float *)&pCVar2->norm + *(float *)&pCVar2->norm;
+                //           (enemy->actor).vel.x = next_pos.x;
+                //           (enemy->actor).vel.y = next_pos.y;
+                //           (enemy->actor).vel.z = next_pos.z;
+                //         }
+                //         else {
+                //           addXZ(&(enemy->actor).vel,&pCVar2->norm);
+                //         }
+                //         collided = true;
+                //         break;
+                //       }
+                //       iVar5 += 1;
+                //     } while (iVar5 < 4);
+                if (collided) {
+                    if ((this.curInstr.flags & 0x1000) === 0) {
+                        const thetaDist = angularDistance(this.dstEulers[1], this.nextEulers[1]);
+                        if (thetaDist < Math.PI / 2) {
+                            this.dstEulers[1] += Math.PI;
+                        }
+                        this.dstEulers[1] = radianModulo(this.dstEulers[1]);
+                    }
+                    this.instrCooldownCounter = 0x1e;
+                }
+                return collided;
+            }
+        }
+        return false;
+    }
+
     private flyTo(dst: vec3, velMagnitude: number, instrFlags: number): boolean {
-        // TODO: enemyCollisionCheck()
+        if (this.groundCollisionCheck()) {
+            return true;
+        }
         // TODO: enemy-specific edge cases (dibber, bugle, robes)
         const distRemaining = vec3.dist(this.nextPosition, dst);
         if (distRemaining > velMagnitude) {
@@ -638,92 +756,57 @@ export class GloverEnemy implements GenericRenderable {
 
     private walkTo(dst: vec3, velMagnitude: number, instrFlags: number): boolean {
 
-        //   // TODO: enemyCollisionCheck()
+        this.dstEulers[2] = 0;
 
-        //   // uVar6 = (undefined4)((ulonglong)in_f2 >> 0x20);
-        //   // (enemy->actor).dstEulers.z = 0.0;
-        //   // uVar2 = 1;
-        //   //   a = &(enemy->actor).pos;
-        //   //   fVar5 = distXZ(a,dst);
-        //   //   uVar2 = 1;
-        
-        // const journeyVec = scratchVec3;
-        // vec3.sub(journeyVec, this.nextPosition, dst);
+        if (this.groundCollisionCheck()) {
+            return true;
+        }
 
-        // let distXZ = Math.sqrt(journeyVec[0]*journeyVec[0] + journeyVec[2]*journeyVec[2]);
-        // if (distXZ < velMagnitude) {
-        //     this.velocity[0] *= 0.5;
-        //     this.velocity[2] *= 0.5;
-        //     return true;
-        // } else {
+        const journeyVec = scratchVec3;
+        vec3.sub(journeyVec, this.nextPosition, dst);
 
-        //     if ((instrFlags & 0x1) != 0) {
-        //         journeyVec[0] /= distXZ;
-        //         journeyVec[2] /= distXZ;
-        //         journeyVec[0] *= enemy_beh[this.enemyType].walkSpeed;
-        //         journeyVec[2] *= enemy_beh[this.enemyType].walkSpeed;
-        //         if ((instrFlags & 0x1000) != 0) {
-        //             this.dstEulers[1] = radianModulo(Math.atan2(journeyVec[0], journeyVec[2]) + Math.PI);
-        //         }
-        //         this.setXZVelocityBasedOnRotation(enemy_beh[this.enemyType].walkSpeed, enemy_beh[this.enemyType].maxVelocity);
-        //     }
+        let distXZ = Math.sqrt(journeyVec[0]*journeyVec[0] + journeyVec[2]*journeyVec[2]);
+        if (distXZ < velMagnitude) {
+            this.velocity[0] *= 0.5;
+            this.velocity[2] *= 0.5;
+            return true;
+        }
 
-        //     if ((instrFlags & 0x2) != 0) {
-        //         if ((enemy_beh[this.enemyType].actorFlags & 0x1000000) === 0) {
-        //             const xz_speed = Math.sqrt(this.velocity[0]*this.velocity[0] + this.velocity[2]*this.velocity[2]);
-        //             if (xz_speed >= enemy_beh[this.enemyType].maxVelocity) {
-        //                 return false;
-        //             }
-                    
-        //         }
+        if ((instrFlags & 0x1) != 0) {
+            journeyVec[0] /= distXZ;
+            journeyVec[2] /= distXZ;
+            journeyVec[0] *= enemy_beh[this.enemyType].walkSpeed;
+            journeyVec[2] *= enemy_beh[this.enemyType].walkSpeed;
+            // TODO: double check this block, it seems to not be firing for sharkle even though he needs it??
+            if ((instrFlags & 0x1000) === 0) {
+                this.dstEulers[1] = radianModulo(Math.atan2(journeyVec[0], journeyVec[2]) + Math.PI);
+            }
+            this.setXZVelocityBasedOnRotation(enemy_beh[this.enemyType].walkSpeed, enemy_beh[this.enemyType].maxVelocity);
+        }
 
-        //     }
-        //   //     if ((flags & INSTR_FLAG_MODULATE_ACCELERATION) != 0) {
-        //   //       if (((enemy->actor).flags & ACTOR_DONT_THROTTLE_VELOCITY) == 0) {
-        //   //         fVar9 = (enemy->actor).vel.x;
-        //   //         fVar5 = (enemy->actor).vel.z;
-        //   //         fVar9 = fVar9 * fVar9 + fVar5 * fVar5;
-        //   //         fVar5 = SQRT(fVar9);
-        //   //         if (false) {
-        //   //           dVar4 = sqrt((double)CONCAT44(in_register_00001060,fVar9));
-        //   //           fVar5 = SUB84(dVar4,0);
-        //   //         }
-        //   //         if (((enemy->actor).act_beh)->max_velocity <= fVar5) {
-        //   //           return 0;
-        //   //         }
-        //   //       }
-        //   //       aPStack48[0].x = (enemy->actor).pos.x - dst->x;
-        //   //       aPStack48[0].z = (enemy->actor).pos.z - dst->z;
-        //   //       aPStack48[0].y = 0.0;
-        //   //       normalizeVec3(aPStack48);
-        //   //       aPStack48[0].x = aPStack48[0].x * ((enemy->actor).act_beh)->walk_speed;
-        //   //       aPStack48[0].y = aPStack48[0].y * ((enemy->actor).act_beh)->walk_speed;
-        //   //       aPStack48[0].z = aPStack48[0].z * ((enemy->actor).act_beh)->walk_speed;
-        //   //       (enemy->actor).vel.x = (enemy->actor).vel.x - aPStack48[0].x;
-        //   //       uVar6 = 0;
-        //   //       (enemy->actor).vel.z = (enemy->actor).vel.z - aPStack48[0].z;
-        //   //     }
+        if ((instrFlags & 0x2) != 0) {
+            if ((enemy_beh[this.enemyType].actorFlags & 0x1000000) === 0) {
+                const xz_speed = Math.sqrt(this.velocity[0]*this.velocity[0] + this.velocity[2]*this.velocity[2]);
+                if (xz_speed >= enemy_beh[this.enemyType].maxVelocity) {
+                    return false;
+                }
+                vec3.sub(journeyVec, this.nextPosition, dst);
+                journeyVec[1] = 0;
+                vec3.normalize(journeyVec, journeyVec);
+                vec3.scale(journeyVec, journeyVec, enemy_beh[this.enemyType].walkSpeed);
+                this.velocity[0] -= journeyVec[0];
+                this.velocity[2] -= journeyVec[2];
+            }
+        }
 
-        // }
-
-
-        //   //     if ((flags & INSTR_FLAG_MOVEMENT_ROLL_INTO_TURN) != 0) {
-        //   //       fVar9 = subtractAngles((enemy->actor).dstEulers.y,(enemy->actor).eulers.y);
-        //   //       fVar9 = fVar9 * enemy->roll_modulation;
-        //   //       fVar5 = fVar9;
-        //   //       if (fVar9 <= 0.0) {
-        //   //         fVar5 = -fVar9;
-        //   //       }
-        //   //       if ((double)CONCAT44(uVar6,D_0_DOT_08_a188._4_4_) < (double)fVar5) {
-        //   //         (enemy->actor).dstEulers.z = fVar9;
-        //   //       }
-        //   //       else {
-        //   //         (enemy->actor).dstEulers.z = 0.0;
-        //   //       }
-        //   //       uVar2 = 0;
-        //   //     }
-        //   //   }
-
+        if ((instrFlags & 0x2000) != 0) {
+            const theta_diff = subtractAngles(this.dstEulers[1], this.nextEulers[1]) * enemy_roll_modulation[this.enemyType];
+            if (Math.abs(theta_diff) > 0.08) {
+                this.dstEulers[2] = theta_diff;
+            } else {
+                this.dstEulers[2] = 0;
+            }
+        }
         return false;
     }
 
@@ -787,6 +870,11 @@ export class GloverEnemy implements GenericRenderable {
 
     private advanceAI() {
         let advanceInstr: boolean = false;
+
+        if (this.instrCooldownCounter > 0) {
+            this.instrCooldownCounter -= 1;
+            return;
+        }
 
         if (this.curInstr !== null) {
             const instrParams = this.curInstr.params!;
@@ -913,15 +1001,50 @@ export class GloverEnemy implements GenericRenderable {
         }
 
         // TODO: need floor collision, first:
-        // if ((beh.actorFlags & 1) !== 0) {
-        //     const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
-        //     const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
-        //     this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
-        // }
+        if ((beh.actorFlags & 1) !== 0) {
+            const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
+            const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+            this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
+        }
 
 
     }
 
+    private advancePerEnemyCode() {
+        switch (this.enemyType) {
+            case EnemyType.robes: {
+                // TODO:
+                // actor.alpha = Math.sin(this.frameCount/8.0);
+                const ether_spawn_period = (this.level_id === '1e') ? 3 : 1;
+                const ether_lifetime = (this.level_id === '1e') ? 0x28 : 1;
+                const ether_alpha_center = (this.level_id === '1e') ? 0x3c : 0x78;
+                const ether_alpha_spread = (this.level_id === '1e') ? 0xa : 0x1e;
+                if ((this.frameCount % ether_spawn_period) === 0) {
+                    const particle = this.particles!.spawn(this.nextPosition, [0,0,0]);
+                    particle.flipbook.setPrimColor(0xbf, 0xff, 0x14);
+                    particle.flipbook.startAlpha = 0;
+                    particle.flipbook.endAlpha = ether_alpha_center + Math.sin(this.frameCount / 10) * ether_alpha_spread;
+                    particle.flipbook.startSize = particle.flipbook.flipbookMetadata.startSize * 3; 
+                    particle.flipbook.endSize = particle.flipbook.flipbookMetadata.endSize * 3; 
+                    particle.setLifetime(ether_lifetime * 10);
+                }
+                break;
+            }
+            case EnemyType.sucker: {
+                if ((this.frameCount % 3) === 0) {
+                    const pos = scratchVec3;
+                    const vel = scratchVec3_2;
+                    vec3.copy(pos, this.nextPosition);
+                    vec3.scale(vel, this.velocity, 0.8 / SRC_FRAME_TO_MS);
+                    pos[1] += 8;
+                    vel[1] += 3;
+                    const particle = this.particles!.spawn(pos, vel);
+                    particle.setLifetime(10);
+                }
+                break;
+            }
+        }
+    }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible) {
@@ -935,9 +1058,11 @@ export class GloverEnemy implements GenericRenderable {
             this.frameCount += 1;
             vec3.copy(this.lastPosition, this.nextPosition);
             vec3.copy(this.lastEulers, this.nextEulers);
-            this.advanceAI()
-            this.advancePhysics()
+            this.advanceAI();
+            this.advancePerEnemyCode();
+            this.advancePhysics();
         }
+
 
         vec3.lerp(this.position, this.lastPosition, this.nextPosition, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
         radianLerp(this.eulers, this.lastEulers, this.nextEulers, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
@@ -945,6 +1070,10 @@ export class GloverEnemy implements GenericRenderable {
         this.updateActorModelview();
 
         this.actor.prepareToRender(device, renderInstManager, viewerInput);
+
+        if (this.particles !== null) {
+            this.particles.prepareToRender(device, renderInstManager, viewerInput);
+        }
     }
 
 };

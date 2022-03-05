@@ -367,7 +367,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         private device: GfxDevice,
         private cache: GfxRenderCache,
         private textures: Textures.GloverTextureHolder,
-        private flipbookMetadata: Flipbook)
+        public flipbookMetadata: Flipbook)
     {
         this.setSprite(flipbookMetadata);
 

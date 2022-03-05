@@ -1621,12 +1621,12 @@ const sceneBanks = new Map<string, GloverSceneBankDescriptor>([
 
     ["2c", {
         landscape: "44.FLYTHRU.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART7.obj.fla"],
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART8.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], // "Flythru (title)"
     ["2d", {
         landscape: "45.FLYTHRU.n64.lev",
-        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART7.obj.fla"],
+        object_banks: ["GENERIC.obj.fla", "FLYTHRU.obj.fla", "HUB_PART8.obj.fla"],
         texture_banks: ["GENERIC_TEX_BANK.tex.fla", "FLYTHRU_TEX_BANK.tex.fla", "HUB_TEX_BANK.tex.fla"]
     }], // "Flythru (credits)"
     ["2e", {
@@ -1699,6 +1699,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         Shadows.Shadow.initializeRenderer(device, cache, textureHolder);
 
+
         let scratchMatrix = mat4.create();
         let currentEnemy: GloverEnemy | null = null;
         let currentActor: GloverActorRenderer | null = null; 
@@ -1723,6 +1724,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let ventParents: [GloverVent, number][] = [];
         let shadowCasters: [Shadows.ShadowCaster, boolean][] = [];
         let ballActors: GloverActorRenderer[] = [];
+        let enemies: GloverEnemy[] = [];
 
         // Do a first pass to set up scene lights
         for (let cmd of landscape.body) {
@@ -1879,8 +1881,9 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 case 'Enemy': {
                     let pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z)
-                    currentEnemy = new GloverEnemy(device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights, cmd.params.type as number, pos, cmd.params.yRotation);
+                    currentEnemy = new GloverEnemy(device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights, cmd.params.type as number, pos, cmd.params.yRotation, this.id);
                     sceneRenderer.miscRenderers.push(currentEnemy);
+                    enemies.push(currentEnemy);
                     break;
                 }
                 case 'EnemyNormalInstruction': {
@@ -1891,7 +1894,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Vent': {
-                    console.log("vent:", cmd.params);
                     currentVent = new GloverVent(
                         device, cache, textureHolder, loadedObjects, sceneRenderer.sceneLights,
                         [cmd.params.originX, cmd.params.originY, cmd.params.originZ],
@@ -2202,6 +2204,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 const dist = collision.position[1] - (ballPos[1] - 2*radius);
                 ballActor.modelMatrix[13] += dist;
             }
+        }
+
+        for (let enemy of enemies) {
+            enemy.terrain = shadowTerrain;
         }
 
         // Project shadows

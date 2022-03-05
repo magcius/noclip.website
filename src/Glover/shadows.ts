@@ -158,7 +158,7 @@ export function rayTriangleIntersection (rayOrigin: ReadonlyVec3, rayVector: Rea
 
 const downwardRay: ReadonlyVec3 = vec3.fromValues(0, -1, 0);
 
-export function projectOntoTerrain(sourcePos: vec3, sourceObj: Object | null, terrain: Collidable[]) : Collision | null {
+export function projectOntoTerrain(sourcePos: vec3, sourceObj: Object | null, terrain: readonly Collidable[]) : Collision | null {
     let closestIntersectionDist = Infinity;
     let closestCollision: Collision | null = null;
     for (let terrainPiece of terrain) {
