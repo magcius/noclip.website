@@ -454,7 +454,7 @@ const scratchVec3 = vec3.create();
 const scratchVec3_2 = vec3.create();
 
 export class GloverEnemy implements GenericRenderable {
-    private actor: GloverActorRenderer;
+    public actor: GloverActorRenderer;
 
     private lastFrameAdvance: number = 0;
     private frameCount: number = 0;
@@ -500,6 +500,7 @@ export class GloverEnemy implements GenericRenderable {
     constructor (private device: GfxDevice, private cache: GfxRenderCache, private textureHolder: Textures.GloverTextureHolder, private objects: ObjectDirectory, private sceneLights: SceneLighting, private enemyType: EnemyType, position: vec3, y_rotation: number, private level_id: string) {
         vec3.copy(this.lastPosition, position);
         vec3.copy(this.nextPosition, position);
+        vec3.copy(this.position, position);
         this.lastEulers[1] = y_rotation;
         this.nextEulers[1] = y_rotation;
         this.dstEulers[1] = y_rotation;
@@ -580,6 +581,10 @@ export class GloverEnemy implements GenericRenderable {
             }
 
         }
+    }
+
+    public getPosition(): vec3 {
+        return this.position;
     }
 
     public pushNormalInstruction(instr: Instruction) {
@@ -987,8 +992,24 @@ export class GloverEnemy implements GenericRenderable {
 
         vec3.add(this.nextPosition, this.nextPosition, this.velocity);
 
-        vec3.scale(this.velocity, this.velocity, 1-(1-beh.decel0x18)/4);
+        if ((beh.actorFlags & 1) !== 0) {
+            // TODO: need floor collision, first:
+            // const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
+            // const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+            // this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
 
+            vec3.scale(this.velocity, this.velocity, Math.max(0, beh.decel0x18));
+
+
+            const groundCollision = projectOntoTerrain(this.position, null, this.terrain);
+            if (groundCollision !== null) {
+                this.nextPosition[1] = groundCollision.position[1] + this.maxCollisionDistance;
+            }
+        } else {
+            vec3.scale(this.velocity, this.velocity, 1-(1-beh.decel0x18)/4);
+
+        }
+        vec3.scale(this.velocity, this.velocity, 0.75);
 
         if (beh.spinTweenX !== 0) {
             this.advanceEulerAngle(0);
@@ -998,18 +1019,6 @@ export class GloverEnemy implements GenericRenderable {
         }
         if (beh.spinTweenZ !== 0) {
             this.advanceEulerAngle(2);
-        }
-
-        if ((beh.actorFlags & 1) !== 0) {
-            // TODO: need floor collision, first:
-            // const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
-            // const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
-            // this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
-
-            const groundCollision = projectOntoTerrain(this.position, null, this.terrain);
-            if (groundCollision !== null) {
-                this.nextPosition[1] = groundCollision.position[1] + this.maxCollisionDistance;
-            }
         }
 
 

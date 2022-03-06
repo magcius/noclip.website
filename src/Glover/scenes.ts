@@ -12,7 +12,7 @@ import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT
 
 
 import { GenericRenderable, SceneLighting } from './render';
-import { GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer, ElectricityThicknessStyle, ElectricityRandStyle } from './actor';
+import { GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer, ElectricityThicknessStyle, ElectricityRandStyle, ActorMeshNode } from './actor';
 import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFootprintRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
 import { GloverEnemy } from './enemy';
 
@@ -38,7 +38,7 @@ import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullCl
 
 import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
 import { decompress } from './fla2';
-import { radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion, pushAlongLookatVector } from './util';
+import { hashStr, radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion, pushAlongLookatVector } from './util';
 import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
 import { BulletPool } from './bullets';
 
@@ -66,16 +66,6 @@ const powerup_objects = [
 ];
 
 export type ObjectDirectory = Map<number, GloverObjbank.ObjectRoot>;
-
-////////////////////////
-// TODO: use these:
-export class InitContext {
-    constructor (public device: GfxDevice, public cache: GfxRenderCache, public textures: GloverTextureHolder) {}
-}
-export class RenderContext {
-    constructor (public device: GfxDevice, public renderInstManager: GfxRenderInstManager, public viewerInput: Viewer.ViewerRenderInput) {}
-}
-////////////////////////
 
 export class GloverWaterVolume implements GenericRenderable {
     public visible: boolean = true;
@@ -438,6 +428,8 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     public shadow: Shadows.Shadow | null = null;
     public shadowSize: number | Shadows.ConstantShadowSize = 0;
 
+    public linkedTransform: mat4 | null = null;
+
     // Sparkle
 
     private exitSparkle = false;
@@ -785,6 +777,9 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             return;
         }
         mat4.fromRotationTranslationScale(this.actor.modelMatrix, this.globalRotation, this.globalPosition, this.scale);
+        if (this.linkedTransform !== null) {
+            mat4.mul(this.actor.modelMatrix, this.actor.modelMatrix, this.linkedTransform);
+        }
     }
 
     public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
@@ -2221,7 +2216,7 @@ class SceneDesc implements Viewer.SceneDesc {
         // Hard-coded fix for the stamp vents in Out Of This World 2, because
         // our path movement code isn't frame-accurate so otherwise things get
         // out of sync
-        if (this.id == '24') {
+        if (this.id === '24') {
             for (let [vent, tag] of ventParents) {
                 const plat: GloverPlatform = sceneRenderer.platformByTag.get(tag)!;
                 if (tag === 138) {
@@ -2243,6 +2238,30 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
+        // Hard-coded behavior for robot legs in ootw boss phase 1
+        if (this.id === '26') {
+            const boss = enemies[0];
+            boss.actor.updateDrawMatrices();
+            // const boss_pos = boss.getPosition();
+            const leg_pos = vec3.create()
+            const linkages: [number, number, vec3][] = [
+                [1, hashStr("bot_foot_L"), vec3.fromValues(-50,0,170)],
+                [2, hashStr("bot_foot_R"), vec3.fromValues(170,0,-50)],
+            ]
+            for (let [tag, mesh_id, offset] of linkages) {
+                let transformMatrix: mat4 | null = null;
+                boss.actor.rootMesh.forEachMesh((node: ActorMeshNode) => {
+                    if (node.mesh.id === mesh_id) {
+                        transformMatrix = node.drawMatrix;
+                    }
+                })                
+                const plat = sceneRenderer.platformByTag.get(tag)!;
+                plat.setPosition(offset[0],offset[1],offset[2]);
+                plat.setScale(1,1,1);
+                plat.linkedTransform = transformMatrix;
+                plat.updateModelMatrix();
+            }                
+        }
 
         sceneRenderer.renderPassDescriptor = makeAttachmentClearDescriptor(
             colorNewFromRGBA(skyboxClearColor[0], skyboxClearColor[1], skyboxClearColor[2]));

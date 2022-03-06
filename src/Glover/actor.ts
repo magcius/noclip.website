@@ -36,21 +36,22 @@ interface ActorKeyframeSet {
     translation: number;
 }
 
-function keyframeLerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec3 {
+function keyframeLerp(dst: vec3, cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec3 {
     let duration = next.t - cur.t
     if (duration == 0) {
         t = 1
     } else {
         t = (t - cur.t) / duration;
     }
-    return vec3.fromValues(
+    return vec3.set(dst, 
         cur.v1*(1-t) + next.v1*t,
         cur.v2*(1-t) + next.v2*t,
         cur.v3*(1-t) + next.v3*t
     );
 }
 
-function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec4 {
+const slerpScratchVec4 = vec4.create();
+function keyframeSlerp(dst: vec4, cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec4 {
     let duration = next.t - cur.t
     if (duration == 0) {
         t = 1
@@ -63,10 +64,10 @@ function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.Affin
            (cur.v3 * next.v3) +
            (cur.v4 * next.v4))
 
-    let tmp = vec4.fromValues(next.v1, next.v2, next.v3, next.v4);
+    vec4.set(slerpScratchVec4, next.v1, next.v2, next.v3, next.v4);
     if (dot < 0.0) {
         dot = -dot
-        vec4.negate(tmp, tmp);
+        vec4.negate(slerpScratchVec4, slerpScratchVec4);
     }
 
     if (dot < 0.95) {
@@ -74,13 +75,13 @@ function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.Affin
         let sin_1minust = Math.sin(theta * (1-t));
         let sin_t = Math.sin(theta * t);
         let sin_theta = Math.sin(theta);
-        return vec4.fromValues(
-            (cur.v1 * sin_1minust + tmp[0] * sin_t) / sin_theta,
-            (cur.v2 * sin_1minust + tmp[1] * sin_t) / sin_theta,
-            (cur.v3 * sin_1minust + tmp[2] * sin_t) / sin_theta,
-            (cur.v4 * sin_1minust + tmp[3] * sin_t) / sin_theta);
+        return vec4.set(dst,
+            (cur.v1 * sin_1minust + slerpScratchVec4[0] * sin_t) / sin_theta,
+            (cur.v2 * sin_1minust + slerpScratchVec4[1] * sin_t) / sin_theta,
+            (cur.v3 * sin_1minust + slerpScratchVec4[2] * sin_t) / sin_theta,
+            (cur.v4 * sin_1minust + slerpScratchVec4[3] * sin_t) / sin_theta);
     } else {
-        return vec4.fromValues(
+        return vec4.set(dst,
             cur.v1*(1-t) + next.v1*t,
             cur.v2*(1-t) + next.v2*t,
             cur.v3*(1-t) + next.v3*t,
@@ -89,14 +90,21 @@ function keyframeSlerp(cur: GloverObjbank.AffineFrame, next: GloverObjbank.Affin
     }
 }
 
-class ActorMeshNode {
+export class ActorMeshNode {
     private static rendererCache = new Map<[number, number], GloverMeshRenderer>();
 
     public renderer: GloverMeshRenderer;
 
     public children: ActorMeshNode[] = [];
 
+    public drawMatrix: mat4 = mat4.create();
+    public childMatrix: mat4 = mat4.create();
+
     private keyframeState: ActorKeyframeSet = {scale: 0, rotation: 0, translation: 0};
+
+    private curScale: vec3 = vec3.create();
+    private curTranslation: vec3 = vec3.create();
+    private curRotation: vec4 = vec4.create();
 
     constructor(
         device: GfxDevice,
@@ -137,18 +145,14 @@ class ActorMeshNode {
     }
 
     public forEachMesh(callback: (node: ActorMeshNode)=>void): void {
-        // TODO: provide draw matrix for node
         callback(this);
         for (let child of this.children) {
             child.forEachMesh(callback);
         }
     }
 
-    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, curAnimTime: number, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
-        const drawMatrix = mat4.clone(parentMatrix);
-
+    private updateAnimation(curAnimTime: number) {
         if (this.mesh.numRotation > 1 || this.mesh.numTranslation > 1 || this.mesh.numScale > 1) {
-            
             const nextKeyframes = {
                 scale: Math.min(this.keyframeState.scale + 1, this.mesh.numScale - 1),
                 translation: Math.min(this.keyframeState.translation + 1, this.mesh.numTranslation - 1),
@@ -205,42 +209,55 @@ class ActorMeshNode {
                     break;
                 }
             }
-            var scale = keyframeLerp(
+            keyframeLerp(this.curScale,
                 this.mesh.scale[this.keyframeState.scale],
                 this.mesh.scale[nextKeyframes.scale],
                 curAnimTime);
 
-            var translation = keyframeLerp(
+            keyframeLerp(this.curTranslation,
                 this.mesh.translation[this.keyframeState.translation],
                 this.mesh.translation[nextKeyframes.translation],
                 curAnimTime);
 
-            var rotation = keyframeSlerp(
+            keyframeSlerp(this.curRotation,
                 this.mesh.rotation[this.keyframeState.rotation],
                 this.mesh.rotation[nextKeyframes.rotation],
                 curAnimTime);
 
         } else {
-            var rotation = vec4.fromValues(this.mesh.rotation[0].v1, this.mesh.rotation[0].v2, this.mesh.rotation[0].v3, this.mesh.rotation[0].v4);
-            var translation = vec3.fromValues(this.mesh.translation[0].v1, this.mesh.translation[0].v2, this.mesh.translation[0].v3);
-            var scale = vec3.fromValues(this.mesh.scale[0].v1, this.mesh.scale[0].v2, this.mesh.scale[0].v3);
+            vec4.set(this.curRotation, this.mesh.rotation[0].v1, this.mesh.rotation[0].v2, this.mesh.rotation[0].v3, this.mesh.rotation[0].v4);
+            vec3.set(this.curTranslation, this.mesh.translation[0].v1, this.mesh.translation[0].v2, this.mesh.translation[0].v3);
+            vec3.set(this.curScale, this.mesh.scale[0].v1, this.mesh.scale[0].v2, this.mesh.scale[0].v3);
         }
+    }
 
-        const rotXlateMatrix = mat4.create();
-        mat4.fromQuat(rotXlateMatrix, rotation);
-        rotXlateMatrix[12] = translation[0] * parentScale[0];
-        rotXlateMatrix[13] = translation[1] * parentScale[1];
-        rotXlateMatrix[14] = translation[2] * parentScale[2];
+    private updateDrawMatrices(parentMatrix: mat4, parentScale: vec3) {
+        mat4.copy(this.drawMatrix, parentMatrix);
+        const rotXlateMatrix = this.childMatrix;
+        mat4.fromQuat(rotXlateMatrix, this.curRotation);
+        rotXlateMatrix[12] = this.curTranslation[0] * parentScale[0];
+        rotXlateMatrix[13] = this.curTranslation[1] * parentScale[1];
+        rotXlateMatrix[14] = this.curTranslation[2] * parentScale[2];
+        mat4.mul(this.childMatrix, this.drawMatrix, rotXlateMatrix);
+        mat4.scale(this.drawMatrix, this.childMatrix, this.curScale); 
+    }
 
-        mat4.mul(drawMatrix, drawMatrix, rotXlateMatrix);
+    public updateDrawMatricesTree(curAnimTime: number, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
+        this.updateAnimation(curAnimTime);
+        this.updateDrawMatrices(parentMatrix, parentScale);            
+        for (let child of this.children) {
+            child.updateDrawMatricesTree(curAnimTime, this.childMatrix, this.curScale);
+        }        
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, curAnimTime: number, parentMatrix: mat4, parentScale: vec3 = vec3.fromValues(1,1,1)) {
+        this.updateAnimation(curAnimTime);
+        this.updateDrawMatrices(parentMatrix, parentScale);
 
         for (let child of this.children) {
-            child.prepareToRender(device, renderInstManager, viewerInput, curAnimTime, drawMatrix, scale);
+            child.prepareToRender(device, renderInstManager, viewerInput, curAnimTime, this.childMatrix, this.curScale);
         }
- 
-        mat4.scale(drawMatrix, drawMatrix, scale); 
-
-        this.renderer.prepareToRender(device, renderInstManager, viewerInput, drawMatrix);
+        this.renderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix);
     }
 
     public destroy(device: GfxDevice): void {
@@ -263,8 +280,6 @@ interface QueuedSkeletalAnimation {
 }
 
 export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCaster {
-
-
     private vec3Scratch: vec3 = vec3.create();
 
     // General
@@ -355,10 +370,14 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         }
 
         // Hardcoded fix:
-        // Force crystf in wayroom to render on top of crysbk
-        if (this.actorObject.objId == 0x97AF34B3) {
-            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OVERLAY); 
+        // Force crysbk to render behind crystf
+        if (this.actorObject.objId == 0x530E329C) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OPAQUE); 
         }
+    }
+
+    public updateDrawMatrices() {
+        this.rootMesh.updateDrawMatricesTree(this.currentAnimTime, this.modelMatrix);
     }
 
     public playSkeletalAnimation(animIdx: number, startPlaying: boolean, queue: boolean, playbackSpeed: number | null = null) {
