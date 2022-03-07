@@ -508,11 +508,9 @@ class Timeline {
                     if (!e.ctrlKey)
                         this.deselectAllKeyframeIcons();
                     this.selectKeyframeIcon(kfIcon);
-                    if (kfIcon.type !== KeyframeIconType.Start) {
-                        this.keyframeIconGrabbed = true;
-                        this.grabbedIcon = kfIcon;
-                        this.grabbedIconInitialXPos = kfIcon.getX();
-                    }
+                    this.keyframeIconGrabbed = true;
+                    this.grabbedIcon = kfIcon;
+                    this.grabbedIconInitialXPos = kfIcon.getX();
                     break;
                 }
             }
@@ -539,7 +537,8 @@ class Timeline {
     }
 
     public onMouseMove(e: MouseEvent) {
-        if (!this.playheadGrabbed && !this.keyframeIconGrabbed && !this.selectionBoxActive)
+        if ((!this.playheadGrabbed && !this.keyframeIconGrabbed && !this.selectionBoxActive)
+            || (this.keyframeIconGrabbed && this.selectedKeyframeIcons.some((icon) => icon.type === KeyframeIconType.Start)))
             return;
 
         let targetX = e.offsetX;
@@ -589,6 +588,10 @@ class Timeline {
         } else if (this.selectionBoxActive) {
             this.selectionBoxEndVertex[0] = e.offsetX - Playhead.HALF_WIDTH;
             this.selectionBoxEndVertex[1] = e.offsetY;
+            if (e.target !== this.elementsCtx.canvas) {
+                this.selectionBoxEndVertex[0] = e.clientX - this.elementsCtx.canvas.getBoundingClientRect().x - Playhead.HALF_WIDTH;
+                this.selectionBoxEndVertex[1] = e.clientY - this.elementsCtx.canvas.getBoundingClientRect().y;
+            }
             this.selectionBoxPath = new Path2D();
             this.selectionBoxPath.moveTo(this.selectionBoxStartVertex[0], this.selectionBoxStartVertex[1]);
             this.selectionBoxPath.lineTo(this.selectionBoxEndVertex[0], this.selectionBoxStartVertex[1]);
@@ -596,7 +599,11 @@ class Timeline {
             this.selectionBoxPath.lineTo(this.selectionBoxStartVertex[0], this.selectionBoxEndVertex[1]);
             this.selectionBoxPath.closePath();
             for (const kfIcon of this.keyframeIcons) {
-                const kfInBox = this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST, kfIcon.getY() + KeyframeIcon.XY_DIST);
+                const kfInBox = this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST, kfIcon.getY() + KeyframeIcon.XY_DIST)
+                                || this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST / 2, kfIcon.getY() + KeyframeIcon.XY_DIST / 2)
+                                || this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST / 2, kfIcon.getY() + KeyframeIcon.XY_DIST * 3 / 2)
+                                || this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST * 3 / 2, kfIcon.getY() + KeyframeIcon.XY_DIST / 2)
+                                || this.elementsCtx.isPointInPath(this.selectionBoxPath, kfIcon.getX() + KeyframeIcon.XY_DIST * 3 / 2, kfIcon.getY() + KeyframeIcon.XY_DIST * 3 / 2);
                 if (e.ctrlKey) {
                     // When the control key is held, toggle the selection state of any icons we add/remove.
                     if (kfInBox) {
@@ -738,10 +745,10 @@ class Timeline {
         const x = t * this.pixelsPerSecond / this.timelineScaleFactor;
         this.playhead.updatePosition(x, t * MILLISECONDS_IN_SECOND);
         if (!animationPlaying) {
+            this.deselectAllKeyframeIcons();
             const snapKfIndex = this.getClosestSnappingIconIndex(x);
             if (snapKfIndex > -1 && x === this.keyframeIcons[snapKfIndex].getX()) {
                 // If the playhead is directly on a keyframe, highlight it.
-                this.deselectAllKeyframeIcons();
                 this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
             }
         }
@@ -971,6 +978,13 @@ export class StudioPanel extends FloatingPanel {
     private easeOutSlider: Slider;
 
     private customValuesContainer: HTMLElement;
+    private posXValueInputContainer: HTMLElement;
+    private posYValueInputContainer: HTMLElement;
+    private posZValueInputContainer: HTMLElement;
+    private lookAtXValueInputContainer: HTMLElement;
+    private lookAtYValueInputContainer: HTMLElement;
+    private lookAtZValueInputContainer: HTMLElement;
+    private bankValueInputContainer: HTMLElement;
     private posXValueInput: HTMLInputElement;
     private posYValueInput: HTMLInputElement;
     private posZValueInput: HTMLInputElement;
@@ -1361,16 +1375,16 @@ export class StudioPanel extends FloatingPanel {
                         </div>
                         <div id="customValuesContainer">
                             <div>
-                                <div><span>X Position:</span> <input id="posXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>Y Position:</span> <input id="posYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>Z Position:</span> <input id="posZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="posXValueInputContainer"><span>X Position:</span> <input id="posXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="posYValueInputContainer"><span>Y Position:</span> <input id="posYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="posZValueInputContainer"><span>Z Position:</span> <input id="posZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
                             </div>
                             <div>
-                                <div><span>LookAt X:</span> <input id="lookAtXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>LookAt Y:</span> <input id="lookAtYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div><span>LookAt Z:</span> <input id="lookAtZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="lookAtXValueInputContainer"><span>LookAt X:</span> <input id="lookAtXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="lookAtYValueInputContainer"><span>LookAt Y:</span> <input id="lookAtYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="lookAtZValueInputContainer"><span>LookAt Z:</span> <input id="lookAtZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
                             </div>
-                            <div>
+                            <div id="bankValueInputContainer">
                                 <span>Bank rotation:</span> <input id="bankValueInput" class="StudioNumericInput" type="number" step="0.01" value="0">
                             </div>
                             <div id="lockPerspectiveBracket" hidden></div>
@@ -1526,6 +1540,13 @@ export class StudioPanel extends FloatingPanel {
         this.interpolationTab = this.contents.querySelector('#interpolationTab') as HTMLElement;
 
         this.customValuesContainer = this.contents.querySelector('#customValuesContainer') as HTMLElement;
+        this.posXValueInputContainer = this.contents.querySelector('#posXValueInputContainer') as HTMLElement;
+        this.posYValueInputContainer = this.contents.querySelector('#posYValueInputContainer') as HTMLElement;
+        this.posZValueInputContainer = this.contents.querySelector('#posZValueInputContainer') as HTMLElement;
+        this.lookAtXValueInputContainer = this.contents.querySelector('#lookAtXValueInputContainer') as HTMLElement;
+        this.lookAtYValueInputContainer = this.contents.querySelector('#lookAtYValueInputContainer') as HTMLElement;
+        this.lookAtZValueInputContainer = this.contents.querySelector('#lookAtZValueInputContainer') as HTMLElement;
+        this.bankValueInputContainer = this.contents.querySelector('#bankValueInputContainer') as HTMLElement;
         this.posXValueInput = this.contents.querySelector('#posXValueInput') as HTMLInputElement;
         this.posXValueInput.dataset.track = KeyframeTrackType.posXTrack.toString();
         this.posYValueInput = this.contents.querySelector('#posYValueInput') as HTMLInputElement;
@@ -1553,6 +1574,14 @@ export class StudioPanel extends FloatingPanel {
 
         this.interpInTypeBtns = new RadioButtons('Interpolation In', ['Ease', 'Linear', 'Hold']);
         this.interpInTypeBtns.onselectedchange = () => {
+            if (this.interpInTypeBtns.selectedIndex !== InterpolationType.Ease)
+                this.easeInSlider.elem.style.display = 'none';
+            else
+                this.easeInSlider.elem.style.display = 'grid';
+
+            if (this.interpInTypeBtns.selectedIndex === -1)
+                return;
+
             if (this.timeline.selectedKeyframeIcons.length) {
                 for (const kfIcon of this.timeline.selectedKeyframeIcons) {
                     kfIcon.keyframesMap.forEach((kf) => {
@@ -1581,6 +1610,14 @@ export class StudioPanel extends FloatingPanel {
         this.interpolationTab.appendChild(this.interpInTypeBtns.elem);
         this.interpOutTypeBtns = new RadioButtons('Interpolation Out', ['Ease', 'Linear', 'Hold']);
         this.interpOutTypeBtns.onselectedchange = () => {
+            if (this.interpOutTypeBtns.selectedIndex !== InterpolationType.Ease)
+                this.easeOutSlider.elem.style.display = 'none';
+            else
+                this.easeOutSlider.elem.style.display = 'grid';
+
+            if (this.interpOutTypeBtns.selectedIndex === -1)
+                return;
+
             if (this.timeline.selectedKeyframeIcons.length) {
                 for (const kfIcon of this.timeline.selectedKeyframeIcons) {
                     kfIcon.keyframesMap.forEach((kf) => {
@@ -1756,7 +1793,11 @@ export class StudioPanel extends FloatingPanel {
             if (e.buttons === 1 && this.timeline && this.playheadTimePositionInput
                 && !this.studioCameraController.isAnimationPlaying && !this.editingKeyframe) {
                 if (this.selectedNumericInput) {
-                    const distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
+                    let distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
+                    if (e.ctrlKey)
+                        distance *= .1;
+                    else if (e.shiftKey)
+                        distance *= 10;
                     this.selectedNumericInput.value = (parseFloat(this.selectedNumericInput.value) + distance).toFixed(2);
                     this.selectedNumericInput.dispatchEvent(new Event('change', { 'bubbles': true }));
                 } else {
@@ -2133,40 +2174,120 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private onKeyframeSelected() {
-        if (this.timeline.selectedKeyframeIcons.length === 1) {
-            const kfIcon = this.timeline.selectedKeyframeIcons[0];
+        const icon = this.timeline.selectedKeyframeIcons[0];
+        let selectedTracks = 0;
+        let commonEaseInVal = 1;
+        let commonEaseOutVal = 1;
+        let commonInterpInType = 0;
+        let commonInterpOutType = 0;
+        
+        icon.keyframesMap.forEach((kf, trackType) => {
+            selectedTracks |= trackType;
+            const input = this.getValueInput(trackType);
+            input.value = kf.value.toFixed(0).toString();
+            input.dataset.prevValue = input.value;
+            commonEaseInVal = kf.easeInCoeff;
+            commonEaseOutVal = kf.easeOutCoeff;
+            commonInterpInType = kf.interpInType;
+            commonInterpOutType = kf.interpOutType;
+        });
+        
+        for (let i = 1; i < this.timeline.selectedKeyframeIcons.length; i++) {
+            const kfIcon = this.timeline.selectedKeyframeIcons[i];
             kfIcon.keyframesMap.forEach((kf, trackType) => {
-                const input = this.getValueInput(trackType);
-                input.value = kf.value.toFixed(0).toString();
-                input.dataset.prevValue = input.value;
-                this.easeInSlider.setValue(kf.easeInCoeff);
-                this.easeOutSlider.setValue(kf.easeOutCoeff);
-                this.interpInTypeBtns.setSelectedIndex(kf.interpInType);
-                this.interpOutTypeBtns.setSelectedIndex(kf.interpOutType);
+                if (selectedTracks !== 0) {
+                    if (selectedTracks & trackType) {
+                        selectedTracks = 0;
+                    } else {
+                        selectedTracks |= trackType;
+                        const input = this.getValueInput(trackType);
+                        input.value = kf.value.toFixed(0).toString();
+                        input.dataset.prevValue = input.value;
+                    }
+                }
+
+                if (commonEaseInVal !== -1 && kf.easeInCoeff !== commonEaseInVal)
+                    commonEaseInVal = -1;
+                
+                if (commonEaseOutVal !== -1 && kf.easeOutCoeff !== commonEaseOutVal)
+                    commonEaseOutVal = -1;
+                
+                if (commonInterpInType !== -1 && kf.interpInType !== commonInterpInType)
+                    commonInterpInType = -1;
+                
+                if (commonInterpOutType !== -1 && kf.interpOutType !== commonInterpOutType)
+                    commonInterpOutType = -1;
             });
-            this.keyframeControlsContents.removeAttribute('hidden');
-            if (kfIcon.keyframesMap.has(KeyframeTrackType.posXTrack)
-              && kfIcon.keyframesMap.has(KeyframeTrackType.lookAtXTrack)) {
-                this.lockPerspectiveBracket.removeAttribute('hidden');
-                this.lockPerspectiveDiv.removeAttribute('hidden');
-            }
-            this.selectKeyframeMsg.setAttribute('hidden', '');
-        } else {
-            this.hideKeyframeControls();
         }
+        
+        this.selectKeyframeMsg.setAttribute('hidden', '');
+        this.keyframeControlsContents.removeAttribute('hidden');
+        this.editKeyframeWithCamBtn.setAttribute('hidden', '');
+        this.posXValueInputContainer.setAttribute('hidden','');
+        this.posYValueInputContainer.setAttribute('hidden','');
+        this.posZValueInputContainer.setAttribute('hidden','');
+        this.lookAtXValueInputContainer.setAttribute('hidden','');
+        this.lookAtYValueInputContainer.setAttribute('hidden','');
+        this.lookAtZValueInputContainer.setAttribute('hidden','');
+        this.bankValueInputContainer.setAttribute('hidden','');
+        this.lockPerspectiveBracket.setAttribute('hidden', '');
+        this.lockPerspectiveDiv.setAttribute('hidden', '');
+
+        if (selectedTracks !== 0) {
+            this.editKeyframeWithCamBtn.removeAttribute('hidden');
+
+            if (selectedTracks & KeyframeTrackType.posXTrack)
+                this.posXValueInputContainer.removeAttribute('hidden');
+                
+            if (selectedTracks & KeyframeTrackType.posYTrack)
+                this.posYValueInputContainer.removeAttribute('hidden');
+                
+            if (selectedTracks & KeyframeTrackType.posZTrack)
+                this.posZValueInputContainer.removeAttribute('hidden');
+                
+            if (selectedTracks & KeyframeTrackType.lookAtXTrack)
+                this.lookAtXValueInputContainer.removeAttribute('hidden');
+                
+            if (selectedTracks & KeyframeTrackType.lookAtYTrack)
+                this.lookAtYValueInputContainer.removeAttribute('hidden');
+                
+            if (selectedTracks & KeyframeTrackType.lookAtZTrack)
+                this.lookAtZValueInputContainer.removeAttribute('hidden');
+                
+            if (selectedTracks & KeyframeTrackType.bankTrack)
+                this.bankValueInputContainer.removeAttribute('hidden');
+        }
+
+            
+        if (((selectedTracks & KeyframeTrackType.posXTrack) && (selectedTracks & KeyframeTrackType.lookAtXTrack))
+            || ((selectedTracks & KeyframeTrackType.posYTrack) && (selectedTracks & KeyframeTrackType.lookAtYTrack))
+            || ((selectedTracks & KeyframeTrackType.posZTrack) && (selectedTracks & KeyframeTrackType.lookAtZTrack))) {
+            this.lockPerspectiveBracket.removeAttribute('hidden');
+            this.lockPerspectiveDiv.removeAttribute('hidden');
+        } 
+
+        if (commonEaseInVal !== -1) {
+            this.easeInSlider.setValue(commonEaseInVal);
+        } else {
+            (this.easeInSlider.elem.querySelector('.Slider') as HTMLInputElement).value = '1';
+        }
+
+        if (commonEaseOutVal !== -1) {
+            this.easeOutSlider.setValue(commonEaseOutVal);
+        } else {
+            (this.easeOutSlider.elem.querySelector('.Slider') as HTMLInputElement).value = '1';
+        }
+
+        this.interpInTypeBtns.setSelectedIndex(commonInterpInType);
+        this.interpOutTypeBtns.setSelectedIndex(commonInterpOutType);
     }
     
     private onKeyframeDeselected(): void {
         if (this.timeline.selectedKeyframeIcons.length === 0) {
             this.hideKeyframeControls();
-        } else if (this.timeline.selectedKeyframeIcons.length === 1) {
-            const kfIcon = this.timeline.selectedKeyframeIcons[0];
-            kfIcon.keyframesMap.forEach((kf, trackType) => {
-                const input = this.getValueInput(trackType);
-                input.value = kf.value.toString();
-            });
-            this.keyframeControlsContents.removeAttribute('hidden');
-            this.selectKeyframeMsg.setAttribute('hidden', '');
+        } else {
+            // Call onKeyframeSelected to update relevant keyframe editing inputs
+            this.onKeyframeSelected();
         }
     }
 
@@ -2730,17 +2851,18 @@ export class StudioPanel extends FloatingPanel {
     };
 
     private handleGlobalInput = (ev: KeyboardEvent) => {
+        const canvasActive = document.activeElement === document.querySelector('canvas')
         if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcons.length && !ev.repeat) {
             this.deleteSelectedKeyframeIcons();
-        } else if (ev.key === 'j') {
+        } else if (ev.key === 'j' && !canvasActive) {
             this.prevKeyframe();
-        } else if (ev.key === 'k') {
+        } else if (ev.key === 'k' && !canvasActive) {
             this.nextKeyframe();
         } else if (ev.key === ',') {
             this.movePlayhead(-1 / 60);
         } else if (ev.key === '.') {
             this.movePlayhead(1 / 60);
-        } else if (ev.key === ' ') {
+        } else if (ev.key === ' ' && !canvasActive) {
             if (this.studioCameraController.isAnimationPlaying)
                 this.stopAnimation();
             else
