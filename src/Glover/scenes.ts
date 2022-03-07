@@ -2146,9 +2146,9 @@ class SceneDesc implements Viewer.SceneDesc {
                     const backdrops = sceneRenderer.backdrops;
                     let idx = 0;
                     for (; idx < backdrops.length; idx++) {
-                        if (backdrops[idx].sortKey < cmd.params.sortKey) {
+                        if (backdrops[idx].backdropSortKey < cmd.params.sortKey) {
                             break;
-                        } else if (backdrops[idx].textureId === cmd.params.textureId && backdrops[idx].sortKey === cmd.params.sortKey) {
+                        } else if (backdrops[idx].textureId === cmd.params.textureId && backdrops[idx].backdropSortKey === cmd.params.sortKey) {
                             break;
                         }
                     }

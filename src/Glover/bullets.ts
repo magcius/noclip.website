@@ -347,7 +347,7 @@ class WaterBullet extends Bullet {
 
     private collidingVolume: GloverWaterVolume | null = null;
 
-    protected frameAdvance(viewerInput: Viewer.ViewerRenderInput): boolean {
+    protected override frameAdvance(viewerInput: Viewer.ViewerRenderInput): boolean {
         for (let waterVolume of this.waterVolumes) {
             if (waterVolume.inBbox(this.position) && this.position[1] <= waterVolume.surface_y) {
                 this.collidingVolume = waterVolume;
@@ -357,7 +357,7 @@ class WaterBullet extends Bullet {
         return false;
     }
 
-    protected destruct(): void {
+    protected override destruct(): void {
         if (this.collidingVolume !== null) {
             // TODO: splashy little droplets
             if (Math.random() * 10 < 5) {

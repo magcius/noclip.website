@@ -248,11 +248,11 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
     private backdropWidth: number = 0; 
     private backdropHeight: number = 0; 
 
-    public sortKey: number;
+    public backdropSortKey: number;
     public textureId: number;
 
-    protected isOrtho = true;
-    protected isBillboard = false;
+    protected override isOrtho = true;
+    protected override isBillboard = false;
 
     constructor(
         device: GfxDevice,
@@ -265,11 +265,12 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
 
         this.initialize();
 
-        this.sortKey = backdropObject.sortKey;
+        this.backdropSortKey = backdropObject.sortKey;
+        this.sortKey = makeSortKey(this.backdropSortKey);
         this.textureId = backdropObject.textureId;
     }
 
-    protected initialize() {
+    protected override initialize() {
         this.loadFrameset(this.frameset);
         const rect = {
             sX: 0,
@@ -296,7 +297,7 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
         this.backdropHeight = rect.sH;
     }
 
-    protected initializePipeline(rspState: Render.GloverRSPState) {
+    protected override initializePipeline(rspState: Render.GloverRSPState) {
         Render.initializeRenderState(rspState);
         Render.setRenderMode(rspState, true, false, false, 1.0);
 
@@ -312,7 +313,7 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
 
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const view = viewerInput.camera.viewMatrix;
         const yaw = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
         const pitch = Math.asin(view[6]) / (Math.PI * 2);
@@ -510,11 +511,11 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
 }
 
 export class GloverShadowRenderer extends GloverSpriteRenderer {
-    protected isBillboard: boolean = false;
+    protected override isBillboard: boolean = false;
 
     public drawMatrix: mat4 = mat4.create();
 
-    protected initializePipeline(rspState: Render.GloverRSPState) {
+    protected override initializePipeline(rspState: Render.GloverRSPState) {
         Render.initializeRenderState(rspState);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
@@ -532,7 +533,7 @@ export class GloverShadowRenderer extends GloverSpriteRenderer {
         this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.FOOTPRINTS);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix, 0, {r: 0, g: 0, b: 0, a: 1});
     }
 }
@@ -544,8 +545,8 @@ export enum WeatherType {
 
 
 export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
-    protected isOrtho = true;
-    protected isBillboard = false;
+    protected override isOrtho = true;
+    protected override isBillboard = false;
     public primColor: Color = {r: 1, g: 1, b: 1, a: 1};
 
     constructor(
@@ -559,7 +560,7 @@ export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
         this.initialize();
     }
 
-    protected initialize() {
+    protected override initialize() {
         this.loadFrameset(this.frameset);
         let tex = this.frame_textures[0];
         const rect = {
@@ -575,7 +576,7 @@ export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
         this.buildDrawCall(rect);
     }
 
-    protected initializePipeline(rspState: Render.GloverRSPState) {
+    protected override initializePipeline(rspState: Render.GloverRSPState) {
         Render.initializeRenderState(rspState);
         Render.setRenderMode(rspState, true, false, false, 1.0);
 
@@ -588,7 +589,7 @@ export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, alpha: number | null = null): void {
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4, alpha: number | null = null): void {
         if (alpha !== null) {
             this.primColor.a = alpha / 0xFF;
         }
@@ -859,7 +860,7 @@ export class GloverWeatherRenderer {
 
 
 export class GloverFootprintRenderer extends GloverSpriteRenderer {
-    protected isBillboard: boolean = false;
+    protected override isBillboard: boolean = false;
 
     private drawMatrix: mat4 = mat4.create();
 
@@ -880,7 +881,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
     private lifetime: number;
     private lastFrameAdvance: number = 0;
 
-    protected initializePipeline(rspState: Render.GloverRSPState) {
+    protected override initializePipeline(rspState: Render.GloverRSPState) {
         Render.initializeRenderState(rspState);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
         rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
@@ -926,7 +927,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
 
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.active) {
             return;
         }
