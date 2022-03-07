@@ -47,7 +47,6 @@ layout(std140) uniform ub_SceneParams {
 #endif
 };
 
-
 layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
     Mat4x2 u_TexMatrix[2];

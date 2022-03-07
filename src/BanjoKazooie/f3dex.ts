@@ -592,7 +592,6 @@ export function runDL_F3DEX(state: RSPStateInterface, addr: number): void {
             state.gSPModifyVertex(vtx, where, val);
         } break;
 
-
         case F3DEX_GBI.G_CULLDL:
         case F3DEX_GBI.G_RDPFULLSYNC:
         case F3DEX_GBI.G_RDPTILESYNC:
