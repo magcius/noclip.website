@@ -61,7 +61,7 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
         this.resourceSystem.destroy(device);

@@ -24,6 +24,7 @@ export const enum MovementType {
     ScreenEffect                   = 0x03,
     SensorHitChecker               = 0x05,
     MsgSharedGroup                 = 0x06,
+    TalkDirector                   = 0x01,
     DemoDirector                   = 0x0B,
     AreaObj                        = 0x0D,
     Layout                         = 0x0E,
@@ -133,7 +134,7 @@ export const enum DrawType {
     BloomModel                     = 0x36,
     BrightSun                      = 0x39,
     WaterCameraFilter              = 0x3A,
-
+    Layout                         = 0x3C,
     EffectDraw3D                   = 0x47,
     EffectDrawIndirect             = 0x48,
     EffectDrawAfterIndirect        = 0x49,
@@ -141,6 +142,7 @@ export const enum DrawType {
     EffectDrawFor2DModel           = 0x4B,
     EffectDrawForBloomEffect       = 0x4C,
     EffectDrawAfterImageEffect     = 0x4D,
+    TalkLayout                     = 0x4E,
 
     GravityExplainer               = 0x200,
 };
@@ -372,22 +374,22 @@ export class NameObjAdaptor extends NameObj {
     public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
     public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.calcAnimCallback !== null)
             this.calcAnimCallback(sceneObjHolder);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
         if (this.calcViewAndEntryCallback !== null)
             this.calcViewAndEntryCallback(sceneObjHolder, camera, viewMatrix);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         if (this.movementCallback !== null)
             this.movementCallback(sceneObjHolder, viewerInput);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.drawCallback !== null)
             this.drawCallback(sceneObjHolder, renderInstManager, viewerInput);
     }

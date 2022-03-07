@@ -27,7 +27,7 @@ export class FFXProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 // Expected to be constant across the entire scene.
@@ -48,7 +48,7 @@ varying vec4 v_Color;
 varying vec2 v_TexCoord;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec2 a_TexCoord;

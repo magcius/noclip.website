@@ -3,14 +3,14 @@ import { DeviceProgram } from "../../Program";
 import { TextureMapping } from "../../TextureHolder";
 import { nArray } from "../../util";
 import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph";
 import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
 class FXAAProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
-    public frag = `
+    public override frag = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 

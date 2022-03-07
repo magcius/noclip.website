@@ -57,7 +57,7 @@ class KingdomHeartsIIProgram extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     private static program = program_glsl;
-    public both = KingdomHeartsIIProgram.program;
+    public override both = KingdomHeartsIIProgram.program;
 }
 
 const enum RenderPass {

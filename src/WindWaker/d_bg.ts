@@ -236,7 +236,7 @@ export class cBgS_GndChk extends cBgS_Chk {
     public searchGnd: boolean = true;
     public searchWall: boolean = true;
 
-    public Reset(): void {
+    public override Reset(): void {
         super.Reset();
 
         vec3.zero(this.pos);
@@ -664,7 +664,7 @@ function cM3d_CrossY_Tri_Front(p1: vec3, p2: vec3, p3: vec3, pos: vec3): boolean
 }
 
 export class dBgW extends cBgW {
-    protected ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
+    protected override ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
         if (depth === 2 && chk !== null) {
             const attr = this.dt.grpTbl[grpIdx].attr;
             if (!(attr & 0x80700) && !!(chk.attr & 0x01))
@@ -685,7 +685,7 @@ export class dBgW extends cBgW {
         return false;
     }
 
-    protected ChkPolyThrough(triIdx: number, chk: cBgS_PolyPassChk | null): boolean {
+    protected override ChkPolyThrough(triIdx: number, chk: cBgS_PolyPassChk | null): boolean {
         if (chk !== null) {
             const inf = this.dt.infTbl[this.dt.triTbl[triIdx].infIdx];
             if (chk.objThrough && !!(inf.passFlag & dBgW__PassFlag.ObjThrough))

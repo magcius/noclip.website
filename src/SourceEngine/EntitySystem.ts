@@ -1,26 +1,24 @@
 
-import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
-import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType } from './Main';
+import { assert, assertExists, fallback, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
-import { VTF } from './VTF';
 
 type EntityMessageValue = string;
 
@@ -51,7 +49,7 @@ function parseEntityOutputAction(S: string): EntityOutputAction {
     return { targetName, inputName, parameterOverride, delay, timesToFire };
 }
 
-class EntityOutput {
+export class EntityOutput {
     public actions: EntityOutputAction[] = [];
 
     public parse(S: string | string[] | undefined): void {
@@ -61,9 +59,17 @@ class EntityOutput {
             this.actions.push(parseEntityOutputAction(S));
     }
 
+    public getNumActions(): number {
+        return this.actions.length;
+    }
+
+    public hasAnyActions(): boolean {
+        return this.actions.length > 0;
+    }
+
     public fire(entitySystem: EntitySystem, activator: BaseEntity, value: EntityMessageValue = ''): void {
         for (let i = 0; i < this.actions.length; i++)
-            entitySystem.queueEntityOutputAction(this.actions[i], activator, value);
+            entitySystem.queueOutputEvent(this.actions[i], activator, value);
     }
 }
 
@@ -76,6 +82,14 @@ const enum SpawnState {
     FetchingResources,
     ReadyForSpawn,
     Spawned,
+}
+
+function shouldHideEntityFallback(classname: string): boolean {
+    if (classname === 'func_clip_vphysics')
+        return true;
+    if (classname.startsWith('func_nav_'))
+        return true;
+    return false;
 }
 
 // Some part of this is definitely BaseAnimating, maybe split at some point?
@@ -114,6 +128,7 @@ export class BaseEntity {
     private seqindex = 0;
     private seqtime = 0;
     private seqplay: boolean = false;
+    private seqrate = 1;
     private holdAnimation: boolean = false;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
@@ -149,6 +164,8 @@ export class BaseEntity {
 
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
+        this.registerInput('enabledraw', this.input_enabledraw.bind(this));
+        this.registerInput('disabledraw', this.input_disabledraw.bind(this));
         this.registerInput('kill', this.input_kill.bind(this));
         this.registerInput('skin', this.input_skin.bind(this));
         this.registerInput('use', this.input_use.bind(this));
@@ -170,14 +187,25 @@ export class BaseEntity {
         // TODO(jstpierre): This should be on baseanimation / prop_dynamic
         this.registerInput('setanimation', this.input_setanimation.bind(this));
         this.registerInput('setdefaultanimation', this.input_setdefaultanimation.bind(this));
+        this.registerInput('setplaybackrate', this.input_setplaybackrate.bind(this));
 
-        // Set up some defaults.
-        if (this.entity.classname.startsWith('func_nav_'))
+        if (shouldHideEntityFallback(this.entity.classname))
             this.visible = false;
     }
 
     public shouldDraw(): boolean {
         return this.visible && this.enabled && this.alive && this.spawnState === SpawnState.Spawned;
+    }
+
+    public checkFrustum(renderContext: SourceRenderContext): boolean {
+        if (this.modelStudio !== null) {
+            return this.modelStudio.checkFrustum(renderContext);
+        } else if (this.modelBSP !== null) {
+            return this.modelBSP.checkFrustum(renderContext);
+        } else {
+            // TODO(jstpierre): Do what here?
+            return false;
+        }
     }
 
     private findSequenceLabel(label: string): number {
@@ -187,13 +215,16 @@ export class BaseEntity {
 
     private playseqindex(index: number): void {
         if (index < 0) {
-            debugger;
             index = 0;
         }
 
         this.seqindex = index;
         this.seqplay = true;
         this.seqtime = 0;
+    }
+
+    public resetSequence(label: string): void {
+        this.playseqindex(this.findSequenceLabel(label));
     }
 
     public spawn(entitySystem: EntitySystem): void {
@@ -320,27 +351,27 @@ export class BaseEntity {
             this.materialParams!.lightCache!.debugDrawLights(renderContext.currentView);
     }
 
-    private calcParentModelMatrix(dst: mat4): void {
+    private getParentModelMatrix(): ReadonlyMat4 {
         if (this.parentAttachment !== null)
-            this.parentEntity!.getAttachmentMatrix(dst, this.parentAttachment);
+            return this.parentEntity!.getAttachmentMatrix(this.parentAttachment);
         else
-            mat4.copy(dst, this.parentEntity!.updateModelMatrix());
+            return this.parentEntity!.updateModelMatrix();
     }
 
     public setAbsOrigin(origin: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
-            this.calcParentModelMatrix(scratchMat4a);
-            mat4.invert(scratchMat4a, scratchMat4a);
+            mat4.invert(scratchMat4a, this.getParentModelMatrix());
             transformVec3Mat4w1(this.localOrigin, scratchMat4a, origin);
         } else {
             vec3.copy(this.localOrigin, origin);
         }
+
+        this.updateModelMatrix();
     }
 
     public setAbsOriginAndAngles(origin: ReadonlyVec3, angles: ReadonlyVec3): void {
         if (this.parentEntity !== null) {
-            this.calcParentModelMatrix(scratchMat4a);
-            mat4.invert(scratchMat4a, scratchMat4a);
+            mat4.invert(scratchMat4a, this.getParentModelMatrix());
             computeModelMatrixPosQAngle(scratchMat4b, origin, angles);
             mat4.mul(scratchMat4b, scratchMat4a, scratchMat4b);
             computePosQAngleModelMatrix(this.localOrigin, this.localAngles, scratchMat4b);
@@ -348,6 +379,8 @@ export class BaseEntity {
             vec3.copy(this.localOrigin, origin);
             vec3.copy(this.localAngles, angles);
         }
+
+        this.updateModelMatrix();
     }
 
     public getAbsOrigin(dstOrigin: vec3): void {
@@ -385,6 +418,9 @@ export class BaseEntity {
         if (this.parentEntity === null)
             return;
 
+        if (this.parentEntity.modelStudio === null)
+            return;
+
         const parentAttachment = this.parentEntity.getAttachmentIndex(attachmentName);
         this.setParentEntity(this.parentEntity, parentAttachment);
 
@@ -396,7 +432,7 @@ export class BaseEntity {
 
     public getAttachmentIndex(attachmentName: string): number | null {
         if (this.modelStudio === null)
-            throw "whoops";
+            return null;
 
         const attachmentIndex = this.modelStudio.modelData.attachment.findIndex((attachment) => attachment.name === attachmentName);
         if (attachmentIndex < 0)
@@ -405,26 +441,21 @@ export class BaseEntity {
         return attachmentIndex;
     }
 
-    public getAttachmentMatrix(dst: mat4, attachmentIndex: number): void {
+    public getAttachmentMatrix(attachmentIndex: number): ReadonlyMat4 {
         if (this.modelStudio === null)
             throw "whoops";
 
         this.updateModelMatrix();
         this.updateStudioPose();
-        this.modelStudio.getAttachmentMatrix(dst, attachmentIndex);
+        return this.modelStudio.attachmentMatrix[attachmentIndex];
     }
 
     public updateModelMatrix(): mat4 {
         computeModelMatrixPosQAngle(this.modelMatrix, this.localOrigin, this.localAngles);
 
         if (this.parentEntity !== null) {
-            if (this.parentAttachment !== null) {
-                this.parentEntity.getAttachmentMatrix(scratchMat4a, this.parentAttachment);
-                mat4.mul(this.modelMatrix, scratchMat4a, this.modelMatrix);
-            } else {
-                const parentModelMatrix = this.parentEntity.updateModelMatrix();
-                mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
-            }
+            const parentModelMatrix = this.parentAttachment !== null ? this.parentEntity.getAttachmentMatrix(this.parentAttachment) : this.parentEntity.updateModelMatrix();
+            mat4.mul(this.modelMatrix, parentModelMatrix, this.modelMatrix);
         }
 
         return this.modelMatrix;
@@ -453,7 +484,10 @@ export class BaseEntity {
             // Update animation state machine.
             if (this.seqplay) {
                 const oldSeqTime = this.seqtime;
-                this.seqtime += renderContext.globalDeltaTime;
+                this.seqtime += renderContext.globalDeltaTime * this.seqrate;
+
+                if (this.seqtime < 0)
+                    this.seqtime = 0;
 
                 // Pass to default animation if we're through.
                 if (this.seqdefaultindex >= 0 && this.modelStudio.sequenceIsFinished(this.seqindex, this.seqtime) && !this.holdAnimation)
@@ -498,6 +532,14 @@ export class BaseEntity {
 
     private input_disable(): void {
         this.enabled = false;
+    }
+
+    private input_enabledraw(): void {
+        this.visible = true;
+    }
+
+    private input_disabledraw(): void {
+        this.visible = false;
     }
 
     private input_kill(): void {
@@ -559,6 +601,10 @@ export class BaseEntity {
 
         this.seqdefaultindex = this.findSequenceLabel(value);
     }
+
+    private input_setplaybackrate(entitySystem: EntitySystem, value: string): void {
+        this.seqrate = Number(value);
+    }
 }
 
 class player extends BaseEntity {
@@ -594,7 +640,7 @@ class player extends BaseEntity {
         return controller;
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.currentFogController = this.getMasterFogController(entitySystem);
@@ -604,7 +650,7 @@ class player extends BaseEntity {
         this.currentFogController = entitySystem.findEntityByTargetName(value) as env_fog_controller;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         const view = renderContext.currentView;
@@ -618,10 +664,12 @@ class player extends BaseEntity {
 export class worldspawn extends BaseEntity {
     public static classname = `worldspawn`;
     public detailMaterial: string;
+    public skyname: string | undefined;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
         this.detailMaterial = fallbackUndefined(this.entity.detailmaterial, `detail/detailsprites`);
+        this.skyname = this.entity.skyname;
     }
 }
 
@@ -629,7 +677,7 @@ export class sky_camera extends BaseEntity {
     public static classname = `sky_camera`;
     public area: number = -1;
     public scale: number = 1;
-    public modelMatrix = mat4.create();
+    public override modelMatrix = mat4.create();
     private fogEnabled: boolean;
     private fogStart: number;
     private fogEnd: number;
@@ -732,7 +780,7 @@ abstract class BaseToggle extends BaseEntity {
             vec3.scale(this.angVelPerSecond, this.angVelPerSecond, 1.0 / this.moveTimeLeftInSeconds);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         const deltaTimeInSeconds = renderContext.globalDeltaTime;
@@ -778,7 +826,7 @@ class func_movelinear extends BaseToggle {
         this.registerInput('close', this.input_close.bind(this));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         angleVec(scratchVec3a, null, null, this.moveDir);
@@ -846,7 +894,7 @@ abstract class BaseDoor extends BaseToggle {
             this.goToTop(entitySystem);
     }
 
-    public use(entitySystem: EntitySystem): void {
+    public override use(entitySystem: EntitySystem): void {
         let allowUse = false;
 
         // TODO(jstpierre): SF_DOOR_NEW_USE_RULES
@@ -946,7 +994,7 @@ class func_door extends BaseDoor {
         this.lip = Number(fallbackUndefined(this.entity.lip, '0'));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         vec3.copy(this.positionOpened, this.localOrigin);
@@ -988,7 +1036,7 @@ class func_door_rotating extends BaseDoor {
     protected anglesOpened = vec3.create();
     protected anglesClosed = vec3.create();
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         const enum SpawnFlags {
@@ -1073,7 +1121,7 @@ class func_rotating extends BaseEntity {
         this.output_ongetspeed.parse(this.entity.ongetspeed);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.friction = Math.max(Number(fallbackUndefined(this.entity.fanfriction, '0')), 1);
@@ -1107,7 +1155,7 @@ class func_rotating extends BaseEntity {
             this.toggle();
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.useAcceleration && this.targetSpeed !== this.speed) {
@@ -1202,7 +1250,7 @@ class func_rotating extends BaseEntity {
 class func_areaportalwindow extends BaseEntity {
     public static classname = `func_areaportalwindow`;
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         // We don't support areaportals yet, so just hide the replacement target entity.
@@ -1247,7 +1295,7 @@ class logic_auto extends BaseEntity {
         this.output_onMapSpawn.parse(this.entity.onmapspawn);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
         this.output_onMapSpawn.fire(entitySystem, this);
     }
@@ -1259,24 +1307,61 @@ class logic_relay extends BaseEntity {
     private output_onTrigger = new EntityOutput();
     private output_onSpawn = new EntityOutput();
 
+    private removeOnFire = false;
+    private allowFastRetrigger = false;
+    private waitingForEnableRefire = false;
+
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
+
+        const enum SpawnFlags {
+            RemoveOnFire = 0x01,
+            AllowFastRetrigger = 0x02,
+        };
+        const spawnflags: SpawnFlags = Number(this.entity.spawnflags);
+        this.removeOnFire = !!(spawnflags & SpawnFlags.RemoveOnFire);
+        this.allowFastRetrigger = !!(spawnflags & SpawnFlags.AllowFastRetrigger);
 
         this.output_onTrigger.parse(this.entity.ontrigger);
         this.output_onSpawn.parse(this.entity.onspawn);
         this.registerInput('trigger', this.input_trigger.bind(this));
+        this.registerInput('cancelpending', this.input_cancelpending.bind(this));
+        this.registerInput('enablerefire', this.input_enablerefire.bind(this));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
+
         this.output_onSpawn.fire(entitySystem, this);
+
+        if (this.output_onSpawn.hasAnyActions() && this.removeOnFire)
+            this.remove();
     }
 
     private input_trigger(entitySystem: EntitySystem): void {
         if (!this.enabled)
             return;
 
+        if (this.waitingForEnableRefire)
+            return;
+
         this.output_onTrigger.fire(entitySystem, this);
+        if (this.removeOnFire)
+            this.remove();
+
+        if (!this.allowFastRetrigger) {
+            const targetName = assertExists(this.targetName);
+            entitySystem.queueOutputEvent({ targetName, inputName: 'enablerefire', parameterOverride: '', delay: 0.001, timesToFire: 1 }, this, '');
+            this.waitingForEnableRefire = true;
+        }
+    }
+
+    private input_enablerefire(entitySystem: EntitySystem): void {
+        this.waitingForEnableRefire = false;
+    }
+
+    private input_cancelpending(entitySystem: EntitySystem): void {
+        entitySystem.cancelOutputEventsForSender(this);
     }
 }
 
@@ -1443,7 +1528,7 @@ class logic_timer extends BaseEntity {
         this.fireTimer(entitySystem);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (!this.enabled)
@@ -1451,6 +1536,64 @@ class logic_timer extends BaseEntity {
 
         if (entitySystem.currentTime >= this.nextFireTime)
             this.fireTimer(entitySystem);
+    }
+}
+
+class logic_compare extends BaseEntity {
+    public static classname = `logic_compare`;
+
+    private compareValue: number = -1;
+    private value: number = -1;
+
+    private output_onEqualTo = new EntityOutput();
+    private output_onNotEqualTo = new EntityOutput();
+    private output_onGreaterThan = new EntityOutput();
+    private output_onLessThan = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.value = vmtParseNumber(this.entity.initialvalue, -1);
+        this.compareValue = vmtParseNumber(this.entity.comparevalue, -1);
+
+        this.output_onEqualTo.parse(this.entity.onequalto);
+        this.output_onNotEqualTo.parse(this.entity.onnotequalto);
+        this.output_onGreaterThan.parse(this.entity.ongreaterthan);
+        this.output_onLessThan.parse(this.entity.onlessthan);
+
+        this.registerInput('setvalue', this.input_setvalue.bind(this));
+        this.registerInput('setvaluecompare', this.input_setvaluecompare.bind(this));
+        this.registerInput('setcomparevalue', this.input_setcomparevalue.bind(this));
+        this.registerInput('compare', this.input_compare.bind(this));
+    }
+
+    private compare(entitySystem: EntitySystem): void {
+        if (this.value === this.compareValue) {
+            this.output_onEqualTo.fire(entitySystem, this);
+        } else {
+            this.output_onNotEqualTo.fire(entitySystem, this);
+            if (this.value > this.compareValue)
+                this.output_onGreaterThan.fire(entitySystem, this);
+            else
+                this.output_onLessThan.fire(entitySystem, this);
+        }
+    }
+
+    private input_setvalue(entitySystem: EntitySystem, value: string): void {
+        this.value = Number(value);
+    }
+
+    private input_setvaluecompare(entitySystem: EntitySystem, value: string): void {
+        this.value = Number(value);
+        this.compare(entitySystem);
+    }
+
+    private input_setcomparevalue(entitySystem: EntitySystem, value: string): void {
+        this.compareValue = Number(value);
+    }
+
+    private input_compare(entitySystem: EntitySystem, value: string): void {
+        this.compare(entitySystem);
     }
 }
 
@@ -1465,6 +1608,7 @@ class math_counter extends BaseEntity {
     private maxEdgeState: boolean = false;
 
     private output_outValue = new EntityOutput();
+    private output_outGetValue = new EntityOutput();
     private output_onHitMin = new EntityOutput();
     private output_onHitMax = new EntityOutput();
 
@@ -1472,12 +1616,14 @@ class math_counter extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.output_outValue.parse(this.entity.outvalue);
+        this.output_outGetValue.parse(this.entity.outgetvalue);
         this.output_onHitMin.parse(this.entity.onhitmin);
         this.output_onHitMax.parse(this.entity.onhitmax);
         this.registerInput('add', this.input_add.bind(this));
         this.registerInput('subtract', this.input_subtract.bind(this));
         this.registerInput('setvalue', this.input_setvalue.bind(this));
         this.registerInput('setvaluenofire', this.input_setvaluenofire.bind(this));
+        this.registerInput('getvalue', this.input_getvalue.bind(this));
 
         this.value = Number(fallbackUndefined(this.entity.startvalue, '0'));
         this.min = Number(fallbackUndefined(this.entity.min, '0'));
@@ -1506,10 +1652,14 @@ class math_counter extends BaseEntity {
         this.value = num;
     }
 
+    private input_getvalue(entitySystem: EntitySystem): void {
+        this.output_outGetValue.fire(entitySystem, this, '' + this.value);
+    }
+
     private updateValue(entitySystem: EntitySystem, v: number): void {
         this.value = v;
 
-        if (this.max !== 0) {
+        if (this.min !== 0 || this.max !== 0) {
             if (this.value >= this.max) {
                 this.value = this.max;
                 if (!this.maxEdgeState) {
@@ -1519,9 +1669,7 @@ class math_counter extends BaseEntity {
             } else {
                 this.maxEdgeState = false;
             }
-        }
 
-        if (this.min !== 0) {
             if (this.value <= this.min) {
                 this.value = this.min;
                 if (!this.minEdgeState) {
@@ -1656,13 +1804,15 @@ class math_colorblend extends BaseEntity {
     }
 }
 
-class trigger_multiple extends BaseEntity {
+export class trigger_multiple extends BaseEntity {
     public static classname = `trigger_multiple`;
 
+    private triggerAABB: AABB | null = null;
     private isPlayerTouching = false;
 
     private output_onTrigger = new EntityOutput();
     private output_onStartTouch = new EntityOutput();
+    private output_onStartTouchAll = new EntityOutput();
     private output_onEndTouch = new EntityOutput();
     private output_onEndTouchAll = new EntityOutput();
     private output_onTouching = new EntityOutput();
@@ -1673,6 +1823,7 @@ class trigger_multiple extends BaseEntity {
 
         this.output_onTrigger.parse(this.entity.ontrigger);
         this.output_onStartTouch.parse(this.entity.onstarttouch);
+        this.output_onStartTouchAll.parse(this.entity.onstarttouchall);
         this.output_onEndTouch.parse(this.entity.onendtouch);
         this.output_onEndTouchAll.parse(this.entity.onendtouchall);
         this.output_onTouching.parse(this.entity.ontouching);
@@ -1683,12 +1834,18 @@ class trigger_multiple extends BaseEntity {
     }
 
     private getAABB(): AABB | null {
+        if (this.triggerAABB !== null)
+            return this.triggerAABB;
         if (this.modelBSP !== null)
             return this.modelBSP.model.bbox;
         else if (this.modelStudio !== null)
             return this.modelStudio.modelData.viewBB;
         else
             return null;
+    }
+
+    public setSize(aabb: AABB | null): void {
+        this.triggerAABB = aabb !== null ? aabb.clone() : null;
     }
 
     private input_touchtest(entitySystem: EntitySystem): void {
@@ -1709,6 +1866,7 @@ class trigger_multiple extends BaseEntity {
 
     protected onStartTouch(entitySystem: EntitySystem): void {
         this.output_onStartTouch.fire(entitySystem, this);
+        this.output_onStartTouchAll.fire(entitySystem, this);
 
         // TODO(jstpierre): wait
         this.multiStartTouch(entitySystem);
@@ -1722,7 +1880,7 @@ class trigger_multiple extends BaseEntity {
         this.output_onEndTouchAll.fire(entitySystem, this);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         const aabb = this.getAABB();
@@ -1760,16 +1918,16 @@ class trigger_multiple extends BaseEntity {
 }
 
 class trigger_once extends trigger_multiple {
-    public static classname = `trigger_once`;
+    public static override classname = `trigger_once`;
 
-    protected activateTrigger(entitySystem: EntitySystem): void {
+    protected override activateTrigger(entitySystem: EntitySystem): void {
         super.activateTrigger(entitySystem);
         this.remove();
     }
 }
 
 class trigger_look extends trigger_once {
-    public static classname = `trigger_look`;
+    public static override classname = `trigger_look`;
 
     private fieldOfView: number = 0;
     private lookTimeAmount: number = 0;
@@ -1784,13 +1942,13 @@ class trigger_look extends trigger_once {
         this.lookTimeAmount = Number(this.entity.looktime);
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.target = entitySystem.findEntityByTargetName(this.entity.target);
     }
 
-    protected multiStartTouch(entitySystem: EntitySystem): void {
+    protected override multiStartTouch(entitySystem: EntitySystem): void {
         // Do nothing.
     }
 
@@ -1798,7 +1956,7 @@ class trigger_look extends trigger_once {
         this.startLookTime = -1;
     }
 
-    protected onTouch(entitySystem: EntitySystem): void {
+    protected override onTouch(entitySystem: EntitySystem): void {
         super.onTouch(entitySystem);
 
         if (this.target === null)
@@ -1830,7 +1988,7 @@ class trigger_look extends trigger_once {
         }
     }
 
-    protected onEndTouch(entitySystem: EntitySystem): void {
+    protected override onEndTouch(entitySystem: EntitySystem): void {
         super.onEndTouch(entitySystem);
         this.reset();
     }
@@ -1860,12 +2018,13 @@ class env_fog_controller extends BaseEntity {
 
         this.fogEnabled = !!Number(this.entity.fogenable);
         vmtParseColor(this.fogColor1, this.entity.fogcolor);
-        vmtParseColor(this.fogColor2, this.entity.fogcolor2);
-        this.fogDirection = vmtParseVector(this.entity.fogdir);
+        if (this.entity.fogcolor2)
+            vmtParseColor(this.fogColor2, this.entity.fogcolor2);
+        this.fogDirection = this.entity.fogdir ? vmtParseVector(this.entity.fogdir) : [0, 0, 0];
         this.farZ = Number(this.entity.farz);
         this.fogStart = Number(this.entity.fogstart);
         this.fogEnd = Number(this.entity.fogend);
-        this.fogMaxDensity = Number(this.entity.fogmaxdensity);
+        this.fogMaxDensity = Number(fallbackUndefined(this.entity.fogmaxdensity, '1'));
 
         this.registerInput('setstartdist', this.input_setstartdist.bind(this));
         this.registerInput('setenddist', this.input_setenddist.bind(this));
@@ -1944,6 +2103,38 @@ function findMaterialOnEntity(entity: BaseEntity, materialName: string): BaseMat
     return null;
 }
 
+class AnimControl {
+    public valueStart = -1;
+    public valueEnd = -1;
+    public timeStart = -1;
+    public timeEnd = -1;
+    public loop = false;
+
+    public setDuration(currentTime: number, duration: number): void {
+        this.timeStart = currentTime;
+        this.timeEnd = currentTime + duration;
+    }
+
+    public update(currentTime: number): number | null {
+        if (this.timeStart < 0)
+            return null;
+
+        let time = invlerp(this.timeStart, this.timeEnd, currentTime);
+
+        if (time > 1.0) {
+            if (this.loop) {
+                time = time % 1.0;
+            } else {
+                time = 1.0;
+                this.timeStart = -1;
+            }
+        }
+
+        const value = lerp(this.valueStart, this.valueEnd, time);
+        return value;
+    }
+}
+
 class material_modify_control extends BaseEntity {
     public static classname = `material_modify_control`;
 
@@ -1951,11 +2142,8 @@ class material_modify_control extends BaseEntity {
     private materialvar: ParameterReference;
     private value: number | null = null;
 
-    private lerpValid = false;
-    private lerpStartValue = -1;
-    private lerpEndValue = -1;
-    private lerpStartTime = -1;
-    private lerpEndTime = -1;
+    private lerp: AnimControl | null = null;
+    private textureAnim: AnimControl | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -1965,6 +2153,7 @@ class material_modify_control extends BaseEntity {
 
         this.registerInput('setmaterialvar', this.input_setmaterialvar.bind(this));
         this.registerInput('startfloatlerp', this.input_startfloatlerp.bind(this));
+        this.registerInput('startanimsequence', this.input_startanimsequence.bind(this));
     }
 
     private input_setmaterialvar(entitySystem: EntitySystem, value: string): void {
@@ -1974,22 +2163,45 @@ class material_modify_control extends BaseEntity {
     private input_startfloatlerp(entitySystem: EntitySystem, value: string): void {
         const [startValue, endValue, duration, loop] = value.split(' ');
 
-        this.lerpValid = true;
-        this.lerpStartValue = Number(startValue);
-        this.lerpEndValue = Number(endValue);
-        this.lerpStartTime = entitySystem.currentTime;
-        this.lerpEndTime = this.lerpStartTime + Number(duration);
+        this.lerp = new AnimControl();
+        this.lerp.valueStart = Number(startValue);
+        this.lerp.valueEnd = Number(endValue);
+        this.lerp.setDuration(entitySystem.currentTime, Number(duration));
+        this.lerp.loop = Boolean(loop);
+    }
+
+    private input_startanimsequence(entitySystem: EntitySystem, value: string): void {
+        const [startFrame, endFrame, frameRate, loop] = value.split(' ');
+
+        this.textureAnim = new AnimControl();
+        this.textureAnim.valueStart = Number(startFrame);
+        this.textureAnim.valueEnd = Number(endFrame);
+
+        if (this.textureAnim.valueEnd < 0) {
+            const materialInstance = this.getMaterialInstance();
+            this.textureAnim.valueEnd = materialInstance !== null ? materialInstance.getNumFrames() : 0;
+        }
+
+        const numFrames = Math.abs(this.textureAnim.valueEnd - this.textureAnim.valueStart);
+        const duration = numFrames / Math.max(Number(frameRate), 1);
+        this.textureAnim.setDuration(entitySystem.currentTime, duration);
+
+        this.textureAnim.loop = Boolean(loop);
+    }
+
+    private getMaterialInstance(): BaseMaterial | null {
+        const target = this.parentEntity;
+        if (target === null)
+            return null;
+
+        return findMaterialOnEntity(target, this.materialname);
     }
 
     private syncValue(): void {
         if (this.value === null)
             return;
 
-        const target = this.parentEntity;
-        if (target === null)
-            return;
-
-        const materialInstance = findMaterialOnEntity(target, this.materialname);
+        const materialInstance = this.getMaterialInstance();
         if (materialInstance === null)
             return;
 
@@ -1997,18 +2209,23 @@ class material_modify_control extends BaseEntity {
         this.value = null;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
-        if (this.lerpValid) {
-            let time = invlerp(this.lerpStartTime, this.lerpEndTime, entitySystem.currentTime);
+        if (this.lerp !== null) {
+            const lerpValue = this.lerp.update(entitySystem.currentTime);
+            if (lerpValue !== null)
+                this.value = lerpValue;
+            else
+                this.lerp = null;
+        }
 
-            if (time > 1.0) {
-                time = 1.0;
-                this.lerpValid = false;
-            }
-
-            this.value = lerp(this.lerpStartValue, this.lerpEndValue, time);
+        if (this.textureAnim !== null) {
+            const textureAnimValue = this.textureAnim.update(entitySystem.currentTime);
+            if (textureAnimValue !== null && this.materialParams !== null)
+                this.materialParams.textureFrameIndex = textureAnimValue;
+            else
+                this.textureAnim = null;
         }
 
         this.syncValue();
@@ -2035,7 +2252,7 @@ class info_overlay_accessor extends BaseEntity {
         this.materialParams = new EntityMaterialParameters();
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.needsMaterialInit !== null) {
@@ -2083,7 +2300,6 @@ class color_correction extends BaseEntity {
 
         this.layer = lutData.createTypedArray(Uint8Array);
         renderContext.colorCorrection.addLayer(this.layer);
-        this.updateWeight(renderContext);
     }
 
     private calcWeight(renderContext: SourceRenderContext): number {
@@ -2110,7 +2326,7 @@ class color_correction extends BaseEntity {
         renderContext.colorCorrection.setLayerWeight(this.layer, weight);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
         this.updateWeight(renderContext);
     }
@@ -2175,7 +2391,7 @@ abstract class BaseLight extends BaseEntity {
         this.isOn = true;
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         if (this.style >= 32) {
@@ -2199,39 +2415,14 @@ class point_template extends BaseEntity {
 
     public templateEntities: BaseEntity[] = [];
 
-    public spawn(entitySystem: EntitySystem): void {
-        super.spawn(entitySystem);
-
-        for (let i = 1; i <= 16; i++) {
-            const templateKeyName = `template${leftPad('' + i, 2)}`;
-            const templateEntityName = this.entity[templateKeyName];
-            if (templateEntityName === undefined)
-                continue;
-
-            const entity = entitySystem.findEntityByTargetName(templateEntityName);
-            if (entity === null)
-                continue;
-
-            this.templateEntities.push(entity);
-        }
-    }
-}
-
-class env_entity_maker extends BaseEntity {
-    public static classname = 'env_entity_maker';
-
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.registerInput('forcespawn', this.input_forcespawn.bind(this));
     }
 
-    private spawnEntities(entitySystem: EntitySystem): void {
-        const template = entitySystem.findEntityByTargetName(this.entity.entitytemplate) as point_template;
-        if (template === null)
-            return;
-
-        const mapDatas = template.templateEntities.map((entity) => entity.cloneMapData());
+    public createInstance(entitySystem: EntitySystem, modelMatrix: ReadonlyMat4): void {
+        const mapDatas = this.templateEntities.map((entity) => entity.cloneMapData());
         const targetMapDatas: BSPEntity[] = [];
 
         // Pick new target names.
@@ -2276,8 +2467,8 @@ class env_entity_maker extends BaseEntity {
 
         // Have our new map datas. Spawn them, and then move them relative to our matrix.
 
-        const worldFromThis = this.updateModelMatrix();
-        const worldFromTemplate = template.updateModelMatrix();
+        const worldFromThis = modelMatrix;
+        const worldFromTemplate = this.updateModelMatrix();
 
         for (let i = 0; i < mapDatas.length; i++) {
             const entity = entitySystem.createEntity(mapDatas[i]);
@@ -2290,6 +2481,45 @@ class env_entity_maker extends BaseEntity {
             computePosQAngleModelMatrix(scratchVec3a, scratchVec3b, scratchMat4a);
             entity.setAbsOriginAndAngles(scratchVec3a, scratchVec3b);
         }
+    }
+
+    public override spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        for (let i = 1; i <= 16; i++) {
+            const templateKeyName = `template${leftPad('' + i, 2)}`;
+            const templateEntityName = this.entity[templateKeyName];
+            if (templateEntityName === undefined)
+                continue;
+
+            const entity = entitySystem.findEntityByTargetName(templateEntityName);
+            if (entity === null)
+                continue;
+
+            this.templateEntities.push(entity);
+        }
+    }
+
+    private input_forcespawn(entitySystem: EntitySystem): void {
+        this.createInstance(entitySystem, this.updateModelMatrix());
+    }
+}
+
+class env_entity_maker extends BaseEntity {
+    public static classname = 'env_entity_maker';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('forcespawn', this.input_forcespawn.bind(this));
+    }
+
+    private spawnEntities(entitySystem: EntitySystem): void {
+        const template = entitySystem.findEntityByTargetName(this.entity.entitytemplate) as point_template;
+        if (template === null)
+            return;
+
+        template.createInstance(entitySystem, this.updateModelMatrix());
     }
 
     private input_forcespawn(entitySystem: EntitySystem): void {
@@ -2380,7 +2610,7 @@ class env_steam extends BaseEntity {
         }
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         this.calcLightingRamp(entitySystem);
@@ -2441,7 +2671,7 @@ class env_steam extends BaseEntity {
         }
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         this.emit(renderContext);
@@ -2462,7 +2692,7 @@ class env_steam extends BaseEntity {
         colorLerp(dst, this.lightingRamp[i0], this.lightingRamp[i1], t);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (!this.shouldDraw())
             return;
 
@@ -2540,12 +2770,13 @@ class env_sprite extends BaseEntity {
         this.registerInput('hidesprite', this.input_hidesprite.bind(this));
         this.registerInput('togglesprite', this.input_togglesprite.bind(this));
         this.registerInput('setscale', this.input_setscale.bind(this));
+        this.registerInput('color', this.input_color.bind(this));
         this.registerInput('colorredvalue', this.input_colorredvalue.bind(this));
         this.registerInput('colorgreenvalue', this.input_colorgreenvalue.bind(this));
         this.registerInput('colorbluevalue', this.input_colorbluevalue.bind(this));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         const sprite = assertExists(this.modelSprite);
@@ -2560,7 +2791,7 @@ class env_sprite extends BaseEntity {
         this.once = !!(spawnflags & SpawnFlags.Once);
     }
 
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
         this.frame += this.framerate * renderContext.globalDeltaTime;
@@ -2596,6 +2827,10 @@ class env_sprite extends BaseEntity {
         this.scale = Number(value);
     }
 
+    private input_color(entitySystem: EntitySystem, value: string): void {
+        vmtParseColor(this.rendercolor, value);
+    }
+
     private input_colorredvalue(entitySystem: EntitySystem, value: string): void {
         this.rendercolor.r = Number(value) / 255.0;
     }
@@ -2611,11 +2846,11 @@ class env_sprite extends BaseEntity {
 
 // Alias
 class env_glow extends env_sprite {
-    public static classname = `env_glow`;
+    public static override classname = `env_glow`;
 }
 
 class env_sprite_clientside extends env_sprite {
-    public static classname = `env_sprite_clientside`;
+    public static override classname = `env_sprite_clientside`;
 }
 
 class env_tonemap_controller extends BaseEntity {
@@ -2634,15 +2869,21 @@ class env_tonemap_controller extends BaseEntity {
     }
 
     private input_setbloomscale(entitySystem: EntitySystem, value: string): void {
-        entitySystem.renderContext.toneMapParams.bloomScale = Number(value);
+        const v = Number(value);
+        if (v > 0.0)
+            entitySystem.renderContext.toneMapParams.bloomScale = v;
     }
 
     private input_setautoexposuremin(entitySystem: EntitySystem, value: string): void {
-        entitySystem.renderContext.toneMapParams.autoExposureMin = Number(value);
+        const v = Number(value);
+        if (v > 0.0)
+            entitySystem.renderContext.toneMapParams.autoExposureMin = v;
     }
 
     private input_setautoexposuremax(entitySystem: EntitySystem, value: string): void {
-        entitySystem.renderContext.toneMapParams.autoExposureMax = Number(value);
+        const v = Number(value);
+        if (v > 0.0)
+            entitySystem.renderContext.toneMapParams.autoExposureMax = v;
     }
 
     private input_settonemaprate(entitySystem: EntitySystem, value: string): void {
@@ -2662,32 +2903,51 @@ class env_tonemap_controller extends BaseEntity {
     }
 }
 
+function calcViewFromWorldMatrixForEntity(dst: mat4, entity: BaseEntity): void {
+    entity.getAbsOriginAndAngles(scratchVec3a, scratchVec3b);
+
+    mat4.identity(dst);
+    mat4.rotateX(dst, dst, -MathConstants.TAU / 4);
+    mat4.rotateZ(dst, dst, MathConstants.TAU / 4);
+
+    mat4.rotateX(dst, dst, -scratchVec3b[2] * MathConstants.DEG_TO_RAD);
+    mat4.rotateY(dst, dst, -scratchVec3b[0] * MathConstants.DEG_TO_RAD);
+    mat4.rotateZ(dst, dst, -scratchVec3b[1] * MathConstants.DEG_TO_RAD);
+
+    vec3.negate(scratchVec3a, scratchVec3a);
+    mat4.translate(dst, dst, scratchVec3a);
+}
+
+export function calcFrustumViewProjection(dst: SourceEngineView, renderContext: SourceRenderContext, fovY: number, aspect: number, nearZ: number, farZ: number): void {
+    const nearY = Math.tan(MathConstants.DEG_TO_RAD * 0.5 * fovY) * nearZ;
+    const nearX = nearY * aspect;
+    projectionMatrixForFrustum(dst.clipFromViewMatrix, -nearX, nearX, -nearY, nearY, nearZ, farZ);
+    projectionMatrixReverseDepth(dst.clipFromViewMatrix);
+    const clipSpaceNearZ = renderContext.device.queryVendorInfo().clipSpaceNearZ;
+    projectionMatrixConvertClipSpaceNearZ(dst.clipFromViewMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+    dst.clipSpaceNearZ = clipSpaceNearZ;
+    dst.finishSetup();
+}
+
 export class env_projectedtexture extends BaseEntity {
     public static classname = `env_projectedtexture`;
 
     private fovY: number;
     private nearZ: number;
+    private style: number = -1;
+    private brightnessScale: number = 8;
 
-    public farZ: number;
-    public frustumView = new SourceEngineView();
-    public texture: VTF | null = null;
-    public textureFrame: number = 0;
-    public lightColor = colorNewCopy(White);
-    public brightnessScale: number = 1.0;
-    public depthTexture = new GfxrTemporalTexture();
-    private depthTextureValid = false;
-    private lastInstCount = -1;
+    public projectedLightRenderer = new ProjectedLightRenderer();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
-        this.frustumView.viewType = SourceEngineViewType.ShadowMap;
-
         this.fovY = Number(entity.lightfov);
         this.nearZ = Number(entity.nearz);
-        this.farZ = Number(entity.farz);
-        vmtParseColor(this.lightColor, entity.lightcolor);
+        this.projectedLightRenderer.light.farZ = Number(entity.farz);
+        vmtParseColor(this.projectedLightRenderer.light.lightColor, entity.lightcolor);
         this.brightnessScale = Number(entity.brightnessscale);
+        this.style = vmtParseNumber(entity.style, -1);
 
         const enum SpawnFlags {
             ENABLED = 0x01,
@@ -2699,98 +2959,21 @@ export class env_projectedtexture extends BaseEntity {
 
         this.registerInput('turnon', this.input_turnon.bind(this));
         this.registerInput('turnoff', this.input_turnoff.bind(this));
-    }
-
-    private calcViewMatrix(dst: mat4): void {
-        this.getAbsOriginAndAngles(scratchVec3a, scratchVec3b);
-
-        mat4.identity(dst);
-        mat4.rotateX(dst, dst, -MathConstants.TAU / 4);
-        mat4.rotateZ(dst, dst, MathConstants.TAU / 4);
-
-        mat4.rotateX(dst, dst, -scratchVec3b[2]);
-        mat4.rotateY(dst, dst, -scratchVec3b[0]);
-        mat4.rotateZ(dst, dst, -scratchVec3b[1]);
-
-        vec3.negate(scratchVec3a, scratchVec3a);
-        mat4.translate(dst, dst, scratchVec3a);
+        this.registerInput('setfov', this.input_setfov.bind(this));
+        this.registerInput('setlightcolor', this.input_setlightcolor.bind(this));
+        this.registerInput('setlightstyle', this.input_setlightstyle.bind(this));
+        this.registerInput('setpattern', this.input_setpattern.bind(this));
     }
 
     private updateFrustumView(renderContext: SourceRenderContext): void {
-        this.calcViewMatrix(this.frustumView.viewFromWorldMatrix);
-        const nearXY = Math.tan(MathConstants.DEG_TO_RAD * 0.5 * this.fovY) * this.nearZ;
-        projectionMatrixForFrustum(this.frustumView.clipFromViewMatrix, -nearXY, nearXY, -nearXY, nearXY, this.nearZ, this.farZ);
-        projectionMatrixReverseDepth(this.frustumView.clipFromViewMatrix);
-        const clipSpaceNearZ = renderContext.device.queryVendorInfo().clipSpaceNearZ;
-        projectionMatrixConvertClipSpaceNearZ(this.frustumView.clipFromViewMatrix, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-        this.frustumView.clipSpaceNearZ = clipSpaceNearZ;
-        this.frustumView.finishSetup();
+        calcViewFromWorldMatrixForEntity(this.projectedLightRenderer.light.frustumView.viewFromWorldMatrix, this);
+        const aspect = 1.0;
+        calcFrustumViewProjection(this.projectedLightRenderer.light.frustumView, renderContext, this.fovY, aspect, this.nearZ, this.projectedLightRenderer.light.farZ);
     }
 
     private async fetchTexture(renderContext: SourceRenderContext, textureName: string) {
         const materialCache = renderContext.materialCache;
-        this.texture = await materialCache.fetchVTF(textureName, true);
-    }
-
-    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
-        if (!this.shouldDraw())
-            return;
-
-        this.updateFrustumView(renderContext);
-    }
-
-    public preparePasses(renderer: SourceRenderer, renderInstManager: GfxRenderInstManager): void {
-        const renderContext = renderer.renderContext;
-        renderContext.currentView = this.frustumView;
-
-        for (let i = 0; i < renderer.bspRenderers.length; i++) {
-            const bspRenderer = renderer.bspRenderers[i];
-
-            if (!this.frustumView.calcPVS(bspRenderer.bsp, false))
-                continue;
-
-            bspRenderer.prepareToRenderView(renderContext, renderInstManager);
-        }
-
-        // Use the inst count as an approximation for which objects have been drawn into the shadow map.
-        // Doesn't work if the objects move...
-        const instCount = renderContext.currentView.mainList.renderInsts.length;
-        if (this.lastInstCount === instCount) {
-            this.frustumView.reset();
-        } else {
-            this.depthTextureValid = false;
-        }
-
-        renderContext.currentView = null!;
-    }
-
-    public pushPasses(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder): void {
-        if (this.depthTextureValid)
-            return;
-
-        const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-        depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
-        depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
-
-        const depthTargetID = builder.createRenderTargetID(depthTargetDesc, `Projected Texture Depth - ${this.targetName}`);
-
-        builder.pushPass((pass) => {
-            pass.setDebugName(`Projected Texture Depth - ${this.targetName}`);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, depthTargetID);
-
-            pass.exec((passRenderer) => {
-                this.lastInstCount = this.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
-            });
-        });
-
-        this.depthTexture.setDescription(renderInstManager.gfxRenderCache.device, depthTargetDesc);
-        builder.resolveRenderTargetToExternalTexture(depthTargetID, this.depthTexture.getTextureForResolving());
-
-        this.depthTextureValid = true;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.depthTexture.destroy(device);
+        this.projectedLightRenderer.light.texture = await materialCache.fetchVTF(textureName, true);
     }
 
     private input_turnon(): void {
@@ -2800,6 +2983,124 @@ export class env_projectedtexture extends BaseEntity {
     private input_turnoff(): void {
         this.enabled = false;
     }
+
+    private input_setfov(entitySystem: EntitySystem, value: string): void {
+        this.fovY = Number(value);
+    }
+
+    private input_setlightcolor(entitySystem: EntitySystem, value: string): void {
+        vmtParseColor(this.projectedLightRenderer.light.lightColor, value);
+    }
+
+    private input_setlightstyle(entitySystem: EntitySystem, value: string): void {
+        this.style = Number(value);
+    }
+
+    private input_setpattern(entitySystem: EntitySystem, value: string): void {
+        entitySystem.renderContext.worldLightingState.stylePatterns[this.style] = value;
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.shouldDraw())
+            return;
+
+        const styleIntensity = this.style >= 0 ? renderContext.worldLightingState.styleIntensities[this.style] : 1.0;
+        this.projectedLightRenderer.light.brightnessScale = this.brightnessScale * styleIntensity;
+    
+        this.updateFrustumView(renderContext);
+    }
+
+    public override destroy(device: GfxDevice): void {
+        this.projectedLightRenderer.destroy(device);
+    }
+}
+
+export class point_camera extends BaseEntity {
+    public static classname = `point_camera`;
+
+    private fovY: number;
+    private nearZ: number = 0.1;
+    private farZ: number = 10000.0;
+    private useScreenAspectRatio: boolean;
+
+    public viewRenderer = new SourceWorldViewRenderer(`Camera`, SourceEngineViewType.MainView);
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.fovY = Number(this.entity.fov);
+        this.useScreenAspectRatio = fallbackUndefined(this.entity.usescreenaspectratio, '1') !== '0';
+
+        this.viewRenderer.pvsFallback = false;
+        this.viewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
+    }
+
+    private updateFrustumView(renderContext: SourceRenderContext): void {
+        const frustumView = this.viewRenderer.mainView;
+        calcViewFromWorldMatrixForEntity(frustumView.viewFromWorldMatrix, this);
+        const aspect = this.useScreenAspectRatio ? renderContext.currentView.aspect : 1.0;
+        calcFrustumViewProjection(frustumView, renderContext, this.fovY, aspect, this.nearZ, this.farZ);
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.shouldDraw())
+            return;
+
+        this.updateFrustumView(renderContext);
+    }
+
+    public preparePasses(renderer: SourceRenderer): void {
+        this.viewRenderer.reset();
+        this.viewRenderer.prepareToRender(renderer, null);
+    }
+
+    public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, mainColorDesc: GfxrRenderTargetDescription): void {
+        const cameraColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        cameraColorDesc.copyDimensions(mainColorDesc);
+        cameraColorDesc.width /= 2;
+        cameraColorDesc.height /= 2;
+
+        this.viewRenderer.pushPasses(renderer, builder, cameraColorDesc);
+    }
+}
+
+class BaseMonitor extends BaseEntity {
+    public target: string;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.target = this.entity.target;
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.shouldDraw() || !this.checkFrustum(renderContext))
+            return;
+
+        const camera = entitySystem.findEntityByTargetName(this.target);
+        if (camera === null || !(camera instanceof point_camera))
+            return;
+
+        renderContext.currentPointCamera = camera;
+    }
+}
+
+class func_monitor extends BaseMonitor {
+    public static classname = `func_monitor`;
+}
+
+class info_camera_link extends BaseMonitor {
+    public static classname = `info_camera_link`;
+}
+
+export class info_player_start extends BaseEntity {
+    public static classname = `info_player_start`;
 }
 
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
@@ -2837,6 +3138,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(logic_branch);
         this.registerFactory(logic_case);
         this.registerFactory(logic_timer);
+        this.registerFactory(logic_compare);
         this.registerFactory(math_counter);
         this.registerFactory(math_remap);
         this.registerFactory(math_colorblend);
@@ -2860,6 +3162,10 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_sprite_clientside);
         this.registerFactory(env_tonemap_controller);
         this.registerFactory(env_projectedtexture);
+        this.registerFactory(point_camera);
+        this.registerFactory(func_monitor);
+        this.registerFactory(info_camera_link);
+        this.registerFactory(info_player_start);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -2909,13 +3215,19 @@ export class EntitySystem {
         return false;
     }
 
-    public queueEntityOutputAction(action: EntityOutputAction, sender: BaseEntity, value: EntityMessageValue): void {
+    public queueOutputEvent(action: EntityOutputAction, sender: BaseEntity, value: EntityMessageValue): void {
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
         const triggerTime = this.currentTime + action.delay;
         const activator = this.currentActivator;
         this.outputQueue.push({ sender, activator, action, triggerTime, value });
+    }
+
+    public cancelOutputEventsForSender(sender: BaseEntity): void {
+        for (let i = 0; i < this.outputQueue.length; i++)
+            if (this.outputQueue[i].sender === sender)
+                this.outputQueue.splice(i--, 1);
     }
 
     // For console debugging.
@@ -2932,7 +3244,7 @@ export class EntitySystem {
     // For console debugging.
     private queueOutputAction(S: string, value: EntityMessageValue): void {
         const action = parseEntityOutputAction(S);
-        this.queueEntityOutputAction(action, this.getLocalPlayer(), value);
+        this.queueOutputEvent(action, this.getLocalPlayer(), value);
     }
 
     public findEntityByType<T extends BaseEntity>(type: EntityFactory<T>, start: T | null = null): T | null {

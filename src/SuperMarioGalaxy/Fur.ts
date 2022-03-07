@@ -16,7 +16,7 @@ import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescrip
 import { getRandomFloat, connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil";
 import { TextureMapping } from "../TextureHolder";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
+import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
 import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
@@ -283,7 +283,7 @@ function setLightColorGray(dst: Color, v: number): void {
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class FurDrawer {
     public indirect = new CLayerParam(0.2, 0.0, 1.5);
     public brightness = new CLayerParam(40.0, 0.0, 4.5);
@@ -480,12 +480,12 @@ class FurCtrl {
             this.furDrawer.setOnRenderInst(device, cache, template, materialParams);
 
             for (let j = 0; j < shape.mtxGroups.length; j++) {
-                if (!prepareShapeMtxGroup(packetParams, shapeInstanceState, shape, shape.mtxGroups[j]))
+                if (!prepareShapeMtxGroup(drawParams, shapeInstanceState, shape, shape.mtxGroups[j]))
                     continue;
 
                 const renderInst = renderInstManager.newRenderInst();
                 shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[j]);
-                this.furDrawer.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+                this.furDrawer.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
                 renderInstManager.submitRenderInst(renderInst);
             }
@@ -602,14 +602,14 @@ export class FurDrawManager extends NameObj {
         this.furCtrls.push(furCtrl);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         for (let i = 0; i < this.furCtrls.length; i++)
             this.furCtrls[i].drawFur(sceneObjHolder, renderInstManager, viewerInput);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         for (let i = 0; i < this.furBank.furMultis.length; i++)
             this.furBank.furMultis[i].destroy(device);
     }

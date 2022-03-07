@@ -3,7 +3,7 @@ import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { clamp } from "../MathHelpers";
+import { clamp, MathConstants } from "../MathHelpers";
 import { SingleSelect } from "../ui";
 import { assert } from "../util";
 import { ViewerRenderInput } from "../viewer";
@@ -13,7 +13,7 @@ import { DkrLevel } from "./DkrLevel";
 import { DkrObject } from './DkrObject';
 import { DkrObjectCache } from "./DkrObjectCache";
 import { DkrTextureCache } from "./DkrTextureCache";
-import { buf2hex, createQuaternionFromEuler, updateCameraViewMatrix } from "./DkrUtil";
+import { updateCameraViewMatrix } from "./DkrUtil";
 
 // This is basically the maximum framerate that is supported.
 // More samples is always technically better, but it also means more RAM being used up.
@@ -26,10 +26,10 @@ export const DKR_FPS = 30;
 export const FPS_SAMPLES_DELTA = DKR_FPS / SAMPLES_PER_SECOND;
 
 // Converts an 8-bit angle value into degrees 
-const BYTE_ANGLE_TO_DEGREES = 360 / 256;
+const BYTE_ANGLE_TO_RADIANS = MathConstants.TAU / 256;
 
 // Converts a radian angle to an 8-bit angle value
-const RADIANS_TO_BYTE_ANGLE = 256 / (Math.PI * 2);
+const RADIANS_TO_BYTE_ANGLE = 256 / MathConstants.TAU;
 
 // from: https://stackoverflow.com/a/4467559
 function mod(val: number, n: number): number {
@@ -89,6 +89,21 @@ let objAnimSpeed_scratch = 0;
 let nodeIndex_scratch = 0;
 let loopType_scratch = 0;
 let trackPos_scratch = 0;
+
+function calcQuatFromEuler(dst: quat, x: number, y: number, z: number): void {
+    const c1 = Math.cos(x * 0.5);
+    const c2 = Math.cos(y * 0.5);
+    const c3 = Math.cos(z * 0.5);
+    const s1 = Math.sin(x * 0.5);
+    const s2 = Math.sin(y * 0.5);
+    const s3 = Math.sin(z * 0.5);
+
+    // YXZ order
+    dst[0] = s1 * c2 * c3 + c1 * s2 * s3;
+    dst[1] = c1 * s2 * c3 - s1 * c2 * s3;
+    dst[2] = c1 * c2 * s3 - s1 * s2 * c3;
+    dst[3] = c1 * c2 * c3 + s1 * s2 * s3;
+}
 
 export class DkrAnimationTrack {
     private actor: DkrObject;
@@ -177,6 +192,7 @@ export class DkrAnimationTrack {
         rot_scratch[0] = nearestPoint.rotation[0]; // Pitch
         rot_scratch[1] = nearestPoint.rotation[1]; // Yaw
         rot_scratch[2] = nearestPoint.rotation[2]; // Roll
+
         switch(this.rotateType) {
             case 2:
                 {
@@ -194,18 +210,16 @@ export class DkrAnimationTrack {
                 break;
         }
 
-        if(DkrControlGlobals.ADV2_MIRROR.on && enableMirror) {
+        if (DkrControlGlobals.ADV2_MIRROR.on && enableMirror) {
             pos_scratch[0] = -pos_scratch[0];
             rot_scratch[1] = -rot_scratch[1];
             rot_scratch[2] = -rot_scratch[2];
         }
 
-        createQuaternionFromEuler(
-            quat_scratch, 
-            rot_scratch[0] * BYTE_ANGLE_TO_DEGREES,
-            rot_scratch[1] * BYTE_ANGLE_TO_DEGREES, 
-            -rot_scratch[2] * BYTE_ANGLE_TO_DEGREES, 
-            'YXZ'
+        calcQuatFromEuler(quat_scratch,
+            rot_scratch[0] * BYTE_ANGLE_TO_RADIANS,
+            rot_scratch[1] * BYTE_ANGLE_TO_RADIANS,
+            -rot_scratch[2] * BYTE_ANGLE_TO_RADIANS,
         );
 
         if(this.rotateType === 1) {
@@ -617,7 +631,7 @@ export class DkrAnimationTrack {
         const p3 = this.getNextNextNode(curNodeIndex);
         assert(!!p0 && !!p1 && !!p2 && !!p3);
 
-        let out = [
+        const out = [
             vec3.fromValues(0, 0, 0),
             vec3.fromValues(p1.getRoll(), p1.getYaw(), p1.getPitch()),
             vec3.fromValues(0, 0, 0),

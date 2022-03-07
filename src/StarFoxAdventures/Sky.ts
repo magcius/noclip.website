@@ -6,7 +6,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render';
+import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render';
 import { getMatrixAxisZ } from '../MathHelpers';
 
 import { ObjectRenderContext } from './objects';
@@ -14,22 +14,17 @@ import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from '.
 import { vecPitch } from './util';
 import { getCamPos } from './util';
 import { World } from './world';
-import { createGlobalLight, Light, LightType } from './WorldLights';
+import { createDirectionalLight, Light, LightType } from './WorldLights';
 import { colorCopy, colorNewCopy, colorScale, White } from '../Color';
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
 
 export class Sky {
     private skyddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
-
-    // TODO: move to envfx as AmbientLight?
-    private mainSkylight: Light = createGlobalLight(vec3.fromValues(0.0, 1.0, 0.0), White);
-    private otherSkylight: Light = createGlobalLight(vec3.fromValues(0.0, -1.0, 0.0), White);
-    private otherSkylightFactor: number = 1.0;
 
     constructor(private world: World) {
         this.skyddraw.setVtxDesc(GX.Attr.POS, true);
@@ -50,15 +45,6 @@ export class Sky {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('atmosphere'));
-
-        this.world.worldLights.addLight(this.mainSkylight);
-        this.world.worldLights.addLight(this.otherSkylight);
-    }
-
-    public update() {
-        this.world.envfxMan.getAmbientColor(this.mainSkylight.color, 0);
-        colorScale(this.otherSkylight.color, this.mainSkylight.color, this.otherSkylightFactor);
-        this.otherSkylight.color.a = 1.0;
     }
 
     private renderAtmosphere(device: GfxDevice, renderHelper: GXRenderHelperGfx, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
@@ -113,8 +99,8 @@ export class Sky {
 
         const renderInst = this.skyddraw.makeRenderInst(renderInstManager);
 
-        packetParams.clear();
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.materialHelperSky, materialParams, packetParams);
+        drawParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.materialHelperSky, materialParams, drawParams);
 
         this.skyddraw.endAndUpload(renderInstManager);
 
@@ -141,7 +127,7 @@ export class Sky {
             const objectCtx: ObjectRenderContext = {
                 sceneCtx,
                 showDevGeometry: false,
-                setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+                setupPointLights: () => {}, // Lights are not used when rendering skyscape objects (?)
             }
 
             const eyePos = scratchVec0;

@@ -133,7 +133,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return null;
     }
 
-    public setTextureOverride(name: string, textureOverride: TextureOverride, checkExisting: boolean = false): void {
+    public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         this.textureOverrides.set(name, textureOverride);
     }
 

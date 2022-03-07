@@ -24,7 +24,7 @@ import { Spine } from "./Spine";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch";
 import * as GX from '../gx/gx_enum';
 import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeDisplayFlags, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { MaterialParams, PacketParams } from "../gx/gx_render";
+import { MaterialParams, DrawParams } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
 
@@ -255,7 +255,7 @@ function patchBMD(bmd: BMD): void {
 }
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -283,7 +283,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
         // Fill texture memory with normal matrices.
         for (let i = 0; i < 10; i++) {
             const m = materialParams.u_TexMtx[i];
-            computeNormalMatrix(m, packetParams.u_PosMtx[i], true);
+            computeNormalMatrix(m, drawParams.u_PosMtx[i], true);
         }
     }
 }
@@ -755,7 +755,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     // HACK(jstpierre): For not having proper culling that stops movement
     public initWaitPhase: number = 0;
 
-    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
+    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, name: string) {
         super(sceneObjHolder, name);
     }
 
@@ -822,7 +822,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // disconnectToDrawTemporarily
     }
 
-    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
         const newVisibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
         if (this.visibleScenario === newVisibleScenario)
             return;
@@ -872,7 +872,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelInstance.modelMatrix;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const modelCache = sceneObjHolder.modelCache;
 
         // By default, we request the object's name.
@@ -972,7 +972,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (!this.visibleAlive || !this.visibleScenario)
             return;
 
@@ -990,7 +990,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             setCollisionMtx(this, this.collisionParts);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
         if (this.modelInstance === null)
             return;
 
@@ -1056,7 +1056,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (this.binder !== null) {
             if (this.calcBinderFlag) {
                 this.binder.bind(sceneObjHolder, scratchVec3a, this.velocity);
-                vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
+                vec3.add(this.translation, this.translation, scratchVec3a);
             } else {
                 vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
                 this.binder.clear();
@@ -1066,7 +1066,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         // Don't do anything. All cleanup should have happened at offScenario time.
         if (!this.visibleScenario)
             return;
@@ -1176,7 +1176,7 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         if (this.pendingMessageType !== null) {

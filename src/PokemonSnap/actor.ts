@@ -304,7 +304,7 @@ export class Projectile extends ModelRenderer {
         }
     }
 
-    protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+    protected override motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
         const dt = viewerInput.deltaTime / 1000;
         if (this.landedAt > 0) {
             const frames = 30 * (viewerInput.time - this.landedAt) / 1000;
@@ -502,7 +502,7 @@ class Splash extends ModelRenderer {
         return true;
     }
 
-    public motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+    public override motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
         if (this.renderers[this.headAnimationIndex].animator.loopCount >= 1)
             this.visible = false;
     }
@@ -589,7 +589,7 @@ export class Actor extends ModelRenderer {
         vec3.transformMat4(this.center, this.center, this.modelMatrix);
     }
 
-    protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+    protected override motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
         this.motionStep(viewerInput, globals);
         while (this.currState >= 0) {
             const state = this.def.stateGraph.states[this.currState];
@@ -629,7 +629,7 @@ export class Actor extends ModelRenderer {
             return MotionResult.None;
     }
 
-    protected animate(globals: LevelGlobals): void {
+    protected override animate(globals: LevelGlobals): void {
         super.animate(globals);
         if (this.renderers[0].animator.track)
             this.updatePositions(); // collision center depends on root node position
@@ -1064,7 +1064,7 @@ export class Actor extends ModelRenderer {
 }
 
 class Bulbasaur extends Actor {
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (param) {
             case 1: {
                 this.translation[1] = groundHeightAt(globals, this.translation) - 80;
@@ -1077,7 +1077,7 @@ class Bulbasaur extends Actor {
 }
 
 class Charmander extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
             case 0x802D8BB8: // stored in an array
@@ -1109,7 +1109,7 @@ class Charmander extends Actor {
 }
 
 class Charmeleon extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
             case 0x802DC170:
@@ -1123,7 +1123,7 @@ class Charmeleon extends Actor {
         super.startBlock(globals);
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         this.motionData.pathParam = this.motionData.pathParam % 1;
         this.motionData.storedValues[4] = Math.min(1, this.motionData.pathParam + .3 * (1 + Math.random()));
         return MotionResult.Done;
@@ -1133,7 +1133,7 @@ class Charmeleon extends Actor {
 class Squirtle extends Actor {
     private depth = -95;
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802CBA90) {
             if (this.motionData.auxStart < 0)
                 this.motionData.auxStart = viewerInput.time;
@@ -1148,7 +1148,7 @@ class Squirtle extends Actor {
 }
 
 class Kakuna extends Actor {
-    public reset(globals: LevelGlobals): void {
+    public override reset(globals: LevelGlobals): void {
         super.reset(globals);
         this.motionData.storedValues[0] = this.translation[1];
         this.motionData.storedValues[1] = this.motionData.groundHeight + 25;
@@ -1156,7 +1156,7 @@ class Kakuna extends Actor {
 }
 
 class Pidgey extends Actor {
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802C8BC4) {
             if (this.motionData.auxStart < 0)
                 this.motionData.auxStart = viewerInput.time;
@@ -1175,7 +1175,7 @@ class Pikachu extends Actor {
     public static currDiglett = 0;
     public static targetDiglett = 1;
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (this.currAux) {
             case 0x802CB814: {
                 getPathPoint(this.motionData.destination, assertExists(this.spawn.path), 1);
@@ -1195,7 +1195,7 @@ class Pikachu extends Actor {
         return MotionResult.None;
     }
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
             case 0x802E8290: {
@@ -1216,7 +1216,7 @@ class Pikachu extends Actor {
         super.startBlock(globals);
     }
 
-    protected endBlock(address: number, globals: LevelGlobals): boolean {
+    protected override endBlock(address: number, globals: LevelGlobals): boolean {
         const state = this.def.stateGraph.states[this.currState];
         switch (address) {
             case 0x802E8330:
@@ -1232,7 +1232,7 @@ class Pikachu extends Actor {
 }
 
 class Vulpix extends Actor {
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (this.currAux) {
             // runs both of these at the same time, second one is actually for cleanup
             case 0x802D9DFC:
@@ -1255,7 +1255,7 @@ class Psyduck extends Actor {
     private pathIndex = 0;
     private oldOffset = 0;
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802DB93C) {
             if (this.currBlock === 1) {
@@ -1267,7 +1267,7 @@ class Psyduck extends Actor {
         super.startBlock(globals);
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802DB630) {
             if (this.motionData.auxStart < 0)
                 this.motionData.auxStart = viewerInput.time;
@@ -1279,7 +1279,7 @@ class Psyduck extends Actor {
         return MotionResult.None;
     }
 
-    protected endBlock(address: number, globals: LevelGlobals): boolean {
+    protected override endBlock(address: number, globals: LevelGlobals): boolean {
         if (address === 0x802DB78C)
             globals.fishTracker = 2;
         else if (address === 0x802DB93C && this.currBlock === 1) {
@@ -1300,7 +1300,7 @@ class Poliwag extends Actor {
     private endHeight = 0;
     private pathIndex = 0;
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
             case 0x802DCBB8: this.currBlock = this.spawn.behavior - 4; break;
@@ -1319,7 +1319,7 @@ class Poliwag extends Actor {
         super.startBlock(globals);
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (param === 1) {
             this.motionData.storedValues[0] = this.motionData.storedValues[1];
             if (this.def.stateGraph.states[this.currState].startAddress === 0x802DC60C)
@@ -1330,7 +1330,7 @@ class Poliwag extends Actor {
         }
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux < 0x80000000 && (this.currAux & fakeAuxFlag)) {
             this.motionData.stateFlags |= EndCondition.Pause;
             const refState = this.def.stateGraph.states[this.currAux & 0xFF];
@@ -1376,7 +1376,7 @@ class Poliwag extends Actor {
         return MotionResult.None;
     }
 
-    protected endBlock(address: number, globals: LevelGlobals): boolean {
+    protected override endBlock(address: number, globals: LevelGlobals): boolean {
         if (address === 0x802DC6BC)
             globals.fishTracker = 1;
         else if (address === 0x802DCC6C && this.currBlock === 1) {
@@ -1392,7 +1392,7 @@ class Poliwag extends Actor {
 }
 
 class Weepinbell extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
             case 0x802BF68C: {
@@ -1407,7 +1407,7 @@ class Weepinbell extends Actor {
 }
 
 class Victreebel extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         if (this.def.stateGraph.states[this.currState].startAddress === 0x802BFEF0) {
             this.translation[1] = assertExists(this.target).translation[1] - 100;
             this.updatePositions();
@@ -1417,7 +1417,7 @@ class Victreebel extends Actor {
 }
 
 class Slowpoke extends Actor {
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802D9A58) {
             getPathPoint(this.motionData.destination, assertExists(this.motionData.path), 1);
             if (vec3.dist(this.motionData.destination, this.translation) < 475)
@@ -1427,7 +1427,7 @@ class Slowpoke extends Actor {
         return MotionResult.None;
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         getPathTangent(actorScratch, assertExists(this.motionData.path), 1);
         const targetYaw = Math.atan2(actorScratch[0], actorScratch[2]) + Math.PI;
         if (stepYawTowards(this.euler, targetYaw, Math.PI / 90, viewerInput.deltaTime / 1000))
@@ -1443,7 +1443,7 @@ class Magnemite extends Actor {
     private matchedAngle = false;
     private others: Actor[] = [];
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (this.currAux) {
             case 0x802E39A0: {
                 if (this.others.length === 0) {
@@ -1478,7 +1478,7 @@ class Magnemite extends Actor {
         return MotionResult.None;
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         mat4.getTranslation(this.translation, this.others[0].renderers[1].modelMatrix);
         if (this.matchedAngle)
             this.euler[1] = this.others[0].euler[1];
@@ -1487,7 +1487,7 @@ class Magnemite extends Actor {
         return MotionResult.Update;
     }
 
-    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (addr === 0x802E4434)
             mat4.getTranslation(this.motionData.destination, this.others[0].renderers[1].modelMatrix);
         else if (addr === 0x802E4668 && Magnemite.counter >= 2)
@@ -1495,7 +1495,7 @@ class Magnemite extends Actor {
         return MotionResult.None;
     }
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         switch (this.def.stateGraph.states[this.currState].startAddress) {
             case 0x802E4668: {
                 if (this.currAnimation !== this.others[0].currAnimation)
@@ -1516,7 +1516,7 @@ class Grimer extends Actor {
         this.materialController = new AdjustableAnimationController(0);
     }
 
-    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         let mask = 0;
         switch (addr) {
             case 0x802C0960:
@@ -1536,7 +1536,7 @@ class Grimer extends Actor {
             return MotionResult.Done;
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802C1018) {
             Grimer.flags |= 1 << (this.spawn.behavior - 1);
             return MotionResult.Done;
@@ -1550,7 +1550,7 @@ class Grimer extends Actor {
         return MotionResult.None;
     }
 
-    protected endBlock(address: number, globals: LevelGlobals): boolean {
+    protected override endBlock(address: number, globals: LevelGlobals): boolean {
         if (address === 0x802C0D34 && this.currBlock === 1) {
             this.motionData.storedValues[1] = 6000;
             this.motionData.storedValues[0]++;
@@ -1562,7 +1562,7 @@ class Grimer extends Actor {
         return false;
     }
 
-    public setAnimation(index: number): void {
+    public override setAnimation(index: number): void {
         super.setAnimation(index);
         this.materialController?.init(this.def.stateGraph.animations[index].fps * this.motionData.storedValues[0] / 2);
     }
@@ -1573,7 +1573,7 @@ class Haunter extends Actor {
     public fullModel: ModelRenderer;
     private timer = 2000;
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
         if (!this.visible)
             return;
         if (viewerInput.time > this.timer) {
@@ -1616,7 +1616,7 @@ export class Staryu extends Actor {
         vec3.add(dst, dst, pos);
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (this.currAux) {
             case 0x802CD5D8: {
                 const refHeight = this.relativeToPlayer ? globals.translation[1] : groundHeightAt(globals, this.translation);
@@ -1636,7 +1636,7 @@ export class Staryu extends Actor {
         return MotionResult.Update;
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         const dt = viewerInput.deltaTime / 1000;
         switch (param) {
             case 1: {
@@ -1692,7 +1692,7 @@ export class Staryu extends Actor {
         return MotionResult.Update;
     }
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
             case 0x802CCCFC:
@@ -1716,7 +1716,7 @@ export class Staryu extends Actor {
 
 class Jynx extends Actor {
     private static baseOffset = -53.25;
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         switch (this.def.stateGraph.states[this.currState].startAddress) {
             case 0x802C4EF4: {
                 this.motionData.storedValues[0] = this.euler[1];
@@ -1727,7 +1727,7 @@ class Jynx extends Actor {
         }
         super.startBlock(globals);
     }
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (param === 0) {
             if (this.motionData.storedValues[1] === 0)
                 return MotionResult.Done;
@@ -1756,7 +1756,7 @@ class Jynx extends Actor {
 
 class Magikarp extends Actor {
     private gyarados: Actor | null = null;
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802D2128) {
             if (this.gyarados === null)
                 this.gyarados = globals.allActors.find((a) => a.def.id === this.def.id + 1)!;
@@ -1771,7 +1771,7 @@ class Magikarp extends Actor {
 class Lapras extends Actor {
     private static flags = 0;
 
-    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         let mask = 0;
         switch (addr) {
             case 0x802C816C:
@@ -1787,7 +1787,7 @@ class Lapras extends Actor {
             return MotionResult.Done;
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === fakeAux) {
             // this is handled in a much more complicated way using state transitions,
             // possibly to ensure the values are only changed once, though it doesn't matter
@@ -1806,7 +1806,7 @@ class Porygon extends Actor {
     private amplitude = 0;
     private endHeight = 0;
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802DD1D4) {
             if (this.target && vec3.dist(this.translation, this.target.translation) < 1000)
@@ -1823,7 +1823,7 @@ class Porygon extends Actor {
             globals.sendGlobalSignal(this, 0x2B);
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802DD53C) {
             if (this.motionData.auxStart < 0) {
                 this.motionData.auxStart = viewerInput.time;
@@ -1844,7 +1844,7 @@ class Porygon extends Actor {
 }
 
 class Articuno extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         if (this.def.stateGraph.states[this.currState].startAddress === 0x802C46F0) {
             if (this.currBlock === 0)
                 vec3.copy(this.translation, this.target!.translation);
@@ -1856,7 +1856,7 @@ class Articuno extends Actor {
 class Zapdos extends Actor {
     private egg: Actor | null = null;
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         const r = 100 - (viewerInput.time - this.motionData.start) / 10;
         if (r <= 0) {
             vec3.copy(this.translation, this.motionData.startPos);
@@ -1868,7 +1868,7 @@ class Zapdos extends Actor {
         return MotionResult.Update;
     }
 
-    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currAux === 0x802EB6D0) {
             if (!this.egg) {
                 this.egg = globals.allActors.find((a) => a.def.id === 602)!;
@@ -1886,7 +1886,7 @@ class Zapdos extends Actor {
 class ArticunoEgg extends Actor {
     private currFPS = 30;
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802C4B04) {
             if (this.currBlock === 0)
@@ -1895,7 +1895,7 @@ class ArticunoEgg extends Actor {
         super.startBlock(globals);
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.currFPS >= 120) {
             this.motionData.stateFlags |= EndCondition.Misc;
             return MotionResult.Done;
@@ -1909,7 +1909,7 @@ class ArticunoEgg extends Actor {
         return MotionResult.None;
     }
 
-    protected endBlock(address: number, globals: LevelGlobals): boolean {
+    protected override endBlock(address: number, globals: LevelGlobals): boolean {
         if (address === 0x802C4B04) {
             if (this.currBlock === 0) {
                 this.animationController.adjust(30);
@@ -1923,7 +1923,7 @@ class ArticunoEgg extends Actor {
 }
 
 class ZapdosEgg extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802EC078) {
             if (this.currBlock === 0) {
@@ -1935,7 +1935,7 @@ class ZapdosEgg extends Actor {
         super.startBlock(globals);
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (param === 1) {
             const delta = 300 * viewerInput.deltaTime / 1000;
             if (this.translation[1] + delta > this.motionData.destination[1] - 120) {
@@ -1952,7 +1952,7 @@ class ZapdosEgg extends Actor {
 class MiniCrater extends Actor {
     private lavaSplash: Actor;
 
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802DD954)
             if (this.motionData.storedValues[0] === 0 && this.target && vec3.dist(this.translation, this.target.translation) < 200) {
@@ -1963,7 +1963,7 @@ class MiniCrater extends Actor {
         super.startBlock(globals);
     }
 
-    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected override customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.motionData.storedValues[0] !== 0) {
             this.lavaSplash.receiveSignal(this, 0x23, globals);
             return MotionResult.Done;
@@ -1975,7 +1975,7 @@ class MiniCrater extends Actor {
         return MotionResult.None;
     }
 
-    protected endBlock(address: number, globals: LevelGlobals): boolean {
+    protected override endBlock(address: number, globals: LevelGlobals): boolean {
         if (address === 0x802DD7F0)
             this.lavaSplash = assertExists(this.lastSpawn);
         return false;
@@ -1983,7 +1983,7 @@ class MiniCrater extends Actor {
 }
 
 class Crater extends Actor {
-    protected startBlock(globals: LevelGlobals): void {
+    protected override startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802DE95C) {
             let edgeIndex = 0;

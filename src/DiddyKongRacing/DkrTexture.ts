@@ -1,8 +1,7 @@
 
-import { nArray } from '../util';
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { Texture, translateCM } from '../Common/N64/RDP';
+import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { translateCM } from '../Common/N64/RDP';
 import { TexCM } from '../Common/N64/Image';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { vec2 } from 'gl-matrix';
@@ -31,14 +30,15 @@ export class DkrTexture {
     private hasBeenDestroyed = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private pixels: Uint8ClampedArray, headerData: Uint8Array) {
-        const dataView = new DataView(headerData.buffer);
-        this.width = dataView.getUint8(0);
-        this.height = dataView.getUint8(1);
-        this.format = this.getFormatString(dataView.getUint8(2) & 0xF);
+        const view = new DataView(headerData.buffer);
+        this.width = view.getUint8(0x00);
+        this.height = view.getUint8(0x01);
+        this.format = this.getFormatString(view.getUint8(0x02) & 0xF);
         this.layer = this.getTextureLayer();
 
-        const wrapS = (dataView.getUint8(7) & 0x40) ? TexCM.CLAMP : TexCM.WRAP;
-        const wrapT = (dataView.getUint8(7) & 0x80) ? TexCM.CLAMP : TexCM.WRAP;
+        const flags = view.getUint8(0x07);
+        const wrapS = !!(flags & 0x40) ? TexCM.CLAMP : TexCM.WRAP;
+        const wrapT = !!(flags & 0x80) ? TexCM.CLAMP : TexCM.WRAP;
 
         const sampler = cache.createSampler({
             wrapS: translateCM(wrapS),
@@ -49,10 +49,10 @@ export class DkrTexture {
             minLOD: 0, maxLOD: 0,
         });
 
-        this.numberOfFrames = dataView.getUint8(0x12);
+        this.numberOfFrames = view.getUint8(0x12);
 
         // How many frames to delay before moving to the next texture.
-        const frameDelayData = dataView.getUint16(0x14);
+        const frameDelayData = view.getUint16(0x14);
         if(frameDelayData > 0) {
             this.frameDelayAmount = Math.floor(Math.max(0x100 / frameDelayData, 1));
             this.currentFrameDelay = this.frameDelayAmount * 2.0;
@@ -69,9 +69,7 @@ export class DkrTexture {
             const frameEnd = (i + 1) * frameSize;
 
             const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, 1));
-            //const hostAccessPass = device.createHostAccessPass();
             device.uploadTextureData(gfxTexture, 0, [this.pixels.slice(frameStart, frameEnd)]);
-            //device.submitPass(hostAccessPass);
 
             this.textureMappingsArray[i][0].gfxSampler = sampler;
             this.textureMappingsArray[i][0].gfxTexture = gfxTexture;
@@ -82,7 +80,6 @@ export class DkrTexture {
         if(!this.hasBeenDestroyed) {
             for(const textureMapping of this.textureMappingsArray) {
                 device.destroyTexture(textureMapping[0].gfxTexture!);
-                // The sampler is already destroyed from renderHelper.destroy()
             }
             this.hasBeenDestroyed = true;
         }

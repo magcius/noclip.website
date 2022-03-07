@@ -14,7 +14,7 @@ export class F3DDKR_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
     
-    public both = `
+    public override both = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {
@@ -39,7 +39,7 @@ varying vec4 v_Color;
 varying vec2 v_TexCoord;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = ${F3DDKR_Program.a_Position}) in vec3 a_Position;
 layout(location = ${F3DDKR_Program.a_Position_2}) in vec3 a_Position_2;
 layout(location = ${F3DDKR_Program.a_Color}) in vec4 a_Color;
@@ -64,7 +64,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public override frag = `
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
 vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {

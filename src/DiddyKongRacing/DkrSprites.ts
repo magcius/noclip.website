@@ -192,97 +192,97 @@ export class DkrSprites {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, layer: number) {
-            if(!this.spritesInfo || !this.spriteInstances || !DkrControlGlobals.ENABLE_TEXTURES.on) {
-                return;
-            }
-            
-            const template = renderInstManager.pushTemplateRenderInst();
-            template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
-            template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        if(!this.spritesInfo || !this.spriteInstances || !DkrControlGlobals.ENABLE_TEXTURES.on) {
+            return;
+        }
 
-            if(layer === SPRITE_LAYER_TRANSPARENT) {
-                this.checkCameraDistanceToObjects(viewerInput.camera, layer);
-                this.sortInstances(layer);
-                template.setMegaStateFlags(setAttachmentStateSimple({
-                    depthWrite: true
-                }, {
-                    blendMode: GfxBlendMode.Add,
-                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-                }));
-                template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-                if(viewerInput.deltaTime > 0.0) {
-                    this.currentFrame += 0.1 * ((1000 / 30) / viewerInput.deltaTime);
-                }
-            }
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-            if (this.gfxProgram === null) {
-                this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
+        if(layer === SPRITE_LAYER_TRANSPARENT) {
+            this.checkCameraDistanceToObjects(viewerInput.camera, layer);
+            this.sortInstances(layer);
+            template.setMegaStateFlags(setAttachmentStateSimple({
+                depthWrite: true
+            }, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            }));
+            template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            if(viewerInput.deltaTime > 0.0) {
+                this.currentFrame += 0.1 * ((1000 / 30) / viewerInput.deltaTime);
             }
-    
-            const renderInst = renderInstManager.newRenderInst();
-    
-            // Set scene parameters
-            let offs = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_SceneParams, 16);
-            const d = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_SceneParams);
-            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-    
-            // Set draw parameters
-            let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_DrawParams, 4 + 16 + (20 * MAX_NUM_OF_SPRITE_INSTANCES));
-            const d2 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_DrawParams);
-            d2[offs2] = this.currentFrame;
+        }
+
+        if (this.gfxProgram === null) {
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
+        }
+
+        const renderInst = renderInstManager.newRenderInst();
+
+        // Set scene parameters
+        let offs = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_SceneParams, 16);
+        const d = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+
+        // Set draw parameters
+        let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_DrawParams, 4 + 16 + (20 * MAX_NUM_OF_SPRITE_INSTANCES));
+        const d2 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_DrawParams);
+        d2[offs2] = this.currentFrame;
+        offs2 += 4;
+
+        // Use the texture.
+        this.bind(renderInst);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, 0);
+
+        computeViewMatrix(viewMatrixScratch, viewerInput.camera);
+
+        assert(this.spriteInstances[layer].length <= MAX_NUM_OF_SPRITE_INSTANCES);
+        for(let i = 0; i < this.spriteInstances[layer].length; i++) {
+            const instanceObject: DkrObject = this.spriteInstances[layer][i];
+            const spriteIndex = instanceObject.getSpriteIndex();
+            d2[offs2]     = this.spriteIndexOffsets[spriteIndex];
+            d2[offs2 + 1] = this.spritesInfo[spriteIndex].length;
+            d2[offs2 + 2] = instanceObject.getSpriteAlphaTest();
+            d2[offs2 + 3] = instanceObject.isSpriteCentered() ? 0.0 : 500.0;
             offs2 += 4;
-    
-            // Use the texture.
-            this.bind(renderInst);
-            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, 0);
-
-            computeViewMatrix(viewMatrixScratch, viewerInput.camera);
-
-            assert(this.spriteInstances[layer].length <= MAX_NUM_OF_SPRITE_INSTANCES);
-            for(let i = 0; i < this.spriteInstances[layer].length; i++) {
-                const instanceObject: DkrObject = this.spriteInstances[layer][i];
-                const spriteIndex = instanceObject.getSpriteIndex();
-                d2[offs2]     = this.spriteIndexOffsets[spriteIndex];
-                d2[offs2 + 1] = this.spritesInfo[spriteIndex].length;
-                d2[offs2 + 2] = instanceObject.getSpriteAlphaTest();
-                d2[offs2 + 3] = instanceObject.isSpriteCentered() ? 0.0 : 500.0;
-                offs2 += 4;
-                const color = instanceObject.getSpriteColor();
-                d2[offs2]     = color[0];
-                d2[offs2 + 1] = color[1];
-                d2[offs2 + 2] = color[2];
-                d2[offs2 + 3] = color[3];
-                offs2 += 4;
-                if(DkrControlGlobals.ADV2_MIRROR.on) {
-                    mat4.mul(viewMatrixCalcScratch, mirrorMatrix, instanceObject.getModelMatrix());
-                    mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
-                } else {
-                    mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, instanceObject.getModelMatrix());
-                }
-                calcBillboardMatrix(viewMatrixCalc2Scratch, viewMatrixCalcScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
-                offs2 += fillMatrix4x3(d2, offs2, viewMatrixCalc2Scratch);
+            const color = instanceObject.getSpriteColor();
+            d2[offs2]     = color[0];
+            d2[offs2 + 1] = color[1];
+            d2[offs2 + 2] = color[2];
+            d2[offs2 + 3] = color[3];
+            offs2 += 4;
+            if(DkrControlGlobals.ADV2_MIRROR.on) {
+                mat4.mul(viewMatrixCalcScratch, mirrorMatrix, instanceObject.getModelMatrix());
+                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
+            } else {
+                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, instanceObject.getModelMatrix());
             }
+            calcBillboardMatrix(viewMatrixCalc2Scratch, viewMatrixCalcScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
+            offs2 += fillMatrix4x3(d2, offs2, viewMatrixCalc2Scratch);
+        }
 
-            // Set tex parameters
-            let offs3 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_TexParams, 4 * MAX_NUM_OF_SPRITE_FRAMES);
-            const d3 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_TexParams);
+        // Set tex parameters
+        let offs3 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_TexParams, 4 * MAX_NUM_OF_SPRITE_FRAMES);
+        const d3 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_TexParams);
 
-            for(let i = 0; i < this.spriteData.length; i++) {
-                d3[offs3++] = this.spriteData[i];
-            }
-            renderInst.setGfxProgram(this.gfxProgram);
-            
-            if(this.spriteInstances[layer].length > 0) {
-                renderInst.drawIndexesInstanced(6, this.spriteInstances[layer].length);
-            }
-            /*
-            renderInst.setMegaStateFlags({
-                cullMode: GfxCullMode.BACK
-            });
-            */
-    
-            renderInstManager.submitRenderInst(renderInst);
-            renderInstManager.popTemplateRenderInst();
+        for(let i = 0; i < this.spriteData.length; i++) {
+            d3[offs3++] = this.spriteData[i];
+        }
+        renderInst.setGfxProgram(this.gfxProgram);
+        
+        if(this.spriteInstances[layer].length > 0) {
+            renderInst.drawIndexesInstanced(6, this.spriteInstances[layer].length);
+        }
+        /*
+        renderInst.setMegaStateFlags({
+            cullMode: GfxCullMode.BACK
+        });
+        */
+
+        renderInstManager.submitRenderInst(renderInst);
+        renderInstManager.popTemplateRenderInst();
     }
 }

@@ -29,11 +29,11 @@ export class DrawCall extends F3DEX.DrawCall {
 
 // same logic, just with the new type
 export class RSPOutput extends F3DEX.RSPOutput {
-    public drawCalls: DrawCall[] = [];
+    public override drawCalls: DrawCall[] = [];
 
-    public currentDrawCall = new DrawCall();
+    public override currentDrawCall = new DrawCall();
 
-    public newDrawCall(firstIndex: number): DrawCall {
+    public override newDrawCall(firstIndex: number): DrawCall {
         this.currentDrawCall = new DrawCall();
         this.currentDrawCall.firstIndex = firstIndex;
         this.drawCalls.push(this.currentDrawCall);

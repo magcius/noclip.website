@@ -5,7 +5,7 @@ import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, White } from "../Colo
 import { AABB } from "../Geometry";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
@@ -20,10 +20,14 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Asset_Type, Material_Flags, Material_Type, Mesh_Asset, Render_Material, Texture_Asset } from "./Assets";
 import { Entity_World, Lightmap_Table } from "./Entity";
 import { TheWitnessGlobals } from "./Globals";
+import { UberShaderTemplate, UberShaderTemplateBasic } from "../SourceEngine/UberShader";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
+import { HashMap, nullHashFunc } from "../HashMap";
 
 class DepthCopyProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
@@ -34,11 +38,35 @@ void main() {
 `;
 }
 
-class TheWitnessProgram extends DeviceProgram {
+function shader_equals(a: Render_Material, b: Render_Material): boolean {
+    // The only things that influence the shader are these.
+    if (a.material_type !== b.material_type) return false;
+    if (a.flags !== b.flags) return false;
+    return true;
+}
+
+class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;
 
-    public both = `
+    constructor() {
+        super();
+        
+        this.cache = new HashMap<Render_Material, GfxProgram>(shader_equals, nullHashFunc);
+    }
+
+    protected createGfxProgram(cache: GfxRenderCache, variantSettings: Render_Material): GfxProgram {
+        // We do our own caching here; no need to use the render cache for this.
+        const programString = this.generateProgramString(variantSettings);
+        const preprocessedVert = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'vert', programString);
+        const preprocessedFrag = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'frag', programString);
+        return cache.device.createProgramSimple({ preprocessedVert, preprocessedFrag });
+    }
+
+    public generateProgramString(m: Render_Material): string {
+        return `
+precision mediump float;
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ViewProjection;
     vec4 u_CameraPosWorld;
@@ -83,6 +111,7 @@ uniform sampler2D u_LightMap1;
 
 uniform sampler2D u_TerrainColor;
 
+${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.CalcScaleBias}
 
 vec3 UnpackNormalMap(in vec4 t_NormalMapSample) {
@@ -113,11 +142,18 @@ vec3 CalcLightMapColor(in vec2 t_TexCoord) {
         t_LightMapSample += UnpackLightMapSample(texture(SAMPLER_2D(u_LightMap1), t_TexCoord.xy)) * u_LightMap1Blend;
     return t_LightMapSample;
 }
-`;
 
-    public vert = `
-precision mediump float;
+varying vec2 v_TexCoord0;
+varying vec3 v_LightMapData;
+varying vec4 v_Color0;
+varying vec3 v_PositionWorld;
 
+// TBN
+varying vec3 v_TangentSpaceBasis0;
+varying vec3 v_TangentSpaceBasis1;
+varying vec3 v_TangentSpaceBasis2;
+
+#ifdef VERT
 layout(location = 0) in vec4 a_Position;
 layout(location = 1) in vec2 a_TexCoord0;
 layout(location = 2) in vec2 a_TexCoord1;
@@ -128,17 +164,7 @@ layout(location = 6) in vec4 a_Color1;
 layout(location = 7) in vec4 a_BlendIndices;
 layout(location = 8) in vec4 a_BlendWeights;
 
-out vec2 v_TexCoord0;
-out vec3 v_LightMapData;
-out vec4 v_Color0;
-out vec3 v_PositionWorld;
-
-// TBN
-out vec3 v_TangentSpaceBasis0;
-out vec3 v_TangentSpaceBasis1;
-out vec3 v_TangentSpaceBasis2;
-
-void main() {
+void mainVS() {
     v_PositionWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(a_Position.xyz, 1.0)).xyz;
     gl_Position = Mul(u_ViewProjection, vec4(v_PositionWorld, 1.0));
     v_TexCoord0 = a_TexCoord0.xy;
@@ -152,27 +178,16 @@ void main() {
     v_TangentSpaceBasis2 = t_NormalWorld;
     v_Color0 = a_Color0;
 
-    bool use_vertex_lightmap = ${this.is_flag(Material_Flags.Vertex_Lightmap | Material_Flags.Vertex_Lightmap_Auto)};
+    bool use_vertex_lightmap = ${this.is_flag(m, Material_Flags.Vertex_Lightmap | Material_Flags.Vertex_Lightmap_Auto)};
     if (use_vertex_lightmap) {
         v_LightMapData = CalcLightMapColor(a_TexCoord1.xy);
     } else {
         v_LightMapData = vec3(a_TexCoord1.xy, 0.0);
     }
 }
-`;
+#endif
 
-    public frag = `
-in vec2 v_TexCoord0;
-in vec3 v_LightMapData;
-in vec4 v_Color0;
-in vec3 v_PositionWorld;
-
-in vec3 v_TangentSpaceBasis0;
-in vec3 v_TangentSpaceBasis1;
-in vec3 v_TangentSpaceBasis2;
-
-${GfxShaderLibrary.saturate}
-
+#ifdef FRAG
 vec3 CalcBlendWeight2(in vec2 t_TexCoord, in vec4 t_Blend, in float t_BlendRange) {
     float t_Blend0 = t_Blend.w - texture(SAMPLER_2D(u_BlendMap0), t_TexCoord.xy).x;
     float t_Weight0 = t_Blend0 * t_BlendRange + 0.5;
@@ -201,8 +216,8 @@ vec3 CalcBlendWeight3(in vec2 t_TexCoord, in vec4 t_Blend, in float t_BlendRange
 }
 
 vec3 CalcBlendWeightAlbedo(in vec2 t_TexCoord, in vec4 t_Blend, in float t_BlendRange) {
-    bool type_blended = ${this.is_type(Material_Type.Blended)};
-    bool type_blended3 = ${this.is_type(Material_Type.Blended3)};
+    bool type_blended = ${this.is_type(m, Material_Type.Blended)};
+    bool type_blended3 = ${this.is_type(m, Material_Type.Blended3)};
 
     if (type_blended3) {
         return CalcBlendWeight3(t_TexCoord, t_Blend, t_BlendRange);
@@ -214,7 +229,7 @@ vec3 CalcBlendWeightAlbedo(in vec2 t_TexCoord, in vec4 t_Blend, in float t_Blend
 }
 
 vec3 CalcBlendWeightNormal(in vec2 t_TexCoord, in vec4 t_Blend, in float t_BlendRange) {
-    bool type_blended3 = ${this.is_type(Material_Type.Blended3)};
+    bool type_blended3 = ${this.is_type(m, Material_Type.Blended3)};
 
     if (type_blended3) {
         return CalcBlendWeight3(t_TexCoord, t_Blend, t_BlendRange);
@@ -230,7 +245,7 @@ float HalfLambert(in float t_Dot) {
 void CalcLight(inout bool t_HasLighting, inout vec3 t_Diffuse, vec3 t_LightDirWorld, vec3 t_LightColor, vec3 t_NormalWorld, vec3 t_WorldDirectionToEye) {
     float t_NoL = dot(t_NormalWorld, t_LightDirWorld);
 
-    bool use_standard_light = ${this.is_type(Material_Type.Standard) || this.is_type(Material_Type.Blended) || this.is_type(Material_Type.Blended3)};
+    bool use_standard_light = ${this.is_type(m, Material_Type.Standard) || this.is_type(m, Material_Type.Blended) || this.is_type(m, Material_Type.Blended3)};
     if (use_standard_light) {
         t_NoL = saturate(t_NoL);
         t_NoL *= t_NoL;
@@ -239,7 +254,7 @@ void CalcLight(inout bool t_HasLighting, inout vec3 t_Diffuse, vec3 t_LightDirWo
         t_HasLighting = true;
     }
 
-    bool use_foliage = ${this.is_type(Material_Type.Foliage)};
+    bool use_foliage = ${this.is_type(m, Material_Type.Foliage)};
     if (use_foliage) {
         if (t_NoL >= 0.0) {
             t_NoL = mix(0.2, 1.0, t_NoL);
@@ -253,7 +268,7 @@ void CalcLight(inout bool t_HasLighting, inout vec3 t_Diffuse, vec3 t_LightDirWo
         t_HasLighting = true;
     }
 
-    bool use_vegetation = ${this.is_type(Material_Type.Vegetation)};
+    bool use_vegetation = ${this.is_type(m, Material_Type.Vegetation)};
     if (use_vegetation) {
         float t_Wrap = u_FoliageParams.x;
 
@@ -277,7 +292,7 @@ vec4 SampleTerrain() {
 }
 
 vec4 TintTerrain(in vec4 t_Sample, in vec3 t_AverageColor, in float t_TintAmount) {
-    bool use_terrain_tint = ${this.is_type(Material_Type.Blended3) || this.is_type(Material_Type.Tinted) || this.is_type(Material_Type.Decal)};
+    bool use_terrain_tint = ${this.is_type(m, Material_Type.Blended3) || this.is_type(m, Material_Type.Tinted) || this.is_type(m, Material_Type.Decal)};
 
     if (use_terrain_tint) {
         vec3 t_TerrainColor = SampleTerrain().rgb;
@@ -314,7 +329,7 @@ vec3 CalcNormalMap() {
 }
 
 vec4 CalcAlbedo() {
-    bool use_sky = ${this.is_type(Material_Type.Sky)};
+    bool use_sky = ${this.is_type(m, Material_Type.Sky)};
     if (use_sky) {
         vec3 t_Normal = normalize(v_PositionWorld.xyz);
 
@@ -360,7 +375,7 @@ void CalcToneMap(inout vec3 t_Color) {
     t_Color.rgb *= t_Scale;
 }
 
-void main() {
+void mainPS() {
     vec2 t_TexCoord0 = v_TexCoord0.xy;
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
@@ -380,9 +395,9 @@ void main() {
     // Add directional light.
     CalcLight(t_HasIncomingLight, t_DiffuseLight, u_KeyLightDir.xyz, u_KeyLightColor.rgb, t_NormalWorld.xyz, t_WorldDirectionToEye.xyz);
 
-    bool use_lightmap = ${this.is_flag(Material_Flags.Lightmapped)};
+    bool use_lightmap = ${this.is_flag(m, Material_Flags.Lightmapped)};
     if (use_lightmap) {
-        bool use_vertex_lightmap = ${this.is_flag(Material_Flags.Vertex_Lightmap | Material_Flags.Vertex_Lightmap_Auto)};
+        bool use_vertex_lightmap = ${this.is_flag(m, Material_Flags.Vertex_Lightmap | Material_Flags.Vertex_Lightmap_Auto)};
 
         vec3 t_LightMapSample;
         if (use_vertex_lightmap) {
@@ -391,7 +406,7 @@ void main() {
             t_LightMapSample = CalcLightMapColor(v_LightMapData.xy);
         }
 
-        bool use_vegetation = ${this.is_type(Material_Type.Vegetation)};
+        bool use_vegetation = ${this.is_type(m, Material_Type.Vegetation)};
         if (use_vegetation) {
             // Kill some of the existing light.
             t_DiffuseLight *= t_LightMapSample * 0.5 + 0.5;
@@ -407,7 +422,7 @@ void main() {
     if (!t_HasIncomingLight)
         t_DiffuseLight = vec3(1.0);
 
-    bool use_cloud = ${this.is_type(Material_Type.Cloud)};
+    bool use_cloud = ${this.is_type(m, Material_Type.Cloud)};
     if (use_cloud) {
         float t_Wrap = u_FoliageParams.x;
         float t_Dot = saturate((dot(t_NormalWorld.xyz, u_KeyLightDir.xyz) + t_Wrap) / (t_Wrap + 1.0));
@@ -433,25 +448,25 @@ void main() {
     t_FinalColor = pow(t_FinalColor, vec3(1.0 / 2.2));
 
     float t_Alpha = 1.0;
-    bool use_albedo_alpha = ${this.is_type(Material_Type.Vegetation) || this.is_type(Material_Type.Foliage) || this.is_type(Material_Type.Translucent) || this.is_type(Material_Type.Cloud)};
+    bool use_albedo_alpha = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Translucent) || this.is_type(m, Material_Type.Cloud)};
     if (use_albedo_alpha) {
         t_Alpha *= t_Albedo.a;
     }
 
-    bool use_hedge_alpha = ${this.is_type(Material_Type.Hedge)};
+    bool use_hedge_alpha = ${this.is_type(m, Material_Type.Hedge)};
     if (use_hedge_alpha) {
         float t_HedgeInstance = 0.0 + (1.0 - v_Color0.x);
         t_Alpha = smoothstep(t_HedgeInstance - 0.1, t_HedgeInstance + 0.1, t_Albedo.a);
     }
 
-    bool use_decal_alpha = ${this.is_type(Material_Type.Decal)};
+    bool use_decal_alpha = ${this.is_type(m, Material_Type.Decal)};
     if (use_decal_alpha) {
         float t_Blend0 = texture(SAMPLER_2D(u_BlendMap0), t_TexCoord0.xy).x;
         float t_BlendFactor = saturate(v_Color0.r + (((v_Color0.r + t_Blend0) - 1.0) * u_BlendFactor));
         t_Alpha *= t_BlendFactor;
     }
 
-    bool use_alpharef = ${this.is_type(Material_Type.Vegetation) || this.is_type(Material_Type.Foliage) || this.is_type(Material_Type.Hedge)};
+    bool use_alpharef = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Hedge)};
     if (use_alpharef) {
         if (t_Alpha < 0.5)
             discard;
@@ -459,18 +474,16 @@ void main() {
 
     gl_FragColor = vec4(t_FinalColor.rgb, t_Alpha);
 }
+#endif
 `;
-
-    constructor(private render_material: Render_Material) {
-        super();
     }
 
-    private is_type(type: Material_Type): boolean {
-        return this.render_material.material_type === type;
+    private is_type(m: Render_Material, type: Material_Type): boolean {
+        return m.material_type === type;
     }
 
-    private is_flag(flag: Material_Flags): boolean {
-        return !!(this.render_material.flags & flag);
+    private is_flag(m: Render_Material, flag: Material_Flags): boolean {
+        return !!(m.flags & flag);
     }
 }
 
@@ -520,13 +533,23 @@ function load_texture(globals: TheWitnessGlobals, m: TextureMapping, texture_nam
     return texture;
 }
 
+export class Render_Material_Cache {
+    private template = new TheWitnessShaderTemplate();
+
+    constructor(private cache: GfxRenderCache) {
+    }
+
+    public create_program(render_material: Render_Material): GfxProgram {
+        return this.template.getGfxProgram(this.cache, render_material);
+    }
+}
+
 const scratchColor = colorNewCopy(White);
 const scratchAABB = new AABB();
 const scratchVec3a = vec3.create();
 class Device_Material {
     public visible: boolean = true;
 
-    private program: TheWitnessProgram;
     private gfx_program: GfxProgram;
     private texture_map: (Texture_Asset | null)[] = nArray(3, () => null);
     private texture_mapping_array: TextureMapping[] = nArray(12, () => new TextureMapping());
@@ -570,8 +593,7 @@ class Device_Material {
         this.load_texture(globals, 9, 'white', clamp_sampler);
         this.load_texture(globals, 10, 'white', clamp_sampler);
 
-        this.program = new TheWitnessProgram(this.render_material);
-        this.gfx_program = globals.asset_manager.cache.createProgram(this.program);
+        this.gfx_program = globals.device_material_cache.create_program(this.render_material);
 
         // Disable invisible material types.
         if (material_type === Material_Type.Collision_Only || material_type === Material_Type.Occluder)
@@ -608,8 +630,8 @@ class Device_Material {
     }
 
     public fillMaterialParams(globals: TheWitnessGlobals, renderInst: GfxRenderInst, params: Material_Params): void {
-        let offs = renderInst.allocateUniformBuffer(TheWitnessProgram.ub_ObjectParams, 4*4+4*8);
-        const d = renderInst.mapUniformBufferF32(TheWitnessProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(TheWitnessShaderTemplate.ub_ObjectParams, 4*4+4*8);
+        const d = renderInst.mapUniformBufferF32(TheWitnessShaderTemplate.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, params.model_matrix);
 
         let lightmap0Blend = 1, lightmap1Blend = 0;
@@ -787,8 +809,8 @@ export class TheWitnessRenderer implements SceneGfx {
         const viewpoint = globals.viewpoint;
 
         viewpoint.setupFromCamera(viewerInput.camera);
-        let offs = template.allocateUniformBuffer(TheWitnessProgram.ub_SceneParams, 40);
-        const d = template.mapUniformBufferF32(TheWitnessProgram.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(TheWitnessShaderTemplate.ub_SceneParams, 40);
+        const d = template.mapUniformBufferF32(TheWitnessShaderTemplate.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewpoint.clipFromWorldMatrix);
         offs += fillVec3v(d, offs, viewpoint.cameraPos);
 

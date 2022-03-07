@@ -64,14 +64,14 @@ export class PartsModel extends LiveActor {
         this.hostMtx = this.fixedPosition.transformMatrix;
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.fixedPosition !== null)
             this.fixedPosition.calc();
 
         super.calcAnim(sceneObjHolder);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (this.hostMtx !== null && this.useHostMtx) {
             getMatrixTranslation(this.translation, this.hostMtx);
             mat4.copy(this.modelInstance!.modelMatrix, this.hostMtx);
@@ -80,7 +80,7 @@ export class PartsModel extends LiveActor {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         if (!isDead(this) && !isDead(this.parentActor) && (this.isAttached || !isHiddenModel(this.parentActor))) {
             if (this.isDead) {
                 this.isDead = false;

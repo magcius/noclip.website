@@ -2,16 +2,6 @@
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
 
-declare global {
-    interface HTMLElement {
-        requestPointerLock(): void;
-    }
-
-    interface Document {
-        exitPointerLock(): void;
-    }
-}
-
 function isModifier(key: string) {
     switch (key) {
     case 'ShiftLeft':
@@ -51,13 +41,12 @@ export default class InputManager {
     public keysDown: Map<string, boolean>;
     public mouseX: number = -1;
     public mouseY: number = -1;
-    public dx: number;
-    public dy: number;
-    public dz: number;
+    public dx: number = 0;
+    public dy: number = 0;
+    public dz: number = 0;
     public buttons: number = 0;
     public ondraggingmodechanged: (() => void) | null = null;
     private scrollListeners: Listener[] = [];
-    private keyTriggerListeners = new Map<string, Listener[]>();
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
 
@@ -108,12 +97,12 @@ export default class InputManager {
 
         this.afterFrame();
 
-        GlobalSaveManager.addSettingListener('InvertY', (saveManager: SaveManager, key: string) => {
-            this.invertY = saveManager.loadSetting<boolean>(key, false);
-        });
-
         GlobalSaveManager.addSettingListener('InvertX', (saveManager: SaveManager, key: string) => {
             this.invertX = saveManager.loadSetting<boolean>(key, false);
+        });
+
+        GlobalSaveManager.addSettingListener('InvertY', (saveManager: SaveManager, key: string) => {
+            this.invertY = saveManager.loadSetting<boolean>(key, false);
         });
     }
 
@@ -131,16 +120,16 @@ export default class InputManager {
 
     public getTouchDeltaX(): number {
         // XXX: In non-pinch mode, touch deltas are turned into mouse deltas.
-        return this.touchGesture == TouchGesture.Pinch ? this.dTouchX : 0;
+        return this.touchGesture === TouchGesture.Pinch ? this.dTouchX : 0;
     }
 
     public getTouchDeltaY(): number {
         // XXX: In non-pinch mode, touch deltas are turned into mouse deltas.
-        return this.touchGesture == TouchGesture.Pinch ? this.dTouchY : 0;
+        return this.touchGesture === TouchGesture.Pinch ? this.dTouchY : 0;
     }
 
     public getPinchDeltaDist(): number {
-        return this.touchGesture == TouchGesture.Pinch ? this.dPinchDist : 0;
+        return this.touchGesture === TouchGesture.Pinch ? this.dPinchDist : 0;
     }
 
     public isKeyDownEventTriggered(key: string): boolean {
@@ -166,13 +155,6 @@ export default class InputManager {
         return this.getDraggingMode() !== DraggingMode.None;
     }
 
-    public registerKeyTrigger(key: string, func: Listener): void {
-        if (!this.keyTriggerListeners.has(key))
-            this.keyTriggerListeners.set(key, []);
-
-        this.keyTriggerListeners.get(key)!.push(func);
-    }
-
     public afterFrame() {
         this.dx = 0;
         this.dy = 0;
@@ -183,26 +165,15 @@ export default class InputManager {
 
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
-            if (v) {
-                const triggers = this.keyTriggerListeners.get(k);
-                if (triggers)
-                    for (let i = 0; i < triggers.length; i++)
-                        triggers[i](this);
-            }
-
             this.keysDown.set(k, false);
         });
-    }
-
-    public focusViewer() {
-        this.toplevel.focus();
     }
 
     private _hasFocus() {
         return document.activeElement === document.body || document.activeElement === this.toplevel;
     }
 
-    private callScrollListeners(): void {
+    private _callScrollListeners(): void {
         for (let i = 0; i < this.scrollListeners.length; i++)
             this.scrollListeners[i](this);
     }
@@ -228,7 +199,7 @@ export default class InputManager {
     private _onWheel = (e: WheelEvent) => {
         e.preventDefault();
         this.dz += Math.sign(e.deltaY) * -4;
-        this.callScrollListeners();
+        this._callScrollListeners();
     };
 
     private _getScaledTouches(touches: TouchList): {x: number, y: number}[] {
@@ -304,17 +275,22 @@ export default class InputManager {
     }
 
     public onMotion(dx: number, dy: number) {
+        // Toss junk deltas.
+        // https://bugs.chromium.org/p/chromium/issues/detail?id=1031906
+        if (Math.abs(dx) > 200 || Math.abs(dy) > 200)
+            return;
+
         this.dx += dx;
         this.dy += dy;
-    }
-
-    public setCursor(cursor: string): void {
-        GlobalGrabManager.setCursor(cursor);
     }
 
     public onGrabReleased() {
         this.buttons = 0;
         if (this.ondraggingmodechanged !== null)
             this.ondraggingmodechanged();
+    }
+
+    public reset(): void {
+        this.isInteractive = true;
     }
 }

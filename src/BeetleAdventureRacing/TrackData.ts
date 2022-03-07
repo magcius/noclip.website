@@ -220,21 +220,21 @@ console.log();
 */
 
 class TranslucentPlaneProgram extends DeviceProgram {
-    public both = `
+    public override both = `
 layout(std140) uniform ub {
     Mat4x4 u_ClipFromView;
     Mat4x4 u_ViewFromModel;
     vec4 u_color;
 };`;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec2 a_Position;
 
 void main() {
     gl_Position = Mul(u_ClipFromView, Mul(u_ViewFromModel, vec4(a_Position.xy, 0.0, 1.0)));
 }`;
 
-    public frag = `void main() { gl_FragColor = u_color; }`;
+    public override frag = `void main() { gl_FragColor = u_color; }`;
 }
 
 export class TranslucentPlaneRenderer {

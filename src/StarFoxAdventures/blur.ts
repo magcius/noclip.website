@@ -1,15 +1,13 @@
 import { DeviceProgram } from "../Program";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxWrapMode, GfxTexture, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../TextureHolder";
-import { MathConstants } from "../MathHelpers";
-import { assert, nArray } from "../util";
+import { nArray } from "../util";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GXShaderLibrary } from "../gx/gx_material";
 
 // A downsampler to create blurred images for water and reflection effects.
 //
@@ -31,9 +29,9 @@ layout(std140) uniform ub_Params {
 `;
 
 class BlurDownProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
-    public frag = `
+    public override frag = `
 ${BindingsDefinition}
 
 in vec2 v_TexCoord;
@@ -53,9 +51,9 @@ void main() {
 }
 
 class BlurUpProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
-    public frag = `
+    public override frag = `
 ${BindingsDefinition}
 
 in vec2 v_TexCoord;

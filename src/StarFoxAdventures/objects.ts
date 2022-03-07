@@ -19,7 +19,8 @@ import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUin
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
-import { getMatrixTranslation } from '../MathHelpers';
+import { computeMatrixWithoutScale, getMatrixTranslation } from '../MathHelpers';
+import { LightType } from './WorldLights';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchVec0 = vec3.create();
@@ -103,7 +104,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
 }
 
 export interface Light {
@@ -124,14 +125,15 @@ export class ObjectInstance {
     public roll: number = 0;
     public scale: number = 1.0;
     private srtMatrix: mat4 = mat4.create();
+    private srtMatrixChild: mat4 = mat4.create();
     private srtDirty: boolean = true;
-    private cullRadius: number = 10;
+    public cullRadius: number = 10;
 
     private modelAnimNum: number | null = null;
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    private ambienceNum: number = 0;
+    private ambienceIdx: number = 0;
 
     public animSpeed: number = 0.1; // Default to a sensible value.
     // In the game, each object class is responsible for driving its own animations
@@ -145,9 +147,9 @@ export class ObjectInstance {
         this.commonObjectParams = parseCommonObjectParams(objParams);
 
         if (this.commonObjectParams.ambienceValue !== 0)
-            this.ambienceNum = this.commonObjectParams.ambienceValue - 1;
+            this.ambienceIdx = this.commonObjectParams.ambienceValue - 1;
         else
-            this.ambienceNum = objType.ambienceNum;
+            this.ambienceIdx = objType.ambienceNum;
 
         vec3.copy(this.position, this.commonObjectParams.position);
         
@@ -184,9 +186,12 @@ export class ObjectInstance {
             console.log(`attaching this object (${this.objType.name}) to parent ${parent?.objType.name}`);
     }
 
-    public getLocalSRT(): mat4 {
+    private updateSRT(): mat4 {
         if (this.srtDirty) {
             mat4FromSRT(this.srtMatrix, this.scale, this.scale, this.scale,
+                this.yaw, this.pitch, this.roll,
+                this.position[0], this.position[1], this.position[2]);
+            mat4FromSRT(this.srtMatrixChild, 1, 1, 1,
                 this.yaw, this.pitch, this.roll,
                 this.position[0], this.position[1], this.position[2]);
             this.srtDirty = false;
@@ -195,23 +200,22 @@ export class ObjectInstance {
         return this.srtMatrix;
     }
 
+    public getLocalSRT(): mat4 {
+        this.updateSRT();
+        return this.srtMatrix;
+    }
+
     public getSRTForChildren(): mat4 {
-        const result = mat4.create();
-        mat4.fromTranslation(result, this.position);
-        // mat4.scale(result, result, [this.scale, this.scale, this.scale]);
-        mat4.rotateY(result, result, this.yaw);
-        mat4.rotateX(result, result, this.pitch);
-        mat4.rotateZ(result, result, this.roll);
-        return result;
+        this.updateSRT();
+        return this.srtMatrixChild;
     }
 
     public getWorldSRT(out: mat4) {
         const localSrt = this.getLocalSRT();
-        if (this.parent !== null) {
+        if (this.parent !== null)
             mat4.mul(out, this.parent.getSRTForChildren(), localSrt);
-        } else {
+        else
             mat4.copy(out, localSrt);
-        }
     }
 
     public getType(): ObjectType {
@@ -226,8 +230,13 @@ export class ObjectInstance {
         return this.objType.name;
     }
 
-    public getPosition(): vec3 {
-        return this.position;
+    public getPosition(dst: vec3) {
+        if (this.parent !== null) {
+            this.parent.getPosition(dst);
+            vec3.add(dst, dst, this.position);
+        } else {
+            vec3.copy(dst, this.position);
+        }
     }
 
     public setPosition(pos: vec3) {
@@ -322,13 +331,15 @@ export class ObjectInstance {
             getMatrixTranslation(worldPos, worldMtx);
             const viewPos = scratchVec1;
             vec3.transformMat4(viewPos, worldPos, viewMtx);
-            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
+            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceIdx);
             // const debugCtx = getDebugOverlayCanvas2D();
             // drawWorldSpacePoint(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos);
             // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ")");
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
+                ambienceIdx: this.ambienceIdx,
                 outdoorAmbientColor: scratchColor0,
+                object: this,
             }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
     }

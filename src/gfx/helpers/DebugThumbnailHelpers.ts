@@ -1,7 +1,7 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
 import { GfxColor, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
-import { GfxShaderLibrary } from '../helpers/ShaderHelpers';
+import { GfxShaderLibrary } from './GfxShaderLibrary';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInstManager';

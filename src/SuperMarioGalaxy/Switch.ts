@@ -280,7 +280,7 @@ export class SwitchWatcherHolder extends NameObj {
         connectToScene(sceneObjHolder, this, MovementType.SwitchWatcherHolder, -1, -1, -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
         for (let i = 0; i < this.watchers.length; i++)
             this.watchers[i].movement(sceneObjHolder);
@@ -351,7 +351,7 @@ export class SleepControllerHolder extends NameObj {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
         for (let i = 0; i < this.controllers.length; i++)
             this.controllers[i].update(sceneObjHolder);
@@ -404,7 +404,7 @@ export class SwitchSynchronizer extends NameObj {
         this.reverse = true;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
         if (this.reverse) {
             if (!this.switchCtrl.isOnSwitchB(sceneObjHolder))

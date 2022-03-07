@@ -250,6 +250,16 @@ export class AABB {
         v[2] = (this.minZ + this.maxZ) / 2;
     }
 
+
+    public setFromCenterAndExtents(center: ReadonlyVec3, extents: ReadonlyVec3): void {
+        this.minX = center[0] - extents[0];
+        this.minY = center[1] - extents[1];
+        this.minZ = center[2] - extents[2];
+        this.maxX = center[0] + extents[0];
+        this.maxY = center[1] + extents[1];
+        this.maxZ = center[2] + extents[2];
+    }
+
     public cornerPoint(dst: vec3, i: number): void {
         if (i === 0)
             vec3.set(dst, this.minX, this.minY, this.minZ);

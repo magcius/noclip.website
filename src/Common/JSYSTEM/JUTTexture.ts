@@ -17,6 +17,8 @@ export interface BTI_Texture extends TextureInputGX {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
+    paletteFormat: GX.TexPalette;
+    paletteData: ArrayBufferSlice | null;
 }
 
 export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI_Texture {

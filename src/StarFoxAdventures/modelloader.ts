@@ -6,7 +6,7 @@ import * as GX from '../gx/gx_enum';
 import { nArray } from '../util';
 
 import { parseShader, ANCIENT_MAP_SHADER_FIELDS, SFA_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS } from './materialloader';
-import { MaterialFactory, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
+import { MaterialFactory, NormalFlags, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
 import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';
@@ -92,7 +92,7 @@ type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: nu
 // everything.
 // The final version of the game has a minor difference in VAT 5 compared to beta
 // and older versions.
-function generateVat(old: boolean): GX_VtxAttrFmt[][] {
+function generateVat(old: boolean, nbt: boolean): GX_VtxAttrFmt[][] {
     const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
     for (let i = 0; i <= GX.Attr.MAX; i++) {
         for (let j = 0; j < 8; j++)
@@ -114,7 +114,7 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
     vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
 
     vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-    vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: nbt ? GX.CompCnt.NRM_NBT : GX.CompCnt.NRM_XYZ };
     vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
     vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
     vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -154,8 +154,9 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
     return vat;
 }
 
-const VAT = generateVat(false);
-const OLD_VAT = generateVat(true);
+const VAT = generateVat(false, false);
+const VAT_NBT = generateVat(false, true);
+const OLD_VAT = generateVat(true, false);
 
 const FIELDS: any = {
     [ModelVersion.AncientMap]: {
@@ -346,6 +347,7 @@ const FIELDS: any = {
         shaderOffset: 0x38,
         shaderCount: 0xf8,
         shaderFields: SFA_SHADER_FIELDS,
+        texMtxCount: 0xfa,
         dlInfoOffset: 0xd0,
         dlInfoCount: 0xf5,
         dlInfoSize: 0x1c,
@@ -394,10 +396,6 @@ const enum Opcode {
     End         = 5,
 }
 
-const enum NormalFlags {
-    NBT = 0x8,
-}
-
 export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFactory: MaterialFactory, version: ModelVersion): Model {
     const model = new Model(version);
     const fields = FIELDS[version];
@@ -410,14 +408,13 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     const posOffset = data.getUint32(fields.posOffset);
     const posCount = data.getUint16(fields.posCount);
     // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-    model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
+    // model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
+    model.originalPosBuffer = dataSubarray(data, posOffset);
 
-    let nrmBuffer = data;
     if (fields.hasNormals) {
         const nrmOffset = data.getUint32(fields.nrmOffset);
         const nrmCount = data.getUint16(fields.nrmCount);
         // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
-        nrmBuffer = dataSubarray(data, nrmOffset);
         model.originalNrmBuffer = dataSubarray(data, nrmOffset, nrmCount * ((normalFlags & NormalFlags.NBT) ? 9 : 3));
     }
 
@@ -425,7 +422,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.posFineSkinningConfig));
         if (posFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
-            model.fineSkinQuantizeScale = posFineSkinningConfig.quantizeScale;
+            model.fineSkinPositionQuantizeScale = posFineSkinningConfig.quantizeScale;
 
             const weightsOffs = data.getUint32(fields.posFineSkinningWeights);
             const posFineSkinningWeights = dataSubarray(data, weightsOffs);
@@ -445,7 +442,10 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
         if (nrmFineSkinningConfig.numPieces !== 0) {
             model.hasFineSkinning = true;
+            model.fineSkinNormalQuantizeScale = nrmFineSkinningConfig.quantizeScale;
             model.fineSkinNBTNormals = !!(normalFlags & NormalFlags.NBT);
+            if (model.fineSkinNBTNormals)
+                console.warn(`Fine-skinned NBT normals detected; not implemented yet`);
 
             const weightsOffs = data.getUint32(fields.nrmFineSkinningWeights);
             const nrmFineSkinningWeights = dataSubarray(data, weightsOffs);
@@ -465,8 +465,13 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         model.hasBetaFineSkinning = model.hasFineSkinning && version === ModelVersion.Beta;
     }
 
-
-    const vat = fields.oldVat ? OLD_VAT : VAT;
+    let vat: GX_VtxAttrFmt[][];
+    if (fields.oldVat)
+        vat = OLD_VAT;
+    else if (normalFlags & NormalFlags.NBT)
+        vat = VAT_NBT;
+    else
+        vat = VAT;
 
     // @0x8: data size
     // @0xc: 4x3 matrix (placeholder; always zeroed in files)
@@ -485,18 +490,24 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     const clrOffset = data.getUint32(fields.clrOffset);
     const clrCount = data.getUint16(fields.clrCount);
     // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
+    // const clrBuffer = dataSubarray(data, clrOffset, clrCount * 2);
     const clrBuffer = dataSubarray(data, clrOffset);
 
     const texcoordOffset = data.getUint32(fields.texcoordOffset);
     const texcoordCount = data.getUint16(fields.texcoordCount);
     // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordOffset.toString(16)}`);
+    // const texcoordBuffer = dataSubarray(data, texcoordOffset, texcoordCount * 4);
     const texcoordBuffer = dataSubarray(data, texcoordOffset);
+
+    let hasSkinning = false;
 
     let jointCount = 0;
     if (fields.hasBones) {
         const jointOffset = data.getUint32(fields.jointOffset);
         jointCount = data.getUint8(fields.jointCount);
         // console.log(`Loading ${jointCount} joints from offset 0x${jointOffset.toString(16)}`);
+
+        hasSkinning = true;
 
         model.joints = [];
         let offs = jointOffset;
@@ -552,12 +563,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     }
 
     let texMtxCount = 0;
-    if (fields.hasBones) {
-        if (fields.isBeta)
-            texMtxCount = data.getUint8(fields.texMtxCount);
-        else
-            texMtxCount = data.getUint8(0xfa);
-    }
+    if (fields.hasBones)
+        texMtxCount = data.getUint8(fields.texMtxCount);
     
     const shaderOffset = data.getUint32(fields.shaderOffset);
     const shaderCount = data.getUint8(fields.shaderCount);
@@ -631,14 +638,17 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
             let texmtxNum = 0;
 
-            if (shader.hasAuxTex0 || shader.hasAuxTex1) {
-                if (shader.hasAuxTex2) {
+            if (shader.hasHemisphericProbe || shader.hasReflectiveProbe) {
+                if (shader.hasNBTTexture) {
+                    // Binormal matrix index
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;
+                    // Tangent matrix index
                     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                     texmtxNum++;
                 }
 
+                // Normal matrix index
                 vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                 texmtxNum++;
             }
@@ -650,25 +660,17 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
             }
         }
 
-        const posDesc = bits.get(1);
-        vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+        vcd[GX.Attr.POS].type = bits.get(1) ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
 
-        if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM)) {
-            const nrmDesc = bits.get(1);
-            vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-
-            // const isNBT = !!(nrmTypeFlags & 8);
-            // No need to do anything, NRM and NBT are the same under the hood.
-        } else {
+        if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM))
+            vcd[GX.Attr.NRM].type = bits.get(1) ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+        else
             vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-        }
 
-        if (shader.attrFlags & ShaderAttrFlags.CLR) {
-            const clr0Desc = bits.get(1);
-            vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-        } else {
+        if (shader.attrFlags & ShaderAttrFlags.CLR)
+            vcd[GX.Attr.CLR0].type = bits.get(1) ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+        else
             vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
-        }
 
         const texCoordDesc = bits.get(1);
         if (shader.layers.length > 0) {
@@ -711,7 +713,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
-        newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
+        newGeom.setPnMatrixMap(pnMatrixMap, hasSkinning, model.hasFineSkinning);
         if (dlInfo.aabb !== undefined)
             newGeom.setBoundingBox(dlInfo.aabb);
         if (dlInfo.sortLayer !== undefined)
@@ -775,7 +777,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
                         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
-                        newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
+                        newGeom.setPnMatrixMap(pnMatrixMap, hasSkinning, model.hasFineSkinning);
                         if (dlInfo.aabb !== undefined)
                             newGeom.setBoundingBox(dlInfo.aabb);
                         if (dlInfo.sortLayer !== undefined)
@@ -807,7 +809,8 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                 vcd = readVertexDesc(bits, curShader);
                 break;
             }
-            case Opcode.SetMatrices: // When drawing map blocks, this command is ignored by the original game.
+            case Opcode.SetMatrices:
+                // This command is only relevant when drawing objects. The game ignores this command when drawing maps.
                 const numBones = bits.get(4);
                 if (numBones > 10)
                     throw Error(`Too many PN matrices`);

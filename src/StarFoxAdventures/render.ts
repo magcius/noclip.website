@@ -2,28 +2,33 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Viewer from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
+import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render';
 import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CameraController } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8, White } from '../Color';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
-import { MaterialFactory, HeatShimmerMaterial } from './materials';
+import { MaterialFactory, HeatShimmerMaterial, MaterialRenderContext } from './materials';
 import { radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
 import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
-import { drawScreenSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { World } from './world';
+
+export interface SceneUpdateContext {
+    viewerInput: Viewer.ViewerRenderInput;
+}
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
     animController: SFAAnimationController;
+    world?: World;
 }
 
 const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
@@ -40,22 +45,24 @@ export interface SFARenderLists {
 
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
-const scratchPacketParams = new PacketParams();
+const scratchdrawParams = new DrawParams();
 const scratchMaterialParams = new MaterialParams();
 
-export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
+export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 }
 
-export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, packetParams: PacketParams) {
-    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, packetParams);
+export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
+    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, drawParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
 export class SFARenderer implements Viewer.SceneGfx {
+    protected world?: World;
+
     protected renderHelper: GXRenderHelperGfx;
     protected renderLists: SFARenderLists;
     
@@ -130,6 +137,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, sceneCtx: SceneRenderContext) {}
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
+    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
 
     private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sourceColorResolveTextureID: GfxrResolveTextureID, sourceDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
         // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
@@ -179,17 +187,20 @@ export class SFARenderer implements Viewer.SceneGfx {
         if (this.heatShimmerMaterial === undefined)
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
 
-        const matCtx = {
+        const matCtx: MaterialRenderContext = {
             sceneCtx,
-            modelViewMtx: mat4.create(),
-            invModelViewMtx: mat4.create(),
+            worldToViewMtx: mat4.create(),
+            viewToWorldMtx: mat4.create(),
+            modelToViewMtx: mat4.create(),
+            viewToModelMtx: mat4.create(),
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
             furLayer: 0,
         };
         this.heatShimmerMaterial!.setOnMaterialParams(scratchMaterialParams, matCtx);
 
-        scratchPacketParams.clear();
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchPacketParams);
+        scratchdrawParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchdrawParams);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 
@@ -231,7 +242,12 @@ export class SFARenderer implements Viewer.SceneGfx {
         );
     }
 
+    protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {}
+    protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {}
+
     private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
+        this.addWorldRenderPassesInner(device, builder, renderInstManager, sceneCtx);
+
         let blurTargetID: GfxrRenderTargetID | undefined;
         if (renderLists.world[0].hasLateSamplerBinding('temporal-texture-downscale-8x'))
             blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
@@ -248,11 +264,15 @@ export class SFARenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(blurResolveID);
             }
 
+            this.attachResolveTexturesForWorldOpaques(builder, pass);
+
             pass.exec((passRenderer, scope) => {
                 if (blurTargetID !== undefined) {
                     this.temporalTextureMapping.gfxTexture = scope.getResolveTextureForID(blurResolveID);
                     renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
                 }
+
+                this.resolveLateSamplerBindingsForWorldOpaques(renderLists.world[0], scope);
 
                 renderLists.world[0].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 renderLists.furs.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
@@ -296,6 +316,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         const sceneCtx: SceneRenderContext = {
             viewerInput,
             animController: this.animController,
+            world: this.world,
         };
 
         this.addSkyRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
@@ -318,6 +339,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.addWorldRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
         if (this.enableHeatShimmer)
             this.addHeatShimmerRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
+            
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);

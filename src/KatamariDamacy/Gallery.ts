@@ -31,7 +31,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, nu
 class GalleryCircleProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ColorInner;
     vec4 u_ColorOuter;
@@ -39,7 +39,7 @@ layout(std140) uniform ub_Params {
 };
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -52,7 +52,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {

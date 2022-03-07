@@ -224,11 +224,6 @@ export function getCamPos(v: vec3, camera: Camera): void {
     getMatrixTranslation(v, camera.worldMatrix);
 }
 
-export function computeModelView(dst: mat4, camera: Camera, modelMatrix: ReadonlyMat4): void {
-    computeViewMatrix(dst, camera);
-    mat4.mul(dst, dst, modelMatrix);
-}
-
 export function setInt8Clamped(data: DataView, byteOffset: number, value: number) {
     if (value < -128)
         value = -128;

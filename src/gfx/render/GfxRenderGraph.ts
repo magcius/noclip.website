@@ -112,6 +112,8 @@ export interface GfxrPass {
      * seldomly used.
      */
     post(func: PassPostFunc): void;
+
+    addExtraRef(renderTargetID: GfxrAttachmentSlot): void;
 }
 
 class PassImpl implements GfxrPass {
@@ -119,14 +121,16 @@ class PassImpl implements GfxrPass {
 
     // Input state used for scheduling.
 
-    // RenderTargetAttachmentSlot => renderTargetID
+    // GfxrAttachmentSlot => renderTargetID
     public renderTargetIDs: GfxrRenderTargetID[] = [];
-    // RenderTargetAttachmentSlot => resolveTextureID
+    // GfxrAttachmentSlot => resolveTextureID
     public resolveTextureOutputIDs: GfxrResolveTextureID[] = [];
-    // RenderTargetAttachmentSlot => GfxTexture
+    // GfxrAttachmentSlot => GfxTexture
     public resolveTextureOutputExternalTextures: GfxTexture[] = [];
     // List of resolveTextureIDs that we have a reference to.
     public resolveTextureInputIDs: GfxrResolveTextureID[] = [];
+    // GfxrAttachmentSlot => refcount.
+    public renderTargetExtraRefs: boolean[] = [];
 
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
@@ -197,6 +201,10 @@ class PassImpl implements GfxrPass {
     public post(func: PassPostFunc): void {
         assert(this.postFunc === null);
         this.postFunc = func;
+    }
+
+    public addExtraRef(slot: GfxrAttachmentSlot): void {
+        this.renderTargetExtraRefs[slot] = true;
     }
 }
 
@@ -321,7 +329,7 @@ export interface GfxrGraphBuilderDebug {
 }
 
 class RenderTarget {
-    public debugName: string;
+    public debugName: string = '';
 
     public readonly dimension = GfxTextureDimension.n2D;
     public readonly depth = 1;
@@ -352,11 +360,15 @@ class RenderTarget {
         } else {
             // Single-sampled textures can be backed by regular textures.
             this.texture = device.createTexture(this);
-            device.setResourceName(this.texture, this.debugName);
 
             this.attachment = device.createRenderTargetFromTexture(this.texture);
         }
+    }
 
+    public setDebugName(device: GfxDevice, debugName: string): void {
+        this.debugName = debugName;
+        if (this.texture !== null)
+            device.setResourceName(this.texture, this.debugName);
         device.setResourceName(this.attachment, this.debugName);
     }
 
@@ -453,10 +465,14 @@ export class GfxrTemporalTexture {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.inputTexture !== null)
-            this.inputTexture.destroy(device);
-        if (this.outputTexture !== null && this.outputTexture !== this.inputTexture)
+        if (this.outputTexture !== null && this.outputTexture !== this.inputTexture) {
             this.outputTexture.destroy(device);
+            this.outputTexture = null;
+        }
+        if (this.inputTexture !== null) {
+            this.inputTexture.destroy(device);
+            this.inputTexture = null;
+        }
     }
 }
 
@@ -610,12 +626,15 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     private singleSampledTextureForResolveTextureID: SingleSampledTexture[] = [];
 
     private scheduleAddUseCount(graph: GraphImpl, pass: PassImpl): void {
-        for (let i = 0; i < pass.renderTargetIDs.length; i++) {
-            const renderTargetID = pass.renderTargetIDs[i];
+        for (let slot = 0; slot < pass.renderTargetIDs.length; slot++) {
+            const renderTargetID = pass.renderTargetIDs[slot];
             if (renderTargetID === undefined)
                 continue;
 
             this.renderTargetOutputCount[renderTargetID]++;
+
+            if (pass.renderTargetExtraRefs[slot])
+                this.renderTargetOutputCount[renderTargetID]++;
         }
 
         for (let i = 0; i < pass.resolveTextureInputIDs.length; i++) {
@@ -639,7 +658,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         if (!this.renderTargetAliveForID[renderTargetID]) {
             const desc = graph.renderTargetDescriptions[renderTargetID];
             const newRenderTarget = this.acquireRenderTargetForDescription(desc);
-            newRenderTarget.debugName = graph.renderTargetDebugNames[renderTargetID];
+            newRenderTarget.setDebugName(this.device, graph.renderTargetDebugNames[renderTargetID]);
             this.renderTargetAliveForID[renderTargetID] = newRenderTarget;
         }
 
@@ -806,6 +825,10 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
         for (let i = 0; i < pass.renderTargetIDs.length; i++)
             this.releaseRenderTargetForID(pass.renderTargetIDs[i], true);
+
+        for (let slot = 0; slot < pass.renderTargetExtraRefs.length; slot++)
+            if (pass.renderTargetExtraRefs[slot])
+                this.releaseRenderTargetForID(pass.renderTargetIDs[slot], true);
     }
 
     private scheduleGraph(graph: GraphImpl): void {

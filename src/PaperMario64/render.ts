@@ -33,7 +33,7 @@ class PaperMario64Program extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     private static program = program_glsl;
-    public both = PaperMario64Program.program;
+    public override both = PaperMario64Program.program;
 }
 
 function makeVertexBufferData(v: Vertex[]): ArrayBufferLike {
@@ -133,7 +133,7 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
@@ -141,7 +141,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -154,7 +154,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {

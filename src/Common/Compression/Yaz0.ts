@@ -32,7 +32,6 @@ export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
 
     while (true) {
         const commandByte = srcView.getUint8(srcOffs++);
-        console.log('loop', srcOffs.toString(16), commandByte.toString(16), uncompressedSize.toString(16));
 
         let i = 8;
         while (i--) {

@@ -29,20 +29,19 @@ class PortalSceneDesc implements SceneDesc {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await Promise.all([
                 filesystem.createVPKMount(`${pathBase}/portal_pak`),
-                filesystem.createVPKMount(`${pathBase2}/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase2}/hl2_misc`),
+                filesystem.createVPKMount(`HalfLife2/hl2_textures`),
+                filesystem.createVPKMount(`HalfLife2/hl2_misc`),
             ]);
             return filesystem;
         });
 
         const renderContext = new SourceRenderContext(context.device, filesystem);
         this.registerEntityFactories(renderContext.entityFactoryRegistry);
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`, renderContext);
+        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`, false, renderContext);
     }
 }
 
 const pathBase = `Portal`;
-const pathBase2 = `HalfLife2`;
 
 const id = 'Portal';
 const name = 'Portal';

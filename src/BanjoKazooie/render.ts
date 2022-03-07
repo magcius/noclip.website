@@ -30,7 +30,7 @@ export class F3DEX_Program extends DeviceProgram {
     public static ub_DrawParams = 1;
     public static ub_CombineParams = 2;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {
@@ -74,7 +74,7 @@ const vec4 t_Half = vec4(0.5);
 const vec4 t_One = vec4(1.0);
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = ${F3DEX_Program.a_Position}) in vec4 a_Position;
 layout(location = ${F3DEX_Program.a_Color}) in vec4 a_Color;
 layout(location = ${F3DEX_Program.a_TexCoord}) in vec2 a_TexCoord;

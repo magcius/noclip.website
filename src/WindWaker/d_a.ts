@@ -1,21 +1,21 @@
 
-import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
+import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, fopAcM_create, fopAcIt_JudgeByID } from "./framework";
 import { dGlobals, dDlst_alphaModel__Type } from "./zww_scenes";
-import { vec3, mat4, quat, ReadonlyVec3, vec2 } from "gl-matrix";
+import { vec3, mat4, quat, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight__OnMaterialParams } from "./d_kankyo";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf } from "./m_do_ext";
-import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad } from "./SComponent";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf, mDoExt_modelEntryDL } from "./m_do_ext";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad, cM__Rad2Short, cLib_distanceXZ, cLib_distanceSqXZ, cLib_targetAngleX } from "./SComponent";
 import { dPath_GetRoomPath, dStage_Multi_c, dPath, dPath__Point } from "./d_stage";
-import { nArray, assertExists, assert } from "../util";
+import { nArray, assertExists, assert, hexzero0x } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8 } from "../Color";
+import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, White, Green } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
-import { dLib_getWaterY, d_a_sea } from "./d_a_sea";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from "../gx/gx_render";
+import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -29,6 +29,7 @@ import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 // Framework'd actors
 
@@ -81,7 +82,7 @@ export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
 }
 
 export function MtxPosition(dst: vec3, src: ReadonlyVec3 = dst, m: mat4 = calc_mtx): void {
-    vec3.transformMat4(dst, src, m);
+    transformVec3Mat4w1(dst, m, src);
 }
 
 export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
@@ -192,7 +193,7 @@ class d_a_grass extends fopAc_ac_c {
         ]
     ];
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const enum FoliageType {
             Grass,
             Tree,
@@ -271,7 +272,7 @@ class d_a_ep extends fopAc_ac_c {
 
     private static arcName = `Ep`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_ep.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -308,7 +309,7 @@ class d_a_ep extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
@@ -322,7 +323,7 @@ class d_a_ep extends fopAc_ac_c {
         alphaModel0.set(dDlst_alphaModel__Type.Bonbori, this.alphaModelMtx, this.alphaModelAlpha);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         if (this.type === 0 || this.type === 3) {
@@ -366,7 +367,7 @@ class d_a_ep extends fopAc_ac_c {
         this.ep_move();
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         dKy_plight_cut(globals.g_env_light, this.light);
     }
 
@@ -473,7 +474,7 @@ class d_a_bg extends fopAc_ac_c {
     private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
     private bgW = new dBgW();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
 
         const roomNo = this.parameters;
@@ -533,7 +534,7 @@ class d_a_bg extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
                 this.bgBtkAnm[i]!.play(deltaTimeInFrames);
@@ -542,9 +543,9 @@ class d_a_bg extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // TODO(jstpierre): Proper culling check
-        // if (!this.cullingCheck(viewerInput))
+        // if (!this.cullingCheck(viewerInput.camera))
         //     return;
 
         // force far plane to 100000.0 ?
@@ -563,7 +564,7 @@ class d_a_bg extends fopAc_ac_c {
         settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         globals.scnPlay.bgS.Release(this.bgW);
     }
 }
@@ -572,7 +573,7 @@ class d_a_vrbox extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox;
     private model: J3DModelInstance;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
 
         const res = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`));
@@ -628,7 +629,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.dungeon_rain_proc(globals);
     }
 
@@ -652,7 +653,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
         this.daVrbox_color_set(globals);
@@ -683,7 +684,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     private usoUmi: J3DModelInstance | null = null;
     private scrollSpeed = 0.0005;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const backCloudRes = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_back_cloud.bdl`));
         this.backCloud = new J3DModelInstance(backCloudRes);
 
@@ -763,11 +764,11 @@ class d_a_vrbox2 extends fopAc_ac_c {
             this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiCol);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.daVrbox2_color_set(globals, deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
         let sum = 0;
@@ -832,7 +833,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     private innerRadius = 0.0;
     private outerRadius = 0.0;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.colpat = this.parameters & 0xFF;
         this.effectMode = (this.parameters >>> 8) & 0xFF;
         this.invert = !!((this.rot[0] >>> 8) & 0xFF);
@@ -872,7 +873,7 @@ class d_a_kytag00 extends fopAc_ac_c {
         // Moved inside wether_tag_move.
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.invert) {
             this.target = cLib_addCalc(this.target, 0.0, 0.1, 0.01, 0.0001);
         } else {
@@ -1000,7 +1001,7 @@ class d_a_kytag01 extends fopAc_ac_c {
 
     private influence = new WAVE_INFLUENCE();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         vec3.copy(this.influence.pos, this.pos);
 
         this.influence.innerRadius = this.scale[0] * 5000.0;
@@ -1043,7 +1044,7 @@ class d_a_kytag01 extends fopAc_ac_c {
         }
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         dKy__waveinfl_cut(globals.g_env_light, this.influence);
     }
 }
@@ -1058,7 +1059,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
 
     private static arcName = `Ygush00`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_Ygush00.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -1083,7 +1084,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.type !== 3) {
             this.btkAnm.play(deltaTimeInFrames);
             this.bckAnm.play(deltaTimeInFrames);
@@ -1094,8 +1095,8 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG1, this.pos, this.tevStr);
@@ -1120,7 +1121,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
     private static arcName = `Oyashi`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_lpalm.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -1151,7 +1152,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     };
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const envLight = globals.g_env_light;
 
         const windVec = dKyw_get_wind_vec(envLight);
@@ -1185,8 +1186,8 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -1207,6 +1208,24 @@ function vecHalfAngle(dst: vec3, a: vec3, b: vec3): void {
         vec3.zero(dst);
 }
 
+function dDlst_texSpecmapST(dst: mat4, globals: dGlobals, pos: ReadonlyVec3, tevStr: dKy_tevstr_c, refl: number): void {
+    const scale = 1.0 / refl;
+    computeModelMatrixS(dst, scale, scale, 1.0);
+
+    // Remap.
+    buildEnvMtx(scratchMat4a, 1.0);
+    mat4.mul(dst, dst, scratchMat4a);
+
+    // Half-vector lookAt transform.
+    vec3.sub(scratchVec3a, pos, globals.cameraPosition);
+    dKyr_get_vectle_calc(tevStr.lightObj.Position, pos, scratchVec3b);
+    vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
+    mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
+    mat4.mul(dst, dst, scratchMat4a);
+
+    computeMatrixWithoutTranslation(dst, dst);
+}
+
 class d_a_obj_zouK extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK;
 
@@ -1216,7 +1235,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
 
     private static arcName = `VzouK`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_zouK.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -1239,7 +1258,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
 
     private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
         mat4.copy(dst, this.effectMtx);
-    }
+    };
 
     private set_mtx(): void {
         vec3.copy(this.model.baseScale, this.scale);
@@ -1247,30 +1266,16 @@ class d_a_obj_zouK extends fopAc_ac_c {
         mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.set_mtx();
     }
 
     private setEffectMtx(globals: dGlobals, pos: vec3, refl: number): void {
-        const scale = 1.0 / refl;
-        computeModelMatrixS(this.effectMtx, scale, scale, 1.0);
-
-        // Remap.
-        buildEnvMtx(scratchMat4a, 1.0);
-        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
-
-        // Half-vector lookAt transform.
-        vec3.sub(scratchVec3a, pos, globals.cameraPosition);
-        dKyr_get_vectle_calc(this.tevStr.lightObj.Position, pos, scratchVec3b);
-        vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
-        mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
-        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
-
-        computeMatrixWithoutTranslation(this.effectMtx, this.effectMtx);
+        dDlst_texSpecmapST(this.effectMtx, globals, pos, this.tevStr, refl);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -1292,7 +1297,7 @@ class d_a_swhit0 extends fopAc_ac_c {
     private static color1Hit = colorNewFromRGBA8(0xE6C8006E);
     private static color2Hit = colorNewFromRGBA8(0x78643264);
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Always`, 0x35));
 
@@ -1315,13 +1320,13 @@ class d_a_swhit0 extends fopAc_ac_c {
         mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.bckAnm.play(deltaTimeInFrames);
         this.btkAnm.play(deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -1467,7 +1472,7 @@ class daSeaFightGame_info_c {
 
 // TODO(jstpierre): This is a hack to put it in 3D.
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 // Simple quad shape & input.
 export class dDlst_2DStatic_c {
@@ -1543,8 +1548,8 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1593,10 +1598,10 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
 
             vec3.set(scratchVec3a, x, 0, 0);
             mat4.translate(scratchMat4a, this.modelMatrix, scratchVec3a);
-            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+            mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
             x -= this.spacing * 2;
 
-            this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
 
             // No more digits.
@@ -1644,7 +1649,11 @@ class mgameboard_seres {
             return status;
 
         if (this.decodeState === cPhs__Status.Started) {
-            ctx.ctx.decodeAudioData(globals.modelCache.getFileData(this.filename).arrayBuffer as ArrayBuffer).then((buffer) => {
+            // Unfortunately, because the WebAudio API, in its infinite wisdom, detaches the original audio buffer,
+            // we have to make a copy here. Amazing stuff.
+            // https://github.com/WebAudio/web-audio-api/issues/1175
+            const buffer = globals.modelCache.getFileData(this.filename).copyToBuffer();
+            ctx.ctx.decodeAudioData(buffer).then((buffer) => {
                 this.buffer = buffer;
                 this.decodeState = cPhs__Status.Complete;
             });
@@ -1688,7 +1697,7 @@ class d_a_mgameboard extends fopAc_ac_c {
 
     private static arcName = `Kaisen_e`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
         status = dComIfG_resLoad(globals, d_a_mgameboard.arcName);
@@ -1959,7 +1968,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.minigameResetTimer = 30;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const inputManager = globals.context.inputManager;
         if (this.minigameResetTimer >= 0) {
             this.minigameResetTimer -= deltaTimeInFrames;
@@ -1976,8 +1985,8 @@ class d_a_mgameboard extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -2321,8 +2330,8 @@ class dCloth_packet_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2367,7 +2376,7 @@ class d_a_sie_flag extends fopAc_ac_c {
     private static arcName = `Eshata`;
     private static arcNameCloth = `Cloth`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
         status = dComIfG_resLoad(globals, d_a_sie_flag.arcName);
@@ -2394,8 +2403,8 @@ class d_a_sie_flag extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -2405,7 +2414,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.set_mtx();
@@ -2435,7 +2444,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.setMtx(calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         this.cloth.destroy(globals.modelCache.device);
     }
 }
@@ -2453,7 +2462,7 @@ class d_a_tori_flag extends fopAc_ac_c {
     private static arcName = `Trflag`;
     private static arcNameCloth = `Cloth`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
         status = dComIfG_resLoad(globals, d_a_tori_flag.arcName);
@@ -2480,8 +2489,8 @@ class d_a_tori_flag extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -2491,7 +2500,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.set_mtx();
@@ -2522,7 +2531,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.setMtx(calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         this.cloth.destroy(globals.modelCache.device);
     }
 }
@@ -2589,7 +2598,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
     private static arcNames = [null, `Matif`, `Vsvfg`, `Xhcf`];
     private static arcNameCloth = `Cloth`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.flagType = this.parameters & 0xFF;
         this.texType = (this.parameters >>> 24) & 0xFF;
 
@@ -2657,7 +2666,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
                 this.flagScale = 1.27;
                 this.usePlayerTevStr = true;
             } else if (this.flagType === 4) {
-                this.flagType = 0.3;
+                this.flagScale = 0.3;
             } else {
                 this.flagScale = 1.0;
             }
@@ -2666,7 +2675,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
             if (this.flagType !== 0xFF) {
                 // In this case, flagType is a scale parameter.
-                this.flagScale += (this.flagType * 0.05)
+                this.flagScale += (this.flagType * 0.05);
             }
         }
 
@@ -2783,8 +2792,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         // For reference.
@@ -2813,8 +2822,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2927,7 +2936,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
             this.setNrmVtx(this.nrmArr[i], i);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         const mMonotone = false;
@@ -2969,7 +2978,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         mat4.copy(this.mtx, calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const device = globals.modelCache.device;
         if (this.rawTex !== null)
             this.rawTex.destroy(device);
@@ -3014,7 +3023,7 @@ class d_a_kamome extends fopAc_ac_c {
 
     private static arcName = 'Kamome';
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
 
         let status: cPhs__Status;
 
@@ -3168,7 +3177,7 @@ class d_a_kamome extends fopAc_ac_c {
         this.kamome_pos_move(globals, deltaTimeInFrames);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.noDraw = false;
 
         if (this.type === 6) {
@@ -3203,11 +3212,11 @@ class d_a_kamome extends fopAc_ac_c {
         this.daKamome_setMtx();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.noDraw || this.switch_id !== 0)
             return;
 
-        if (!this.cullingCheck(viewerInput))
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -3275,29 +3284,31 @@ function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: numb
     return pointIdxCurr;
 }
 
-const enum d_a_obj_ikada_mode { modeWait, modeStopTerry, modePathMoveTerry }
+const enum d_a_obj_ikada_mode { wait, stopTerry, pathMoveTerry }
 class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mode> {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_ikada;
 
     private type: number;
     private path_id: number;
     private model: J3DModelInstance;
+    private flagPcId: number | null = null;
     private bckAnm = new mDoExt_bckAnm();
     private path: dPath | null = null;
     private waveAnim1Timer = 0;
     private linkRideRockTimer = 0;
     private linkRideRockAmpl = 0;
+    private wave = new dLib_wave_c();
+
+    private craneMode: boolean = false;
     private velocityFwd: number = 0.0;
     private velocityFwdTarget: number = 0.0;
     private pathMovePos = vec3.create();
-
-    private craneMode: boolean = false;
     private curPathPointIdx: number = 0;
     private curPathP0 = vec3.create();
     private curPathP1 = vec3.create();
     private pathRotY: number;
 
-    public curMode = d_a_obj_ikada_mode.modeWait;
+    public curMode = d_a_obj_ikada_mode.wait;
 
     private splash: dPa_splashEcallBack | null = null;
     private waveL: dPa_waveEcallBack | null = null;
@@ -3309,7 +3320,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
     private static arcName = `IkadaH`;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_ikada.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
@@ -3336,10 +3347,9 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             this.model.jointMatrixCalcCallback = this.nodeControl_CB;
         }
 
-        this.setMtx(globals);
+        this.setMtx(globals, 0.0);
 
         // initialize BgW
-        // initialize rope / ropeEnd
 
         // createInit
         vec3.copy(this.pathMovePos, this.pos);
@@ -3350,7 +3360,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
 
         if (this.isTerry())
-            modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modeStopTerry);
+            modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.stopTerry);
 
         if (this.isShip()) {
             this.splash = new dPa_splashEcallBack(globals);
@@ -3364,6 +3374,16 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const scaleX = this.scale[0];
         this.setCullSizeBox(scaleX * -1000.0, scaleX * -50.0, scaleX * -1000.0, scaleX * 1000.0, scaleX * 1000.0, scaleX * 1000.0);
         this.cullFarDistanceRatio = 10.0;
+
+        if (this.type === 0 || this.type === 4) {
+            const flagParam = this.type === 0 ? 0x00000004 : 0x02000000;
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, flagParam, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
+        }
+
+        dLib_waveInit(globals, this.wave, this.pos);
+
+        // initialize rope / ropeEnd
+
         return cPhs__Status.Next;
     }
 
@@ -3382,8 +3402,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         return this.isSv() || this.isTerry();
     }
 
-    private setMtx(globals: dGlobals): void {
-        // TODO(jstpierre): dLib_waveRot
+    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, 0.0, deltaTimeInFrames);
         vec3.copy(this.model.baseScale, this.scale);
 
         const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
@@ -3395,8 +3415,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const rockAnimX = rockAnimAmpl * Math.cos(rockAnimTheta);
         const rockAnimZ = rockAnimAmpl * Math.sin(rockAnimTheta);
 
-        this.rot[0] = /* wave.rotX + */ waveAnim1X + rockAnimX;
-        this.rot[2] = /* wave.rotZ + */ waveAnim1Z + rockAnimZ;
+        this.rot[0] = this.wave.rotX + waveAnim1X + rockAnimX;
+        this.rot[2] = this.wave.rotZ + waveAnim1Z + rockAnimZ;
 
         MtxTrans(this.pos, false);
         mDoMtx_XrotM(calc_mtx, this.rot[0]);
@@ -3437,20 +3457,20 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             // attn/eye
 
             if (this.isTerry()) {
-                const waveOffsZ = 660.0 + (this.curMode === d_a_obj_ikada_mode.modePathMoveTerry ? 20.0 : 5.0);
+                const waveOffsZ = 660.0 + (this.curMode === d_a_obj_ikada_mode.pathMoveTerry ? 20.0 : 5.0);
                 const waveOffsY = 20.0;
                 vec3.set(this.wavePos, 0.0, waveOffsY, waveOffsZ);
-                transformVec3Mat4w1(this.wavePos, calc_mtx, this.wavePos);
+                MtxPosition(this.wavePos);
 
                 const trackOffsZ = -180.0;
                 vec3.set(this.trackPos, 0.0, 0.0, trackOffsZ);
-                transformVec3Mat4w1(this.trackPos, calc_mtx, this.trackPos);
+                MtxPosition(this.trackPos);
             }
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -3479,7 +3499,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
     private modeStopTerry(globals: dGlobals, deltaTimeInFrames: number): void {
         // stop for player, check tg hit
-        modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modePathMoveTerry);
+        modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.pathMoveTerry);
     }
 
     private modePathMoveTerryInit(globals: dGlobals): void {
@@ -3520,14 +3540,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
         cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
 
-        vec3.sub(scratchVec3a, dst, this.curPathP1);
-        scratchVec3a[1] = 0.0;
-
-        if (vec3.length(scratchVec3a) < fwdSpeed) {
-            return true;
-        }
-
-        return false;
+        return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
     };
 
     private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -3547,7 +3560,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.modePathMoveTerryInit, this.modePathMoveTerry,
     ];
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.waveAnim1Timer += 0x200 * deltaTimeInFrames;
@@ -3555,13 +3568,29 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
         this.pos[1] = dLib_getWaterY(globals, this.pos, null);
 
-        this.setMtx(globals);
+        this.setMtx(globals, deltaTimeInFrames);
         this.model.calcAnim();
 
         if (this.isShip()) {
-            // check culling box, and velocity and player distance, such
+            if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
+                this.setWave(globals, deltaTimeInFrames);
+            } else {
+                this.waveL!.remove();
+                this.waveR!.remove();
+                this.splash!.remove();
+                this.track!.state = 1;
+            }
+        }
 
-            this.setWave(globals, deltaTimeInFrames);
+        if (this.flagPcId !== null) {
+            const flag = fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId);
+            if (flag !== null && flag.parentMtx === null) {
+                flag.parentMtx = this.model.modelMatrix;
+                if (this.type === 0)
+                    flag.parentPos = vec3.fromValues(0.0, 700.0, 0.0);
+                else if (this.type === 4)
+                    flag.parentPos = vec3.fromValues(100.0, 530.0, 0.0);
+            }
         }
     }
 
@@ -3608,16 +3637,15 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
                 this.track.state = 1;
         }
 
-        // this.wavePos[1] = dLib_getWaterY(this.wavePos, this.objAcch);
-        this.wavePos[1] = this.pos[1] + 25.0;
+        this.wavePos[1] = dLib_getWaterY(globals, this.wavePos, null);
         this.waveRot[1] = this.rot[1];
 
         if (this.track !== null && this.track.emitter !== null) {
             this.track.indTransY = -0.04;
             this.track.indScaleY = 4.0;
-
-            // mObjAcch
             this.track.vel = 300.0;
+            this.track.baseY = this.wavePos[1];
+            // mObjAcch
             this.track.minVel = 3.0;
         }
 
@@ -3647,7 +3675,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         if (this.splash !== null)
@@ -3661,9 +3689,481 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     }
 }
 
+const enum d_a_oship_mode { wait, attack, damage, delete, rangeA, rangeB, rangeC, rangeD }
+class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_oship;
+
+    private subMode: number;
+    private model: J3DModelInstance;
+    private path: dPath | null = null;
+    private effectMtx = mat4.create();
+    private flagPcId: number | null = null;
+    private wave = new dLib_wave_c();
+    private splash: dPa_splashEcallBack;
+    private waveL: dPa_waveEcallBack;
+    private waveR: dPa_waveEcallBack;
+    private track: dPa_trackEcallBack;
+    private wavePos = vec3.create();
+    private waveRot = vec3.create();
+    private trackPos = vec3.create();
+
+    private attackSwayAmount = 0;
+    private attackSwayTimer = 0;
+    private attackTimer = 0;
+    private attackBadAimCounter = 0;
+    private targetPos = vec3.create();
+    private aimRotXTarget = 0;
+    private aimRotYTarget = 0;
+    private aimRotX = 0;
+    private aimRotY = 0;
+
+    private velocityFwd = 0.0;
+    private velocityFwdTarget = 0.0;
+    private pathMovePos = vec3.create();
+    private pathRotY = 0;
+    private curPathPointIdx = 0;
+    private curPathP0 = vec3.create();
+    private curPathP1 = vec3.create();
+
+    public curMode: d_a_oship_mode = d_a_oship_mode.wait;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const arcName = `Oship`;
+
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.subMode = this.parameters & 0xFF;
+        const triforce = (this.parameters >>> 8) & 0x0F;
+        const fmapIdx = (this.parameters >>> 12) & 0x0F;
+        const pathId = (this.parameters >>> 16) & 0xFF;
+        const switchA = (this.parameters >>> 24) & 0xFF;
+        const switchB = (this.rot[0] >>> 0) & 0xFF;
+        const modelType = (this.rot[0] >>> 8) & 0xFF;
+        this.rot[0] = 0;
+
+        let bdl = 3;
+        if (modelType !== 0xFF)
+            bdl = 4;
+
+        const resCtrl = globals.resCtrl;
+        const modelData = resCtrl.getObjectRes(ResType.Model, arcName, bdl);
+        this.model = new J3DModelInstance(modelData);
+        this.model.jointMatrixCalcCallback = this.nodeControl;
+
+        for (let i = 0; i < this.model.materialInstances.length; i++)
+            this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
+
+        if (modelType === 0xFF)
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, 0x04, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
+
+        if (pathId !== 0xFF)
+            this.path = assertExists(dPath_GetRoomPath(globals, pathId, this.roomNo));
+
+        this.changeModeByRange(globals);
+        dLib_waveInit(globals, this.wave, this.pos);
+        this.setMtx(globals, 0.0);
+        this.cullMtx = this.model.modelMatrix;
+        this.setCullSizeBox(-300.0, -100.0, -650.0, 300.0, 700.0, 800.0);
+        this.cullFarDistanceRatio = 10.0;
+
+        this.splash = new dPa_splashEcallBack(globals);
+        this.waveL = new dPa_waveEcallBack(globals);
+        this.waveR = new dPa_waveEcallBack(globals);
+        this.track = new dPa_trackEcallBack(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    private mode_tbl = [
+        this.modeWaitInit, this.modeWait,
+        this.modeAttackInit, this.modeAttack,
+        this.modeDamageInit, this.modeDamage,
+        this.modeDeleteInit, this.modeDelete,
+        this.modeRangeAInit, this.modeRangeA,
+        this.modeRangeBInit, this.modeRangeB,
+        this.modeRangeCInit, this.modeRangeC,
+        this.modeRangeDInit, this.modeRangeD,
+    ];
+
+    private changeModeByRange(globals: dGlobals): void {
+        const dist = cLib_distanceXZ(this.pos, globals.cameraPosition);
+        let mode = this.curMode;
+        if (dist < 2500.0)
+            mode = d_a_oship_mode.rangeA;
+        else if (dist < 6000.0)
+            mode = d_a_oship_mode.rangeB;
+        else if (dist < 12000.0)
+            mode = d_a_oship_mode.rangeC;
+        else
+            mode = d_a_oship_mode.rangeD;
+
+        if (mode !== this.curMode)
+            modeProcInit(globals, this, this.mode_tbl, mode);
+    }
+
+    private checkTgHit(globals: dGlobals): boolean {
+        return false;
+    }
+
+    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeInFrames: number): boolean => {
+        vec3.copy(this.curPathP0, curr.pos);
+        this.curPathP0[1] = this.pos[1];
+        vec3.copy(this.curPathP1, next.pos);
+        this.curPathP1[1] = this.pos[1];
+
+        vec3.sub(scratchVec3a, this.curPathP1, this.curPathP0);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
+        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeInFrames, 8);
+        const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
+
+        return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
+    };
+
+    private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeInFrames);
+        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeInFrames, this.pathMove_CB);
+
+        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeInFrames);
+        if (this.velocityFwd !== 0 && this.velocityFwdTarget !== 0) {
+            const rotTargetY = cLib_targetAngleY(this.pos, this.pathMovePos);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeInFrames);
+        }
+    }
+
+    private calcY(globals: dGlobals): void {
+        // TODO(jstpierre): Acch
+        this.pos[1] = dLib_getWaterY(globals, this.pos, null);
+    }
+
+    private rangePathMove(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.path !== null) {
+            this.velocityFwdTarget = 20.0;
+            this.pathMove(globals, deltaTimeInFrames);
+        }
+    }
+
+    private plFireRepeat(globals: dGlobals): boolean {
+        return false;
+    }
+
+    private modeWaitInit(globals: dGlobals): void {
+        this.changeModeByRange(globals);
+    }
+
+    private modeWait(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.changeModeByRange(globals);
+    }
+
+    private modeAttackInit(globals: dGlobals): void {
+        this.attackTimer = -1;
+
+        vec3.copy(this.targetPos, globals.cameraPosition);
+
+        // Aim at our target.
+
+        const distXZ = cLib_distanceXZ(this.targetPos, this.pos);
+        const badAimStart = 3500.0;
+        let badAimRadius = 300.0 + Math.max((distXZ - badAimStart) * 0.5, 0.0);
+
+        if (cM_rndF(100.0) < 10.0) {
+            // 10% change of perfect aim.
+            badAimRadius = 0.0;
+        }
+
+        if (this.attackBadAimCounter < 6) {
+            // With each bullet the player fires, the aim gets better.
+            badAimRadius += (6 - this.attackBadAimCounter) * 500;
+        }
+
+        const angleY = cLib_targetAngleY(this.pos, this.targetPos);
+        // TODO(jstpierre): Figure out the bad aim system.
+        // this.targetPos[0] -= badAimRadius * Math.sin(cM__Short2Rad(angleY));
+        // this.targetPos[2] -= badAimRadius * Math.cos(cM__Short2Rad(angleY));
+    }
+
+    private attackCannon(globals: dGlobals): boolean {
+        // TODO(jstpierre): spawn bomb
+        return true;
+    }
+
+    private modeAttack(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.path !== null) {
+            this.velocityFwdTarget = 0.0;
+            this.pathMove(globals, deltaTimeInFrames);
+        }
+
+        if (this.checkTgHit(globals))
+            return;
+
+        this.calcY(globals);
+
+        if (this.attackTimer >= 0.0) {
+            this.attackTimer -= deltaTimeInFrames;
+            if (this.attackTimer <= 0.0) {
+                this.changeModeByRange(globals);
+            } else {
+                this.attackSwayTimer += 0x1830 * deltaTimeInFrames;
+                this.attackSwayAmount = cLib_addCalcAngleS2(this.attackSwayAmount, 0, 10, 10 * deltaTimeInFrames);
+            }
+        } else {
+            this.attackTimer = -1;
+
+            // lineCheck
+            if (this.velocityFwd <= 2.0) {
+                if (this.attackCannon(globals)) {
+                    this.attackTimer = 15;
+                    this.attackSwayAmount = 100;
+                }
+            }
+        }
+    }
+
+    private modeDamageInit(globals: dGlobals): void {
+    }
+
+    private modeDamage(globals: dGlobals, deltaTimeInFrames: number): void {
+    }
+
+    private modeDeleteInit(globals: dGlobals): void {
+    }
+
+    private modeDelete(globals: dGlobals, deltaTimeInFrames: number): void {
+    }
+
+    private modeRangeAInit(globals: dGlobals): void {
+        this.attackTimer = 30;
+    }
+
+    private rangeTargetCommon(globals: dGlobals, deltaTimeInFrames: number): void {
+        vec3.copy(this.targetPos, globals.cameraPosition);
+        this.calcY(globals);
+
+        if (this.checkTgHit(globals))
+            return;
+        if (this.plFireRepeat(globals))
+            return;
+
+        this.attackTimer -= deltaTimeInFrames;
+        if (this.attackTimer <= 0.0)
+            modeProcInit(globals, this, this.mode_tbl, d_a_oship_mode.attack);
+        else
+            this.changeModeByRange(globals);
+    }
+
+    private modeRangeA(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.subMode === 1 || this.subMode === 2)
+            this.rangePathMove(globals, deltaTimeInFrames);
+
+        this.rangeTargetCommon(globals, deltaTimeInFrames);
+    }
+
+    private modeRangeBInit(globals: dGlobals): void {
+        this.attackTimer = this.subMode === 0 ? 30 : 200;
+    }
+
+    private modeRangeB(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.modeRangeA(globals, deltaTimeInFrames);
+    }
+
+    private modeRangeCInit(globals: dGlobals): void {
+        this.attackTimer = 200;
+    }
+
+    private modeRangeC(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.subMode === 2)
+            this.rangePathMove(globals, deltaTimeInFrames);
+
+        this.rangeTargetCommon(globals, deltaTimeInFrames);
+    }
+
+    private modeRangeDInit(globals: dGlobals): void {
+    }
+
+    private modeRangeD(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (!this.checkTgHit(globals)) {
+            if (this.subMode === 2)
+                this.rangePathMove(globals, deltaTimeInFrames);
+            this.calcY(globals);
+            this.changeModeByRange(globals);
+        }
+    }
+
+    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
+        mat4.copy(dst, this.effectMtx);
+    };
+
+    private nodeControl = (dst: mat4, modelData: J3DModelData, i: number): void => {
+        if (i === 1)
+            mDoMtx_XrotM(dst, this.aimRotY);
+        else if (i === 2)
+            mDoMtx_ZrotM(dst, -this.aimRotX + 0x2800);
+    };
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
+            return;
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        const specScale = 0.75;
+        dDlst_texSpecmapST(this.effectMtx, globals, this.pos, this.tevStr, specScale);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+
+        /*
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `PId: ${this.processId}`, 0, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Mode: ${d_a_oship_mode[this.curMode]}`, 14, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Aim  : ${hexzero0x(this.aimRotX, 4)} ${hexzero0x(this.aimRotY, 4)}`, 14*2, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Aim T: ${hexzero0x(this.aimRotXTarget, 4)} ${hexzero0x(this.aimRotYTarget, 4)}`, 14*3, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Tgt  : ${this.targetPos[0].toFixed(2)} ${this.targetPos[1].toFixed(2)} ${this.targetPos[2].toFixed(2)}`, 14*4, White, { outline: 2 });
+        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.targetPos, Green, 10);
+        */
+    }
+
+    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, this.attackSwayAmount, deltaTimeInFrames);
+
+        const angleY = this.rot[1] + cLib_targetAngleY(this.pos, globals.cameraPosition);
+        const swayAmount = Math.sin(cM__Short2Rad(this.attackSwayTimer)) * (this.attackSwayAmount * 10);
+
+        if (this.curMode !== d_a_oship_mode.delete) {
+            this.rot[0] = this.wave.rotX + Math.cos(angleY) * swayAmount;
+            this.rot[2] = this.wave.rotZ + Math.sin(angleY) * swayAmount;
+        }
+
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false);
+        mDoMtx_XrotM(calc_mtx, this.rot[0]);
+        mDoMtx_ZrotM(calc_mtx, this.rot[2]);
+        mDoMtx_YrotM(calc_mtx, this.rot[1]);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+
+        const waveOffsZ = 380.0;
+        vec3.set(this.wavePos, 0.0, 0.0, waveOffsZ);
+        MtxPosition(this.wavePos);
+
+        const trackOffsZ = 0.0;
+        vec3.set(this.trackPos, 0.0, 0.0, trackOffsZ);
+        MtxPosition(this.trackPos);
+    }
+
+    private createWave(globals: dGlobals): void {
+        if (this.waveL.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveL);
+            if (emitter !== null)
+                vec3.set(emitter.localDirection, 0.5, 1.0, -0.3);
+        }
+
+        if (this.waveR.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveR);
+            if (emitter !== null)
+                vec3.set(emitter.localDirection, -0.5, 1.0, -0.3);
+        }
+
+        if (this.splash.emitter === null)
+            globals.particleCtrl.set(globals, 0, 0x0035, this.wavePos, this.waveRot, null, 1.0, this.splash);
+
+        if (this.track.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
+            if (emitter !== null) {
+                vec3.set(emitter.globalScale, 3.0, 3.0, 3.0);
+                vec2.set(emitter.globalParticleScale, 3.0, 3.0);
+            }
+        }
+    }
+
+    private static waveCollapsePos = [
+        vec3.fromValues(-80.0, -50.0, -150.0),
+        vec3.fromValues(-40.0, -100.0, -350.0),
+    ];
+
+    private setWave(globals: dGlobals, deltaTimeInFrames: number): void {
+        let splashScaleTarget = 200.0;
+        let waveVelFade = 2.0;
+
+        if (this.velocityFwd > 2.0 && this.curMode !== d_a_oship_mode.delete) {
+            this.createWave(globals);
+        } else {
+            splashScaleTarget = 0.0;
+            waveVelFade = 0.0;
+            if (this.track !== null)
+                this.track.state = 1;
+        }
+
+        this.wavePos[1] = dLib_getWaterY(globals, this.wavePos, null);
+        this.waveRot[1] = this.rot[1];
+
+        if (this.track.emitter !== null) {
+            this.track.indTransY = -0.04;
+            this.track.indScaleY = 4.0;
+            this.track.vel = 300.0;
+            this.track.baseY = this.wavePos[1];
+            // mObjAcch
+            this.track.minVel = 3.0;
+        }
+
+        this.waveL.velFade1 = waveVelFade;
+        this.waveL.velFade2 = 1.0;
+        this.waveL.velSpeed = 2.0;
+        this.waveL.maxParticleVelocity = 15.0;
+        vec3.copy(this.waveL.collapsePos[0], d_a_oship.waveCollapsePos[0]);
+        vec3.copy(this.waveL.collapsePos[1], d_a_oship.waveCollapsePos[1]);
+
+        this.waveR.velFade1 = waveVelFade;
+        this.waveR.velFade2 = 1.0;
+        this.waveR.velSpeed = 2.0;
+        this.waveR.maxParticleVelocity = 15.0;
+        vec3.copy(this.waveR.collapsePos[0], d_a_oship.waveCollapsePos[0]);
+        vec3.copy(this.waveR.collapsePos[1], d_a_oship.waveCollapsePos[1]);
+        this.waveR.collapsePos[0][0] *= -1.0;
+        this.waveR.collapsePos[1][0] *= -1.0;
+
+        this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeInFrames);
+        this.splash.maxScaleTimer = 300.0;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        // TODO(jstpierre): smoke
+        // TODO(jstpierre): bomb
+
+        this.aimRotYTarget = cLib_targetAngleY(this.pos, this.targetPos) - this.rot[1];
+        this.aimRotXTarget = cLib_targetAngleX(this.pos, this.targetPos);
+        // TODO(jstpierre): Add on bad aim rot
+
+        this.aimRotX = cLib_addCalcAngleS2(this.aimRotX, this.aimRotXTarget, 6, 0x300 * deltaTimeInFrames);
+        this.aimRotY = cLib_addCalcAngleS2(this.aimRotY, this.aimRotYTarget, 6, 0x300 * deltaTimeInFrames);
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
+
+        this.model.calcAnim();
+        this.setMtx(globals, deltaTimeInFrames);
+
+        this.visible
+        if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
+            this.setWave(globals, deltaTimeInFrames);
+        } else {
+            this.waveL.remove();
+            this.waveR.remove();
+            this.splash.remove();
+            this.track.state = 1;
+        }
+
+        if (this.flagPcId !== null) {
+            const flag = fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId);
+            if (flag !== null && flag.parentMtx === null) {
+                flag.parentMtx = this.model.modelMatrix;
+                flag.parentPos = vec3.fromValues(0.0, 800.0, 0.0);
+            }
+        }
+    }
+}
+
 const enum d_a_obj_flame_mode { wait, wait2, l_before, l_u, u, u_l, l_after }
 const enum d_a_obj_em_state { Off, TurnOn, On, TurnOff }
-export class d_a_obj_flame extends fopAc_ac_c {
+class d_a_obj_flame extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_flame;
 
     private type: number;
@@ -3695,7 +4195,7 @@ export class d_a_obj_flame extends fopAc_ac_c {
 
     private mode = d_a_obj_flame_mode.wait;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const arcName = `Yfire_00`;
 
         const status = dComIfG_resLoad(globals, arcName);
@@ -3768,7 +4268,7 @@ export class d_a_obj_flame extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -4000,7 +4500,7 @@ export class d_a_obj_flame extends fopAc_ac_c {
         // hitbox
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.mode_proc_call(globals, deltaTimeInFrames);
@@ -4049,5 +4549,6 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_majuu_flag);
     R(d_a_kamome);
     R(d_a_obj_ikada);
+    R(d_a_oship);
     R(d_a_obj_flame);
 }

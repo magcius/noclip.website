@@ -13,8 +13,8 @@ class HalfLife2DMSceneDesc implements SceneDesc {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await Promise.all([
                 filesystem.createVPKMount(`${pathBase}/hl2mp_pak`),
-                filesystem.createVPKMount(`${pathBase2}/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase2}/hl2_misc`),
+                filesystem.createVPKMount(`HalfLife2/hl2_textures`),
+                filesystem.createVPKMount(`HalfLife2/hl2_misc`),
             ]);
             return filesystem;
         });
@@ -24,21 +24,18 @@ class HalfLife2DMSceneDesc implements SceneDesc {
 }
 
 const pathBase = `HalfLife2DM`;
-const pathBase2 = `HalfLife2`;
 
 const id = 'HalfLife2DM';
 const name = 'Half-Life 2: Deathmatch';
 const sceneDescs = [
-
-new HalfLife2DMSceneDesc('dm_lockdown'),
-new HalfLife2DMSceneDesc('dm_overwatch'),
-new HalfLife2DMSceneDesc('dm_powerhouse'),
-new HalfLife2DMSceneDesc('dm_resistance'),
-new HalfLife2DMSceneDesc('dm_runoff'),
-new HalfLife2DMSceneDesc('dm_steamlab'),
-new HalfLife2DMSceneDesc('dm_underpass'),
-new HalfLife2DMSceneDesc('halls3'),
-    
+    new HalfLife2DMSceneDesc('dm_lockdown'),
+    new HalfLife2DMSceneDesc('dm_overwatch'),
+    new HalfLife2DMSceneDesc('dm_powerhouse'),
+    new HalfLife2DMSceneDesc('dm_resistance'),
+    new HalfLife2DMSceneDesc('dm_runoff'),
+    new HalfLife2DMSceneDesc('dm_steamlab'),
+    new HalfLife2DMSceneDesc('dm_underpass'),
+    new HalfLife2DMSceneDesc('halls3'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

@@ -1,12 +1,12 @@
 
 import * as BCSV from '../luigis_mansion/bcsv';
 import { vec3 } from 'gl-matrix';
-import { MathConstants } from '../MathHelpers';
-import { assertExists, fallback } from '../util';
 import type { SceneObjHolder } from './Main';
+import type { ZoneAndLayer } from './LiveActor';
+import { MathConstants } from '../MathHelpers';
+import { assertExists, fallback, hexzero0x } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { ZoneAndLayer } from './LiveActor';
-import { UI } from '../ui';
+import type { UI } from '../ui';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg0'); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg1'); }
@@ -61,7 +61,7 @@ function makeTable(bcsv: BCSV.Bcsv): HTMLTableElement {
         tbody.appendChild(tr);
         bcsv.fields.forEach((field) => {
             const th = document.createElement('th');
-            th.textContent = field.debugName;
+            th.textContent = guessDebugName(field.nameHash);
             tr.appendChild(th);
         });
     }
@@ -77,6 +77,14 @@ function makeTable(bcsv: BCSV.Bcsv): HTMLTableElement {
     });
 
     return table;
+}
+
+function bcsvHashSMG(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash * 0x1F + str.charCodeAt(i)) >>> 0;
+    }
+    return hash;
 }
 
 export class JMapInfoIter {
@@ -109,16 +117,24 @@ export class JMapInfoIter {
         return results;
     }
 
+    private getValue<T extends number | string>(name: string): T | null {
+        const hash = bcsvHashSMG(name);
+        const index = BCSV.getFieldIndexFromHash(this.bcsv, hash);
+        if (index === -1)
+            return null;
+        return this.record[index] as T;
+    }
+
     public getValueString(name: string): string | null {
-        return BCSV.getField<string>(this.bcsv, this.record, name);
+        return this.getValue<string>(name);
     }
 
     public getValueNumber(name: string): number | null {
-        return BCSV.getField<number>(this.bcsv, this.record, name);
+        return this.getValue<number>(name);
     }
 
     public getValueNumberNoInit(name: string): number | null {
-        const v = BCSV.getField<number>(this.bcsv, this.record, name);
+        const v = this.getValue<number>(name);
         if (v === -1)
             return null;
         return v;
@@ -127,6 +143,7 @@ export class JMapInfoIter {
     public popDebug(): void {
         const ui: UI = window.main.ui;
         const debugFloater = ui.debugFloaterHolder.makeFloatingPanel(fallback(this.filename, 'BCSV'));
+        debugFloater.setWidth('1000px');
         debugFloater.contents.style.overflow = 'auto';
 
         const table = makeTable(this.bcsv);
@@ -212,4 +229,61 @@ export class JMapLinkInfo {
 
         return null;
     }
+}
+
+const seenFieldNames = [
+    'version', 'name', 'pos', 'dir', 'scale', 'furniture', 'room_no',
+
+    // Super Mario Galaxy
+
+    'type', 'no', 'l_id', 'id', 'attribute',
+    // ScenarioData
+    'GalaxyName', 'ZoneName', 'ScenarioNo', 'ScenarioName', 'PowerStarId', 'AppearPowerStarObj', 'Comet', 'LuigiModeTimer', 'IsHidden', 'Hidden', 'WorldNo', 'SceneNo', 'MarioNo',
+    // PlanetData
+    'PlanetName', 'LowFlag', 'MiddleFlag', 'BloomFlag', 'WaterFlag', 'WaterFlag', 'IndirectFlag',
+    // Placement
+    'Obj_arg',
+    'SW_APPEAR', 'SW_DEAD', 'SW_A', 'SW_B', 'SW_SLEEP',
+    'CommonPath_ID', 'FollowId', 'ClippingGroupId', 'GroupId', 'DemoGroupId', 'MapParts_ID', 'Obj_ID', 'ChildObjId',
+    'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateAccelType', 'RotateStopTime', 'RotateType',
+    // Path
+    'closed', 'Path_ID', 'usage', 'path_arg',
+    // Gravity
+    'Range', 'Distant', 'Priority', 'Inverse', 'Power', 'Gravity_type',
+    // LightData
+    'LightID', 'AreaLightName', 'Interpolate', 'Fix',
+    'PlayerLight0Pos', 'PlayerLight0Color', 'PlayerLight0FollowCamera', 'PlayerLight1Pos', 'PlayerLight1Color', 'PlayerLight1FollowCamera', 'PlayerAmbient', 'PlayerAlpha2',
+    'StrongLight0Pos', 'StrongLight0Color', 'StrongLight0FollowCamera', 'StrongLight1Pos', 'StrongLight1Color', 'StrongLight1FollowCamera', 'StrongAmbient', 'StrongAlpha2',
+    'WeakLight0Pos', 'WeakLight0Color', 'WeakLight0FollowCamera', 'WeakLight1Pos', 'WeakLight1Color', 'WeakLight1FollowCamera', 'WeakAmbient', 'WeakAlpha2',
+    'PlanetLight0Pos', 'PlanetLight0Color', 'PlanetLight0FollowCamera', 'PlanetLight1Pos', 'PlanetLight1Color', 'PlanetLight1FollowCamera', 'PlanetAmbient', 'PlanetAlpha2',
+    // Shadow
+    'Name', 'GroupName', 'Joint', 'DropOffset', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity', 'VolumeStart', 'VolumeEnd',
+    'VolumeCut', 'Type', 'Radius', 'Size', 'LineStart', 'LineStartRadius', 'LineEnd', 'LineEndRadius',
+    // GeneralPos
+    'PosName',
+    // CameraParam
+    'version', 'woffset', 'loffset', 'loffsetv', 'roll', 'fovy', 'camint', 'upper', 'lower', 'gndint', 'uplay', 'lplay', 'pushdelaylow', 'pushdelay', 'udown', 'vpanuse', 'vpanaxis',
+    'flag.noreset', 'flag.nofovy', 'flag.lofserpoff', 'flag.antibluroff', 'flag.collisionoff', 'flag.subjectiveoff', 'camtype', 'dist', 'axis', 'wpoint', 'up', 'angleA', 'angleB', 'num1', 'num2',
+    'gflag.thru', 'gflag.enableEndErpFrame', 'gflag.camendint', 'eflag.enableErpFrame', 'eflag.enableEndErpFrame', 'camendint', 'evfrm', 'evpriority',
+];
+
+export function guessDebugName(nameHash: number): string {
+    const isCorrect = (guess: string) => (bcsvHashSMG(guess) === nameHash);
+
+    let guess: string;
+    for (const name of seenFieldNames) {
+        guess = name; if (isCorrect(guess)) return guess;
+
+        for (const suffix of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'X', 'Y', 'Z', '_x', '_y', '_z', '.X', '.Y', '.Z', 'R', 'G', 'B', 'A']) {
+            guess = `${name}${suffix}`; if (isCorrect(guess)) return guess;
+        }
+    }
+
+    for (let i = 0; i <= 9; i++) {
+        for (const suffix of ['_x', '_y', '_z']) {
+            guess = `pnt${i}${suffix}`; if (isCorrect(guess)) return guess;
+        }
+    }
+
+    return `${hexzero0x(nameHash, 8)}`;
 }
