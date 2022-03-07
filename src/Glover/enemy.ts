@@ -14,7 +14,7 @@ import { GenericRenderable, SceneLighting } from './render';
 import { ObjectDirectory } from './scenes';
 import { GloverActorRenderer } from './actor';
 import { ParticlePool } from './particles';
-import { Collidable, projectOntoTerrain } from './shadows';
+import { Collidable, Collision, projectOntoTerrain } from './shadows';
 
 import { GloverLevel } from './parsers';
 
@@ -494,6 +494,8 @@ export class GloverEnemy implements GenericRenderable {
     private curInstrLifetime: number = -1;
     private instrCooldownCounter: number = 0;
 
+    private collision: Collision | null = null;
+
     private dstPos: vec3 = vec3.create();
     private dstEulers: vec3 = vec3.create();
 
@@ -632,50 +634,20 @@ export class GloverEnemy implements GenericRenderable {
             if ((enemy_init_flags[this.enemyType] & 4) === 0) {
                 let collided: boolean = false;
 
-                vec3.scale(scratchVec3, this.velocity, 20);
+                vec3.scale(scratchVec3, this.velocity, 10);
                 scratchVec3[1] = 0;
                 vec3.normalize(scratchVec3, scratchVec3);
                 vec3.add(scratchVec3, scratchVec3, this.nextPosition);
-                // const groundCollision = projectOntoTerrain(scratchVec3, null, this.terrain);
-                // if (groundCollision !== null) {
-                //     const collisionDistance = vec3.distance(groundCollision.position, this.nextPosition);
-                //     if (!this.flying &&
-                //         collisionDistance >= this.minCollisionDistance &&
-                //         collisionDistance <= this.maxCollisionDistance)
-                //     {
-                //         collided = true;
-                //         vec3.zero(this.velocity);
-                //     }
-                // }
 
-                // TODO:
-                //     iVar5 = 0;
-                //     do {
-                //       pCVar2 = ((enemy->actor).collisionCache)->collisionSurfaces[iVar5];
-                //       if ((pCVar2 != (CollisionSurface *)0x0) &&
-                //          ((double)*(float *)&pCVar2->norm <
-                //           (double)CONCAT44(in_register_00001020,D_0_DOT_8_a0f8._4_4_))) {
-                //         EVar1 = (enemy->actor).type;
-                //         (enemy->actor).vel.z = 0.0;
-                //         (enemy->actor).vel.y = 0.0;
-                //         (enemy->actor).vel.x = 0.0;
-                //         if (EVar1 == NME_BUGLE) {
-                //           next_pos.x = (pCVar2->norm).x;
-                //           next_pos.x = next_pos.x + next_pos.x;
-                //           next_pos.y = *(float *)&pCVar2->norm + *(float *)&pCVar2->norm;
-                //           next_pos.z = *(float *)&pCVar2->norm + *(float *)&pCVar2->norm;
-                //           (enemy->actor).vel.x = next_pos.x;
-                //           (enemy->actor).vel.y = next_pos.y;
-                //           (enemy->actor).vel.z = next_pos.z;
-                //         }
-                //         else {
-                //           addXZ(&(enemy->actor).vel,&pCVar2->norm);
-                //         }
-                //         collided = true;
-                //         break;
-                //       }
-                //       iVar5 += 1;
-                //     } while (iVar5 < 4);
+
+                const collision = projectOntoTerrain(scratchVec3, null, this.terrain);
+                if (collision !== null && collision.normal[1] < 0.8) {
+                    collided = true;
+                    vec3.zero(this.velocity);
+                    this.velocity[0] = collision.normal[0];
+                    this.velocity[2] = collision.normal[2];
+                }
+
                 if (collided) {
                     if ((this.curInstr.flags & 0x1000) === 0) {
                         const thetaDist = angularDistance(this.dstEulers[1], this.nextEulers[1]);
@@ -1000,8 +972,9 @@ export class GloverEnemy implements GenericRenderable {
 
             vec3.scale(this.velocity, this.velocity, Math.max(0, beh.decel0x18));
 
-
-            const groundCollision = projectOntoTerrain(this.position, null, this.terrain);
+            vec3.copy(scratchVec3, this.position);
+            scratchVec3[1] += this.maxCollisionDistance;
+            const groundCollision = projectOntoTerrain(scratchVec3, null, this.terrain);
             if (groundCollision !== null) {
                 this.nextPosition[1] = groundCollision.position[1] + this.maxCollisionDistance;
             }

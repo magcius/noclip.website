@@ -964,7 +964,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
             }
         }
 
-        this.scale = lerp(this.lastScale, this.nextScale, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1));
+        this.scale = lerp(this.lastScale, this.nextScale, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
 
         mat4.fromRotationTranslationScale(this.drawMatrix,
             this.rotation,
