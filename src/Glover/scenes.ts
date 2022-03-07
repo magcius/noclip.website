@@ -1250,13 +1250,14 @@ class GloverRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(hideWeatherCheckbox.elem);
 
-        const enableDebugInfoCheckbox = new UI.Checkbox('Show debug information', false);
-        enableDebugInfoCheckbox.onchanged = () => {
-            for (let actor of this.actors) {
-                actor.setDebugInfoVisible(enableDebugInfoCheckbox.checked);
-            }
-        };
-        renderHacksPanel.contents.appendChild(enableDebugInfoCheckbox.elem);
+        // TODO: remove:
+        // const enableDebugInfoCheckbox = new UI.Checkbox('Show debug information', false);
+        // enableDebugInfoCheckbox.onchanged = () => {
+        //     for (let actor of this.actors) {
+        //         actor.setDebugInfoVisible(enableDebugInfoCheckbox.checked);
+        //     }
+        // };
+        // renderHacksPanel.contents.appendChild(enableDebugInfoCheckbox.elem);
 
         return [renderHacksPanel];
 
