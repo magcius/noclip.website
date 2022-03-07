@@ -376,10 +376,17 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
 
     public gSPTri(i0: number, i1: number, i2: number): void {
         this._flushDrawCall();
-        this.currentDrawCall.vertices.push(
-            new F3DEX.Vertex().copy(this.vertexCache[i0]),
-            new F3DEX.Vertex().copy(this.vertexCache[i1]),
-            new F3DEX.Vertex().copy(this.vertexCache[i2]));
+
+        let v = new F3DEX.Vertex();
+        v.copy(this.vertexCache[i0]);
+        this.currentDrawCall.vertices.push(v);
+        v = new F3DEX.Vertex();
+        v.copy(this.vertexCache[i1]);
+        this.currentDrawCall.vertices.push(v);
+        v = new F3DEX.Vertex();
+        v.copy(this.vertexCache[i2]);
+        this.currentDrawCall.vertices.push(v);
+
         this.currentDrawCall.vertexCount += 3;
     }
 

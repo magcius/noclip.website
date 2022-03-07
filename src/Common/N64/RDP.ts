@@ -334,10 +334,8 @@ export function texturePadWidth(siz: ImageSize, line: number, width: number): nu
 
 export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
+    if (tile.fmt === ImageFormat.G_IM_FMT_CI)
         translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
-    }
 
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
