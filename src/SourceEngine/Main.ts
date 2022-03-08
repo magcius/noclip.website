@@ -33,7 +33,6 @@ import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelper
 import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
-import InputManager from "../InputManager";
 import { dfRange, dfShow } from "../DebugFloaters";
 
 export class CustomMount {
@@ -44,7 +43,7 @@ export class CustomMount {
         return this.files.includes(resolvedPath);
     }
 
-    public fetchFileData(dataFetcher: DataFetcher, resolvedPath: string): Promise<ArrayBufferSlice> {
+    public fetchEntryData(dataFetcher: DataFetcher, resolvedPath: string): Promise<ArrayBufferSlice> {
         return dataFetcher.fetchData(`${this.path}/${resolvedPath}`);
     }
 }
@@ -160,13 +159,13 @@ export class SourceFileSystem {
         for (let i = 0; i < this.custom.length; i++) {
             const custom = this.custom[i];
             if (custom.hasEntry(resolvedPath))
-                return custom.fetchFileData(this.dataFetcher, resolvedPath);
+                return custom.fetchEntryData(this.dataFetcher, resolvedPath);
         }
 
         for (let i = 0; i < this.vpk.length; i++) {
             const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
-                return this.vpk[i].fetchFileData(entry);
+                return this.vpk[i].fetchFileData(this.dataFetcher, entry);
         }
 
         for (let i = 0; i < this.pakfiles.length; i++) {

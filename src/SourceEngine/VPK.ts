@@ -110,19 +110,19 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
 export class VPKMount {
     private fileDataPromise = new Map<string, Promise<ArrayBufferSlice>>();
 
-    constructor(private dataFetcher: DataFetcher, private basePath: string, private dir: VPKDirectory) {
+    constructor(private basePath: string, private dir: VPKDirectory) {
     }
 
-    private fetchChunk(chunk: VPKFileEntryChunk, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
+    private fetchChunk(dataFetcher: DataFetcher, chunk: VPKFileEntryChunk, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
         const packFileIdx = chunk.packFileIdx, rangeStart = chunk.chunkOffset, rangeSize = chunk.chunkSize;
-        return this.dataFetcher.fetchData(`${this.basePath}_${leftPad('' + packFileIdx, 3, '0')}.vpk`, { rangeStart, rangeSize, abortedCallback });
+        return dataFetcher.fetchData(`${this.basePath}_${leftPad('' + packFileIdx, 3, '0')}.vpk`, { rangeStart, rangeSize, abortedCallback });
     }
 
     public findEntry(path: string): VPKFileEntry | null {
         return nullify(this.dir.entries.get(path));
     }
 
-    private async fetchFileDataInternal(entry: VPKFileEntry, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
+    private async fetchFileDataInternal(dataFetcher: DataFetcher, entry: VPKFileEntry, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
         const promises = [];
         let size = 0;
 
@@ -131,7 +131,7 @@ export class VPKMount {
 
         for (let i = 0; i < entry.chunks.length; i++) {
             const chunk = entry.chunks[i];
-            promises.push(this.fetchChunk(chunk, abortedCallback));
+            promises.push(this.fetchChunk(dataFetcher, chunk, abortedCallback));
             size += chunk.chunkSize;
         }
 
@@ -162,9 +162,9 @@ export class VPKMount {
         return new ArrayBufferSlice(buf.buffer);
     }
 
-    public fetchFileData(entry: VPKFileEntry): Promise<ArrayBufferSlice> {
+    public fetchFileData(dataFetcher: DataFetcher, entry: VPKFileEntry): Promise<ArrayBufferSlice> {
         if (!this.fileDataPromise.has(entry.path)) {
-            this.fileDataPromise.set(entry.path, this.fetchFileDataInternal(entry, () => {
+            this.fileDataPromise.set(entry.path, this.fetchFileDataInternal(dataFetcher, entry, () => {
                 this.fileDataPromise.delete(entry.path);
             }));
         }
@@ -174,5 +174,5 @@ export class VPKMount {
 
 export async function createVPKMount(dataFetcher: DataFetcher, basePath: string) {
     const dir = parseVPKDirectory(await dataFetcher.fetchData(`${basePath}_dir.vpk`));
-    return new VPKMount(dataFetcher, basePath, dir);
+    return new VPKMount(basePath, dir);
 }
