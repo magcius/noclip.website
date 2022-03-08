@@ -561,8 +561,8 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
             const baseVertex = vertex.length;
             vertex.push(...overlayPoints);
             const dstIndexOffs = indices.length;
-            indices.length = indices.length + getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, overlayPoints.length);
-            convertToTrianglesRange(indices, dstIndexOffs, GfxTopology.TRIFAN, baseVertex, overlayPoints.length);
+            indices.length = indices.length + getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, overlayPoints.length);
+            convertToTrianglesRange(indices, dstIndexOffs, GfxTopology.TriFans, baseVertex, overlayPoints.length);
         }
 
         if (vertex.length === 0)
@@ -1546,7 +1546,7 @@ export class BSPFile {
                 addVertexDataToBuffer(vertex, tex, center, tangentW);
 
                 // index buffer
-                indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
                 const indexData = indexBuffer.addUint32(indexCount);
                 if (m_NumPrims !== 0) {
                     let primType, primFirstIndex, primIndexCount, primFirstVert, primVertCount;
@@ -1578,7 +1578,7 @@ export class BSPFile {
                     for (let k = 0; k < indexCount; k++)
                         indexData[dstOffsIndex + k] = dstIndexBase + primindices[primFirstIndex + k];
                 } else {
-                    convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
+                    convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
                 }
 
                 surface = mergeSurface;

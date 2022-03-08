@@ -271,10 +271,10 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
     let streamIdx: ArrayBufferSlice;
     let topology: GfxTopology;
     if (!!(materialFlags & MaterialFlags.Tristrip)) {
-        topology = GfxTopology.TRISTRIP;
+        topology = GfxTopology.TriStrips;
         streamIdx = stream.readSlice(0x02 * (iPolyCount + 2));
     } else {
-        topology = GfxTopology.TRIANGLES;
+        topology = GfxTopology.Triangles;
         streamIdx = stream.readSlice(0x02 * (iPolyCount * 3));
     }
 

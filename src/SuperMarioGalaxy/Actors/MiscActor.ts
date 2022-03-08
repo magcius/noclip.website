@@ -5377,7 +5377,7 @@ class OceanRingPipe extends LiveActor {
 
         assert(pointCount < 0xFFFF);
         const tristripsPerSegment = this.pointsPerSegment * 2;
-        const indexCountPerSegment = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, tristripsPerSegment);
+        const indexCountPerSegment = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, tristripsPerSegment);
         this.indexCount = (this.segmentCount + 1) * indexCountPerSegment;
         const indexData = new Uint16Array(this.indexCount);
         let io = 0;

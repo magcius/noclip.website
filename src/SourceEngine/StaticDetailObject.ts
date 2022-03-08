@@ -339,7 +339,7 @@ export class DetailPropLeafRenderer {
             vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
         }
 
-        convertToTrianglesRange(this.indexData, 0, GfxTopology.QUADS, 0, sortList.length * 4);
+        convertToTrianglesRange(this.indexData, 0, GfxTopology.Quads, 0, sortList.length * 4);
 
         const device = renderContext.device;
         device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));

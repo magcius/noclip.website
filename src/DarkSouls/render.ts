@@ -178,7 +178,7 @@ export class FLVERData {
             const batch = flver.batches[i];
             for (let j = 0; j < batch.primitiveIndexes.length; j++) {
                 const primitive = flver.primitives[batch.primitiveIndexes[j]];
-                const triangleIndexData = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TRISTRIP, primitive.indexData.createTypedArray(Uint16Array)));
+                const triangleIndexData = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TriStrips, primitive.indexData.createTypedArray(Uint16Array)));
                 const triangleIndexCount = triangleIndexData.byteLength / 2;
                 indexBufferDatas.push(new ArrayBufferSlice(triangleIndexData.buffer));
                 triangleIndexCounts.push(triangleIndexCount);

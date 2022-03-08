@@ -222,6 +222,11 @@ export function gfxColorCopy(dst: GfxColor, src: Readonly<GfxColor>): void {
     dst.a = src.a;
 }
 
+export function gfxColorNewCopy(src: Readonly<GfxColor>): GfxColor {
+    const { r, g, b, a } = src;
+    return { r, g, b, a };
+}
+
 // Copied from toplevel util.ts
 
 export function assert(b: boolean, message: string = ""): asserts b {

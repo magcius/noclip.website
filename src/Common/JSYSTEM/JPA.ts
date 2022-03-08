@@ -1000,7 +1000,7 @@ class StripeBufferManager {
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
-        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, MAX_STRIPE_VERTEX_COUNT);
+        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, tristripIndexData.buffer);
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
@@ -2012,7 +2012,7 @@ export class JPABaseEmitter {
 
         workData.fillParticleRenderInst(device, renderInstManager, template);
 
-        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
+        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, oneStripVertexCount);
 
         const renderInst1 = renderInstManager.newRenderInst();
         renderInst1.drawIndexes(oneStripIndexCount);

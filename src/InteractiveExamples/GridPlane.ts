@@ -100,7 +100,7 @@ export class GridPlane {
         vtx[11] = 1;
         this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
 
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },

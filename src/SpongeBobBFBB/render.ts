@@ -219,7 +219,7 @@ class RWMeshFragData implements MeshFragData {
         this.indexMap = Array.from(new Set(mesh.indices)).sort();
 
         this.indices = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(
-            tristrip ? GfxTopology.TRISTRIP : GfxTopology.TRIANGLES,
+            tristrip ? GfxTopology.TriStrips : GfxTopology.Triangles,
             mesh.indices!.map(index => this.indexMap.indexOf(index))));
     }
 
