@@ -552,6 +552,9 @@ export class GloverEnemy implements GenericRenderable {
                 this.particles = new ParticlePool(device, cache, textureHolder, 1);
                 break;
             }
+            case EnemyType.frankie2: {
+                this.maxCollisionDistance = 30;
+            }
 
             // TODO: mike, raptor, opec, and then audit from kloset onward
         }
