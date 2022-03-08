@@ -1,7 +1,7 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 
 const pathBase = `HalfLife2Ep2`;
@@ -22,7 +22,8 @@ class HalfLife2Ep2SceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/maps/${this.id}.bsp`);
     }
 }
 

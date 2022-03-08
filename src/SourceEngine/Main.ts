@@ -1031,8 +1031,16 @@ class Flashlight {
     }
 }
 
-export class SourceRenderContext {
+export class SourceLoadContext {
     public entityFactoryRegistry = new EntityFactoryRegistry();
+
+    constructor(public filesystem: SourceFileSystem) {
+    }
+}
+
+export class SourceRenderContext {
+    public entityFactoryRegistry: EntityFactoryRegistry;
+    public filesystem: SourceFileSystem;
     public lightmapManager: LightmapManager;
     public studioModelCache: StudioModelCache;
     public materialCache: MaterialCache;
@@ -1063,7 +1071,10 @@ export class SourceRenderContext {
 
     public debugStatistics = new DebugStatistics();
 
-    constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
+    constructor(public device: GfxDevice, loadContext: SourceLoadContext) {
+        this.entityFactoryRegistry = loadContext.entityFactoryRegistry;
+        this.filesystem = loadContext.filesystem;
+
         this.renderCache = new GfxRenderCache(device);
         this.lightmapManager = new LightmapManager(device, this.renderCache);
         this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);

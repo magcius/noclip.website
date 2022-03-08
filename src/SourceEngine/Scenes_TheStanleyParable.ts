@@ -3,7 +3,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { decodeString } from "../util";
-import { CustomMount, SourceFileSystem } from "./Main";
+import { CustomMount, SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 
 class TheStanleyParableDesc implements SceneDesc {
@@ -23,7 +23,8 @@ class TheStanleyParableDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/thestanleyparable/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/thestanleyparable/maps/${this.id}.bsp`);
     }
 }
 

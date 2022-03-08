@@ -2,7 +2,7 @@
 import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";
 import { BSPFile } from "./BSPFile";
-import { BSPRenderer, SkyboxRenderer, SourceFileSystem, SourceRenderContext, SourceRenderer } from "./Main";
+import { BSPRenderer, SkyboxRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext, SourceRenderer } from "./Main";
 
 export async function createKitchenSinkSourceFilesytem(dataFetcher: DataFetcher): Promise<SourceFileSystem> {
     const filesystem = new SourceFileSystem(dataFetcher);
@@ -34,7 +34,8 @@ export async function createFileDropsScene(context: SceneContext, buffer: NamedA
     // Clear out old filesystem pakfile.
     filesystem.pakfiles.length = 0;
 
-    const renderContext = new SourceRenderContext(context.device, filesystem);
+    const loadContext = new SourceLoadContext(filesystem);
+    const renderContext = new SourceRenderContext(context.device, loadContext);
     const renderer = new SourceRenderer(context, renderContext);
 
     const bspFile = new BSPFile(buffer, buffer.name);

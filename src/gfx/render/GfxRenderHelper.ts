@@ -8,11 +8,12 @@ import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpe
 
 class GfxRenderHelperBase {
     public renderCache: GfxRenderCache;
-    public renderCacheOwn: GfxRenderCache | null = null;
     public renderGraph: GfxrRenderGraph;
     public renderInstManager: GfxRenderInstManager;
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public debugThumbnails: DebugThumbnailDrawer;
+
+    private renderCacheOwn: GfxRenderCache | null = null;
 
     constructor(public device: GfxDevice, renderCache: GfxRenderCache | null = null) {
         if (renderCache === null) {

@@ -2,7 +2,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
-import { BSPRenderer, SourceFileSystem, SourceRenderContext } from "./Main";
+import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
 import { BSPEntity } from "./VMT";
 
@@ -35,9 +35,9 @@ class PortalSceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        const renderContext = new SourceRenderContext(context.device, filesystem);
-        this.registerEntityFactories(renderContext.entityFactoryRegistry);
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`, false, renderContext);
+        const loadContext = new SourceLoadContext(filesystem);
+        this.registerEntityFactories(loadContext.entityFactoryRegistry);
+        return createScene(context, loadContext, this.id, `${pathBase}/maps/${this.id}.bsp`, false);
     }
 }
 

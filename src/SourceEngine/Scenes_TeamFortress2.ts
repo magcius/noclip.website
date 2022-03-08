@@ -1,7 +1,7 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 import { createKitchenSinkSourceFilesytem } from "./Scenes_FileDrops";
 
@@ -24,7 +24,8 @@ class TeamFortress2SceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/tf/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/tf/maps/${this.id}.bsp`);
     }
 }
 
@@ -39,7 +40,8 @@ class GarrysModSceneDesc implements SceneDesc {
             return createKitchenSinkSourceFilesytem(context.dataFetcher);
         });
 
-        return createScene(context, filesystem, this.id, `${gmPathBase}/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${gmPathBase}/maps/${this.id}.bsp`);
     }
 }
 
