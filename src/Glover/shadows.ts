@@ -27,7 +27,7 @@ export interface Collision {
 
 export interface Collidable {
     // TODO: bbox coordinates
-    collides: (rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3) => Collision | null;
+    collides: (rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3, boundingSphereCheck: boolean) => Collision | null;
     isSelf: (obj: Object) => boolean;
 }
 
@@ -158,19 +158,14 @@ export function rayTriangleIntersection (rayOrigin: ReadonlyVec3, rayVector: Rea
 
 const downwardRay: ReadonlyVec3 = vec3.fromValues(0, -1, 0);
 
-export function projectOntoTerrain(sourcePos: vec3, sourceObj: Object | null, terrain: readonly Collidable[]) : Collision | null {
+export function projectOntoTerrain(sourcePos: vec3, sourceObj: Object | null, terrain: readonly Collidable[], ray: ReadonlyVec3 = downwardRay, boundingSphereCheck: boolean = true) : Collision | null {
     let closestIntersectionDist = Infinity;
     let closestCollision: Collision | null = null;
     for (let terrainPiece of terrain) {
-        // TODO: only do this on the bounding box which is both
-        //       overlapping in x+z, and also has the smallest
-        //       positive y distance between the bottom of the
-        //       shadow-caster bbox and top of the shadow-surface
-        //       bbox
         if (sourceObj !== null && terrainPiece.isSelf(sourceObj)) {
             continue;
         }
-        const collision = terrainPiece.collides(sourcePos, downwardRay);
+        const collision = terrainPiece.collides(sourcePos, ray, boundingSphereCheck);
         if (collision === null) {
             continue;
         } else {

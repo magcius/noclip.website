@@ -555,7 +555,9 @@ export class GloverEnemy implements GenericRenderable {
             case EnemyType.frankie2: {
                 this.maxCollisionDistance = 30;
             }
-
+            case EnemyType.cymon: {
+                this.maxCollisionDistance = 20;
+            }
             // TODO: mike, raptor, opec, and then audit from kloset onward
         }
     }
@@ -633,22 +635,22 @@ export class GloverEnemy implements GenericRenderable {
 
     private groundCollisionCheck(): boolean {
         assert(this.curInstr !== null);
+        const beh = enemy_beh[this.enemyType];
+
         if (this.instrCooldownCounter === 0) {
             if ((enemy_init_flags[this.enemyType] & 4) === 0) {
                 let collided: boolean = false;
 
-                vec3.scale(scratchVec3, this.velocity, 10);
-                scratchVec3[1] = 0;
-                vec3.normalize(scratchVec3, scratchVec3);
-                vec3.add(scratchVec3, scratchVec3, this.nextPosition);
-
-
-                const collision = projectOntoTerrain(scratchVec3, null, this.terrain);
-                if (collision !== null && collision.normal[1] < 0.8) {
-                    collided = true;
-                    vec3.zero(this.velocity);
-                    this.velocity[0] = collision.normal[0];
-                    this.velocity[2] = collision.normal[2];
+                vec3.normalize(scratchVec3, this.velocity);
+                const collision = projectOntoTerrain(this.nextPosition, null, this.terrain, scratchVec3, false);
+                if (collision !== null) {
+                    const collisionDist = vec3.distance(collision.position, this.nextPosition);
+                    if (collisionDist < vec3.length(this.velocity) * this.maxCollisionDistance * 2) {
+                        collided = true;
+                        vec3.zero(this.velocity);
+                        this.velocity[0] = collision.normal[0] * beh.walkSpeed;
+                        this.velocity[2] = collision.normal[2] * beh.walkSpeed;
+                    }
                 }
 
                 if (collided) {
@@ -659,7 +661,7 @@ export class GloverEnemy implements GenericRenderable {
                         }
                         this.dstEulers[1] = radianModulo(this.dstEulers[1]);
                     }
-                    this.instrCooldownCounter = 0x1e;
+                    this.instrCooldownCounter = 0x5; // 0x1e;
                 }
                 return collided;
             }
@@ -848,6 +850,47 @@ export class GloverEnemy implements GenericRenderable {
         return angularDistance(this.dstEulers[1], this.nextEulers[1]) < 0.1;
     }
 
+    private instrRest() {
+        assert(this.curInstr !== null);
+        assert(this.curInstr.params !== undefined);
+        assert(this.curInstr.params.__type === "EnemyInstructionRest");
+  
+        if (this.enemyType == EnemyType.dibber) {
+            vec3.scale(this.velocity, this.velocity, 0.5);
+        }
+        const restFlags = this.curInstr.params.flags;
+        if (this.curInstrExecCount == 0) {
+            let queueAnim = false;
+            if ((restFlags & 2) == 0) {
+                if ((this.curInstr.flags & 0x4000) == 0) {
+                    if ((restFlags & 4) == 0) {
+                        queueAnim = false;
+                    } else {
+                        this.actor.isPlaying = false;
+                        queueAnim = true;
+                    }
+                    this.actor.playSkeletalAnimation(5, this.curInstr.params.animStartPlaying != 0, queueAnim);
+                }
+            } else {
+                if ((restFlags & 4) != 0) {
+                    this.actor.isPlaying = false;
+                    queueAnim = true;
+                }
+                this.actor.playSkeletalAnimation(0xe, false, queueAnim);
+                if ((this.curInstr.flags & 0x4000) == 0) {
+                    queueAnim = true;
+                    this.actor.playSkeletalAnimation(5, this.curInstr.params.animStartPlaying != 0, queueAnim);
+                }
+            }
+        }
+
+        // TODO:
+        // if (((restFlags & 1) != 0) && this.curInstrExecCount < 5) {
+        //     spawnParticles_801b70f8(this.actor.pos,2,0.0,0.8);
+        // }
+    }
+
+
     private advanceAI() {
         let advanceInstr: boolean = false;
 
@@ -877,8 +920,33 @@ export class GloverEnemy implements GenericRenderable {
                     }
                     break;
                 }
-                case 'EnemyInstructionTurn': {
+                case 'EnemyInstructionDash': {
+                    if (this.curInstrExecCount === 0) {
+                        if ((this.curInstr.flags & 0x40000) == 0) {
+                            if ((this.curInstr.flags & 0x4000) == 0) {
+                                this.actor.playSkeletalAnimation(0xd, true, false);
+                                this.actor.playSkeletalAnimation(0xf, true, true);
+                            }
+                        } else {
+                            this.actor.playSkeletalAnimation(0xd, true, false);
+                            this.actor.playSkeletalAnimation(9, true, true);
+                        }
+                    }
+                    if ((this.curInstr.flags & 0x80000) === 0 || this.actor.currentAnimIdx != 0xd) {
+                        advanceInstr = this.walkTo(
+                            [instrParams.destinationX, instrParams.destinationY, instrParams.destinationZ], 
+                            instrParams.velMagnitude,
+                            this.curInstr.flags
+                        );
+                        if (advanceInstr) {
+                            this.curInstrIdx++;
+                        }
+                    }
+                    break;
+                }
 
+
+                case 'EnemyInstructionTurn': {
                     // TODO: this is a hack to keep dibbers from flipping out.
                     //       figure out why, in game, they don't need this:
                     // TODO: even with this, a dibber near the beginning of PH2 flips out. investigate
@@ -891,6 +959,50 @@ export class GloverEnemy implements GenericRenderable {
                     }
                     break;
                 }
+                case 'EnemyInstructionRest': {
+                    this.instrRest();
+                    if (this.curInstrLifetime <= 0 && (this.actor.currentAnimIdx === 5 || (instrParams.flags & 4) === 0)) {
+                        advanceInstr = true;
+                        this.curInstrIdx++;
+                    }
+                    break;
+                }
+
+                case 'EnemyInstructionPlayAnimation': {
+                    if (this.curInstrExecCount == 0) {
+                        // TODO:
+                        // if (((enemy->curInstruction).flags & INSTR_FLAG_SLOW_DOWN_CLOSE_TO_DESTINATION) != 0) {
+                        //     animReset_80133b9c(&enemy->actor);
+                        // }
+                        let animIdx = 0;
+                        if (instrParams.animIdx1 < 0) {
+                            if ((this.curInstr.flags & 0x2) != 0) {
+                                this.actor.isPlaying = false;
+                            }
+                            animIdx = instrParams.animIdx2;
+                        } else {
+                            if ((this.curInstr.flags & 0x2) != 0) {
+                                this.actor.isPlaying = false;
+                            }
+                            animIdx = instrParams.animIdx1 + 10;
+                        }
+                        this.actor.playSkeletalAnimation(animIdx,
+                                (this.curInstr.flags & 0x1) !== 0,
+                                (this.curInstr.flags & 0x2) !== 0);
+                    }
+                    if (this.curInstrLifetime <= 0) {
+                        let dstIdx = instrParams.animIdx1 + 10;
+                        if (instrParams.animIdx1 < 0) {
+                          dstIdx = instrParams.animIdx2;
+                        }
+                        if (this.actor.currentAnimIdx === dstIdx) {
+                            this.curInstrIdx++
+                            advanceInstr = true;
+                        }
+                    }
+
+                    break;
+                }
                 case 'EnemyInstructionGoto': {
                     this.curInstrIdx = instrParams.instrIdx;
                     advanceInstr = true;
@@ -900,10 +1012,10 @@ export class GloverEnemy implements GenericRenderable {
             this.curInstrExecCount += 1;
             if (this.curInstrLifetime > 0) {
                 this.curInstrLifetime -= 1;
-                if (this.curInstrLifetime == 0 && !advanceInstr) {
-                    this.curInstrIdx++
-                    advanceInstr = true;
-                }
+            }
+            if (this.curInstrLifetime == 0 && !advanceInstr) {
+                this.curInstrIdx++
+                advanceInstr = true;
             }
         }
 
@@ -915,7 +1027,7 @@ export class GloverEnemy implements GenericRenderable {
             }
 
             this.curInstrExecCount = 0;
-            if (this.curInstrIdx <= this.normalInstructions.length) {
+            if (this.curInstrIdx < this.normalInstructions.length) {
                 this.curInstr = this.normalInstructions[this.curInstrIdx];
                 this.curInstrLifetime = this.curInstr.lifetime;
             } else {

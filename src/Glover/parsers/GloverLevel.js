@@ -666,6 +666,34 @@ var GloverLevel = (function() {
     return Plat0x9f;
   })();
 
+  var EnemyInstructionDash = GloverLevel.EnemyInstructionDash = (function() {
+    function EnemyInstructionDash(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionDash';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyInstructionDash.prototype._read = function() {
+      this._debug.destinationX = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.destinationX = this._io.readF4be();
+      this._debug.destinationX.end = this._io.pos;
+      this._debug.destinationY = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.destinationY = this._io.readF4be();
+      this._debug.destinationY.end = this._io.pos;
+      this._debug.destinationZ = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.destinationZ = this._io.readF4be();
+      this._debug.destinationZ.end = this._io.pos;
+      this._debug.velMagnitude = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.velMagnitude = this._io.readF4be();
+      this._debug.velMagnitude.end = this._io.pos;
+    }
+
+    return EnemyInstructionDash;
+  })();
+
   var EnvironmentalSound = GloverLevel.EnvironmentalSound = (function() {
     function EnvironmentalSound(_io, _parent, _root) {
       this.__type = 'EnvironmentalSound';
@@ -1279,6 +1307,28 @@ var GloverLevel = (function() {
     }
 
     return PlatMvspn0x73;
+  })();
+
+  var EnemyInstructionRest = GloverLevel.EnemyInstructionRest = (function() {
+    function EnemyInstructionRest(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionRest';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyInstructionRest.prototype._read = function() {
+      this._debug.flags = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.flags = this._io.readU4be();
+      this._debug.flags.end = this._io.pos;
+      this._debug.animStartPlaying = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.animStartPlaying = this._io.readU4be();
+      this._debug.animStartPlaying.end = this._io.pos;
+    }
+
+    return EnemyInstructionRest;
   })();
 
   var LookAtBall0x61 = GloverLevel.LookAtBall0x61 = (function() {
@@ -3700,6 +3750,28 @@ var GloverLevel = (function() {
     return PlatTopple0x81;
   })();
 
+  var EnemyInstructionPlayAnimation = GloverLevel.EnemyInstructionPlayAnimation = (function() {
+    function EnemyInstructionPlayAnimation(_io, _parent, _root) {
+      this.__type = 'EnemyInstructionPlayAnimation';
+      this._io = _io;
+      this._parent = _parent;
+      this._root = _root || this;
+      this._debug = {};
+
+      this._read();
+    }
+    EnemyInstructionPlayAnimation.prototype._read = function() {
+      this._debug.animIdx1 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.animIdx1 = this._io.readS4be();
+      this._debug.animIdx1.end = this._io.pos;
+      this._debug.animIdx2 = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.animIdx2 = this._io.readS4be();
+      this._debug.animIdx2.end = this._io.pos;
+    }
+
+    return EnemyInstructionPlayAnimation;
+  })();
+
   var EnemyInstructionRandomWalk = GloverLevel.EnemyInstructionRandomWalk = (function() {
     function EnemyInstructionRandomWalk(_io, _parent, _root) {
       this.__type = 'EnemyInstructionRandomWalk';
@@ -3935,7 +4007,7 @@ var GloverLevel = (function() {
         this.params = new EnemyInstructionMove(this._io, this, this._root);
         break;
       case 4:
-        this.params = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionRest(this._io, this, this._root);
         break;
       case 24:
         this.params = new EnemyInstructionC(this._io, this, this._root);
@@ -3947,10 +4019,10 @@ var GloverLevel = (function() {
         this.params = new EnemyInstructionC(this._io, this, this._root);
         break;
       case 7:
-        this.params = new EnemyInstructionC(this._io, this, this._root);
+        this.params = new EnemyInstructionPlayAnimation(this._io, this, this._root);
         break;
       case 1:
-        this.params = new EnemyInstructionA(this._io, this, this._root);
+        this.params = new EnemyInstructionDash(this._io, this, this._root);
         break;
       case 13:
         this.params = new EnemyInstructionA(this._io, this, this._root);

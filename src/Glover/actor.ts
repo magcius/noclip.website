@@ -275,6 +275,7 @@ export class ActorMeshNode {
 
 interface QueuedSkeletalAnimation {
     anim: GloverObjbank.AnimationDefinition;
+    animIdx: number;
     startPlaying: boolean;
     playbackSpeed: number;
 }
@@ -314,6 +315,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     private currentPlaybackSpeed: number = 0;
     private currentAnim: GloverObjbank.AnimationDefinition | null = null;
     private currentAnimTime: number = 0;
+    public currentAnimIdx: number = -1;
     private animQueue: QueuedSkeletalAnimation[] = [];
 
     constructor(
@@ -389,11 +391,13 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         if (queue) {
             this.animQueue.push({
                 anim: animDef,
+                animIdx: animIdx,
                 startPlaying: startPlaying,
                 playbackSpeed: playbackSpeed
             });
         } else {
             this.currentAnim = animDef;
+            this.currentAnimIdx = animIdx;
             this.currentPlaybackSpeed = playbackSpeed;
             this.isPlaying = startPlaying;
             this.currentAnimTime = (playbackSpeed >= 0) ? animDef.startTime : 
@@ -431,16 +435,18 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         return obj as GloverActorRenderer === this;
     }
 
-    public collides(rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3): Shadows.Collision | null {
+    public collides(rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3, boundingSphereCheck: boolean = true): Shadows.Collision | null {
         let closestIntersection = null;
         let closestFace = null;
         let closestIntersectionDist = Infinity;
 
-        // Bounding sphere check
-        mat4.getTranslation(this.vec3Scratch, this.modelMatrix);
-        vec3.subtract(this.vec3Scratch, this.vec3Scratch, rayOrigin);
-        if (Math.sqrt(Math.pow(this.vec3Scratch[0],2) + Math.pow(this.vec3Scratch[2],2)) > this.greatestExtent) {
-            return null;
+        if (boundingSphereCheck) {
+            // Bounding sphere check
+            mat4.getTranslation(this.vec3Scratch, this.modelMatrix);
+            vec3.subtract(this.vec3Scratch, this.vec3Scratch, rayOrigin);
+            if (Math.sqrt(Math.pow(this.vec3Scratch[0],2) + Math.pow(this.vec3Scratch[2],2)) > this.greatestExtent) {
+                return null;
+            }
         }
 
         // Per-face check
@@ -502,10 +508,11 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
                 if ((reversePlay && this.currentAnimTime < this.currentAnim.startTime) || 
                     (!reversePlay && this.currentAnimTime > this.currentAnim.endTime)) {
                     if (this.animQueue.length > 0) {
-                        const nextAnim = this.animQueue.shift();
-                        this.currentAnim = nextAnim!.anim;
-                        this.currentPlaybackSpeed = nextAnim!.playbackSpeed;
-                        this.isPlaying = nextAnim!.startPlaying;
+                        const nextAnim = this.animQueue.shift()!;
+                        this.currentAnim = nextAnim.anim;
+                        this.currentAnimIdx = nextAnim.animIdx;
+                        this.currentPlaybackSpeed = nextAnim.playbackSpeed;
+                        this.isPlaying = nextAnim.startPlaying;
                     }
                     this.currentAnimTime = reversePlay ? this.currentAnim.endTime : this.currentAnim.startTime;
                 }

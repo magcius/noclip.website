@@ -285,7 +285,7 @@ declare namespace GloverObjbank {
     renderMode: number;
     childPtr: number;
     siblingPtr: number;
-    u15: number;
+    runtimeCollisionDataPtr: number;
 
     _debug: {
       id: DebugPosition;
@@ -306,7 +306,7 @@ declare namespace GloverObjbank {
       renderMode: DebugPosition;
       childPtr: DebugPosition;
       siblingPtr: DebugPosition;
-      u15: DebugPosition;
+      runtimeCollisionDataPtr: DebugPosition;
     };
   }
 }

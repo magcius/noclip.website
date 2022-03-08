@@ -451,6 +451,26 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
+  class EnemyInstructionDash {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyInstructionDash';
+    _io: any;
+
+    destinationX: number;
+    destinationY: number;
+    destinationZ: number;
+    velMagnitude: number;
+
+    _debug: {
+      destinationX: DebugPosition;
+      destinationY: DebugPosition;
+      destinationZ: DebugPosition;
+      velMagnitude: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
   class EnvironmentalSound {
     constructor(io: any, parent?: any, root?: any);
     __type: 'EnvironmentalSound';
@@ -868,6 +888,22 @@ declare namespace GloverLevel {
       u320x34: DebugPosition;
       u320x38: DebugPosition;
       u320x3c: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
+  class EnemyInstructionRest {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyInstructionRest';
+    _io: any;
+
+    flags: number;
+    animStartPlaying: number;
+
+    _debug: {
+      flags: DebugPosition;
+      animStartPlaying: DebugPosition;
     };
   }
 }
@@ -2302,6 +2338,22 @@ declare namespace GloverLevel {
 }
 
 declare namespace GloverLevel {
+  class EnemyInstructionPlayAnimation {
+    constructor(io: any, parent?: any, root?: any);
+    __type: 'EnemyInstructionPlayAnimation';
+    _io: any;
+
+    animIdx1: number;
+    animIdx2: number;
+
+    _debug: {
+      animIdx1: DebugPosition;
+      animIdx2: DebugPosition;
+    };
+  }
+}
+
+declare namespace GloverLevel {
   class EnemyInstructionRandomWalk {
     constructor(io: any, parent?: any, root?: any);
     __type: 'EnemyInstructionRandomWalk';
@@ -2411,7 +2463,7 @@ declare namespace GloverLevel {
 
     instrType: number;
     lifetime: number;
-    params: GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionMove | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionRandomWalk | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionError | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionGoto | GloverLevel.EnemyInstructionTurn | GloverLevel.EnemyInstructionA | undefined;
+    params: GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionMove | GloverLevel.EnemyInstructionRest | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionPlayAnimation | GloverLevel.EnemyInstructionDash | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionRandomWalk | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionError | GloverLevel.EnemyInstructionA | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionC | GloverLevel.EnemyInstructionGoto | GloverLevel.EnemyInstructionTurn | GloverLevel.EnemyInstructionA | undefined;
     executionConditionParamA: number;
     executionConditionParamB: number;
     flags: GloverLevel.EnemyInstruction.InstructionFlags;

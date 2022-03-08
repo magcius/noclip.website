@@ -517,9 +517,9 @@ var GloverObjbank = (function() {
       this._debug.siblingPtr = { start: this._io.pos, ioOffset: this._io.byteOffset };
       this.siblingPtr = this._io.readU4be();
       this._debug.siblingPtr.end = this._io.pos;
-      this._debug.u15 = { start: this._io.pos, ioOffset: this._io.byteOffset };
-      this.u15 = this._io.readU4be();
-      this._debug.u15.end = this._io.pos;
+      this._debug.runtimeCollisionDataPtr = { start: this._io.pos, ioOffset: this._io.byteOffset };
+      this.runtimeCollisionDataPtr = this._io.readU4be();
+      this._debug.runtimeCollisionDataPtr.end = this._io.pos;
     }
     Object.defineProperty(Mesh.prototype, 'rotation', {
       get: function() {
