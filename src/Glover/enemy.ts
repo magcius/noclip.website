@@ -561,6 +561,10 @@ export class GloverEnemy implements GenericRenderable {
             case EnemyType.cymon: {
                 this.maxCollisionDistance = 20;
             }
+            case EnemyType.chuck: {
+                this.maxCollisionDistance = 22;
+            }
+
             // TODO: mike, raptor, opec, and then audit from kloset onward
         }
     }
