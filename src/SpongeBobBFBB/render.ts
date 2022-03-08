@@ -659,7 +659,7 @@ export class FragRenderer extends BaseRenderer {
         }
 
         this.program = new BFBBProgram(defines);
-        this.gfxProgram = device.createProgram(this.program);
+        this.gfxProgram = cache.createProgram(this.program);
 
         this.sortKey = makeSortKey(renderLayer);
         this.filterKey = defines.SKY ? BFBBPass.SKYDOME : BFBBPass.MAIN;
@@ -709,7 +709,6 @@ export class FragRenderer extends BaseRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        device.destroyProgram(this.gfxProgram);
         if (this.frag.textureData !== undefined)
             this.frag.textureData.destroy(device);
     }

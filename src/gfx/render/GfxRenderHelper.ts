@@ -56,7 +56,6 @@ class GfxRenderHelperBase {
 }
 
 // Debug Thumbnails
-// TODO(jstpierre): Find a way to re-add these (maybe by rewriting the DebugTextDrawer system...)
 import { SceneContext } from "../../SceneBase";
 import type { DebugTextDrawer } from "../helpers/DebugTextDrawer";
 
