@@ -555,6 +555,9 @@ export class GloverEnemy implements GenericRenderable {
             case EnemyType.frankie2: {
                 this.maxCollisionDistance = 30;
             }
+            case EnemyType.fumble: {
+                this.maxCollisionDistance = 5;
+            }
             case EnemyType.cymon: {
                 this.maxCollisionDistance = 20;
             }
@@ -1014,8 +1017,11 @@ export class GloverEnemy implements GenericRenderable {
                 this.curInstrLifetime -= 1;
             }
             if (this.curInstrLifetime == 0 && !advanceInstr) {
-                this.curInstrIdx++
-                advanceInstr = true;
+                // TODO: if guard is a hack for incomplete fumble ai
+                if (this.enemyType !== EnemyType.fumble) {
+                    this.curInstrIdx++
+                    advanceInstr = true;                    
+                }
             }
         }
 
