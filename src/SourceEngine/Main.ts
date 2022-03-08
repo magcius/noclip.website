@@ -1606,12 +1606,12 @@ export class SourceRenderer implements SceneGfx {
             this.renderContext.colorCorrection.setEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableColorCorrection.elem);
-        const useExpensiveWater = new UI.Checkbox('Use Expensive Water', true);
-        useExpensiveWater.onchanged = () => {
-            const v = useExpensiveWater.checked;
+        const enableExtensiveWater = new UI.Checkbox('Use Expensive Water', true);
+        enableExtensiveWater.onchanged = () => {
+            const v = enableExtensiveWater.checked;
             this.renderContext.enableExpensiveWater = v;
         };
-        renderHacksPanel.contents.appendChild(useExpensiveWater.elem);
+        renderHacksPanel.contents.appendChild(enableExtensiveWater.elem);
         const showToolMaterials = new UI.Checkbox('Show Tool-only Materials', false);
         showToolMaterials.onchanged = () => {
             const v = showToolMaterials.checked;

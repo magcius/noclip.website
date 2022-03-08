@@ -142,7 +142,6 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
 
 export class UberShaderInstance<T> {
     protected gfxProgram: GfxProgram | null = null;
-    protected gfxRenderCache: GfxRenderCache | null = null;
     protected variantSettings: T;
 
     constructor(protected template: UberShaderTemplate<T>) {
@@ -153,12 +152,8 @@ export class UberShaderInstance<T> {
     }
 
     public getGfxProgram(cache: GfxRenderCache): GfxProgram {
-        if (this.gfxProgram === null) {
+        if (this.gfxProgram === null)
             this.gfxProgram = this.template.getGfxProgram(cache, this.variantSettings);
-
-            // For easy editor support.
-            this.gfxRenderCache = cache;
-        }
 
         return this.gfxProgram;
     }
@@ -166,10 +161,16 @@ export class UberShaderInstance<T> {
 
 export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
     private shaderTextEditor: ShaderTextEditor | null = null;
+    private gfxRenderCache: GfxRenderCache | null = null;
 
     constructor(template: UberShaderTemplateBasic) {
         super(template);
         this.variantSettings = new Map<string, string>();
+    }
+
+    public override getGfxProgram(cache: GfxRenderCache): GfxProgram {
+        this.gfxRenderCache = cache;
+        return super.getGfxProgram(cache);
     }
 
     public setDefineString(name: string, v: string | null): boolean {
