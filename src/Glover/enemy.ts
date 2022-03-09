@@ -861,7 +861,12 @@ export class GloverEnemy implements GenericRenderable {
         assert(this.curInstr !== null);
         assert(this.curInstr.params !== undefined);
         assert(this.curInstr.params.__type === "EnemyInstructionRest");
-  
+
+        if (this.enemyType == EnemyType.hubchicken) {
+            // TODO: hack to let chicken swing, because the rest of this
+            //       is not properly implemented
+            return;
+        }  
         if (this.enemyType == EnemyType.dibber) {
             vec3.scale(this.velocity, this.velocity, 0.5);
         }
