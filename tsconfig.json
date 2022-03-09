@@ -36,8 +36,6 @@
     "include": [
         "./src/",
         "./src/vendor/webxr/",
-        "./src/vendor/kaitai-struct-compiler/",
-        "./src/Glover/",
         "node_modules/@webgpu/types"
     ],
     "exclude": [

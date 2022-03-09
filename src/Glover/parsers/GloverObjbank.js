@@ -2,9 +2,9 @@
 
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
-    define(['kaitai-struct/KaitaiStream'], factory);
+    define(['./kaitai-struct/KaitaiStream'], factory);
   } else if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('kaitai-struct/KaitaiStream'));
+    module.exports = factory(require('./kaitai-struct/KaitaiStream'));
   } else {
     root.GloverObjbank = factory(root.KaitaiStream);
   }

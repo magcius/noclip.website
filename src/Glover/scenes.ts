@@ -43,7 +43,7 @@ import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbo
 import { BulletPool } from './bullets';
 
 
-import { KaitaiStream } from 'kaitai-struct';
+import { KaitaiStream } from './parsers/kaitai-struct';
 
 const pathBase = `glover`;
 
