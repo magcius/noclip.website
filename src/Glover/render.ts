@@ -4,8 +4,6 @@ import * as RDP from '../Common/N64/RDP';
 import * as RSP from '../Common/N64/RSP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 
-import * as RDPRenderModes from './rdp_render_modes';
-
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4 } from "gl-matrix";
@@ -65,7 +63,7 @@ export function setRenderMode(rspState: GloverRSPState, decal: boolean, xlu: boo
     rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
 
     if (overlay) {
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2);
+        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_ZB_CLD_SURF, RDP.RENDER_MODES.G_RM_ZB_CLD_SURF2);
         // TODO: the active line of code here reproduces how
         //       colorful the exit cone is on hardware, but
         //       the commented-out line is what the code actually
@@ -80,14 +78,14 @@ export function setRenderMode(rspState: GloverRSPState, decal: boolean, xlu: boo
             } else {
                 rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); // gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
             }
-            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_XLU_SURF2);
+            rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_PASS, RDP.RENDER_MODES.G_RM_AA_ZB_XLU_SURF2);
         } else {
             if (decal) {
                 rspState.gDPSetCombine(0xFC127FFF, 0xfffff238); // gsDPSetCombineMode(G_CC_MODULATEIDECALA, G_CC_PASS2));
-                rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
+                rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_PASS, RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE2);
             } else {
                 rspState.gDPSetCombine(0xFC127FFF, 0xfffff638); //  gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, PRIMITIVE, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED));
-                rspState.gDPSetRenderMode(RDPRenderModes.G_RM_PASS, RDPRenderModes.G_RM_AA_ZB_OPA_SURF2);
+                rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_PASS, RDP.RENDER_MODES.G_RM_AA_ZB_OPA_SURF2);
             }
         }
         rspState.gDPSetPrimColor(0, 0, 0x00, 0x00, 0x00, alpha * 255); // 0xFA000000, (*0x801ec878) & 0xFF);

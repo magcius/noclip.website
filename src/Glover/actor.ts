@@ -6,7 +6,6 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as Shadows from './shadows';
 import * as Sprite from './sprite';
 import * as Render from './render';
-import * as RDPRenderModes from './rdp_render_modes';
 
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
@@ -938,7 +937,7 @@ export class GloverBlurRenderer {
         Render.initializeRenderState(rspState);    
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_ZB_CLD_SURF, RDP.RENDER_MODES.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         rspState.gDPSetCombine(0xfcffffff, 0xfffe793c); // G_CC_SHADE, G_CC_SHADE
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
         rspState.gSPTexture(false, 0, 0, 0, 0);

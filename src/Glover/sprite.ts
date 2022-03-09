@@ -6,8 +6,6 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as Shadows from './shadows';
 import * as Render from './render';
 
-import * as RDPRenderModes from './rdp_render_modes';
-
 import { assert, assertExists, align, nArray } from "../util";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { mat4, vec3, vec4, quat } from "gl-matrix";
@@ -106,10 +104,10 @@ class GloverBaseSpriteRenderer {
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
         if (this.xlu) {
             rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
-            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+            rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_ZB_CLD_SURF, RDP.RENDER_MODES.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         } else {
             rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIDECALA, G_CC_PASS2
-            rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_ZB_TEX_EDGE, RDPRenderModes.G_RM_AA_ZB_TEX_EDGE2);
+            rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE, RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE2);
         }
         rspState.gDPSetPrimColor(0, 0, 0xFF, 0xFF, 0xFF, 0xFF); // 0xFA000000, (*0x801ec878) & 0xFF);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
@@ -303,7 +301,7 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
 
         rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
         rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_XLU_SURF, RDP.RENDER_MODES.G_RM_AA_XLU_SURF2);
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
         if (this.primitiveColor !== undefined) {
             rspState.gDPSetPrimColor(0, 0, this.primitiveColor[0], this.primitiveColor[1], this.primitiveColor[2], 0xFF);
@@ -518,7 +516,7 @@ export class GloverShadowRenderer extends GloverSpriteRenderer {
     protected override initializePipeline(rspState: Render.GloverRSPState) {
         Render.initializeRenderState(rspState);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_ZB_CLD_SURF, RDP.RENDER_MODES.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
         rspState.gDPSetPrimColor(0, 0, 0, 0, 0, 0xFF);
@@ -582,7 +580,7 @@ export class GloverUISpriteRenderer extends GloverBaseSpriteRenderer {
 
         rspState.gDPSetOtherModeH(0x14, 0x02, 0x0000); // gsDPSetCycleType(G_CYC_1CYCLE)
         rspState.gDPSetCombine(0xFC119623, 0xFF2FFFFF);
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_AA_XLU_SURF, RDPRenderModes.G_RM_AA_XLU_SURF2);
+        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_XLU_SURF, RDP.RENDER_MODES.G_RM_AA_XLU_SURF2);
         
         // TODO: should be .5 rather than .99?
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
@@ -884,7 +882,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
     protected override initializePipeline(rspState: Render.GloverRSPState) {
         Render.initializeRenderState(rspState);
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_ZBUFFER); // 0xB7000000 0x00000001
-        rspState.gDPSetRenderMode(RDPRenderModes.G_RM_ZB_CLD_SURF, RDPRenderModes.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
+        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_ZB_CLD_SURF, RDP.RENDER_MODES.G_RM_ZB_CLD_SURF2); // 0xb900031d 0x00504b50
         rspState.gDPSetCombine(0xfc119623, 0xff2fffff); // G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM
         rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000 / 32, 0.999985 * 0x10000 / 32);
         rspState.gDPSetPrimColor(0, 0, 0, 0, 0, 0xFF);
