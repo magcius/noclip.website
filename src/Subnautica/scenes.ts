@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputState, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
@@ -10,6 +10,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager';
 import { AABB } from '../Geometry';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -103,9 +104,9 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     public program: GfxProgram;
 
     constructor(public device: GfxDevice) {
-        this.program = device.createProgram(new ChunkProgram());
         this.meshRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
+        this.program = this.renderHelper.renderCache.createProgram(new ChunkProgram());
     }
 
     addMesh(mesh: UnityMesh, offset: vec3) {
@@ -160,7 +161,6 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyProgram(this.program);
         this.meshRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy();
     }

@@ -142,27 +142,9 @@ export enum MODIFYVTX_Locations {
     G_MWO_POINT_ZSCREEN  = 0x1C
 }
 
-export function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
-    const out = RDP.translateRenderMode(renderMode);
-
-    if (geoMode & RSP_Geometry.G_CULL_BACK) {
-        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            out.cullMode = GfxCullMode.FrontAndBack;
-        } else {
-            out.cullMode = GfxCullMode.Back;
-        }
-    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        out.cullMode = GfxCullMode.Front;
-    } else {
-        out.cullMode = GfxCullMode.None;
-    }
-
-    return out;
-}
-
 export function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x1000);
-    const cullBack = !!(m & 0x2000);
+    const cullFront = !!(m & RSP_Geometry.G_CULL_FRONT);
+    const cullBack = !!(m & RSP_Geometry.G_CULL_BACK);
     if (cullFront && cullBack)
         return GfxCullMode.FrontAndBack;
     else if (cullFront)

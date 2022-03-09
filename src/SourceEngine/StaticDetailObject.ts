@@ -339,7 +339,7 @@ export class DetailPropLeafRenderer {
             vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
         }
 
-        convertToTrianglesRange(this.indexData, 0, GfxTopology.QUADS, 0, sortList.length * 4);
+        convertToTrianglesRange(this.indexData, 0, GfxTopology.Quads, 0, sortList.length * 4);
 
         const device = renderContext.device;
         device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
@@ -574,8 +574,7 @@ export class StaticPropRenderer {
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
-            // TODO(HDR)
-            const spPrefix = (false && this.bspRenderer.bsp.usingHDR) ? `sp_hdr` : `sp`;
+            const spPrefix = (this.bspRenderer.bsp.usingHDR) ? `sp_hdr` : `sp`;
             const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
             if (staticLightingData !== null) {
                 this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);

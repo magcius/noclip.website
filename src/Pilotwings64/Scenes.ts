@@ -20,7 +20,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers";
 import { CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
-import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
+import { TextureState, RSP_Geometry, translateCullMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -1827,7 +1827,8 @@ class MaterialInstance {
             const chosenCombine = RDP.decodeCombineParams(0, 0);
             this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode, chosenCombine);
         }
-        this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
+        this.stateFlags = RDP.translateRenderMode(this.decodedMaterial.renderMode);
+        this.stateFlags.cullMode = translateCullMode(this.decodedMaterial.geoMode);
         this.program.defines.set('BONE_MATRIX_COUNT', '1');
         this.program.defines.set("USE_VERTEX_COLOR", "1");
         if (this.hasTexture)

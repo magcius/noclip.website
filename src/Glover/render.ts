@@ -548,7 +548,7 @@ export class DrawCallInstance {
     constructor(private drawCall: DrawCall, private textureCache: RDP.TextureCache, private sceneLights: SceneLighting | null = null) {
         assert(drawCall.renderData !== null);
         this.reloadTextureMappings();
-        this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
+        this.megaStateFlags = RDP.translateRenderMode(this.drawCall.DP_OtherModeL);
         this.setBackfaceCullingEnabled(false);
         this.createProgram();
     }

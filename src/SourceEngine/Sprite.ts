@@ -53,6 +53,14 @@ export class SpriteInstance {
         if (distScale <= 0.0 || distAlpha <= 0.0)
             return;
 
+        const tex = this.materialInstance.representativeTexture!;
+        const scale = distScale * this.scale;
+        const scaleX = scale * tex.width * 0.5, scaleY = scale * tex.height * 0.5;
+        const maxScale = Math.max(scaleX, scaleY);
+
+        if (!renderContext.currentView.frustum.containsSphere(this.origin, maxScale))
+            return;
+
         // Set up model matrix for sprite.
         const renderInst = renderInstManager.newRenderInst();
         renderContext.materialCache.staticResources.particleStaticResource.setQuadOnRenderInst(renderInst);
@@ -65,9 +73,6 @@ export class SpriteInstance {
         calcSpriteOrientation(scratchMat4a, spriteOrientation, view);
         setMatrixTranslation(scratchMat4a, this.origin);
 
-        const tex = this.materialInstance.representativeTexture!;
-        const scale = distScale * this.scale;
-        const scaleX = scale * tex.width * 0.5, scaleY = scale * tex.height * 0.5;
         scaleMatrix(scratchMat4a, scratchMat4a, scaleX, scaleY);
 
         // TODO(jstpierre): $spriteorigin

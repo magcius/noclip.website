@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
 import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
-import { getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dex";
+import { getImageFormatString, Vertex, DrawCall, RSP_Geometry, RSPSharedOutput, translateCullMode } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -556,7 +556,7 @@ class DrawCallInstance {
             }
         }
 
-        this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
+        this.megaStateFlags = RDP.translateRenderMode(this.drawCall.DP_OtherModeL);
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }

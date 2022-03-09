@@ -2912,9 +2912,11 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
 void mainPS() {
     bool use_flowmap = ${getDefineBool(m, `USE_FLOWMAP`)};
 
+    vec2 t_BumpmapCoord0 = CalcScaleBias(v_TexCoord1.xy, u_BumpScaleBias);
+
 #ifdef USE_FLOWMAP
 
-    vec2 t_FlowTexCoord = v_TexCoord1.xy * u_FlowTexCoordScale;
+    vec2 t_FlowTexCoord = t_BumpmapCoord0.xy * u_FlowTexCoordScale;
 
     vec2 t_TexCoordWorldBase = vec2(v_PositionWorld.x, -v_PositionWorld.y);
     vec2 t_FlowNoiseTexCoord = t_TexCoordWorldBase * u_FlowNoiseTexCoordScale;
@@ -2935,7 +2937,6 @@ void mainPS() {
 #else
 
     // Sample our normal map with scroll offsets.
-    vec2 t_BumpmapCoord0 = CalcScaleBias(v_TexCoord1.xy, u_BumpScaleBias);
     vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0);
 #ifdef USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = CalcScaleBias(vec2(v_TexCoord1.x + v_TexCoord1.y, -v_TexCoord1.x + v_TexCoord1.y) * 0.1, u_TexScroll0ScaleBias);
