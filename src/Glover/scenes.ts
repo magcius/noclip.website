@@ -2239,16 +2239,25 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        // Hard-coded behavior for robot legs in ootw boss phase 1
+        // Hard-coded behavior for robot limbs in various
+        // OOTW boss stages
+        const linkages: [number, number, vec3][] = []
         if (this.id === '26') {
-            const boss = enemies[0];
-            boss.actor.updateDrawMatrices();
-            // const boss_pos = boss.getPosition();
-            const leg_pos = vec3.create()
-            const linkages: [number, number, vec3][] = [
+            linkages.push(
                 [1, hashStr("bot_foot_L"), vec3.fromValues(-50,0,170)],
                 [2, hashStr("bot_foot_R"), vec3.fromValues(170,0,-50)],
-            ]
+            )
+        } else if (this.id === '28') {
+            linkages.push(
+                [1, hashStr("roblsho"), vec3.fromValues(0,0,0)],
+                [2, hashStr("robrsho"), vec3.fromValues(0,0,0)],
+                [4, hashStr("roblgun"), vec3.fromValues(0,0,0)],
+                [5, hashStr("robrgun"), vec3.fromValues(0,0,0)],
+            )
+        }
+        if (linkages.length > 0) {
+            const boss = enemies[0];
+            boss.actor.updateDrawMatrices();
             for (let [tag, mesh_id, offset] of linkages) {
                 let transformMatrix: mat4 | null = null;
                 boss.actor.rootMesh.forEachMesh((node: ActorMeshNode) => {
