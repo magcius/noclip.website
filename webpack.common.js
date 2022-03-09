@@ -17,12 +17,6 @@ module.exports = {
   },
   resolve: {
     extensions: ['.ts', '.js'],
-    fallback: {
-      "zlib": false,
-    },
-  },
-  externals: {
-    'iconv-lite': true,
   },
   module: {
     rules: [

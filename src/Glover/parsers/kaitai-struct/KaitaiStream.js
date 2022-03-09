@@ -583,11 +583,7 @@ KaitaiStream.bytesToStr = function(arr, encoding) {
           return new Buffer(arr).toString(encoding);
           break;
         default:
-          // unsupported encoding, we'll have to resort to iconv-lite
-          if (typeof KaitaiStream.iconvlite === 'undefined')
-            KaitaiStream.iconvlite = require('iconv-lite');
-
-          return KaitaiStream.iconvlite.decode(arr, encoding);
+          throw "Unsupported"; // NOTE (noclip/naclomi): Removed iconv-lite decoding support since we don't need it here
       }
     }
   }
@@ -634,28 +630,7 @@ KaitaiStream.processRotateLeft = function(data, amount, groupSize) {
 };
 
 KaitaiStream.processZlib = function(buf) {
-  if (typeof require !== 'undefined')  {
-    // require is available - we're running under node
-    if (typeof KaitaiStream.zlib === 'undefined')
-      KaitaiStream.zlib = require('zlib');
-    // use node's zlib module API
-    var r = KaitaiStream.zlib.inflateSync(
-      Buffer.from(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
-    );
-    return r;
-  } else {
-    // no require() - assume we're running as a web worker in browser.
-    // user should have configured KaitaiStream.depUrls.zlib, if not
-    // we'll throw.
-    if (typeof KaitaiStream.zlib === 'undefined'
-      && typeof KaitaiStream.depUrls.zlib !== 'undefined') {
-      importScripts(KaitaiStream.depUrls.zlib);
-      KaitaiStream.zlib = pako;
-    }
-    // use pako API
-    r = KaitaiStream.zlib.inflate(buf);
-    return r;
-  }
+  throw "Unsupported"; // NOTE (noclip/naclomi): Removed zlib support since we don't need it here
 };
 
 // ========================================================================
