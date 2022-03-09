@@ -1510,7 +1510,7 @@ export class RadioButtons implements Widget {
     public elem: HTMLElement;
     public selectedIndex: number = -1;
     public onselectedchange: ((() => void) | null) = null;
-    private options: HTMLElement[] = [];
+    public options: HTMLElement[] = [];
 
     constructor(title: string, optionNames: string[]) {
         this.elem = document.createElement('div');

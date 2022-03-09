@@ -347,18 +347,17 @@ class Timeline {
     private pixelsPerSecond: number;
     private timelineScaleFactor: number = 1;
     private selectionBoxPath: Path2D = new Path2D();
-    private selectionBoxStartVertex: vec2 = vec2.create();
-    private selectionBoxEndVertex: vec2 = vec2.create();
-    private selectionBoxActive: boolean = false;
     private selectionBoxIcons: KeyframeIcon[] = [];
     private grabbedIcon: KeyframeIcon | undefined = undefined;
     private grabbedIconInitialXPos: number = -1;
+    private selectionBoxStartVertex: vec2 = vec2.create();
+    private selectionBoxEndVertex: vec2 = vec2.create();
+    public selectionBoxActive: boolean = false;
     public keyframeIcons: KeyframeIcon[] = [];
     public selectedKeyframeIcons: KeyframeIcon[] = [];
     public playheadGrabbed: boolean = false;
     public keyframeIconGrabbed: boolean = false;
     public snappingEnabled: boolean = false;
-    public livePreview: boolean = false;
 
     // Calculates the scale and redraws the time markers when changing the width of the canvas, or the max time value on the timeline.
     public setScaleAndDrawMarkers(lengthMs?: number) {
@@ -481,7 +480,6 @@ class Timeline {
         if (this.elementsCtx.isPointInPath(this.playhead.playheadPath, e.offsetX, e.offsetY) ||
             this.elementsCtx.isPointInPath(this.timelineHeaderPath, e.offsetX, e.offsetY)) {
             this.playheadGrabbed = true;
-            this.deselectAllKeyframeIcons();
             this.onMouseMove(e);
             return;
         }
@@ -552,14 +550,15 @@ class Timeline {
 
         if (this.playheadGrabbed) {
             const snapKfIndex = this.getClosestSnappingIconIndex(targetX);
-            this.deselectAllKeyframeIcons();
             if (snapKfIndex > -1) {
                 if (snappingEnabled)
                     targetX = this.keyframeIcons[snapKfIndex].getX();
 
                 // If the playhead is directly on a keyframe, highlight it.
-                if (targetX === this.keyframeIcons[snapKfIndex].getX())
+                if (targetX === this.keyframeIcons[snapKfIndex].getX()) {
+                    this.deselectAllKeyframeIcons();
                     this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
+                }
             }
 
             const t = targetX / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
@@ -680,7 +679,7 @@ class Timeline {
           && this.grabbedIconInitialXPos !== this.grabbedIcon.getX();
     }
 
-    private selectKeyframeIcon(kfIcon: KeyframeIcon) {
+    public selectKeyframeIcon(kfIcon: KeyframeIcon) {
         if (this.selectedKeyframeIcons.includes(kfIcon))
             return;
         kfIcon.selected = true;
@@ -689,9 +688,12 @@ class Timeline {
     }
     
     private deselectKeyframeIcon(kfIcon: KeyframeIcon) {
-        this.selectedKeyframeIcons.splice(this.selectedKeyframeIcons.indexOf(kfIcon), 1);
-        kfIcon.selected = false;
-        this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
+        const index = this.selectedKeyframeIcons.indexOf(kfIcon);
+        if (index !== -1) {
+            this.selectedKeyframeIcons.splice(index, 1);
+            kfIcon.selected = false;
+            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
+        }
     }
 
     public deselectAllKeyframeIcons() {
@@ -700,6 +702,25 @@ class Timeline {
         }
         this.selectedKeyframeIcons = [];
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
+    }
+
+    public getSelectedKeyframeIndices(): number[] {
+        const indices = [];
+        for (let i = 0; i < this.keyframeIcons.length; i++) {
+            if (this.keyframeIcons[i].selected)
+                indices.push(i);
+        }
+        return indices;
+    }
+    
+    public reselectKeyframes(indices: number[]) {
+        this.selectedKeyframeIcons = [];
+        for (const i of indices) {
+            this.selectedKeyframeIcons.push(this.keyframeIcons[i]);
+            this.keyframeIcons[i].selected = true;
+        }
+        if (this.selectedKeyframeIcons.length)
+            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
 
     private ensureIconDistance(v: number, c: number, r: number): number {
@@ -741,13 +762,13 @@ class Timeline {
         return snapKfIndex;
     }
 
-    public setPlayheadTimeSeconds(t: number, animationPlaying: boolean) {
+    public setPlayheadTimeSeconds(t: number, selectLandedKeyframe: boolean) {
         const x = t * this.pixelsPerSecond / this.timelineScaleFactor;
         this.playhead.updatePosition(x, t * MILLISECONDS_IN_SECOND);
-        if (!animationPlaying) {
-            this.deselectAllKeyframeIcons();
+        if (selectLandedKeyframe) {
             const snapKfIndex = this.getClosestSnappingIconIndex(x);
             if (snapKfIndex > -1 && x === this.keyframeIcons[snapKfIndex].getX()) {
+                this.deselectAllKeyframeIcons();
                 // If the playhead is directly on a keyframe, highlight it.
                 this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
             }
@@ -927,6 +948,13 @@ export class CameraAnimationManager {
 interface StudioState {
     animation: CameraAnimation;
     timelineLengthMs: number;
+    selectedKeyframeIndices: number[];
+}
+
+interface studioSettings {
+    drawPreviewLine: boolean;
+    livePreview: boolean;
+    autoSave: boolean;
 }
 
 export class StudioPanel extends FloatingPanel {
@@ -945,15 +973,18 @@ export class StudioPanel extends FloatingPanel {
     private undoBtn: HTMLButtonElement;
     private redoBtn: HTMLButtonElement;
 
+    private studioControlsContainer: HTMLElement;
     private studioDataTabBtn: HTMLButtonElement;
-    private optionsTabBtn: HTMLButtonElement;
+    private settingsTabBtn: HTMLButtonElement;
     private newAnimationBtn: HTMLButtonElement;
     private loadAnimationBtn: HTMLButtonElement;
     private saveAnimationBtn: HTMLButtonElement;
     private importAnimationBtn: HTMLButtonElement;
     private exportAnimationBtn: HTMLButtonElement;
-
-    private studioControlsContainer: HTMLElement;
+    private studioSettingsContainer: HTMLElement;
+    private showPreviewLineCheckbox: Checkbox;
+    private livePreviewCheckbox: Checkbox;
+    private autoSaveCheckbox: Checkbox;
 
     private timeLineContainerElement: HTMLElement;
     private timelineControlsContainer: HTMLElement;
@@ -963,6 +994,16 @@ export class StudioPanel extends FloatingPanel {
 
     private timelineMarkersCanvas: HTMLCanvasElement;
     private timelineElementsCanvas: HTMLCanvasElement;
+
+    private zoomLevel: number = 1;
+    private zoomOutBtn: HTMLButtonElement;
+    private zoomInBtn: HTMLButtonElement;
+
+    private loopAnimationBtn: HTMLButtonElement;
+    private playAnimationBtn: HTMLButtonElement;
+    private stopAnimationBtn: HTMLButtonElement;
+    private prevKeyframeBtn: HTMLButtonElement;
+    private nextKeyframeBtn: HTMLButtonElement;
 
     private keyframeControlsDock: HTMLElement;
     private keyframeControlsContents: HTMLElement;
@@ -1002,20 +1043,6 @@ export class StudioPanel extends FloatingPanel {
 
     public timeline: Timeline;
     private selectedTracks: number = KeyframeTrackType.allTracks;
-
-    private zoomLevel: number = 1;
-    private zoomOutBtn: HTMLButtonElement;
-    private zoomInBtn: HTMLButtonElement;
-
-    private previewOptionsContainer: HTMLElement;
-    private showPreviewLineCheckbox: Checkbox;
-    private livePreviewCheckbox: Checkbox;
-
-    private loopAnimationBtn: HTMLButtonElement;
-    private playAnimationBtn: HTMLButtonElement;
-    private stopAnimationBtn: HTMLButtonElement;
-    private prevKeyframeBtn: HTMLButtonElement;
-    private nextKeyframeBtn: HTMLButtonElement;
 
     private scratchVec: vec3 = vec3.create();
     private scratchVecUp: vec3 = vec3.create();
@@ -1281,7 +1308,7 @@ export class StudioPanel extends FloatingPanel {
             </div>
             <div style="display: flex;">
                 <button id="studioDataTabBtn" class="SettingsButton TabBtn" data-tab-group="StudioPanelTab" data-target="#studioSaveLoadControls">📁</button>
-                <button id="optionsTabBtn" class="SettingsButton TabBtn" data-tab-group="StudioPanelTab" data-target="#optionsTab">⚙</button>
+                <button id="settingsTabBtn" class="SettingsButton TabBtn" data-tab-group="StudioPanelTab" data-target="#settingsTab">⚙</button>
             </div>
             <div>
                 <div id="studioSaveLoadControls" class="StudioPanelTab" hidden>
@@ -1292,9 +1319,9 @@ export class StudioPanel extends FloatingPanel {
                         <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
                     </div>
                 </div>
-                <div id="optionsTab" class="StudioPanelTab" hidden>
-                    <div id="previewOptionsContainer">
-                        <div style="text-align: center;">Preview Options</div>
+                <div id="settingsTab" class="StudioPanelTab" hidden>
+                    <div id="studioSettingsContainer">
+                        <div style="text-align: center;">Studio Settings</div>
                     </div>
                 </div>
             </div>
@@ -1415,8 +1442,8 @@ export class StudioPanel extends FloatingPanel {
 
         this.studioDataTabBtn = this.contents.querySelector('#studioDataTabBtn') as HTMLButtonElement;
         this.studioDataTabBtn.title = 'Save the current animation, or load a previously-saved animation.';
-        this.optionsTabBtn = this.contents.querySelector('#optionsTabBtn') as HTMLButtonElement;
-        this.optionsTabBtn.title = 'Options';
+        this.settingsTabBtn = this.contents.querySelector('#settingsTabBtn') as HTMLButtonElement;
+        this.settingsTabBtn.title = 'Settings';
 
         this.newAnimationBtn = this.contents.querySelector('#newAnimationBtn') as HTMLButtonElement;
         this.newAnimationBtn.title = 'Clear the current keyframes and create a new animation.';
@@ -1434,6 +1461,48 @@ export class StudioPanel extends FloatingPanel {
         this.exportAnimationBtn.title = 'Save the current animation as a JSON file.';
 
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
+
+        this.studioDataTabBtn.addEventListener('click', this.onTabBtnClick);
+        setElementHighlighted(this.studioDataTabBtn, false);
+        this.newAnimationBtn.onclick = () => {
+            this.newAnimation();
+            this.saveState();
+        }
+        this.loadAnimationBtn.onclick = () => this.loadAnimation();
+        this.saveAnimationBtn.onclick = () => {
+            this.saveAnimation();
+            this.displayMessage('Saved animation to local storage.');
+        }
+        this.exportAnimationBtn.onclick = () => this.exportAnimation();
+        this.importAnimationBtn.onclick = () => this.importAnimation();
+
+        this.settingsTabBtn.addEventListener('click', this.onTabBtnClick);
+        setElementHighlighted(this.settingsTabBtn, false);
+
+        this.showPreviewLineCheckbox = new Checkbox('Show Animation Preview Line', true);
+        this.showPreviewLineCheckbox.elem.title = 'Show/Hide the line indicating the path of the animation.';
+        this.showPreviewLineCheckbox.onchanged = () => {
+            if (this.showPreviewLineCheckbox.checked)
+                this.updatePreviewSteps();
+            // TODO - Customize preview line colours?
+            this.saveStudioSettings();
+        };
+        this.livePreviewCheckbox = new Checkbox('Live Preview');
+        this.livePreviewCheckbox.elem.title = 'Preview the animation when moving the playhead or keyframes.';
+        this.livePreviewCheckbox.onchanged = () => {
+            if (this.livePreviewCheckbox.checked)
+                this.updatePreviewSteps();
+            this.saveStudioSettings();
+        }
+        this.autoSaveCheckbox = new Checkbox('Auto-Save');
+        this.autoSaveCheckbox.elem.title = 'Auto-save the current animation on every modification.';
+        this.autoSaveCheckbox.checked = true;
+        this.autoSaveCheckbox.onchanged = () => this.saveStudioSettings();
+
+        this.studioSettingsContainer = this.contents.querySelector('#studioSettingsContainer') as HTMLElement;
+        this.studioSettingsContainer.insertAdjacentElement('beforeend', this.showPreviewLineCheckbox.elem);
+        this.studioSettingsContainer.insertAdjacentElement('beforeend', this.livePreviewCheckbox.elem);
+        this.studioSettingsContainer.insertAdjacentElement('beforeend', this.autoSaveCheckbox.elem);
 
         this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
         this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
@@ -1470,10 +1539,10 @@ export class StudioPanel extends FloatingPanel {
                 this.playheadTimePositionInput.value = timePosValue.toString();
             }
 
-            this.timeline.setPlayheadTimeSeconds(timePosValue, this.studioCameraController.isAnimationPlaying);
+            this.timeline.setPlayheadTimeSeconds(timePosValue, !this.studioCameraController.isAnimationPlaying);
             this.playheadTimePositionInput.dataset.prevValue = timePosValue.toString();
 
-            if (!this.studioCameraController.isAnimationPlaying && this.timeline.livePreview)
+            if (!this.studioCameraController.isAnimationPlaying && this.livePreviewCheckbox.checked)
                 this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
         }
 
@@ -1607,7 +1676,9 @@ export class StudioPanel extends FloatingPanel {
                 this.updatePreviewSteps();
             }
         };
-        this.interpolationTab.appendChild(this.interpInTypeBtns.elem);
+        this.interpInTypeBtns.options.forEach((e) => {
+            e.addEventListener('click', () => this.saveState());
+        });
         this.interpOutTypeBtns = new RadioButtons('Interpolation Out', ['Ease', 'Linear', 'Hold']);
         this.interpOutTypeBtns.onselectedchange = () => {
             if (this.interpOutTypeBtns.selectedIndex !== InterpolationType.Ease)
@@ -1643,6 +1714,10 @@ export class StudioPanel extends FloatingPanel {
                 this.updatePreviewSteps();
             }
         };
+        this.interpOutTypeBtns.options.forEach((e) => {
+            e.addEventListener('click', () => this.saveState());
+        });
+        this.interpolationTab.appendChild(this.interpInTypeBtns.elem);
         this.interpolationTab.appendChild(this.interpOutTypeBtns.elem);
 
         this.easeInSlider = new Slider();
@@ -1672,6 +1747,14 @@ export class StudioPanel extends FloatingPanel {
                 this.updatePreviewSteps();
             }
         };
+        this.easeInSlider.elem.addEventListener('mousedown', () => {
+            this.easeInSlider.elem.dataset.prevValue = this.easeInSlider.getValue().toFixed(2);
+        });
+        this.easeInSlider.elem.addEventListener('mouseup', () => {
+            if (this.easeInSlider.elem.dataset.prevValue
+                && this.easeInSlider.elem.dataset.prevValue !== this.easeInSlider.getValue().toFixed(2))
+                this.saveState();
+        })
         this.interpolationTab.appendChild(this.easeInSlider.elem);
 
         this.easeOutSlider = new Slider();
@@ -1701,39 +1784,15 @@ export class StudioPanel extends FloatingPanel {
                 this.updatePreviewSteps();
             }
         };
+        this.easeOutSlider.elem.addEventListener('mousedown', () => {
+            this.easeOutSlider.elem.dataset.prevValue = this.easeOutSlider.getValue().toFixed(2);
+        });
+        this.easeOutSlider.elem.addEventListener('mouseup', () => {
+            if (this.easeOutSlider.elem.dataset.prevValue
+                && this.easeOutSlider.elem.dataset.prevValue !== this.easeOutSlider.getValue().toFixed(2))
+                this.saveState();
+        })
         this.interpolationTab.appendChild(this.easeOutSlider.elem);
-
-        this.studioDataTabBtn.addEventListener('click', this.onTabBtnClick);
-        setElementHighlighted(this.studioDataTabBtn, false);
-        this.newAnimationBtn.onclick = () => {
-            this.newAnimation();
-            this.saveState();
-        }
-        this.loadAnimationBtn.onclick = () => this.loadAnimation();
-        this.saveAnimationBtn.onclick = () => this.saveAnimation();
-        this.exportAnimationBtn.onclick = () => this.exportAnimation();
-        this.importAnimationBtn.onclick = () => this.importAnimation();
-
-        this.optionsTabBtn.addEventListener('click', this.onTabBtnClick);
-        setElementHighlighted(this.optionsTabBtn, false);
-        this.showPreviewLineCheckbox = new Checkbox('Show Animation Preview Line', true);
-        this.showPreviewLineCheckbox.elem.title = 'Show/Hide the line indicating the path of the animation.';
-        this.showPreviewLineCheckbox.onchanged = () => {
-            if (this.showPreviewLineCheckbox.checked)
-                this.updatePreviewSteps();
-            // TODO - Customize preview line colours?
-        };
-        this.livePreviewCheckbox = new Checkbox('Live Preview');
-        this.livePreviewCheckbox.elem.title = 'Preview the animation when moving the playhead or keyframes.';
-        this.livePreviewCheckbox.onchanged = () => {
-            if (this.livePreviewCheckbox.checked)
-                this.updatePreviewSteps();
-            this.timeline.livePreview = this.livePreviewCheckbox.checked;
-        }
-
-        this.previewOptionsContainer = this.contents.querySelector('#previewOptionsContainer') as HTMLElement;
-        this.previewOptionsContainer.insertAdjacentElement('beforeend', this.showPreviewLineCheckbox.elem);
-        this.previewOptionsContainer.insertAdjacentElement('beforeend', this.livePreviewCheckbox.elem);
 
         this.posXValueInput.onchange = () => this.onChangeValueInput(this.posXValueInput);
         this.posYValueInput.onchange = () => this.onChangeValueInput(this.posYValueInput);
@@ -1808,7 +1867,7 @@ export class StudioPanel extends FloatingPanel {
                     if (this.timeline.keyframeIconGrabbed)
                         this.updatePreviewSteps();
 
-                    if (this.timeline.livePreview && (this.timeline.keyframeIconGrabbed || this.timeline.playheadGrabbed))
+                    if (this.livePreviewCheckbox.checked && (this.timeline.keyframeIconGrabbed || this.timeline.playheadGrabbed))
                         this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
                 }
             }
@@ -1816,11 +1875,14 @@ export class StudioPanel extends FloatingPanel {
 
         this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
             if (this.timeline && !this.editingKeyframe) {
+                const kfSelectedBefore = this.timeline.selectedKeyframeIcons.length;
                 this.timeline.onMouseDown(e);
                 if (this.timeline.playheadGrabbed) {
                     this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                    if (this.timeline.livePreview)
+                    if (this.livePreviewCheckbox.checked)
                         this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+                } else if (kfSelectedBefore !== this.timeline.selectedKeyframeIcons.length) {
+                    this.saveState();
                 }
             }
         });
@@ -1849,14 +1911,18 @@ export class StudioPanel extends FloatingPanel {
 
         document.addEventListener('mouseup', () => {
             if (this.timeline && !this.editingKeyframe) {
-                if (this.timeline.hasGrabbedIconMoved())
+                if (this.timeline.hasGrabbedIconMoved()
+                    || (this.timeline.selectionBoxActive && this.timeline.selectedKeyframeIcons.length)) {
                     this.saveState();
+                }
 
                 this.timeline.onMouseUp();
                 if (this.selectedNumericInput) {
+                    if (this.selectedNumericInput !== this.playheadTimePositionInput)
+                        this.saveState();
                     this.selectedNumericInput = undefined;
-                    this.saveState();
                 }
+
             }
         });
 
@@ -1866,6 +1932,8 @@ export class StudioPanel extends FloatingPanel {
         window.addEventListener('resize', () => {
             this.rescaleTimelineContainer();
         });
+
+        this.loadStudioSettings();
     }
 
     public playAnimation(theater?: boolean) {
@@ -1946,14 +2014,14 @@ export class StudioPanel extends FloatingPanel {
     private prevKeyframe(): void {
         this.timeline.jumpToPreviousKeyframe();
         this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-        if (this.timeline.livePreview)
+        if (this.livePreviewCheckbox.checked)
             this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
     }
 
     private nextKeyframe(): void {
         this.timeline.jumpToNextKeyframe();
         this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-        if (this.timeline.livePreview)
+        if (this.livePreviewCheckbox.checked)
             this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
     }
 
@@ -1987,14 +2055,28 @@ export class StudioPanel extends FloatingPanel {
         if (!this.animation || !this.timeline) {
             return;
         }
+        const animString = JSON.stringify(this.animation);
+        if (this.studioStates.length) {
+            // Don't save if the most recent state is identical.
+            const lastState = this.studioStates[this.studioStates.length - 1];
+            const selectedKeyframeIndices = this.timeline.getSelectedKeyframeIndices();
+            if (JSON.stringify(lastState.animation) === animString 
+              && lastState.timelineLengthMs === this.timeline.getTimelineLengthMs() 
+              && lastState.selectedKeyframeIndices.every((v) => {
+                  return selectedKeyframeIndices.includes(v);
+              })) {
+                return;
+            }
+        } 
         if (this.currentStateIndex > -1 && this.currentStateIndex < this.studioStates.length - 1) {
             this.studioStates.length = this.currentStateIndex + 1;
             this.redoBtn.setAttribute('disabled', '');
             this.redoBtn.classList.add('disabled');
         }
         const state: StudioState = {
-            animation: JSON.parse(JSON.stringify(this.animation)),
-            timelineLengthMs: this.timeline.getTimelineLengthMs()
+            animation: JSON.parse(animString),
+            timelineLengthMs: this.timeline.getTimelineLengthMs(),
+            selectedKeyframeIndices: this.timeline.getSelectedKeyframeIndices(),
         };
         this.studioStates.push(state);
         this.currentStateIndex++;
@@ -2002,13 +2084,18 @@ export class StudioPanel extends FloatingPanel {
             this.undoBtn.removeAttribute('disabled');
             this.undoBtn.classList.remove('disabled');
         }
+        if (this.autoSaveCheckbox.checked) {
+            this.saveAnimation();
+        }
     }
 
     private loadState(state: StudioState) {
-        this.timeline.deselectAllKeyframeIcons();
         const loadedAnimation = JSON.parse(JSON.stringify(state.animation));
         if (loadedAnimation.loop === undefined)
             loadedAnimation.loop = false;
+
+        if (state.selectedKeyframeIndices === undefined)
+            state.selectedKeyframeIndices = [];
 
         const conformKf = (kf:Keyframe) => {
             if (kf.easeInCoeff === undefined) {
@@ -2067,6 +2154,7 @@ export class StudioPanel extends FloatingPanel {
         this.animation.lookAtZTrack.keyframes = loadedAnimation.lookAtZTrack.keyframes;
         this.animation.bankTrack.keyframes = loadedAnimation.bankTrack.keyframes;
         this.animation.loop = loadedAnimation.loop;
+        this.timeline.deselectAllKeyframeIcons();
         this.timeline.keyframeIcons = [];
         this.timeline.setScaleAndDrawMarkers(state.timelineLengthMs);
         // TODO - Handle multi-track timelines. This is a bit of a kludge as-is, but is fine for the consolidated view.
@@ -2087,11 +2175,10 @@ export class StudioPanel extends FloatingPanel {
             kfMap.set(KeyframeTrackType.bankTrack, this.animation.bankTrack.keyframes[i]);
             this.timeline.addKeyframeIcon(kfMap, this.animation.posXTrack.keyframes[i].time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, kfType, false);
         }
-        this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-        this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
         this.timelineLengthInput.value = this.timeline.getTimelineLengthSeconds();
         this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
         setElementHighlighted(this.loopAnimationBtn, this.animation.loop);
+        this.timeline.reselectKeyframes(state.selectedKeyframeIndices);
         this.timeline.draw();
         this.updatePreviewSteps();
     }
@@ -2175,14 +2262,14 @@ export class StudioPanel extends FloatingPanel {
 
     private onKeyframeSelected() {
         const icon = this.timeline.selectedKeyframeIcons[0];
-        let selectedTracks = 0;
+        let keyframeTracks = 0;
         let commonEaseInVal = 1;
         let commonEaseOutVal = 1;
         let commonInterpInType = 0;
         let commonInterpOutType = 0;
         
         icon.keyframesMap.forEach((kf, trackType) => {
-            selectedTracks |= trackType;
+            keyframeTracks |= trackType;
             const input = this.getValueInput(trackType);
             input.value = kf.value.toFixed(0).toString();
             input.dataset.prevValue = input.value;
@@ -2195,11 +2282,11 @@ export class StudioPanel extends FloatingPanel {
         for (let i = 1; i < this.timeline.selectedKeyframeIcons.length; i++) {
             const kfIcon = this.timeline.selectedKeyframeIcons[i];
             kfIcon.keyframesMap.forEach((kf, trackType) => {
-                if (selectedTracks !== 0) {
-                    if (selectedTracks & trackType) {
-                        selectedTracks = 0;
+                if (keyframeTracks !== 0) {
+                    if (keyframeTracks & trackType) {
+                        keyframeTracks = 0;
                     } else {
-                        selectedTracks |= trackType;
+                        keyframeTracks |= trackType;
                         const input = this.getValueInput(trackType);
                         input.value = kf.value.toFixed(0).toString();
                         input.dataset.prevValue = input.value;
@@ -2233,50 +2320,48 @@ export class StudioPanel extends FloatingPanel {
         this.lockPerspectiveBracket.setAttribute('hidden', '');
         this.lockPerspectiveDiv.setAttribute('hidden', '');
 
-        if (selectedTracks !== 0) {
+        if (keyframeTracks !== 0) {
             this.editKeyframeWithCamBtn.removeAttribute('hidden');
 
-            if (selectedTracks & KeyframeTrackType.posXTrack)
+            if (keyframeTracks & KeyframeTrackType.posXTrack)
                 this.posXValueInputContainer.removeAttribute('hidden');
                 
-            if (selectedTracks & KeyframeTrackType.posYTrack)
+            if (keyframeTracks & KeyframeTrackType.posYTrack)
                 this.posYValueInputContainer.removeAttribute('hidden');
                 
-            if (selectedTracks & KeyframeTrackType.posZTrack)
+            if (keyframeTracks & KeyframeTrackType.posZTrack)
                 this.posZValueInputContainer.removeAttribute('hidden');
                 
-            if (selectedTracks & KeyframeTrackType.lookAtXTrack)
+            if (keyframeTracks & KeyframeTrackType.lookAtXTrack)
                 this.lookAtXValueInputContainer.removeAttribute('hidden');
                 
-            if (selectedTracks & KeyframeTrackType.lookAtYTrack)
+            if (keyframeTracks & KeyframeTrackType.lookAtYTrack)
                 this.lookAtYValueInputContainer.removeAttribute('hidden');
                 
-            if (selectedTracks & KeyframeTrackType.lookAtZTrack)
+            if (keyframeTracks & KeyframeTrackType.lookAtZTrack)
                 this.lookAtZValueInputContainer.removeAttribute('hidden');
                 
-            if (selectedTracks & KeyframeTrackType.bankTrack)
+            if (keyframeTracks & KeyframeTrackType.bankTrack)
                 this.bankValueInputContainer.removeAttribute('hidden');
         }
 
             
-        if (((selectedTracks & KeyframeTrackType.posXTrack) && (selectedTracks & KeyframeTrackType.lookAtXTrack))
-            || ((selectedTracks & KeyframeTrackType.posYTrack) && (selectedTracks & KeyframeTrackType.lookAtYTrack))
-            || ((selectedTracks & KeyframeTrackType.posZTrack) && (selectedTracks & KeyframeTrackType.lookAtZTrack))) {
+        if (((keyframeTracks & KeyframeTrackType.posXTrack) && (keyframeTracks & KeyframeTrackType.lookAtXTrack))
+            || ((keyframeTracks & KeyframeTrackType.posYTrack) && (keyframeTracks & KeyframeTrackType.lookAtYTrack))
+            || ((keyframeTracks & KeyframeTrackType.posZTrack) && (keyframeTracks & KeyframeTrackType.lookAtZTrack))) {
             this.lockPerspectiveBracket.removeAttribute('hidden');
             this.lockPerspectiveDiv.removeAttribute('hidden');
         } 
 
-        if (commonEaseInVal !== -1) {
+        if (commonEaseInVal !== -1)
             this.easeInSlider.setValue(commonEaseInVal);
-        } else {
+        else
             (this.easeInSlider.elem.querySelector('.Slider') as HTMLInputElement).value = '1';
-        }
 
-        if (commonEaseOutVal !== -1) {
+        if (commonEaseOutVal !== -1)
             this.easeOutSlider.setValue(commonEaseOutVal);
-        } else {
+        else 
             (this.easeOutSlider.elem.querySelector('.Slider') as HTMLInputElement).value = '1';
-        }
 
         this.interpInTypeBtns.setSelectedIndex(commonInterpInType);
         this.interpOutTypeBtns.setSelectedIndex(commonInterpOutType);
@@ -2611,8 +2696,6 @@ export class StudioPanel extends FloatingPanel {
         this.playheadTimePositionInput.value = '0';
         this.timelineLengthInput.value = (Timeline.DEFAULT_LENGTH_MS / MILLISECONDS_IN_SECOND).toFixed(2);
         this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
-        this.livePreviewCheckbox.setChecked(false);
-        this.showPreviewLineCheckbox.setChecked(true);
         this.selectedTracks |= KeyframeTrackType.allTracks;
         this.hideEditingUI();
         this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
@@ -2686,7 +2769,8 @@ export class StudioPanel extends FloatingPanel {
     private serializeAnimation(): string {
         const studioState: StudioState = {
             animation: this.animation,
-            timelineLengthMs: this.timeline.getTimelineLengthMs()
+            timelineLengthMs: this.timeline.getTimelineLengthMs(),
+            selectedKeyframeIndices: [],
         };
         const dataObj = { version: 2, studioState };
         return JSON.stringify(dataObj);
@@ -2695,7 +2779,6 @@ export class StudioPanel extends FloatingPanel {
     private saveAnimation() {
         const jsonAnim: string = this.serializeAnimation();
         window.localStorage.setItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId(), jsonAnim);
-        this.displayMessage('Saved animation to local storage.');
     }
 
     private exportAnimation() {
@@ -2872,8 +2955,38 @@ export class StudioPanel extends FloatingPanel {
         } else if (ev.key === 'Escape') {
             this.stopAnimation();
             this.endEditKeyframePosition();
-        } else if (ev.key === 'p') {
-            console.log('test');
+        } else if (ev.ctrlKey && ev.shiftKey && ev.key === 'Z') {
+            this.redo();
+        } else if (ev.ctrlKey && ev.key === 'z') {
+            this.undo();
+        } else if (ev.ctrlKey && ev.key === 's') {
+            ev.preventDefault();
+            this.saveAnimation();
+            this.displayMessage('Saved animation to local storage.');
+        }
+    }
+
+    private saveStudioSettings() {
+        const settings: studioSettings = {
+            drawPreviewLine: this.showPreviewLineCheckbox.checked,
+            livePreview: this.livePreviewCheckbox.checked,
+            autoSave: this.autoSaveCheckbox.checked
+        };
+        window.localStorage.setItem('studio-settings', JSON.stringify(settings));
+    }
+
+    private loadStudioSettings() {
+        const settings = window.localStorage.getItem('studio-settings');
+        if (settings) {
+            const settingsObj = JSON.parse(settings);
+            if (settingsObj.drawPreviewLine !== undefined)
+                this.showPreviewLineCheckbox.setChecked(settingsObj.drawPreviewLine);
+            
+            if (settingsObj.livePreview !== undefined)
+                this.livePreviewCheckbox.setChecked(settingsObj.livePreview);
+            
+            if (settingsObj.autoSave !== undefined)
+                this.autoSaveCheckbox.setChecked(settingsObj.autoSave);
         }
     }
 
