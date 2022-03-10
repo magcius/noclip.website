@@ -32,7 +32,7 @@ export var decompress = function (buffer: ArrayBufferSlice, srcOffs: number = 0)
             } else {
                 // Backreference
 
-                if (data[data_cursor] == 0) {
+                if (data[data_cursor] == 0 && data[data_cursor + 1] == 0) {
                     assert(uncompressed_length == bytes_written);
                     return new ArrayBufferSlice(uncompressed_data.buffer);
                 }
