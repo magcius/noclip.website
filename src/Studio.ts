@@ -54,6 +54,12 @@ export interface CameraAnimation {
     loop: boolean;
 }
 
+const enum TimelineMode {
+    Consolidated,
+    Position_LookAt_Bank,
+    Full
+}
+
 const enum KeyframeTrackType {
     posXTrack    = 0b0000001,
     posYTrack    = 0b0000010,
@@ -191,7 +197,7 @@ class Playhead {
         ctx.strokeStyle = Playhead.COLOR;
         ctx.lineWidth = 1.5;
         ctx.moveTo(this.x, Playhead.HEIGHT + Playhead.POINTER_HEIGHT - 1);
-        ctx.lineTo(this.x, 85);
+        ctx.lineTo(this.x, ctx.canvas.height);
         ctx.stroke();
     }
 
@@ -414,6 +420,18 @@ class Timeline {
             kfIcon.updatePosition((timeMs / MILLISECONDS_IN_SECOND) * (this.pixelsPerSecond / this.timelineScaleFactor), timeMs);
         }
         this.markersCtx.save();
+    }
+
+    public setTimelineMode(timelineMode: TimelineMode): void {
+        if (timelineMode === TimelineMode.Consolidated)
+            this.elementsCtx.canvas.height = Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT;
+        else if (timelineMode === TimelineMode.Position_LookAt_Bank)
+            this.elementsCtx.canvas.height = Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT * 3;
+        else if (timelineMode === TimelineMode.Full)
+            this.elementsCtx.canvas.height = Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT * 7;
+
+        this.setScaleAndDrawMarkers();
+        this.draw();
     }
 
     public getTimelineLengthMs(): number {
@@ -982,6 +1000,7 @@ export class StudioPanel extends FloatingPanel {
     private importAnimationBtn: HTMLButtonElement;
     private exportAnimationBtn: HTMLButtonElement;
     private studioSettingsContainer: HTMLElement;
+    private timelineModeSelect: HTMLSelectElement;
     private showPreviewLineCheckbox: Checkbox;
     private livePreviewCheckbox: Checkbox;
     private autoSaveCheckbox: Checkbox;
@@ -992,8 +1011,12 @@ export class StudioPanel extends FloatingPanel {
     private playheadTimePositionInput: HTMLInputElement;
     private timelineLengthInput: HTMLInputElement;
 
+    private positionLookAtBankLabels: HTMLElement;
+    private fullLabels: HTMLElement;
     private timelineMarkersCanvas: HTMLCanvasElement;
     private timelineElementsCanvas: HTMLCanvasElement;
+    private timelineHeaderBg: HTMLElement;
+    private timelineTracksBg: HTMLElement;
 
     private zoomLevel: number = 1;
     private zoomOutBtn: HTMLButtonElement;
@@ -1042,6 +1065,7 @@ export class StudioPanel extends FloatingPanel {
     private persistHelpText: boolean = false;
 
     public timeline: Timeline;
+    private timelineMode: TimelineMode = TimelineMode.Consolidated;
     private selectedTracks: number = KeyframeTrackType.allTracks;
 
     private scratchVec: vec3 = vec3.create();
@@ -1160,12 +1184,29 @@ export class StudioPanel extends FloatingPanel {
                 min-height: 1rem;
                 text-align: center;
             }
-            #studioPanel small {
+            #trackLabels {
                 line-height: 1.7;
                 font-size: 12px;
-            }
-            #trackLabels {
                 margin: 25px 0 0 10px;
+            }
+            #trackLabels .TrackSelectBox {
+                cursor: pointer;
+                width: 10px;
+                height: 10px;
+                justify-self: center;
+                margin: 0 5px 0 10px;
+                border-radius: 4px;
+                border: 2px solid #aaa;
+                background-color: transparent;
+            }
+            #trackLabels .TrackSelectBox.Selected {
+                border: 2px solid white;
+                background-color: rgb(210, 30, 30);
+            }
+            .label-col > div, .label-container > div {
+                display: flex;
+                align-items: center;
+                justify-content: end;
             }
             .label-container {
                 display: flex;
@@ -1322,6 +1363,14 @@ export class StudioPanel extends FloatingPanel {
                 <div id="settingsTab" class="StudioPanelTab" hidden>
                     <div id="studioSettingsContainer">
                         <div style="text-align: center;">Studio Settings</div>
+                        <div>
+                            <span>Timeline Mode:</span>
+                            <select id="timelineModeSelect">
+                                <option value="${TimelineMode.Consolidated}">Consolidated</option>
+                                <option value="${TimelineMode.Position_LookAt_Bank}">Pos/LookAt/Bank</option>
+                                <option value="${TimelineMode.Full}">Full</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1351,30 +1400,30 @@ export class StudioPanel extends FloatingPanel {
                     <div id="trackLabels">
                         <div id="positionLookAtBankLabels" hidden>
                             <div class="label-col">
-                                <small>Position</small>
-                                <small>LookAt</small>
-                                <small>Bank</small>
+                                <div>Position <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.posXTrack},${KeyframeTrackType.posYTrack},${KeyframeTrackType.posZTrack}"></div></div>
+                                <div>LookAt <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.lookAtXTrack},${KeyframeTrackType.lookAtYTrack},${KeyframeTrackType.lookAtZTrack}"></div></div>
+                                <div>Bank <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.bankTrack}"></div></div>
                             </div>
                         </div>
                         <div id="fullLabels" hidden>
                             <div class="label-container">
                                 <span>Position</span>
                                 <div class="label-col">
-                                    <small>X</small>
-                                    <small>Y</small>
-                                    <small>Z</small>
+                                    <div>X <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.posXTrack}"></div></div>
+                                    <div>Y <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.posYTrack}"></div></div>
+                                    <div>Z <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.posZTrack}"></div></div>
                                 </div>
                             </div>
                             <div class="label-container">
                                 <span>LookAt</span>
                                 <div class="label-col">
-                                    <small>X</small>
-                                    <small>Y</small>
-                                    <small>Z</small>
+                                    <div>X <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.lookAtXTrack}"></div></div>
+                                    <div>Y <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.lookAtYTrack}"></div></div>
+                                    <div>Z <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.lookAtZTrack}"></div></div>
                                 </div>
                             </div>
                             <div class="label-container">
-                                <small>Bank</small>
+                                <div>Bank <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.bankTrack}"></div></div>
                             </div>
                         </div>
                     </div>
@@ -1479,6 +1528,24 @@ export class StudioPanel extends FloatingPanel {
         this.settingsTabBtn.addEventListener('click', this.onTabBtnClick);
         setElementHighlighted(this.settingsTabBtn, false);
 
+        this.timelineModeSelect = this.contents.querySelector('#timelineModeSelect') as HTMLSelectElement;
+        this.timelineModeSelect.onchange = () => {
+            this.timelineMode = parseInt(this.timelineModeSelect.value);
+            if (this.timelineMode === TimelineMode.Consolidated) {
+                this.positionLookAtBankLabels.setAttribute('hidden','');
+                this.fullLabels.setAttribute('hidden','');
+            } else if (this.timelineMode === TimelineMode.Position_LookAt_Bank) {
+                this.positionLookAtBankLabels.removeAttribute('hidden');
+                this.fullLabels.setAttribute('hidden','');
+            } else if (this.timelineMode === TimelineMode.Full) {
+                this.positionLookAtBankLabels.setAttribute('hidden','');
+                this.fullLabels.removeAttribute('hidden');
+            }
+            this.timeline.setTimelineMode(this.timelineMode);
+            this.timelineTracksBg.style.height = (this.timelineElementsCanvas.height - Timeline.HEADER_HEIGHT) + 'px';
+            this.rescaleTimelineContainer();
+        }
+
         this.showPreviewLineCheckbox = new Checkbox('Show Animation Preview Line', true);
         this.showPreviewLineCheckbox.elem.title = 'Show/Hide the line indicating the path of the animation.';
         this.showPreviewLineCheckbox.onchanged = () => {
@@ -1507,8 +1574,26 @@ export class StudioPanel extends FloatingPanel {
         this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
         this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
 
+        this.positionLookAtBankLabels = this.contents.querySelector('#positionLookAtBankLabels') as HTMLElement;
+        this.fullLabels = this.contents.querySelector('#fullLabels') as HTMLElement;
+        (this.contents.querySelectorAll('.TrackSelectBox') as NodeListOf<HTMLElement>).forEach((e) => {
+            e.addEventListener('click', (ev) => {
+                if (ev.target instanceof HTMLElement) {
+                    ev.target.classList.toggle('Selected');
+                    const tracks: number[] = e.dataset.tracks!.split(',').map(v => parseInt(v));
+                    if (ev.target.classList.contains('Selected')) {
+                        tracks.forEach((t) => this.selectedTracks |= t);
+                    } else {
+                        tracks.forEach((t) => this.selectedTracks ^= t);
+                    }
+                }
+            });
+        });
+
         this.timelineMarkersCanvas = this.contents.querySelector('#timelineMarkersCanvas') as HTMLCanvasElement;
         this.timelineElementsCanvas = this.contents.querySelector('#timelineElementsCanvas') as HTMLCanvasElement;
+        this.timelineHeaderBg = this.contents.querySelector('#timelineHeaderBg') as HTMLElement;
+        this.timelineTracksBg = this.contents.querySelector('#timelineTracksBg') as HTMLElement;
 
         const markersCtx = this.timelineMarkersCanvas.getContext('2d') as CanvasRenderingContext2D;
         const elementsCtx = this.timelineElementsCanvas.getContext('2d') as CanvasRenderingContext2D;
@@ -2882,8 +2967,8 @@ export class StudioPanel extends FloatingPanel {
         const zoomedWidth = tlContainerWidth * this.zoomLevel;
         this.timelineMarkersCanvas.width = zoomedWidth;
         this.timelineElementsCanvas.width = zoomedWidth;
-        (this.contents.querySelector('#timelineHeaderBg') as HTMLElement).style.width = (zoomedWidth + Playhead.WIDTH) + 'px';
-        (this.contents.querySelector('#timelineTracksBg') as HTMLElement).style.width = (zoomedWidth + Playhead.WIDTH) + 'px';
+        this.timelineHeaderBg.style.width = (zoomedWidth + Playhead.WIDTH) + 'px';
+        this.timelineTracksBg.style.width = (zoomedWidth + Playhead.WIDTH) + 'px';
         this.timeline.setupContexts();
         this.timeline.setScaleAndDrawMarkers();
         this.onTimelineScaleChanged(parseFloat(this.timelineLengthInput.value));
@@ -2916,7 +3001,7 @@ export class StudioPanel extends FloatingPanel {
         this.keyframeControlsDock.removeAttribute('hidden');
     }
 
-    private onTabBtnClick = function(this: HTMLButtonElement, ev:MouseEvent) {
+    private onTabBtnClick = function(this: HTMLButtonElement, ev: MouseEvent) {
         const studioPanel = document.querySelector('#studioPanel');
         const targetId = this.dataset.target;
         const tabGroup = this.dataset.tabGroup;
