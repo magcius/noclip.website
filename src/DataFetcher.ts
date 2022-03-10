@@ -12,7 +12,7 @@ function getDataStorageBaseURL(isDevelopment: boolean): string {
     if (isDevelopment)
         return `/data`;
     else
-        return `https://gznoclip1.b-cdn.net`;
+        return `https://noclip.beyond3d.com`;
 }
 
 export function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT): string {
