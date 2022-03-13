@@ -650,6 +650,13 @@ class BSPVisibility {
     }
 }
 
+interface LightmapAlloc {
+    readonly width: number;
+    readonly height: number;
+    pagePosX: number;
+    pagePosY: number;
+}
+
 export class LightmapPackerPage {
     public skyline: Uint16Array;
 
@@ -662,7 +669,7 @@ export class LightmapPackerPage {
         this.skyline = new Uint16Array(this.maxHeight);
     }
 
-    public allocate(allocation: SurfaceLightmapData): boolean {
+    public allocate(allocation: LightmapAlloc): boolean {
         const w = allocation.width, h = allocation.height;
 
         // March downwards until we find a span of skyline that will fit.
@@ -841,7 +848,6 @@ export class BSPFile {
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
             const idx = lumpsStart + lumpType * 0x10;
-            const view = buffer.createDataView();
             const offs = view.getUint32(idx + 0x00, true);
             const size = view.getUint32(idx + 0x04, true);
             const version = view.getUint32(idx + 0x08, true);
