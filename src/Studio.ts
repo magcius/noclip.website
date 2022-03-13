@@ -3,7 +3,7 @@ import { UI, Checkbox, setElementHighlighted, createDOMFromString, Slider, Radio
 import { FloatingPanel } from './DebugFloaters';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
 import { Blue, Color, Green, Red, Magenta, Cyan } from './Color';
-import { StudioCameraController } from './Camera';
+import { Camera, StudioCameraController } from './Camera';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
@@ -322,6 +322,8 @@ class Timeline {
     static readonly MARKER_COLOR: string = '#f3f3f3';
     static readonly SELECTION_BOX_STROKE_COLOR: string = "#63BBFF";
     static readonly SELECTION_BOX_FILL_COLOR: string = "rgba(53, 77, 255, 0.4)";
+    static readonly DISABLED_TRACK_OVERLAY_COLOR: string = "rgba(0, 0, 0, 0.6)";
+    static readonly DISABLED_TRACK_LINES_COLOR: string = "#646464";
     static readonly DEFAULT_SECONDS_PER_MARKER: number = 5;
     static readonly SNAP_DISTANCE_PX: number = 10;
     static readonly HEADER_HEIGHT: number = 25;
@@ -354,7 +356,8 @@ class Timeline {
     private timelineScaleFactor: number = 1;
     private selectionBoxPath: Path2D = new Path2D();
     private selectionBoxIcons: KeyframeIcon[] = [];
-    private grabbedIcon: KeyframeIcon | undefined = undefined;
+    private disabledTrackOverlayPaths: Path2D[] = [];
+    public grabbedIcon: KeyframeIcon | undefined = undefined;
     private grabbedIconInitialXPos: number = -1;
     private selectionBoxStartVertex: vec2 = vec2.create();
     private selectionBoxEndVertex: vec2 = vec2.create();
@@ -362,7 +365,6 @@ class Timeline {
     public keyframeIcons: KeyframeIcon[] = [];
     public selectedKeyframeIcons: KeyframeIcon[] = [];
     public playheadGrabbed: boolean = false;
-    public keyframeIconGrabbed: boolean = false;
     public snappingEnabled: boolean = false;
 
     // Calculates the scale and redraws the time markers when changing the width of the canvas, or the max time value on the timeline.
@@ -457,6 +459,14 @@ class Timeline {
             this.elementsCtx.stroke(this.selectionBoxPath);
         }
         this.playhead.drawLine(this.elementsCtx);
+
+        this.elementsCtx.fillStyle = Timeline.DISABLED_TRACK_OVERLAY_COLOR;
+        this.elementsCtx.strokeStyle = Timeline.DISABLED_TRACK_LINES_COLOR;
+        for (let i = 0; i < this.disabledTrackOverlayPaths.length; i++) {
+            this.elementsCtx.beginPath();
+            this.elementsCtx.fill(this.disabledTrackOverlayPaths[i]);
+            this.elementsCtx.stroke(this.disabledTrackOverlayPaths[i]);
+        }
         this.elementsCtx.save();
     }
 
@@ -510,7 +520,6 @@ class Timeline {
                 if (e.ctrlKey) {
                     this.deselectKeyframeIcon(kfIcon);
                 } else {
-                    this.keyframeIconGrabbed = true;
                     this.grabbedIcon = kfIcon;
                     this.grabbedIconInitialXPos = kfIcon.getX();
                 }
@@ -524,13 +533,12 @@ class Timeline {
                     if (!e.ctrlKey)
                         this.deselectAllKeyframeIcons();
                     this.selectKeyframeIcon(kfIcon);
-                    this.keyframeIconGrabbed = true;
                     this.grabbedIcon = kfIcon;
                     this.grabbedIconInitialXPos = kfIcon.getX();
                     break;
                 }
             }
-            if (!this.keyframeIconGrabbed) {
+            if (!this.grabbedIcon) {
                 if (!e.ctrlKey)
                     this.deselectAllKeyframeIcons();
                 this.selectionBoxActive = true;
@@ -544,7 +552,6 @@ class Timeline {
 
     public onMouseUp() {
         this.playheadGrabbed = false;
-        this.keyframeIconGrabbed = false;
         this.selectionBoxActive = false;
         this.selectionBoxIcons = [];
         this.grabbedIcon = undefined;
@@ -553,8 +560,8 @@ class Timeline {
     }
 
     public onMouseMove(e: MouseEvent) {
-        if ((!this.playheadGrabbed && !this.keyframeIconGrabbed && !this.selectionBoxActive)
-            || (this.keyframeIconGrabbed && this.selectedKeyframeIcons.some((icon) => icon.type === KeyframeIconType.Start)))
+        if ((!this.playheadGrabbed && !this.grabbedIcon && !this.selectionBoxActive)
+            || (this.grabbedIcon && this.selectedKeyframeIcons.some((icon) => icon.type === KeyframeIconType.Start)))
             return;
 
         let targetX = e.offsetX;
@@ -572,16 +579,16 @@ class Timeline {
                 if (snappingEnabled)
                     targetX = this.keyframeIcons[snapKfIndex].getX();
 
-                // If the playhead is directly on a keyframe, highlight it.
+                // If the playhead is directly on a keyframe, highlight it and any others at the same position.
                 if (targetX === this.keyframeIcons[snapKfIndex].getX()) {
                     this.deselectAllKeyframeIcons();
-                    this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
+                    this.selectKeyframeIconsAtTime(this.keyframeIcons[snapKfIndex].getT());
                 }
             }
 
             const t = targetX / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
             this.playhead.updatePosition(targetX, t);
-        } else if (this.keyframeIconGrabbed && this.selectedKeyframeIcons.length) {
+        } else if (this.grabbedIcon && this.selectedKeyframeIcons.length) {
             if (this.selectedKeyframeIcons.length === 1) {
                 // Don't allow a loop keyframe icon to be moved before any other keyframes.
                 if (this.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End)
@@ -593,10 +600,12 @@ class Timeline {
                 else
                     this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], targetX);
             } else {
+                if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+                    targetX = this.playhead.getX();
                 // Moving multiple icons. Check if moving all of them will cause
                 // any of them to be in an illegal position.
                 if (this.canMoveGroupTo(targetX)) {
-                    const grabbedX = this.grabbedIcon!.getX();
+                    const grabbedX = this.grabbedIcon.getX();
                     for (const kfIcon of this.selectedKeyframeIcons) {
                         this.updateKeyframeIconPosition(kfIcon, targetX + (kfIcon.getX() - grabbedX));
                     }
@@ -673,7 +682,7 @@ class Timeline {
             // range, or results in any keyframe moving past a loop keyframe icon,
             // prevent the update.
             for (const kfIcon of this.keyframeIcons) {
-                if (kfIcon.selected)
+                if (kfIcon.selected || kfIcon.getY() !== selectedIcon.getY())
                     continue;
                 if (newX < Timeline.SNAP_DISTANCE_PX
                     || (newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX
@@ -690,11 +699,9 @@ class Timeline {
     }
 
     public hasGrabbedIconMoved(): boolean {
-        if (!this.selectedKeyframeIcons.length || !this.grabbedIcon)
-            return false;
-        return this.keyframeIconGrabbed
-          && this.grabbedIconInitialXPos !== -1
-          && this.grabbedIconInitialXPos !== this.grabbedIcon.getX();
+        return this.grabbedIcon !== undefined
+        && this.grabbedIconInitialXPos !== -1 
+        && this.grabbedIconInitialXPos !== this.grabbedIcon.getX();
     }
 
     public selectKeyframeIcon(kfIcon: KeyframeIcon) {
@@ -703,6 +710,26 @@ class Timeline {
         kfIcon.selected = true;
         this.selectedKeyframeIcons.push(kfIcon);
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
+    }
+
+    public selectKeyframeIconsAtTime(t: number) {
+        for (const kfIcon of this.keyframeIcons) {
+            if (kfIcon.getT() === t && !this.selectedKeyframeIcons.includes(kfIcon)) {
+                kfIcon.selected = true;
+                this.selectedKeyframeIcons.push(kfIcon);
+            }
+        }
+        this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
+    }
+    
+    public reselectKeyframes(indices: number[]) {
+        this.selectedKeyframeIcons = [];
+        for (const i of indices) {
+            this.selectedKeyframeIcons.push(this.keyframeIcons[i]);
+            this.keyframeIcons[i].selected = true;
+        }
+        if (this.selectedKeyframeIcons.length)
+            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
     
     private deselectKeyframeIcon(kfIcon: KeyframeIcon) {
@@ -730,16 +757,6 @@ class Timeline {
         }
         return indices;
     }
-    
-    public reselectKeyframes(indices: number[]) {
-        this.selectedKeyframeIcons = [];
-        for (const i of indices) {
-            this.selectedKeyframeIcons.push(this.keyframeIcons[i]);
-            this.keyframeIcons[i].selected = true;
-        }
-        if (this.selectedKeyframeIcons.length)
-            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
-    }
 
     private ensureIconDistance(v: number, c: number, r: number): number {
         if (v <= Timeline.SNAP_DISTANCE_PX)
@@ -751,7 +768,7 @@ class Timeline {
     }
 
     private updateKeyframeIconPosition(icon: KeyframeIcon, x: number) {
-        const snapKfIndex = this.getClosestSnappingIconIndex(x);
+        const snapKfIndex = this.getClosestSnappingIconIndex(x, icon);
         if (snapKfIndex > -1) {
             x = this.ensureIconDistance(x, this.keyframeIcons[snapKfIndex].getX(), Timeline.SNAP_DISTANCE_PX);
         }
@@ -763,13 +780,13 @@ class Timeline {
     /**
      * Returns the index of the closest icon within snapping distance, or -1 if there are no icons that can be snapped to.
      */
-    private getClosestSnappingIconIndex(x: number): number {
+    private getClosestSnappingIconIndex(x: number, icon?: KeyframeIcon): number {
         let closestDist = Timeline.SNAP_DISTANCE_PX;
         let snapKfIndex = -1;
         for (let i = 0; i < this.keyframeIcons.length && closestDist > 0; i++) {
             // If we're moving a keyframe icon, don't check distance against itself.
-            // TODO - will have to check only against icons on the same track when multi-track editor is added.
-            if (this.keyframeIconGrabbed && this.keyframeIcons[i].selected)
+            // Don't check against keyframe icons on other tracks.
+            if (icon && (this.keyframeIcons[i].selected || this.keyframeIcons[i].getY() !== icon.getY()))
                 continue;
             const dist = Math.abs(x - this.keyframeIcons[i].getX());
             if (dist < closestDist) {
@@ -819,6 +836,62 @@ class Timeline {
                 break;
             }
         }
+        this.draw();
+    }
+
+    public updateTrackSelection(selectedTracks: number, timelineMode: TimelineMode) {
+        this.disabledTrackOverlayPaths = [];
+        if (timelineMode === TimelineMode.Consolidated || selectedTracks === KeyframeTrackType.allTracks) {
+            this.draw();
+            return;
+        }
+
+        const createOverlayPath = (trackNumber: number): Path2D => {
+            const path = new Path2D();
+            path.moveTo(-Playhead.WIDTH, Timeline.HEADER_HEIGHT + (Timeline.TRACK_HEIGHT * (trackNumber + 1)));
+            const lineCount = Math.ceil((this.elementsCtx.canvas.width + Playhead.WIDTH) / Playhead.WIDTH);
+            for (let i = 0; i < lineCount; i++) {
+                path.lineTo(i * Playhead.WIDTH, Timeline.HEADER_HEIGHT + (Timeline.TRACK_HEIGHT * trackNumber));
+                path.moveTo(i * Playhead.WIDTH, Timeline.HEADER_HEIGHT + (Timeline.TRACK_HEIGHT * (trackNumber + 1)));
+            }
+            const subPath = new Path2D();
+            subPath.rect(-Playhead.WIDTH, Timeline.HEADER_HEIGHT + (Timeline.TRACK_HEIGHT * trackNumber), this.elementsCtx.canvas.width + Playhead.WIDTH, Timeline.TRACK_HEIGHT);
+            path.addPath(subPath);
+            return path;
+        }
+
+        if (timelineMode === TimelineMode.Position_LookAt_Bank) {   
+            if ((selectedTracks & KeyframeTrackType.posXTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(0));
+            
+            if ((selectedTracks & KeyframeTrackType.lookAtXTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(1));
+
+            if ((selectedTracks & KeyframeTrackType.bankTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(2));
+        } else {
+            if ((selectedTracks & KeyframeTrackType.posXTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(0));
+    
+            if ((selectedTracks & KeyframeTrackType.posYTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(1));
+                
+            if ((selectedTracks & KeyframeTrackType.posZTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(2));
+                
+            if ((selectedTracks & KeyframeTrackType.lookAtXTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(3));
+                
+            if ((selectedTracks & KeyframeTrackType.lookAtYTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(4));
+                
+            if ((selectedTracks & KeyframeTrackType.lookAtZTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(5));
+                
+            if ((selectedTracks & KeyframeTrackType.bankTrack) === 0)
+                this.disabledTrackOverlayPaths.push(createOverlayPath(6));
+        }
+
         this.draw();
     }
 
@@ -966,6 +1039,7 @@ export class CameraAnimationManager {
 interface StudioState {
     animation: CameraAnimation;
     timelineLengthMs: number;
+    timelineMode: TimelineMode;
     selectedKeyframeIndices: number[];
 }
 
@@ -1033,7 +1107,6 @@ export class StudioPanel extends FloatingPanel {
     private valuesTabBtn: HTMLButtonElement;
     private interpTabBtn: HTMLButtonElement;
     private selectKeyframeMsg: HTMLElement;
-    private editKeyframeWithCamBtn: HTMLButtonElement;
 
     private interpolationTab: HTMLElement;
     private interpInTypeBtns: RadioButtons;
@@ -1061,15 +1134,15 @@ export class StudioPanel extends FloatingPanel {
     private lockPerspectiveBtn: HTMLButtonElement;
     private lockPerspective: boolean = true;
 
-    private editingKeyframe: boolean = false;
     private persistHelpText: boolean = false;
 
     public timeline: Timeline;
     private timelineMode: TimelineMode = TimelineMode.Consolidated;
     private selectedTracks: number = KeyframeTrackType.allTracks;
 
-    private scratchVec: vec3 = vec3.create();
-    private scratchVecUp: vec3 = vec3.create();
+    private scratchVec3a: vec3 = vec3.create();
+    private scratchVec3b: vec3 = vec3.create();
+    private scratchVec3c: vec3 = vec3.create();
     private scratchMat: mat4 = mat4.create();
     private previewLineColor: Color = Magenta;
     private previewLineLookAtColor: Color = Blue;
@@ -1152,6 +1225,9 @@ export class StudioPanel extends FloatingPanel {
                 font: 16px monospace;
                 color: #fefefe;
             }
+            #studioPanel a:visited {
+                color: #eee;
+            }
             #studioPanel .disabled,
             .SettingsButton.disabled {
                 cursor: not-allowed!important;
@@ -1166,7 +1242,6 @@ export class StudioPanel extends FloatingPanel {
             #studioPanel select {
                 background: #000;
                 border-radius: 5px;
-                margin-right: 1rem;
                 padding: 3px 0;
                 font: 16px monospace;
                 color: #fefefe;
@@ -1446,9 +1521,6 @@ export class StudioPanel extends FloatingPanel {
                 </div>
                 <div>
                     <div id="valuesTab" class="KeyframeControlsTab">
-                        <div style="width: 33%;margin: 0.5rem auto;">
-                            <button type="button" id="editKeyframeWithCamBtn" class="SettingsButton">Re-Place Keyframe</button>
-                        </div>
                         <div id="customValuesContainer">
                             <div>
                                 <div id="posXValueInputContainer"><span>X Position:</span> <input id="posXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
@@ -1528,19 +1600,76 @@ export class StudioPanel extends FloatingPanel {
         this.settingsTabBtn.addEventListener('click', this.onTabBtnClick);
         setElementHighlighted(this.settingsTabBtn, false);
 
+        const canChangeToMode = (newMode: TimelineMode): boolean => {
+            // We're always able to switch to a larger timeline.
+            if (this.timelineMode === TimelineMode.Consolidated 
+                || (this.timelineMode === TimelineMode.Position_LookAt_Bank && newMode === TimelineMode.Full))
+                return true;
+            
+            if (newMode === TimelineMode.Consolidated) {
+                if (this.animation.posXTrack.keyframes.length !== this.animation.posYTrack.keyframes.length
+                    || this.animation.posXTrack.keyframes.length !== this.animation.posZTrack.keyframes.length
+                    || this.animation.posXTrack.keyframes.length !== this.animation.lookAtXTrack.keyframes.length
+                    || this.animation.posXTrack.keyframes.length !== this.animation.lookAtYTrack.keyframes.length
+                    || this.animation.posXTrack.keyframes.length !== this.animation.lookAtZTrack.keyframes.length
+                    || this.animation.posXTrack.keyframes.length !== this.animation.bankTrack.keyframes.length) {
+                        return false;
+                }
+                for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
+                    if (this.animation.posXTrack.keyframes[i].time !== this.animation.posYTrack.keyframes[i].time
+                        || this.animation.posXTrack.keyframes[i].time !== this.animation.posZTrack.keyframes[i].time
+                        || this.animation.posXTrack.keyframes[i].time !== this.animation.lookAtXTrack.keyframes[i].time
+                        || this.animation.posXTrack.keyframes[i].time !== this.animation.lookAtYTrack.keyframes[i].time
+                        || this.animation.posXTrack.keyframes[i].time !== this.animation.lookAtZTrack.keyframes[i].time
+                        || this.animation.posXTrack.keyframes[i].time !== this.animation.bankTrack.keyframes[i].time)
+                        return false;
+                }
+            } else if (newMode === TimelineMode.Position_LookAt_Bank) {
+                if (this.animation.posXTrack.keyframes.length !== this.animation.posYTrack.keyframes.length
+                    || this.animation.posXTrack.keyframes.length !== this.animation.posZTrack.keyframes.length
+                    || this.animation.lookAtXTrack.keyframes.length !== this.animation.lookAtYTrack.keyframes.length
+                    || this.animation.lookAtXTrack.keyframes.length !== this.animation.lookAtZTrack.keyframes.length) {
+                        return false;
+                }
+                for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
+                    if (this.animation.posXTrack.keyframes[i].time !== this.animation.posYTrack.keyframes[i].time
+                        || this.animation.posXTrack.keyframes[i].time !== this.animation.posZTrack.keyframes[i].time)
+                        return false;
+                }
+                for (let i = 0; i < this.animation.lookAtXTrack.keyframes.length; i++) {
+                    if (this.animation.lookAtXTrack.keyframes[i].time !== this.animation.lookAtYTrack.keyframes[i].time
+                        || this.animation.lookAtXTrack.keyframes[i].time !== this.animation.lookAtZTrack.keyframes[i].time)
+                        return false;
+                }
+            }
+
+            return true;
+        };
+
         this.timelineModeSelect = this.contents.querySelector('#timelineModeSelect') as HTMLSelectElement;
         this.timelineModeSelect.onchange = () => {
-            this.timelineMode = parseInt(this.timelineModeSelect.value);
-            if (this.timelineMode === TimelineMode.Consolidated) {
+            const newMode = parseInt(this.timelineModeSelect.value);
+            if (!canChangeToMode(newMode)) {
+                this.displayError('Cannot flatten timeline unless keyframes are aligned. ',
+                  'See Wiki for details.', 'https://github.com/magcius/noclip.website/wiki/Studio-Mode#Consolidating-Timeline');
+                this.timelineModeSelect.selectedIndex = this.timelineMode;
+                return;
+            }
+
+            if (newMode === TimelineMode.Consolidated) {
                 this.positionLookAtBankLabels.setAttribute('hidden','');
                 this.fullLabels.setAttribute('hidden','');
-            } else if (this.timelineMode === TimelineMode.Position_LookAt_Bank) {
+                this.selectedTracks = KeyframeTrackType.allTracks;
+            } else if (newMode === TimelineMode.Position_LookAt_Bank) {
                 this.positionLookAtBankLabels.removeAttribute('hidden');
                 this.fullLabels.setAttribute('hidden','');
-            } else if (this.timelineMode === TimelineMode.Full) {
+            } else if (newMode === TimelineMode.Full) {
                 this.positionLookAtBankLabels.setAttribute('hidden','');
                 this.fullLabels.removeAttribute('hidden');
             }
+
+            this.timelineMode = newMode;
+            this.reAddAllKeyframeIcons();
             this.timeline.setTimelineMode(this.timelineMode);
             this.timelineTracksBg.style.height = (this.timelineElementsCanvas.height - Timeline.HEADER_HEIGHT) + 'px';
             this.rescaleTimelineContainer();
@@ -1586,6 +1715,7 @@ export class StudioPanel extends FloatingPanel {
                     } else {
                         tracks.forEach((t) => this.selectedTracks ^= t);
                     }
+                    this.timeline.updateTrackSelection(this.selectedTracks, this.timelineMode);
                 }
             });
         });
@@ -1685,12 +1815,6 @@ export class StudioPanel extends FloatingPanel {
         setElementHighlighted(this.interpTabBtn, false);
 
         this.selectKeyframeMsg = this.contents.querySelector('#selectKeyframeMsg') as HTMLElement;
-
-        this.editKeyframeWithCamBtn = this.contents.querySelector('#editKeyframeWithCamBtn') as HTMLButtonElement;
-        this.editKeyframeWithCamBtn.title = 'Edit the camera position represented by this keyframe.';
-        setElementHighlighted(this.editKeyframeWithCamBtn, false);
-        this.editKeyframeWithCamBtn.onclick = () => { this.beginEditKeyframePosition(); };
-
         this.interpolationTab = this.contents.querySelector('#interpolationTab') as HTMLElement;
 
         this.customValuesContainer = this.contents.querySelector('#customValuesContainer') as HTMLElement;
@@ -1935,7 +2059,7 @@ export class StudioPanel extends FloatingPanel {
         document.addEventListener('mousemove', (e: MouseEvent) => {
             // Only need to update if the primary mouse button is pressed while moving.
             if (e.buttons === 1 && this.timeline && this.playheadTimePositionInput
-                && !this.studioCameraController.isAnimationPlaying && !this.editingKeyframe) {
+                && !this.studioCameraController.isAnimationPlaying) {
                 if (this.selectedNumericInput) {
                     let distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
                     if (e.ctrlKey)
@@ -1949,26 +2073,24 @@ export class StudioPanel extends FloatingPanel {
                     if (this.timeline.playheadGrabbed)
                         this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
 
-                    if (this.timeline.keyframeIconGrabbed)
+                    if (this.timeline.grabbedIcon)
                         this.updatePreviewSteps();
 
-                    if (this.livePreviewCheckbox.checked && (this.timeline.keyframeIconGrabbed || this.timeline.playheadGrabbed))
+                    if (this.livePreviewCheckbox.checked && (this.timeline.grabbedIcon || this.timeline.playheadGrabbed))
                         this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
                 }
             }
         });
 
         this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
-            if (this.timeline && !this.editingKeyframe) {
-                const kfSelectedBefore = this.timeline.selectedKeyframeIcons.length;
-                this.timeline.onMouseDown(e);
-                if (this.timeline.playheadGrabbed) {
-                    this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                    if (this.livePreviewCheckbox.checked)
-                        this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
-                } else if (kfSelectedBefore !== this.timeline.selectedKeyframeIcons.length) {
-                    this.saveState();
-                }
+            const kfSelectedCountBefore = this.timeline.selectedKeyframeIcons.length;
+            this.timeline.onMouseDown(e);
+            if (this.timeline.playheadGrabbed) {
+                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+                if (this.livePreviewCheckbox.checked)
+                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+            } else if (kfSelectedCountBefore !== this.timeline.selectedKeyframeIcons.length) {
+                this.saveState();
             }
         });
 
@@ -1995,19 +2117,15 @@ export class StudioPanel extends FloatingPanel {
         })
 
         document.addEventListener('mouseup', () => {
-            if (this.timeline && !this.editingKeyframe) {
-                if (this.timeline.hasGrabbedIconMoved()
-                    || (this.timeline.selectionBoxActive && this.timeline.selectedKeyframeIcons.length)) {
+            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectionBoxActive) {
+                this.saveState();
+            }
+
+            this.timeline.onMouseUp();
+            if (this.selectedNumericInput) {
+                if (this.selectedNumericInput !== this.playheadTimePositionInput)
                     this.saveState();
-                }
-
-                this.timeline.onMouseUp();
-                if (this.selectedNumericInput) {
-                    if (this.selectedNumericInput !== this.playheadTimePositionInput)
-                        this.saveState();
-                    this.selectedNumericInput = undefined;
-                }
-
+                this.selectedNumericInput = undefined;
             }
         });
 
@@ -2061,19 +2179,23 @@ export class StudioPanel extends FloatingPanel {
             for (let i = 0; i <= this.animationPreviewSteps.length - 2; i++) {
                 drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i + 1].pos, this.previewLineColor);
                 if (i % 30 === 0) {
-                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i].lookAtPos, this.previewLineLookAtColor);
+                    vec3.sub(this.scratchVec3a, this.animationPreviewSteps[i].lookAtPos, this.animationPreviewSteps[i].pos);
+                    vec3.normalize(this.scratchVec3a, this.scratchVec3a);
+                    vec3.scale(this.scratchVec3a, this.scratchVec3a, 100);
+                    vec3.add(this.scratchVec3b, this.scratchVec3a, this.animationPreviewSteps[i].pos);
+                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.scratchVec3b, this.previewLineLookAtColor);
     
                     mat4.targetTo(this.scratchMat, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i].lookAtPos, Vec3UnitY);
                     mat4.rotateZ(this.scratchMat, this.scratchMat, -this.animationPreviewSteps[i].bank);
-                    computeEulerAngleRotationFromSRTMatrix(this.scratchVec, this.scratchMat);
-                    vec3.copy(this.scratchVecUp, Vec3UnitY);
-                    vec3.rotateZ(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[2]);
-                    vec3.rotateY(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[1]);
-                    vec3.rotateX(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[0]);
-                    this.scratchVecUp[2] = 0;
-                    vec3.normalize(this.scratchVecUp, this.scratchVecUp);
-                    vec3.scaleAndAdd(this.scratchVecUp, this.animationPreviewSteps[i].pos, this.scratchVecUp, 100);
-                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.scratchVecUp, this.previewLineYAxisColor);
+                    computeEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
+                    vec3.copy(this.scratchVec3c, Vec3UnitY);
+                    vec3.rotateZ(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[2]);
+                    vec3.rotateY(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[1]);
+                    vec3.rotateX(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[0]);
+                    this.scratchVec3c[2] = 0;
+                    vec3.normalize(this.scratchVec3c, this.scratchVec3c);
+                    vec3.scaleAndAdd(this.scratchVec3c, this.animationPreviewSteps[i].pos, this.scratchVec3c, 100);
+                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.scratchVec3c, this.previewLineYAxisColor);
                     // TODO - draw arrow head lines or cone to better communicate direction?
                 }
             }
@@ -2110,7 +2232,7 @@ export class StudioPanel extends FloatingPanel {
             this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
     }
 
-    private redo() {
+    private redo(): void {
         if (this.currentStateIndex < this.studioStates.length - 1) {
             this.currentStateIndex++;
             this.loadState(this.studioStates[this.currentStateIndex]);
@@ -2123,7 +2245,7 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    private undo() {
+    private undo(): void {
         if (this.currentStateIndex > 0) {
             this.currentStateIndex--;
             this.loadState(this.studioStates[this.currentStateIndex]);
@@ -2136,7 +2258,7 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    private saveState() {
+    private saveState(): void {
         if (!this.animation || !this.timeline) {
             return;
         }
@@ -2161,6 +2283,7 @@ export class StudioPanel extends FloatingPanel {
         const state: StudioState = {
             animation: JSON.parse(animString),
             timelineLengthMs: this.timeline.getTimelineLengthMs(),
+            timelineMode: this.timelineMode,
             selectedKeyframeIndices: this.timeline.getSelectedKeyframeIndices(),
         };
         this.studioStates.push(state);
@@ -2174,13 +2297,15 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    private loadState(state: StudioState) {
-        const loadedAnimation = JSON.parse(JSON.stringify(state.animation));
+    private loadState(state: StudioState): void {
+        const loadedAnimation: CameraAnimation = JSON.parse(JSON.stringify(state.animation));
         if (loadedAnimation.loop === undefined)
             loadedAnimation.loop = false;
 
-        if (state.selectedKeyframeIndices === undefined)
-            state.selectedKeyframeIndices = [];
+        if (loadedAnimation.posXTrack.keyframes.length === 0) {
+            this.newAnimation();
+            return;
+        }
 
         const conformKf = (kf:Keyframe) => {
             if (kf.easeInCoeff === undefined) {
@@ -2194,39 +2319,18 @@ export class StudioPanel extends FloatingPanel {
             if (kf.interpOutType === undefined)
                 kf.interpOutType = InterpolationType.Ease;
         };
-        
-        for (const kf of loadedAnimation.posXTrack.keyframes) {
-            conformKf(kf);
-        }
-        
-        for (const kf of loadedAnimation.posYTrack.keyframes) {
-            conformKf(kf);
-        }
-        
-        for (const kf of loadedAnimation.posZTrack.keyframes) {
-            conformKf(kf);
-        }
-        
-        for (const kf of loadedAnimation.lookAtXTrack.keyframes) {
-            conformKf(kf);
-        }
-        
-        for (const kf of loadedAnimation.lookAtYTrack.keyframes) {
-            conformKf(kf);
-        }
-        
-        for (const kf of loadedAnimation.lookAtZTrack.keyframes) {
-            conformKf(kf);
-        }
-        
-        for (const kf of loadedAnimation.bankTrack.keyframes) {
-            conformKf(kf);
-        }
 
-        if (loadedAnimation.posXTrack.keyframes.length === 0) {
-            this.newAnimation();
-            return;
-        }
+        loadedAnimation.posXTrack.keyframes.forEach((kf) => conformKf(kf));
+        loadedAnimation.posYTrack.keyframes.forEach((kf) => conformKf(kf));
+        loadedAnimation.posZTrack.keyframes.forEach((kf) => conformKf(kf));
+        loadedAnimation.lookAtXTrack.keyframes.forEach((kf) => conformKf(kf));
+        loadedAnimation.lookAtYTrack.keyframes.forEach((kf) => conformKf(kf));
+        loadedAnimation.lookAtZTrack.keyframes.forEach((kf) => conformKf(kf));
+        loadedAnimation.bankTrack.keyframes.forEach((kf) => conformKf(kf));
+        
+        this.timelineMode = state.timelineMode;
+        this.timelineModeSelect.selectedIndex = state.timelineMode;
+        this.timelineModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
         // If loading out of a "new timeline" state, we'll need to unhide the UI.
         this.showEditingUI();
         this.rescaleTimelineContainer();
@@ -2239,33 +2343,102 @@ export class StudioPanel extends FloatingPanel {
         this.animation.lookAtZTrack.keyframes = loadedAnimation.lookAtZTrack.keyframes;
         this.animation.bankTrack.keyframes = loadedAnimation.bankTrack.keyframes;
         this.animation.loop = loadedAnimation.loop;
-        this.timeline.deselectAllKeyframeIcons();
-        this.timeline.keyframeIcons = [];
-        this.timeline.setScaleAndDrawMarkers(state.timelineLengthMs);
-        // TODO - Handle multi-track timelines. This is a bit of a kludge as-is, but is fine for the consolidated view.
-        for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
-            let kfType = KeyframeIconType.Default;
-            if (this.timeline.keyframeIcons.length === 0)
-                kfType = KeyframeIconType.Start;
-            else if (this.animation.loop && i === this.animation.posXTrack.keyframes.length - 1)
-                kfType = KeyframeIconType.Loop_End;
 
-            const kfMap = new Map<KeyframeTrackType, Keyframe>();
-            kfMap.set(KeyframeTrackType.posXTrack, this.animation.posXTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackType.posYTrack, this.animation.posYTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackType.posZTrack, this.animation.posZTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackType.lookAtXTrack, this.animation.lookAtXTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackType.lookAtYTrack, this.animation.lookAtYTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackType.lookAtZTrack, this.animation.lookAtZTrack.keyframes[i]);
-            kfMap.set(KeyframeTrackType.bankTrack, this.animation.bankTrack.keyframes[i]);
-            this.timeline.addKeyframeIcon(kfMap, this.animation.posXTrack.keyframes[i].time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, kfType, false);
-        }
+        this.reAddAllKeyframeIcons();
+
+        this.timeline.setScaleAndDrawMarkers(state.timelineLengthMs);
         this.timelineLengthInput.value = this.timeline.getTimelineLengthSeconds();
         this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
         setElementHighlighted(this.loopAnimationBtn, this.animation.loop);
         this.timeline.reselectKeyframes(state.selectedKeyframeIndices);
         this.timeline.draw();
         this.updatePreviewSteps();
+    }
+
+    private reAddAllKeyframeIcons(): void {
+        this.timeline.deselectAllKeyframeIcons();
+        this.timeline.keyframeIcons = [];
+
+        const inferKfType = (i: number, track: KeyframeTrack) => {
+            if (i === 0)
+                return KeyframeIconType.Start;
+            else if (this.animation.loop && i === track.keyframes.length - 1)
+                return KeyframeIconType.Loop_End;
+            else
+                return KeyframeIconType.Default;
+        };
+
+        const addKeyframeIcon = (time: number, kfType: KeyframeIconType, tracks: KeyframeTrackType[], kfs: Keyframe[], y: number) => {
+            if (tracks.length !== kfs.length)
+                throw "Mismatched track/kf array length";
+
+            const kfMap = new Map<KeyframeTrackType, Keyframe>();
+            for (let i = 0; i < tracks.length; i++) {
+                kfMap.set(tracks[i], kfs[i]);
+            }
+            this.timeline.addKeyframeIcon(kfMap, time, y, kfType, false);
+        };
+
+        if (this.timelineMode === TimelineMode.Consolidated) {
+            for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.posXTrack.keyframes[i].time, inferKfType(i, this.animation.posXTrack),
+                    [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack,
+                        KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack,
+                        KeyframeTrackType.bankTrack],
+                    [this.animation.posXTrack.keyframes[i], this.animation.posYTrack.keyframes[i], this.animation.posZTrack.keyframes[i],
+                    this.animation.lookAtXTrack.keyframes[i], this.animation.lookAtYTrack.keyframes[i], this.animation.lookAtZTrack.keyframes[i],
+                    this.animation.bankTrack.keyframes[i]],
+                    Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+            }
+        } else if (this.timelineMode === TimelineMode.Position_LookAt_Bank) {
+            for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.posXTrack.keyframes[i].time, inferKfType(i, this.animation.posXTrack), 
+                    [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack],
+                    [this.animation.posXTrack.keyframes[i], this.animation.posYTrack.keyframes[i], this.animation.posZTrack.keyframes[i]],
+                    Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+            }           
+            for (let i = 0; i < this.animation.lookAtXTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.lookAtXTrack.keyframes[i].time, inferKfType(i, this.animation.lookAtXTrack), 
+                    [KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack],
+                    [this.animation.lookAtXTrack.keyframes[i], this.animation.lookAtYTrack.keyframes[i], this.animation.lookAtZTrack.keyframes[i]], 
+                    Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT);
+            }           
+            for (let i = 0; i < this.animation.bankTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.bankTrack.keyframes[i].time, inferKfType(i, this.animation.bankTrack), 
+                    [KeyframeTrackType.bankTrack], [this.animation.bankTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+            }
+        } else if (this.timelineMode === TimelineMode.Full) {
+            for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.posXTrack.keyframes[i].time, inferKfType(i, this.animation.posXTrack),
+                [KeyframeTrackType.posXTrack], [this.animation.posXTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+            }
+            for (let i = 0; i < this.animation.posYTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.posYTrack.keyframes[i].time, inferKfType(i, this.animation.posYTrack),
+                [KeyframeTrackType.posYTrack], [this.animation.posYTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT);
+            }
+            for (let i = 0; i < this.animation.posZTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.posZTrack.keyframes[i].time, inferKfType(i, this.animation.posZTrack),
+                [KeyframeTrackType.posZTrack], [this.animation.posZTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+            }
+            for (let i = 0; i < this.animation.lookAtXTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.lookAtXTrack.keyframes[i].time, inferKfType(i, this.animation.lookAtXTrack),
+                [KeyframeTrackType.lookAtXTrack], [this.animation.lookAtXTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 3));
+            }
+            for (let i = 0; i < this.animation.lookAtYTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.lookAtYTrack.keyframes[i].time, inferKfType(i, this.animation.lookAtYTrack),
+                [KeyframeTrackType.lookAtYTrack], [this.animation.lookAtYTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 4));
+            }
+            for (let i = 0; i < this.animation.lookAtZTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.lookAtZTrack.keyframes[i].time, inferKfType(i, this.animation.lookAtZTrack),
+                [KeyframeTrackType.lookAtZTrack], [this.animation.lookAtZTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 5));
+            }
+            for (let i = 0; i < this.animation.bankTrack.keyframes.length; i++) {
+                addKeyframeIcon(this.animation.bankTrack.keyframes[i].time, inferKfType(i, this.animation.bankTrack),
+                [KeyframeTrackType.bankTrack], [this.animation.bankTrack.keyframes[i]], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6));
+            }
+        } else {
+            throw "Bad timelineMode";
+        }
     }
 
     private getTrackByType(animation: CameraAnimation, trackType: KeyframeTrackType): KeyframeTrack {
@@ -2394,7 +2567,6 @@ export class StudioPanel extends FloatingPanel {
         
         this.selectKeyframeMsg.setAttribute('hidden', '');
         this.keyframeControlsContents.removeAttribute('hidden');
-        this.editKeyframeWithCamBtn.setAttribute('hidden', '');
         this.posXValueInputContainer.setAttribute('hidden','');
         this.posYValueInputContainer.setAttribute('hidden','');
         this.posZValueInputContainer.setAttribute('hidden','');
@@ -2406,8 +2578,6 @@ export class StudioPanel extends FloatingPanel {
         this.lockPerspectiveDiv.setAttribute('hidden', '');
 
         if (keyframeTracks !== 0) {
-            this.editKeyframeWithCamBtn.removeAttribute('hidden');
-
             if (keyframeTracks & KeyframeTrackType.posXTrack)
                 this.posXValueInputContainer.removeAttribute('hidden');
                 
@@ -2429,7 +2599,6 @@ export class StudioPanel extends FloatingPanel {
             if (keyframeTracks & KeyframeTrackType.bankTrack)
                 this.bankValueInputContainer.removeAttribute('hidden');
         }
-
             
         if (((keyframeTracks & KeyframeTrackType.posXTrack) && (keyframeTracks & KeyframeTrackType.lookAtXTrack))
             || ((keyframeTracks & KeyframeTrackType.posYTrack) && (keyframeTracks & KeyframeTrackType.lookAtYTrack))
@@ -2530,22 +2699,6 @@ export class StudioPanel extends FloatingPanel {
         this.playheadTimePositionInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    private beginEditKeyframePosition() {
-        this.editingKeyframe = true;
-        setElementHighlighted(this.editKeyframeWithCamBtn, true);
-        this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
-        this.disableControls();
-    }
-
-    public endEditKeyframePosition() {
-        if (this.editingKeyframe) {
-            this.editingKeyframe = false;
-            setElementHighlighted(this.editKeyframeWithCamBtn, false);
-            this.resetHelpText();
-            this.enableControls();
-        }
-    }
-
     public deleteSelectedKeyframeIcons() {
         for (const kfIcon of this.timeline.selectedKeyframeIcons) {
             const type = kfIcon.type;
@@ -2605,17 +2758,16 @@ export class StudioPanel extends FloatingPanel {
     private scratchVecZAxis: vec3 = vec3.create();
 
     public addKeyframesFromMat4(worldMatrix: ReadonlyMat4): void {
-        if (!this.timeline || this.timeline.keyframeIcons.length === 0)
+        if (this.timeline.keyframeIcons.length === 0)
             this.initTimeline();
-
-        if (this.timeline.selectedKeyframeIcons.length && !this.editingKeyframe)
+   
+        let tracks = this.selectedTracks;
+        if (tracks === 0) {
             return;
+        }
 
-        if (!this.timeline.selectedKeyframeIcons.length && this.timeline.playheadIsOnIcon())
-            return;
-
+        const editingKf = this.timeline.selectedKeyframeIcons.length && this.timeline.playheadIsOnIcon();
         const time = this.timeline.getPlayheadTimeMs();
-        const tracks = this.selectedTracks;
 
         mat4.getTranslation(this.scratchVecPos, worldMatrix);
         getMatrixAxisZ(this.scratchVecZAxis, worldMatrix);
@@ -2642,10 +2794,12 @@ export class StudioPanel extends FloatingPanel {
         }
         const bankKf: Keyframe = { time, value: bank, tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
 
-        if (this.editingKeyframe) {
+        if (editingKf) {
             for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                if (kfIcon.type === KeyframeIconType.Start
-                    || kfIcon.type === KeyframeIconType.Loop_End) {
+                if (kfIcon.getT() !== time)
+                    continue;
+                
+                if (kfIcon.type === KeyframeIconType.Start || kfIcon.type === KeyframeIconType.Loop_End) {
                     this.animation.posXTrack.keyframes[0].value = posXKf.value;
                     this.animation.posYTrack.keyframes[0].value = posYKf.value;
                     this.animation.posZTrack.keyframes[0].value = posZKf.value;
@@ -2662,33 +2816,33 @@ export class StudioPanel extends FloatingPanel {
                         this.animation.lookAtZTrack.keyframes[this.animation.lookAtZTrack.keyframes.length - 1].value = lookAtZKf.value;
                         this.animation.bankTrack.keyframes[this.animation.bankTrack.keyframes.length - 1].value = bankKf.value;
                     }
-                } else {
-                    const currentPosXTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posXTrack);
-                    const currentPosYTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posYTrack);
-                    const currentPosZTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.posZTrack);
-                    const currentLookAtXTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtXTrack);
-                    const currentLookAtYTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtYTrack);
-                    const currentLookAtZTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.lookAtZTrack);
-                    const currentBankTrackKf = kfIcon.keyframesMap.get(KeyframeTrackType.bankTrack);
-                    if (currentPosXTrackKf)
-                        currentPosXTrackKf.value = posXKf.value;
-                    if (currentPosYTrackKf)
-                        currentPosYTrackKf.value = posYKf.value;
-                    if (currentPosZTrackKf)
-                        currentPosZTrackKf.value = posZKf.value;
-                    if (currentLookAtXTrackKf)
-                        currentLookAtXTrackKf.value = lookAtXKf.value;
-                    if (currentLookAtYTrackKf)
-                        currentLookAtYTrackKf.value = lookAtYKf.value;
-                    if (currentLookAtZTrackKf)
-                        currentLookAtZTrackKf.value = lookAtZKf.value;
-                    if (currentBankTrackKf)
-                        currentBankTrackKf.value = bankKf.value;
+                    tracks = 0;
+                    break;
                 }
-                this.updatePreviewSteps();
+                
+                kfIcon.keyframesMap.forEach((kf, track) => {
+                    tracks ^= track;
+                    if (track === KeyframeTrackType.posXTrack)
+                        kf.value = posXKf.value;
+                    else if (track === KeyframeTrackType.posYTrack)
+                        kf.value = posYKf.value;
+                    else if (track === KeyframeTrackType.posZTrack)
+                        kf.value = posZKf.value;
+                    else if (track === KeyframeTrackType.lookAtXTrack)
+                        kf.value = lookAtXKf.value;
+                    else if (track === KeyframeTrackType.lookAtYTrack)
+                        kf.value = lookAtYKf.value;
+                    else if (track === KeyframeTrackType.lookAtZTrack)
+                        kf.value = lookAtZKf.value;
+                    else if (track === KeyframeTrackType.bankTrack)
+                        kf.value = bankKf.value;
+                });
             }
-            this.endEditKeyframePosition();
-            return;
+
+            if (tracks === 0) {
+                this.updatePreviewSteps();
+                return;
+            }
         }
 
         if (tracks & KeyframeTrackType.posXTrack)
@@ -2706,21 +2860,66 @@ export class StudioPanel extends FloatingPanel {
         if (tracks & KeyframeTrackType.bankTrack)
             this.animation.bankTrack.addKeyframe(bankKf);
 
-        const kfType = this.timeline.keyframeIcons.length === 0 ? KeyframeIconType.Start : KeyframeIconType.Default;
-        // TODO - Update for multi-track editor.
-        const kfMap = new Map<KeyframeTrackType, Keyframe>();
-        kfMap.set(KeyframeTrackType.posXTrack, posXKf);
-        kfMap.set(KeyframeTrackType.posYTrack, posYKf);
-        kfMap.set(KeyframeTrackType.posZTrack, posZKf);
-        kfMap.set(KeyframeTrackType.lookAtXTrack, lookAtXKf);
-        kfMap.set(KeyframeTrackType.lookAtYTrack, lookAtYKf);
-        kfMap.set(KeyframeTrackType.lookAtZTrack, lookAtZKf);
-        kfMap.set(KeyframeTrackType.bankTrack, bankKf);
-
         // If we're past the time of the last keyframe, advance.
         const advancePlayhead = time > this.timeline.getLastKeyframeTimeMs();
 
-        this.timeline.addKeyframeIcon(kfMap, time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, kfType, !advancePlayhead);
+        const kfType = this.timeline.keyframeIcons.length === 0 ? KeyframeIconType.Start : KeyframeIconType.Default;
+
+        const addKeyframeIcon = (tracks: KeyframeTrackType[], kfs: Keyframe[], y: number) => {
+            if (tracks.length !== kfs.length)
+                throw "Mismatched track/kf array length";
+
+            const kfMap = new Map<KeyframeTrackType, Keyframe>();
+            for (let i = 0; i < tracks.length; i++) {
+                kfMap.set(tracks[i], kfs[i]);
+            }
+            this.timeline.addKeyframeIcon(kfMap, time, y, kfType, !advancePlayhead);
+        }
+
+        if (this.timelineMode === TimelineMode.Consolidated) {
+            addKeyframeIcon(
+                [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack,
+                    KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack,
+                    KeyframeTrackType.bankTrack],
+                [posXKf, posYKf, posZKf, lookAtXKf, lookAtYKf, lookAtZKf, bankKf],
+                Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+        } else if (this.timelineMode === TimelineMode.Position_LookAt_Bank) {
+            // In Pos/LookAt/Bank, the selection of posX or lookAtX implies the others.
+            if (tracks & KeyframeTrackType.posXTrack) {
+                addKeyframeIcon(
+                    [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack],
+                    [posXKf, posYKf, posZKf],
+                    Timeline.KEYFRAME_ICONS_BASE_Y_POS
+                );
+            }
+            if (tracks & KeyframeTrackType.lookAtXTrack) {
+                addKeyframeIcon(
+                    [KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack],
+                    [lookAtXKf, lookAtYKf, lookAtZKf],
+                    Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT
+                );
+            }
+            if (tracks & KeyframeTrackType.bankTrack) {
+                addKeyframeIcon([KeyframeTrackType.bankTrack], [bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+            }
+        } else if (this.timelineMode === TimelineMode.Full) {
+            if (tracks & KeyframeTrackType.posXTrack)
+                addKeyframeIcon([KeyframeTrackType.posXTrack], [posXKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+            if (tracks & KeyframeTrackType.posYTrack)
+                addKeyframeIcon([KeyframeTrackType.posYTrack], [posYKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT);
+            if (tracks & KeyframeTrackType.posZTrack)
+                addKeyframeIcon([KeyframeTrackType.posZTrack], [posZKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+            if (tracks & KeyframeTrackType.lookAtXTrack)
+                addKeyframeIcon([KeyframeTrackType.lookAtXTrack], [lookAtXKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 3));
+            if (tracks & KeyframeTrackType.lookAtYTrack)
+                addKeyframeIcon([KeyframeTrackType.lookAtYTrack], [lookAtYKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 4));
+            if (tracks & KeyframeTrackType.lookAtZTrack)
+                addKeyframeIcon([KeyframeTrackType.lookAtZTrack], [lookAtZKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 5));
+            if (tracks & KeyframeTrackType.bankTrack)
+                addKeyframeIcon([KeyframeTrackType.bankTrack], [bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6));
+        } else {
+            throw "Bad timelineMode";
+        }
 
         this.updatePreviewSteps();
 
@@ -2739,25 +2938,38 @@ export class StudioPanel extends FloatingPanel {
             return { time, value, tangentIn, tangentOut, interpInType, interpOutType, easeInCoeff, easeOutCoeff };
         }
 
-        const kfMap = new Map<KeyframeTrackType, Keyframe>();
-
-        const addLoopKeyframe = (trackType: KeyframeTrackType): void => {
-            const track = this.getTrackByType(this.animation, trackType);
-            const loopKeyframe = makeLoopKeyframe(track);
-            track.addKeyframe(loopKeyframe);
-            kfMap.set(trackType, loopKeyframe);
+        const addLoopKeyframe = (tracks: KeyframeTrackType[], y: number) => {
+            const kfMap = new Map<KeyframeTrackType, Keyframe>();
+            for (let i = 0; i < tracks.length; i++) {
+                const track = this.getTrackByType(this.animation, tracks[i]);
+                const loopKeyframe = makeLoopKeyframe(track);
+                kfMap.set(tracks[i], loopKeyframe);
+                track.addKeyframe(loopKeyframe);
+            }
+            this.timeline.addKeyframeIcon(kfMap, time, y, KeyframeIconType.Loop_End, false);
         };
 
-        // TODO - Handle multi-track animations
-        addLoopKeyframe(KeyframeTrackType.posXTrack);
-        addLoopKeyframe(KeyframeTrackType.posYTrack);
-        addLoopKeyframe(KeyframeTrackType.posZTrack);
-        addLoopKeyframe(KeyframeTrackType.lookAtXTrack);
-        addLoopKeyframe(KeyframeTrackType.lookAtYTrack);
-        addLoopKeyframe(KeyframeTrackType.lookAtZTrack);
-        addLoopKeyframe(KeyframeTrackType.bankTrack);
-
-        this.timeline.addKeyframeIcon(kfMap, time, Timeline.KEYFRAME_ICONS_BASE_Y_POS, KeyframeIconType.Loop_End, false);
+        if (this.timelineMode === TimelineMode.Consolidated) {
+            addLoopKeyframe(
+                [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack,
+                    KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack,
+                    KeyframeTrackType.bankTrack],
+                Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+        } else if (this.timelineMode === TimelineMode.Position_LookAt_Bank) {
+            addLoopKeyframe([KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+            addLoopKeyframe([KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT);
+            addLoopKeyframe([KeyframeTrackType.bankTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+        } else if (this.timelineMode === TimelineMode.Full) {
+            addLoopKeyframe([KeyframeTrackType.posXTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS)
+            addLoopKeyframe([KeyframeTrackType.posYTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT)
+            addLoopKeyframe([KeyframeTrackType.posZTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2))
+            addLoopKeyframe([KeyframeTrackType.lookAtXTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 3))
+            addLoopKeyframe([KeyframeTrackType.lookAtYTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 4))
+            addLoopKeyframe([KeyframeTrackType.lookAtZTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 5))
+            addLoopKeyframe([KeyframeTrackType.bankTrack], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6))
+        } else {
+            throw "Bad timelineMode";
+        }
 
         if (time > this.timeline.getTimelineLengthMs()) {
             this.timelineLengthInput.value = (time / MILLISECONDS_IN_SECOND).toFixed(2);
@@ -2788,7 +3000,7 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private resetHelpText() {
-        if (!this.editingKeyframe && !this.persistHelpText)
+        if (!this.persistHelpText)
             this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
     }
 
@@ -2801,11 +3013,19 @@ export class StudioPanel extends FloatingPanel {
         }, 3000);
     }
 
-    private displayError(e: string) {
+    private displayError(e: string, linkText?: string, linkUrl?: string) {
         this.studioHelpText.innerText = e;
         this.studioHelpText.style.color = '#ff4141';
         this.studioHelpText.style.fontWeight = '700';
         this.persistHelpText = true;
+        if (linkText && linkUrl) {
+            const link = document.createElement('a') as HTMLAnchorElement;
+            link.rel = 'noopener noreferrer';
+            link.target = '_blank';
+            link.href = linkUrl;
+            link.innerText = linkText;
+            this.studioHelpText.appendChild(link);
+        }
         window.setTimeout(() => {
             this.studioHelpText.style.color = '';
             this.studioHelpText.style.fontWeight = '';
@@ -2819,7 +3039,7 @@ export class StudioPanel extends FloatingPanel {
         if (jsonAnim) {
             const obj: any = JSON.parse(jsonAnim);
             if (this.isValidAnimationObj(obj)) {
-                this.loadState(obj.studioState);
+                this.loadState(this.createInitStudioState(obj.animation));
                 this.displayMessage('Loaded animation from local storage.');
                 this.saveState();
             } else {
@@ -2835,10 +3055,7 @@ export class StudioPanel extends FloatingPanel {
         if (!obj || !obj.version)
             return false;
 
-        // TODO - Maybe support older versions?
-        if (obj.version === 2) {
-            return obj.studioState
-                && obj.studioState.timelineLengthMs
+        if (obj.version === 2 && obj.studioState
                 && obj.studioState.animation
                 && obj.studioState.animation.posXTrack
                 && obj.studioState.animation.posYTrack
@@ -2846,18 +3063,24 @@ export class StudioPanel extends FloatingPanel {
                 && obj.studioState.animation.lookAtXTrack
                 && obj.studioState.animation.lookAtYTrack
                 && obj.studioState.animation.lookAtZTrack
-                && obj.studioState.animation.bankTrack;
+                && obj.studioState.animation.bankTrack) {
+            obj.animation = obj.studioState.animation;
+            return true;
+        } else if (obj.version === 3) {
+            return obj.animation
+                && obj.animation.posXTrack
+                && obj.animation.posYTrack
+                && obj.animation.posZTrack
+                && obj.animation.lookAtXTrack
+                && obj.animation.lookAtYTrack
+                && obj.animation.lookAtZTrack
+                && obj.animation.bankTrack;
         }
         return false;
     }
 
     private serializeAnimation(): string {
-        const studioState: StudioState = {
-            animation: this.animation,
-            timelineLengthMs: this.timeline.getTimelineLengthMs(),
-            selectedKeyframeIndices: [],
-        };
-        const dataObj = { version: 2, studioState };
+        const dataObj = { version: 3, animation: this.animation };
         return JSON.stringify(dataObj);
     }
 
@@ -2889,7 +3112,7 @@ export class StudioPanel extends FloatingPanel {
                 const fileContents = await this.loadFile(input.files.item(0) as File);
                 const obj = JSON.parse(fileContents);
                 if (this.isValidAnimationObj(obj)) {
-                    this.loadState(obj.studioState);
+                    this.loadState(this.createInitStudioState(obj.animation));
                     this.displayMessage('Successfully loaded animation from file.');
                     this.saveState();
                 } else {
@@ -2901,6 +3124,67 @@ export class StudioPanel extends FloatingPanel {
             }
         }
         input.click();
+    }
+
+    private createInitStudioState(anim: CameraAnimation): StudioState {
+        const duration = Math.max(anim.posXTrack.keyframes[anim.posXTrack.keyframes.length - 1].time, 
+            anim.posYTrack.keyframes[anim.posYTrack.keyframes.length - 1].time, 
+            anim.posZTrack.keyframes[anim.posZTrack.keyframes.length - 1].time, 
+            anim.lookAtXTrack.keyframes[anim.lookAtXTrack.keyframes.length - 1].time, 
+            anim.lookAtYTrack.keyframes[anim.lookAtYTrack.keyframes.length - 1].time, 
+            anim.lookAtZTrack.keyframes[anim.lookAtZTrack.keyframes.length - 1].time, 
+            anim.bankTrack.keyframes[anim.bankTrack.keyframes.length - 1].time);
+
+        return {
+            animation: anim,
+            timelineLengthMs: duration,
+            timelineMode: this.inferTimelineMode(anim),
+            selectedKeyframeIndices: []
+        };
+    }
+
+    private inferTimelineMode(anim: CameraAnimation): TimelineMode {
+        let tlMode = TimelineMode.Consolidated;
+
+        // First, check the length of each keyframe track.
+        // If there is any discrepancy between posX/posY/posZ or between lookAtX/lookAtY/lookAtZ, we need the full timeline.
+        // If there is only a discrepancy between pos/LookAt/bank, we need at least TimelineMode.Pos_LookAt_Bank, 
+        if (anim.posXTrack.keyframes.length !== anim.posYTrack.keyframes.length
+            || anim.posXTrack.keyframes.length !== anim.posZTrack.keyframes.length
+            || anim.lookAtXTrack.keyframes.length !== anim.lookAtYTrack.keyframes.length
+            || anim.lookAtXTrack.keyframes.length !== anim.lookAtZTrack.keyframes.length) {
+            return TimelineMode.Full;
+        } else if (anim.posXTrack.keyframes.length !== anim.lookAtXTrack.keyframes.length 
+            || anim.posXTrack.keyframes.length !== anim.lookAtYTrack.keyframes.length 
+            || anim.posXTrack.keyframes.length !== anim.lookAtZTrack.keyframes.length 
+            || anim.posXTrack.keyframes.length !== anim.bankTrack.keyframes.length) {
+            tlMode = TimelineMode.Position_LookAt_Bank;
+        }
+
+        // Now check the time value for each keyframe.
+        // Again, any discrepancy between posX/posY/posZ or between lookAtX/lookAtY/lookAtZ implies a full timeline.
+        for (let i = 0; i < anim.posXTrack.keyframes.length; i++) {
+            const t = anim.posXTrack.keyframes[i].time;
+            if (anim.posYTrack.keyframes[i].time !== t || anim.posZTrack.keyframes[i].time !== t) {
+                return TimelineMode.Full;
+            }
+            if (anim.lookAtXTrack.keyframes[i] === undefined || anim.lookAtXTrack.keyframes[i].time !== t 
+                || anim.lookAtYTrack.keyframes[i] === undefined || anim.lookAtYTrack.keyframes[i].time !== t 
+                || anim.lookAtZTrack.keyframes[i] === undefined || anim.lookAtZTrack.keyframes[i].time !== t 
+                || anim.bankTrack.keyframes[i] === undefined || anim.bankTrack.keyframes[i].time !== t) {
+                tlMode = TimelineMode.Position_LookAt_Bank;
+            }
+        }
+        for (let i = 0; i < anim.lookAtXTrack.keyframes.length; i++) {
+            const t = anim.lookAtXTrack.keyframes[i].time;
+            if (anim.lookAtYTrack.keyframes[i].time !== t || anim.lookAtZTrack.keyframes[i].time !== t) {
+                return TimelineMode.Full;
+            }
+            if (anim.bankTrack.keyframes[i] === undefined || anim.bankTrack.keyframes[i].time !== t) {
+                tlMode = TimelineMode.Position_LookAt_Bank;
+            }
+        }
+        return tlMode;
     }
 
     private loadFile(file: File): Promise<string> {
@@ -3039,7 +3323,6 @@ export class StudioPanel extends FloatingPanel {
             this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
         } else if (ev.key === 'Escape') {
             this.stopAnimation();
-            this.endEditKeyframePosition();
         } else if (ev.ctrlKey && ev.shiftKey && ev.key === 'Z') {
             this.redo();
         } else if (ev.ctrlKey && ev.key === 'z') {
