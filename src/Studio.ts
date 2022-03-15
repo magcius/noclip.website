@@ -424,7 +424,7 @@ class Timeline {
         this.markersCtx.save();
     }
 
-    public setTimelineMode(timelineMode: TimelineMode): void {
+    public setTimelineMode(timelineMode: TimelineMode, selectedTracks: KeyframeTrackType): void {
         if (timelineMode === TimelineMode.Consolidated)
             this.elementsCtx.canvas.height = Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT;
         else if (timelineMode === TimelineMode.Position_LookAt_Bank)
@@ -433,6 +433,7 @@ class Timeline {
             this.elementsCtx.canvas.height = Timeline.HEADER_HEIGHT + Timeline.TRACK_HEIGHT * 7;
 
         this.setScaleAndDrawMarkers();
+        this.updateTrackSelection(timelineMode, selectedTracks);
         this.draw();
     }
 
@@ -470,15 +471,11 @@ class Timeline {
         this.elementsCtx.save();
     }
 
-    public addKeyframeIcon(kfs: Map<KeyframeTrackType, Keyframe>, t: number, y: number, type: KeyframeIconType, selectAfterAdd: boolean) {
+    public addKeyframeIcon(kfs: Map<KeyframeTrackType, Keyframe>, t: number, y: number, type: KeyframeIconType) {
         const xPos = (t / MILLISECONDS_IN_SECOND) * (this.pixelsPerSecond / this.timelineScaleFactor);
         const kfIcon = new KeyframeIcon(kfs, xPos, y, t, type);
         this.keyframeIcons.push(kfIcon);
         this.keyframeIcons.sort((a, b) => a.getX() - b.getX());
-        if (selectAfterAdd) {
-            this.deselectAllKeyframeIcons();
-            this.selectKeyframeIcon(kfIcon);
-        }
     }
 
     public deleteSelectedKeyframeIcons() {
@@ -709,6 +706,14 @@ class Timeline {
             return;
         kfIcon.selected = true;
         this.selectedKeyframeIcons.push(kfIcon);
+        if (kfIcon.type === KeyframeIconType.Start || kfIcon.type === KeyframeIconType.Loop_End) {
+            for (const icon of this.keyframeIcons) {
+                if (icon.type === kfIcon.type && !this.selectedKeyframeIcons.includes(icon)) {
+                    icon.selected = true;
+                    this.selectedKeyframeIcons.push(icon);
+                }
+            }
+        }
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
 
@@ -737,6 +742,17 @@ class Timeline {
         if (index !== -1) {
             this.selectedKeyframeIcons.splice(index, 1);
             kfIcon.selected = false;
+            if (kfIcon.type === KeyframeIconType.Start || kfIcon.type === KeyframeIconType.Loop_End) {
+                for (const icon of this.keyframeIcons) {
+                    if (icon.type === kfIcon.type) {
+                        const linkedKfIndex = this.selectedKeyframeIcons.indexOf(icon);
+                        if (linkedKfIndex !== -1) {
+                            this.selectedKeyframeIcons.splice(linkedKfIndex, 1);
+                            icon.selected = false;
+                        }
+                    }
+                }
+            }
             this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
         }
     }
@@ -768,11 +784,17 @@ class Timeline {
     }
 
     private updateKeyframeIconPosition(icon: KeyframeIcon, x: number) {
+        let t = x / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
         const snapKfIndex = this.getClosestSnappingIconIndex(x, icon);
         if (snapKfIndex > -1) {
-            x = this.ensureIconDistance(x, this.keyframeIcons[snapKfIndex].getX(), Timeline.SNAP_DISTANCE_PX);
+            if (icon && this.keyframeIcons[snapKfIndex].getY() === icon.getY()) {
+                x = this.ensureIconDistance(x, this.keyframeIcons[snapKfIndex].getX(), Timeline.SNAP_DISTANCE_PX);
+                t = x / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
+            } else if (this.snappingEnabled) {
+                x = this.keyframeIcons[snapKfIndex].getX();
+                t = this.keyframeIcons[snapKfIndex].getT();
+            }
         }
-        const t = x / this.pixelsPerSecond * MILLISECONDS_IN_SECOND * this.timelineScaleFactor;
         icon.updatePosition(x, t);
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeIconMovedEvent', { bubbles: false }));
     }
@@ -784,14 +806,15 @@ class Timeline {
         let closestDist = Timeline.SNAP_DISTANCE_PX;
         let snapKfIndex = -1;
         for (let i = 0; i < this.keyframeIcons.length && closestDist > 0; i++) {
-            // If we're moving a keyframe icon, don't check distance against itself.
-            // Don't check against keyframe icons on other tracks.
-            if (icon && (this.keyframeIcons[i].selected || this.keyframeIcons[i].getY() !== icon.getY()))
+            // If we're moving a keyframe icon, don't check distance against itself or any other selected icons.
+            if (icon && this.keyframeIcons[i].selected)
                 continue;
             const dist = Math.abs(x - this.keyframeIcons[i].getX());
-            if (dist < closestDist) {
-                snapKfIndex = i;
-                closestDist = dist;
+            if (dist <= closestDist) {
+                if (!icon || snapKfIndex === -1 || (icon.getY() === this.keyframeIcons[i].getY())) {
+                    snapKfIndex = i;
+                    closestDist = dist;
+                }
             }
         }
         return snapKfIndex;
@@ -804,8 +827,8 @@ class Timeline {
             const snapKfIndex = this.getClosestSnappingIconIndex(x);
             if (snapKfIndex > -1 && x === this.keyframeIcons[snapKfIndex].getX()) {
                 this.deselectAllKeyframeIcons();
-                // If the playhead is directly on a keyframe, highlight it.
-                this.selectKeyframeIcon(this.keyframeIcons[snapKfIndex]);
+                // If the playhead is directly on a keyframe, highlight it and any others at the same t-val.
+                this.selectKeyframeIconsAtTime(this.playhead.getT());
             }
         }
         this.draw();
@@ -839,7 +862,7 @@ class Timeline {
         this.draw();
     }
 
-    public updateTrackSelection(selectedTracks: number, timelineMode: TimelineMode) {
+    public updateTrackSelection(timelineMode: TimelineMode, selectedTracks: number) {
         this.disabledTrackOverlayPaths = [];
         if (timelineMode === TimelineMode.Consolidated || selectedTracks === KeyframeTrackType.allTracks) {
             this.draw();
@@ -1087,6 +1110,7 @@ export class StudioPanel extends FloatingPanel {
 
     private positionLookAtBankLabels: HTMLElement;
     private fullLabels: HTMLElement;
+    private trackSelectBoxes: NodeListOf<HTMLElement>;
     private timelineMarkersCanvas: HTMLCanvasElement;
     private timelineElementsCanvas: HTMLCanvasElement;
     private timelineHeaderBg: HTMLElement;
@@ -1156,7 +1180,7 @@ export class StudioPanel extends FloatingPanel {
         super();
 
         this.mainPanel.parentElement!.style.minWidth = '100%';
-        this.mainPanel.parentElement!.style.height = '350px';
+        this.mainPanel.parentElement!.style.height = '300px';
         this.mainPanel.parentElement!.style.left = '0px';
         this.mainPanel.parentElement!.style.bottom = '0px';
         this.mainPanel.parentElement!.style.top = '';
@@ -1656,21 +1680,31 @@ export class StudioPanel extends FloatingPanel {
                 return;
             }
 
+            this.trackSelectBoxes.forEach((e) => e.classList.add('Selected'));
             if (newMode === TimelineMode.Consolidated) {
                 this.positionLookAtBankLabels.setAttribute('hidden','');
                 this.fullLabels.setAttribute('hidden','');
                 this.selectedTracks = KeyframeTrackType.allTracks;
-            } else if (newMode === TimelineMode.Position_LookAt_Bank) {
-                this.positionLookAtBankLabels.removeAttribute('hidden');
-                this.fullLabels.setAttribute('hidden','');
-            } else if (newMode === TimelineMode.Full) {
-                this.positionLookAtBankLabels.setAttribute('hidden','');
-                this.fullLabels.removeAttribute('hidden');
+            } else {
+                this.trackSelectBoxes.forEach((e) => {
+                    const tracks: number[] = e.dataset.tracks!.split(',').map(v => parseInt(v));
+                    if (tracks.every((v) => (this.selectedTracks & v) === 0))
+                        e.classList.remove('Selected');
+                    else
+                        tracks.forEach((t) => this.selectedTracks |= t);
+                });
+                if (newMode === TimelineMode.Position_LookAt_Bank) {
+                    this.positionLookAtBankLabels.removeAttribute('hidden');
+                    this.fullLabels.setAttribute('hidden','');
+                } else if (newMode === TimelineMode.Full) {
+                    this.positionLookAtBankLabels.setAttribute('hidden','');
+                    this.fullLabels.removeAttribute('hidden');
+                }
             }
 
             this.timelineMode = newMode;
             this.reAddAllKeyframeIcons();
-            this.timeline.setTimelineMode(this.timelineMode);
+            this.timeline.setTimelineMode(this.timelineMode, this.selectedTracks);
             this.timelineTracksBg.style.height = (this.timelineElementsCanvas.height - Timeline.HEADER_HEIGHT) + 'px';
             this.rescaleTimelineContainer();
         }
@@ -1705,18 +1739,17 @@ export class StudioPanel extends FloatingPanel {
 
         this.positionLookAtBankLabels = this.contents.querySelector('#positionLookAtBankLabels') as HTMLElement;
         this.fullLabels = this.contents.querySelector('#fullLabels') as HTMLElement;
-        (this.contents.querySelectorAll('.TrackSelectBox') as NodeListOf<HTMLElement>).forEach((e) => {
-            e.addEventListener('click', (ev) => {
-                if (ev.target instanceof HTMLElement) {
-                    ev.target.classList.toggle('Selected');
-                    const tracks: number[] = e.dataset.tracks!.split(',').map(v => parseInt(v));
-                    if (ev.target.classList.contains('Selected')) {
-                        tracks.forEach((t) => this.selectedTracks |= t);
-                    } else {
-                        tracks.forEach((t) => this.selectedTracks ^= t);
-                    }
-                    this.timeline.updateTrackSelection(this.selectedTracks, this.timelineMode);
+        this.trackSelectBoxes = this.contents.querySelectorAll('.TrackSelectBox') as NodeListOf<HTMLElement>;
+        this.trackSelectBoxes.forEach((e) => {
+            e.addEventListener('click', () => {
+                e.classList.toggle('Selected');
+                const tracks: number[] = e.dataset.tracks!.split(',').map(v => parseInt(v));
+                if (e.classList.contains('Selected')) {
+                    tracks.forEach((t) => this.selectedTracks |= t);
+                } else {
+                    tracks.forEach((t) => this.selectedTracks ^= t);
                 }
+                this.timeline.updateTrackSelection(this.timelineMode, this.selectedTracks);
             });
         });
 
@@ -2376,7 +2409,7 @@ export class StudioPanel extends FloatingPanel {
             for (let i = 0; i < tracks.length; i++) {
                 kfMap.set(tracks[i], kfs[i]);
             }
-            this.timeline.addKeyframeIcon(kfMap, time, y, kfType, false);
+            this.timeline.addKeyframeIcon(kfMap, time, y, kfType);
         };
 
         if (this.timelineMode === TimelineMode.Consolidated) {
@@ -2873,7 +2906,7 @@ export class StudioPanel extends FloatingPanel {
             for (let i = 0; i < tracks.length; i++) {
                 kfMap.set(tracks[i], kfs[i]);
             }
-            this.timeline.addKeyframeIcon(kfMap, time, y, kfType, !advancePlayhead);
+            this.timeline.addKeyframeIcon(kfMap, time, y, kfType);
         }
 
         if (this.timelineMode === TimelineMode.Consolidated) {
@@ -2925,6 +2958,8 @@ export class StudioPanel extends FloatingPanel {
 
         if (advancePlayhead)
             this.movePlayhead(3);
+        else
+            this.timeline.selectKeyframeIconsAtTime(this.timeline.getPlayheadTimeMs());
 
         this.timeline.draw();
         this.saveState();
@@ -2946,7 +2981,7 @@ export class StudioPanel extends FloatingPanel {
                 kfMap.set(tracks[i], loopKeyframe);
                 track.addKeyframe(loopKeyframe);
             }
-            this.timeline.addKeyframeIcon(kfMap, time, y, KeyframeIconType.Loop_End, false);
+            this.timeline.addKeyframeIcon(kfMap, time, y, KeyframeIconType.Loop_End);
         };
 
         if (this.timelineMode === TimelineMode.Consolidated) {
