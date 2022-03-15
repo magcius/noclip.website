@@ -81,6 +81,7 @@ import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeO
 import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes';
 import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
 import * as Scenes_Subnautica from './Subnautica/scenes';
+import * as Scenes_Glover from './Glover/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -145,6 +146,7 @@ const sceneGroups = [
     Scenes_BanjoTooie.sceneGroup,
     Scenes_BeetleAdventureRacing.sceneGroup,
     Scenes_DiddyKongRacing.sceneGroup,
+    Scenes_Glover.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,

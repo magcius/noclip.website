@@ -1,0 +1,6 @@
+export const SRC_FRAMERATE = 20;
+export const DST_FRAMERATE = 60;
+export const SRC_FRAME_TO_MS = (1/SRC_FRAMERATE)*1000;
+export const DST_FRAME_TO_MS = (1/DST_FRAMERATE)*1000;
+export const CONVERT_FRAMERATE = (SRC_FRAMERATE / DST_FRAMERATE);
+
