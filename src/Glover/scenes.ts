@@ -1654,11 +1654,11 @@ class SceneDesc implements Viewer.SceneDesc {
         const bankDescriptor = sceneBanks.get(this.id);
         assert(bankDescriptor !== undefined);
 
-        const raw_landscape = await dataFetcher.fetchData(`${pathBase}/${bankDescriptor.landscape}?cache_bust=2`)!; 
+        const raw_landscape = await dataFetcher.fetchData(`${pathBase}/${bankDescriptor.landscape}`)!; 
         const raw_object_banks = await Promise.all<ArrayBufferSlice>(bankDescriptor.object_banks.map(
-            (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}?cache_bust=2`)!))
+            (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}`)!))
         const raw_texture_banks = await Promise.all<ArrayBufferSlice>(bankDescriptor.texture_banks.map(
-            (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}?cache_bust=2`)!))
+            (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}`)!))
 
 
         const landscape = new GloverLevel(new KaitaiStream(raw_landscape.arrayBuffer));
