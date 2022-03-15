@@ -951,6 +951,37 @@ class Timeline {
         }
         return false;
     }
+
+    public getSelectedIconForTrack(trackType: KeyframeTrackType): KeyframeIcon {
+        for (const kfIcon of this.selectedKeyframeIcons) {
+            if (kfIcon.keyframesMap.has(trackType))
+                return kfIcon;
+        }
+        throw 'Attempted to get icon of non-selected track';
+    }
+    
+    public getLoopEndKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
+        for (const kfIcon of this.keyframeIcons) {
+            if (kfIcon.type === KeyframeIconType.Start) {
+                const kf = kfIcon.keyframesMap.get(trackType);
+                if (kf !== undefined)
+                    return kf;
+            }
+        }
+        // Should never happen... obviously.
+        throw 'No start keyframe icon exists for track.';
+    }
+
+    public getStartKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
+        for (const kfIcon of this.keyframeIcons) {
+            if (kfIcon.type === KeyframeIconType.Loop_End) {
+                const kf = kfIcon.keyframesMap.get(trackType);
+                if (kf !== undefined)
+                    return kf;
+            }
+        }
+        throw 'No end loop keyframe icon exists for track.';
+    }
 }
 
 export class CameraAnimationManager {
@@ -1580,8 +1611,8 @@ export class StudioPanel extends FloatingPanel {
                             <div id="bankValueInputContainer">
                                 <span>Bank rotation:</span> <input id="bankValueInput" class="StudioNumericInput" type="number" step="0.01" value="0">
                             </div>
-                            <div id="lockPerspectiveBracket" hidden></div>
-                            <div id="lockPerspective" hidden>
+                            <div id="lockPerspectiveBracket"></div>
+                            <div id="lockPerspective">
                                 <button id="lockPerspectiveBtn" class="SettingsButton IconButton">🔒</button>
                                 <span style="position: absolute; white-space: nowrap; top: 9px; margin-left: 0.2rem;">Lock Perspective</span>
                             </div>
@@ -2515,30 +2546,33 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private onChangeValueInput(input: HTMLInputElement): void {
-        if (this.timeline.selectedKeyframeIcons.length === 1 && input.value) {
+        if (this.timeline.selectedKeyframeIcons.length > 0 && input.value) {
             const val = parseFloat(input.value);
             if (!Number.isNaN(val)) {
                 const trackType = parseInt(input.dataset.track!, 10);
-                const kf = this.timeline.selectedKeyframeIcons[0].keyframesMap.get(trackType)!;
+                const kfIcon = this.timeline.getSelectedIconForTrack(trackType);
+                const kf = kfIcon.keyframesMap.get(trackType)!;
                 let linkedKf = undefined;
                 if (this.animation.loop) {
-                    if (this.timeline.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End)
-                        linkedKf = this.timeline.keyframeIcons[0].keyframesMap.get(trackType);
-                    else if (this.timeline.selectedKeyframeIcons[0].type === KeyframeIconType.Start)
-                        linkedKf = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1].keyframesMap.get(trackType);
-                    // TODO - multi-track
+                    if (kfIcon.type === KeyframeIconType.Loop_End)
+                        linkedKf = this.timeline.getStartKeyframeForTrack(trackType);
+                    else if (kfIcon.type === KeyframeIconType.Start)
+                        linkedKf = this.timeline.getLoopEndKeyframeForTrack(trackType);
                 }
                 if (this.lockPerspective) {
                     const diff = val - parseInt(input.dataset.prevValue!);
-                    if (trackType === KeyframeTrackType.posXTrack) {
+                    if (trackType === KeyframeTrackType.posXTrack
+                        && this.lookAtXValueInputContainer.style.visibility !== 'hidden') {
                         const corVal = parseInt(this.lookAtXValueInput.value) + diff;
                         this.lookAtXValueInput.value = corVal.toString();
                         this.lookAtXValueInput.dispatchEvent(new Event('change', {bubbles: true}));
-                    } else if (trackType === KeyframeTrackType.posYTrack) {
+                    } else if (trackType === KeyframeTrackType.posYTrack
+                        && this.lookAtYValueInputContainer.style.visibility !== 'hidden') {
                         const corVal = parseInt(this.lookAtYValueInput.value) + diff;
                         this.lookAtYValueInput.value = corVal.toString();
                         this.lookAtYValueInput.dispatchEvent(new Event('change', {bubbles: true}));
-                    } else if (trackType === KeyframeTrackType.posZTrack) {
+                    } else if (trackType === KeyframeTrackType.posZTrack
+                          && this.lookAtZValueInputContainer.style.visibility !== 'hidden') {
                         const corVal = parseInt(this.lookAtZValueInput.value) + diff;
                         this.lookAtZValueInput.value = corVal.toString();
                         this.lookAtZValueInput.dispatchEvent(new Event('change', {bubbles: true}));
@@ -2548,6 +2582,8 @@ export class StudioPanel extends FloatingPanel {
                 if (linkedKf)
                     this.getTrackByType(this.animation, trackType).setValue(linkedKf, val);
                 this.updatePreviewSteps();
+                if (this.livePreviewCheckbox.checked)
+                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
                 input.dataset.prevValue = input.value.toString();
             }
         }
@@ -2621,44 +2657,44 @@ export class StudioPanel extends FloatingPanel {
         
         this.selectKeyframeMsg.setAttribute('hidden', '');
         this.keyframeControlsContents.removeAttribute('hidden');
-        this.posXValueInputContainer.setAttribute('hidden','');
-        this.posYValueInputContainer.setAttribute('hidden','');
-        this.posZValueInputContainer.setAttribute('hidden','');
-        this.lookAtXValueInputContainer.setAttribute('hidden','');
-        this.lookAtYValueInputContainer.setAttribute('hidden','');
-        this.lookAtZValueInputContainer.setAttribute('hidden','');
-        this.bankValueInputContainer.setAttribute('hidden','');
-        this.lockPerspectiveBracket.setAttribute('hidden', '');
-        this.lockPerspectiveDiv.setAttribute('hidden', '');
+        this.posXValueInputContainer.style.visibility = 'hidden';
+        this.posYValueInputContainer.style.visibility = 'hidden';
+        this.posZValueInputContainer.style.visibility = 'hidden';
+        this.lookAtXValueInputContainer.style.visibility = 'hidden';
+        this.lookAtYValueInputContainer.style.visibility = 'hidden';
+        this.lookAtZValueInputContainer.style.visibility = 'hidden';
+        this.bankValueInputContainer.style.visibility = 'hidden';
+        this.lockPerspectiveBracket.style.visibility = 'hidden';
+        this.lockPerspectiveDiv.style.visibility = 'hidden';
 
         if (keyframeTracks !== 0) {
             if (keyframeTracks & KeyframeTrackType.posXTrack)
-                this.posXValueInputContainer.removeAttribute('hidden');
+                this.posXValueInputContainer.style.visibility = '';
                 
             if (keyframeTracks & KeyframeTrackType.posYTrack)
-                this.posYValueInputContainer.removeAttribute('hidden');
+                this.posYValueInputContainer.style.visibility = '';
                 
             if (keyframeTracks & KeyframeTrackType.posZTrack)
-                this.posZValueInputContainer.removeAttribute('hidden');
+                this.posZValueInputContainer.style.visibility = '';
                 
             if (keyframeTracks & KeyframeTrackType.lookAtXTrack)
-                this.lookAtXValueInputContainer.removeAttribute('hidden');
+                this.lookAtXValueInputContainer.style.visibility = '';
                 
             if (keyframeTracks & KeyframeTrackType.lookAtYTrack)
-                this.lookAtYValueInputContainer.removeAttribute('hidden');
+                this.lookAtYValueInputContainer.style.visibility = '';
                 
             if (keyframeTracks & KeyframeTrackType.lookAtZTrack)
-                this.lookAtZValueInputContainer.removeAttribute('hidden');
+                this.lookAtZValueInputContainer.style.visibility = '';
                 
             if (keyframeTracks & KeyframeTrackType.bankTrack)
-                this.bankValueInputContainer.removeAttribute('hidden');
+                this.bankValueInputContainer.style.visibility = '';
         }
             
         if (((keyframeTracks & KeyframeTrackType.posXTrack) && (keyframeTracks & KeyframeTrackType.lookAtXTrack))
             || ((keyframeTracks & KeyframeTrackType.posYTrack) && (keyframeTracks & KeyframeTrackType.lookAtYTrack))
             || ((keyframeTracks & KeyframeTrackType.posZTrack) && (keyframeTracks & KeyframeTrackType.lookAtZTrack))) {
-            this.lockPerspectiveBracket.removeAttribute('hidden');
-            this.lockPerspectiveDiv.removeAttribute('hidden');
+            this.lockPerspectiveBracket.style.visibility = '';
+            this.lockPerspectiveDiv.style.visibility = '';
         } 
 
         if (commonEaseInVal !== -1)
@@ -2693,8 +2729,8 @@ export class StudioPanel extends FloatingPanel {
         this.lookAtZValueInput.value = '';
         this.bankValueInput.value = '';
         this.keyframeControlsContents.setAttribute('hidden', '');
-        this.lockPerspectiveBracket.setAttribute('hidden', '');
-        this.lockPerspectiveDiv.setAttribute('hidden', '');
+        this.lockPerspectiveBracket.style.visibility = 'hidden';
+        this.lockPerspectiveDiv.style.visibility = 'hidden';
         this.selectKeyframeMsg.removeAttribute('hidden');
     }
 
