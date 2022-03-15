@@ -45,7 +45,7 @@ import { BulletPool } from './bullets';
 
 import { KaitaiStream } from './parsers/kaitai-struct';
 
-const pathBase = `glover`;
+const pathBase = `Glover`;
 
 const powerup_objects = [
     0x03F49393, // rblades.ndo
@@ -1251,7 +1251,7 @@ class GloverRenderer implements Viewer.SceneGfx {
         renderHacksPanel.contents.appendChild(hideWeatherCheckbox.elem);
 
         // TODO: remove:
-        // const enableDebugInfoCheckbox = new UI.Checkbox('Show debug information', false);
+        // const enableDebugInfoCheckbox = new UI.Checkbox('Show object names', false);
         // enableDebugInfoCheckbox.onchanged = () => {
         //     for (let actor of this.actors) {
         //         actor.setDebugInfoVisible(enableDebugInfoCheckbox.checked);
