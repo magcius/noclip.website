@@ -532,8 +532,6 @@ impl Deserialize for Mesh {
         reader.align()?;
         let hash_metrics = [reader.read_f32()?, reader.read_f32()?];
         let streaming_info = StreamingInfo::deserialize(reader, asset)?;
-        //web_sys::console::log_1(&format!("{:?}", &vertex_data.channels).into());
-        //web_sys::console::log_1(&format!("{:?}", &vertex_data.streams).into());
 
         Ok(Mesh {
             name,

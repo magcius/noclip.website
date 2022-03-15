@@ -8,6 +8,8 @@ pub mod reader;
 pub mod mesh;
 pub mod version;
 pub mod bitstream;
+pub mod class_id;
+pub mod game_object;
 
 #[wasm_bindgen]
 pub struct MeshMetadataArray {
