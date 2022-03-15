@@ -389,7 +389,7 @@ export class BulletPool implements GenericRenderable {
             }
         }
         if (newBullet === null) {
-            if (bulletSubclasses.has(this.bulletType) {
+            if (bulletSubclasses.has(this.bulletType)) {
                 newBullet = new (bulletSubclasses.get(this.bulletType)!)(this.device, this.cache, this.textureHolder, this.objects, this.sceneLights, this, this.waterVolumes);
             } else {
                 newBullet = new Bullet(this.device, this.cache, this.textureHolder, this.objects, this.sceneLights, this, this.waterVolumes);

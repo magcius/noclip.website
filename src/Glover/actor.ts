@@ -488,7 +488,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             vec3.cross(closestFace[0], v1, v2);
             vec3.normalize(closestFace[0], closestFace[0]);
             return {
-                position: closestIntersection
+                position: closestIntersection,
                 normal: closestFace[0]
             };
         }
@@ -671,7 +671,7 @@ class GloverMeshRenderer {
         if (this.rspOutput !== null) {
             for (let drawCall of this.rspOutput.drawCalls) {
                 drawCall.renderData = new Render.DrawCallRenderData(device, cache, this.rspOutput.textureCache, this.segments, drawCall);
-                this.drawCallInstances.push(new Render.DrawCallInstance(drawCall, this.rspOutput.textureCache, this.sceneLights);)
+                this.drawCallInstances.push(new Render.DrawCallInstance(drawCall, this.rspOutput.textureCache, this.sceneLights));
             }
         }
 

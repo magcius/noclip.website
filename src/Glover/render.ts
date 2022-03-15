@@ -660,7 +660,7 @@ export class DrawCallInstance {
         if (!isSkybox) {
             computeViewMatrix(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
         } else {
-            mat4.identity(DrawCallInstance.viewMatrixScratch), viewerInput.camera);
+            mat4.identity(DrawCallInstance.viewMatrixScratch);
         }
 
         mat4.mul(DrawCallInstance.modelViewScratch, DrawCallInstance.viewMatrixScratch, drawMatrix);

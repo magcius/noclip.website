@@ -652,7 +652,7 @@ export class GloverWeatherRenderer {
     {
         this.spriteRenderer = new GloverUISpriteRenderer(
             this.device, this.cache, this.textures,
-            (params.type === WeatherType.Rain) ? 0xCB588DD9 : 0x1AF9F784; // raindrop.bmp / ai_snow.bmp
+            (params.type === WeatherType.Rain) ? 0xCB588DD9 : 0x1AF9F784 // raindrop.bmp / ai_snow.bmp
         );
         this.lightningRenderer = new GloverUISpriteRenderer(
             this.device, this.cache, this.textures,
