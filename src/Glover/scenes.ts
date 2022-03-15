@@ -936,7 +936,7 @@ export class CollectibleSparkle implements GenericRenderable {
     private lastFrameAdvance: number = 0;
     private frameCount: number = 0;
 
-    static private velocity = [0,0,0];
+    private static velocity = [0,0,0];
 
     public visible: boolean = true;
 
@@ -1656,9 +1656,9 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const raw_landscape = await dataFetcher.fetchData(`${pathBase}/${bankDescriptor.landscape}`)!; 
         const raw_object_banks = await Promise.all<ArrayBufferSlice>(bankDescriptor.object_banks.map(
-            (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}`)!))
+            (filename:string) => {return dataFetcher.fetchData(`${pathBase}/${filename}`)!}))
         const raw_texture_banks = await Promise.all<ArrayBufferSlice>(bankDescriptor.texture_banks.map(
-            (filename:string) => return dataFetcher.fetchData(`${pathBase}/${filename}`)!))
+            (filename:string) => {return dataFetcher.fetchData(`${pathBase}/${filename}`)!}))
 
 
         const landscape = new GloverLevel(new KaitaiStream(raw_landscape.arrayBuffer));
@@ -1772,7 +1772,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         device, cache, textureHolder,
                         [cmd.params.left, cmd.params.top, cmd.params.front],
                         [cmd.params.width, cmd.params.bottom, cmd.params.depth],
-                        cmd.params.surfaceY;
+                        cmd.params.surfaceY
                     )
                     sceneRenderer.waterVolumes.push(volume);
                     sceneRenderer.miscRenderers.push(volume);
@@ -2174,7 +2174,7 @@ class SceneDesc implements Viewer.SceneDesc {
         for (let connection of buzzerConnections) {
             if (connection[1] !== 0) {
                 assert(sceneRenderer.platformByTag.has(connection[1]));
-                connection[0].reposition(sceneRenderer.platformByTag.get(connection[1])!, null));
+                connection[0].reposition(sceneRenderer.platformByTag.get(connection[1])!, null);
             }
             if (connection[2] !== 0) {
                 assert(sceneRenderer.platformByTag.has(connection[2]));
@@ -2298,42 +2298,42 @@ const sceneDescs = [
     new SceneDesc(`09`, "Assault Course"),
     new SceneDesc(`2a`, "Wayroom"),
 
-    "Atlantis"
+    "Atlantis",
     new SceneDesc(`0a`, "Atlantis Level 1"),
     new SceneDesc(`0b`, "Atlantis Level 2"),
     new SceneDesc(`0c`, "Atlantis Level 3"),
     new SceneDesc(`0d`, "Atlantis Boss"),
     new SceneDesc(`0e`, "Atlantis Bonus"),
 
-    "Carnival"
+    "Carnival",
     new SceneDesc(`0f`, "Carnival Level 1"),
     new SceneDesc(`10`, "Carnival Level 2"),
     new SceneDesc(`11`, "Carnival Level 3"),
     new SceneDesc(`12`, "Carnival Boss"),
     new SceneDesc(`13`, "Carnival Bonus"),
 
-    "Pirate's Cove"
+    "Pirate's Cove",
     new SceneDesc(`14`, "Pirate's Cove Level 1"),
     new SceneDesc(`15`, "Pirate's Cove Level 2"),
     new SceneDesc(`16`, "Pirate's Cove Level 3"),
     new SceneDesc(`17`, "Pirate's Cove Boss"),
     new SceneDesc(`18`, "Pirate's Cove Bonus"),
 
-    "Prehistoric"
+    "Prehistoric",
     new SceneDesc(`19`, "Prehistoric Level 1"),
     new SceneDesc(`1a`, "Prehistoric Level 2"),
     new SceneDesc(`1b`, "Prehistoric Level 3"),
     new SceneDesc(`1c`, "Prehistoric Boss"),
     new SceneDesc(`1d`, "Prehistoric Bonus"),
 
-    "Fortress of Fear"
+    "Fortress of Fear",
     new SceneDesc(`1e`, "Fortress of Fear Level 1"),
     new SceneDesc(`1f`, "Fortress of Fear Level 2"),
     new SceneDesc(`20`, "Fortress of Fear Level 3"),
     new SceneDesc(`21`, "Fortress of Fear Boss"),
     new SceneDesc(`22`, "Fortress of Fear Bonus"),
 
-    "Out Of This World"
+    "Out Of This World",
     new SceneDesc(`23`, "Out Of This World Level 1"),
     new SceneDesc(`24`, "Out Of This World Level 2"),
     new SceneDesc(`25`, "Out Of This World Level 3"),
