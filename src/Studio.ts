@@ -999,20 +999,41 @@ export class CameraAnimationManager {
         const idx0 = idx1 - 1;
         const k0 = track.keyframes[idx0], k1 = track.keyframes[idx1];
 
-        const t = invlerp(k0.time, k1.time, time);
+        let t = invlerp(k0.time, k1.time, time);
         
-        let interpType;
-        if (t < 0.5)
-            interpType = k0.interpOutType;
-        else
-            interpType = k1.interpInType;
+        let p0 = k0.value;
+        let p1 = k1.value;
+        let tOut = k0.tangentOut;
+        let tIn = k1.tangentIn;
+        let interpType = k0.interpOutType;
+    
+        // TODO - Improve this. Discontinuities have been removed but still very janky.
+        if (k0.interpOutType !== k1.interpInType) {
+            if (t > 0.5) {
+                t -= 0.5;
+                t /= 0.5;
+                interpType = k1.interpInType;
+
+                if (k0.interpOutType === InterpolationType.Ease) {
+                    p0 = getPointHermite(p0, p1, tOut, 0, 0.5);
+                } else {
+                    p0 = lerp(p0, p1, 0.5);
+                }
+            } else if (k0.interpOutType === InterpolationType.Ease) {
+                tIn = 0;
+            }
+            if (k0.interpOutType === InterpolationType.Linear) {
+                tOut = 0;
+                tIn = 0;
+            }
+        }
         
         if (interpType === InterpolationType.Ease)
-            return getPointHermite(k0.value, k1.value, k0.tangentOut, k1.tangentIn, t);
+            return getPointHermite(p0, p1, tOut, tIn, t);
         else if (interpType === InterpolationType.Linear)
-            return lerp(k0.value, k1.value, t);
+            return lerp(p0, p1, t);
         else if (interpType === InterpolationType.Hold)
-            return k0.value;
+            return p0;
         else
             throw "whoops";
     }
