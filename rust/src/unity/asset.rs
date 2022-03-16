@@ -1,6 +1,9 @@
 use wasm_bindgen::prelude::wasm_bindgen;
+use std::collections::HashMap;
 use crate::unity::version::UnityVersion;
 use crate::unity::reader::AssetReader;
+use crate::unity::game_object::GameObject;
+use crate::unity::class_id::UnityClassID;
 
 #[wasm_bindgen]
 #[derive(Debug)]
@@ -26,6 +29,67 @@ impl AssetInfo {
     pub fn deserialize(data: Vec<u8>) -> Result<AssetInfo, String> {
         AssetReader::new(data).read_asset_info()
             .map_err(|err| format!("{:?}", err))
+    }
+
+    pub fn get_mesh_metadata(&self, data: Vec<u8>) -> MeshMetadataArray {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(self.header.endianness);
+        let mut mesh_data: Vec<MeshMetadata> = self.objects.iter()
+            .filter(|obj| obj.class_id == 43)
+            .map(|obj| MeshMetadata {
+                offset: obj.byte_start as usize,
+                size: obj.byte_size as usize,
+                name: String::new(),
+            })
+            .collect();
+        for mesh in mesh_data.iter_mut() {
+            reader.seek(std::io::SeekFrom::Start(mesh.offset as u64)).unwrap();
+            mesh.name = reader.read_char_array().unwrap();
+        }
+        MeshMetadataArray {
+            length: mesh_data.len(),
+            data: mesh_data,
+        }
+    }
+
+    fn get_game_object_tree(&self, data: Vec<u8>) -> GameObjectTree {
+        let objects: HashMap<i64, &UnityObject> = self.objects.iter()
+            .map(|obj| (obj.path_id, obj))
+            .collect();
+        todo!();
+    }
+}
+
+struct GameObjectTree {
+    obj: GameObject,
+    children: Vec<GameObject>,
+}
+
+#[wasm_bindgen]
+pub struct MeshMetadataArray {
+    pub length: usize,
+    data: Vec<MeshMetadata>,
+}
+
+#[wasm_bindgen]
+impl MeshMetadataArray {
+    pub fn get(&self, i: usize) -> MeshMetadata {
+        self.data[i].clone()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct MeshMetadata {
+    pub offset: usize,
+    pub size: usize,
+    name: String,
+}
+
+#[wasm_bindgen]
+impl MeshMetadata {
+    pub fn get_name(&self) -> String {
+        self.name.clone()
     }
 }
 
