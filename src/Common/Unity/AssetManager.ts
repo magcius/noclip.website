@@ -105,10 +105,9 @@ export class UnityAssetManager {
     }
 
     public async downloadMeshMetadata() {
-        let wasm = await loadWasm();
         let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
         let assetBytes = new Uint8Array(assetData.arrayBuffer);
-        let meshDataArray = wasm.get_mesh_metadata(this.assetInfo, assetBytes);
+        let meshDataArray = this.assetInfo.get_mesh_metadata(assetBytes);
         let result: MeshMetadata[] = [];
         for (let i=0; i<meshDataArray.length; i++) {
             let data = meshDataArray.get(i);
