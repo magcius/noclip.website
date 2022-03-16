@@ -1,10 +1,10 @@
 import * as Viewer from './viewer';
-import { UI, Checkbox, setElementHighlighted, createDOMFromString, Slider, RadioButtons } from './ui';
+import { UI, Checkbox, setElementHighlighted, createDOMFromString, Slider, RadioButtons, HIGHLIGHT_COLOR } from './ui';
 import { FloatingPanel } from './DebugFloaters';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
 import { Blue, Color, Green, Red, Magenta, Cyan } from './Color';
-import { Camera, StudioCameraController } from './Camera';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero } from './MathHelpers';
+import { StudioCameraController } from './Camera';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
 import { getPointHermite } from './Spline';
@@ -1121,6 +1121,8 @@ interface studioSettings {
 }
 
 export class StudioPanel extends FloatingPanel {
+    static readonly PREVIEW_STEP_TIME_MS: number = 16;
+
     private animationManager: CameraAnimationManager;
     public studioCameraController: StudioCameraController;
 
@@ -1200,6 +1202,8 @@ export class StudioPanel extends FloatingPanel {
     private lookAtXValueInput: HTMLInputElement;
     private lookAtYValueInput: HTMLInputElement;
     private lookAtZValueInput: HTMLInputElement;
+    private bankRotationValCanvas: HTMLCanvasElement;
+    private bankRotationValCanvasCtx: CanvasRenderingContext2D;
     private bankValueInput: HTMLInputElement;
     private lockPerspectiveBracket: HTMLElement;
     private lockPerspectiveDiv: HTMLElement;
@@ -1223,6 +1227,7 @@ export class StudioPanel extends FloatingPanel {
     private previewLineKfDotSelectedColor: Color = Red;
 
     private selectedNumericInput: HTMLInputElement | undefined;
+    private bankRotationLinGrad: CanvasGradient;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
@@ -1442,6 +1447,7 @@ export class StudioPanel extends FloatingPanel {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 text-align: center;
+                margin-top: 0.5rem;
             }
             #customValuesContainer .StudioNumericInput {
                 width: 5rem;
@@ -1595,17 +1601,19 @@ export class StudioPanel extends FloatingPanel {
                     <div id="valuesTab" class="KeyframeControlsTab">
                         <div id="customValuesContainer">
                             <div>
-                                <div id="posXValueInputContainer"><span>X Position:</span> <input id="posXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div id="posYValueInputContainer"><span>Y Position:</span> <input id="posYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div id="posZValueInputContainer"><span>Z Position:</span> <input id="posZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="posXValueInputContainer"><span>X Position:</span> <input id="posXValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.posXTrack}" type="number" step="1.0" value="0"></div>
+                                <div id="posYValueInputContainer"><span>Y Position:</span> <input id="posYValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.posYTrack}" type="number" step="1.0" value="0"></div>
+                                <div id="posZValueInputContainer"><span>Z Position:</span> <input id="posZValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.posZTrack}" type="number" step="1.0" value="0"></div>
                             </div>
                             <div>
-                                <div id="lookAtXValueInputContainer"><span>LookAt X:</span> <input id="lookAtXValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div id="lookAtYValueInputContainer"><span>LookAt Y:</span> <input id="lookAtYValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
-                                <div id="lookAtZValueInputContainer"><span>LookAt Z:</span> <input id="lookAtZValueInput" class="StudioNumericInput" type="number" step="1.0" value="0"></div>
+                                <div id="lookAtXValueInputContainer"><span>LookAt X:</span> <input id="lookAtXValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.lookAtXTrack}" type="number" step="1.0" value="0"></div>
+                                <div id="lookAtYValueInputContainer"><span>LookAt Y:</span> <input id="lookAtYValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.lookAtYTrack}" type="number" step="1.0" value="0"></div>
+                                <div id="lookAtZValueInputContainer"><span>LookAt Z:</span> <input id="lookAtZValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.lookAtZTrack}" type="number" step="1.0" value="0"></div>
                             </div>
                             <div id="bankValueInputContainer">
-                                <span>Bank rotation:</span> <input id="bankValueInput" class="StudioNumericInput" type="number" step="0.01" value="0">
+                                <span>Bank rotation:</span>
+                                <canvas id="bankRotationValCanvas" width="80" height="80"></canvas>
+                                <input id="bankValueInput" class="StudioNumericInput" data-track="${KeyframeTrackType.bankTrack}" type="number" step="1" value="0">
                             </div>
                             <div id="lockPerspectiveBracket"></div>
                             <div id="lockPerspective">
@@ -1907,19 +1915,18 @@ export class StudioPanel extends FloatingPanel {
         this.lookAtZValueInputContainer = this.contents.querySelector('#lookAtZValueInputContainer') as HTMLElement;
         this.bankValueInputContainer = this.contents.querySelector('#bankValueInputContainer') as HTMLElement;
         this.posXValueInput = this.contents.querySelector('#posXValueInput') as HTMLInputElement;
-        this.posXValueInput.dataset.track = KeyframeTrackType.posXTrack.toString();
         this.posYValueInput = this.contents.querySelector('#posYValueInput') as HTMLInputElement;
-        this.posYValueInput.dataset.track = KeyframeTrackType.posYTrack.toString();
         this.posZValueInput = this.contents.querySelector('#posZValueInput') as HTMLInputElement;
-        this.posZValueInput.dataset.track = KeyframeTrackType.posZTrack.toString();
         this.lookAtXValueInput = this.contents.querySelector('#lookAtXValueInput') as HTMLInputElement;
-        this.lookAtXValueInput.dataset.track = KeyframeTrackType.lookAtXTrack.toString();
         this.lookAtYValueInput = this.contents.querySelector('#lookAtYValueInput') as HTMLInputElement;
-        this.lookAtYValueInput.dataset.track = KeyframeTrackType.lookAtYTrack.toString();
         this.lookAtZValueInput = this.contents.querySelector('#lookAtZValueInput') as HTMLInputElement;
-        this.lookAtZValueInput.dataset.track = KeyframeTrackType.lookAtZTrack.toString();
         this.bankValueInput = this.contents.querySelector('#bankValueInput') as HTMLInputElement;
-        this.bankValueInput.dataset.track = KeyframeTrackType.bankTrack.toString();
+        this.bankRotationValCanvas = this.contents.querySelector('#bankRotationValCanvas') as HTMLCanvasElement;
+        this.bankRotationValCanvasCtx = this.bankRotationValCanvas.getContext('2d') as CanvasRenderingContext2D;
+        this.bankRotationLinGrad = this.bankRotationValCanvasCtx.createLinearGradient(20,20,20,60);
+        this.bankRotationLinGrad.addColorStop(0, '#494949');
+        this.bankRotationLinGrad.addColorStop(1, '#2f2f2f');
+        this.bankRotationValCanvasCtx.save();
 
         this.lockPerspectiveDiv = this.contents.querySelector('#lockPerspective') as HTMLElement;
         this.lockPerspectiveBracket = this.contents.querySelector('#lockPerspectiveBracket') as HTMLElement;
@@ -1953,7 +1960,6 @@ export class StudioPanel extends FloatingPanel {
                             linkedKfIcon = this.timeline.keyframeIcons[0];
                         else if (kfIcon.type === KeyframeIconType.Start)
                             linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                        // TODO - multi-track
                     }
                     if (linkedKfIcon) {
                         linkedKfIcon.keyframesMap.forEach((kf) => {
@@ -1991,7 +1997,6 @@ export class StudioPanel extends FloatingPanel {
                             linkedKfIcon = this.timeline.keyframeIcons[0];
                         else if (kfIcon.type === KeyframeIconType.Start)
                             linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                        // TODO - multi-track
                     }
                     if (linkedKfIcon) {
                         linkedKfIcon.keyframesMap.forEach((kf) => {
@@ -2026,7 +2031,6 @@ export class StudioPanel extends FloatingPanel {
                             linkedKfIcon = this.timeline.keyframeIcons[0];
                         else if (kfIcon.type === KeyframeIconType.Start)
                             linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                        // TODO - multi-track
                     }
                     if (linkedKfIcon) {
                         linkedKfIcon.keyframesMap.forEach((kf) => {
@@ -2063,7 +2067,6 @@ export class StudioPanel extends FloatingPanel {
                             linkedKfIcon = this.timeline.keyframeIcons[0];
                         else if (kfIcon.type === KeyframeIconType.Start)
                             linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                        // TODO - multi-track
                     }
                     if (linkedKfIcon) {
                         linkedKfIcon.keyframesMap.forEach((kf) => {
@@ -2142,12 +2145,12 @@ export class StudioPanel extends FloatingPanel {
             if (e.buttons === 1 && this.timeline && this.playheadTimePositionInput
                 && !this.studioCameraController.isAnimationPlaying) {
                 if (this.selectedNumericInput) {
-                    let distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
+                    let distance = (e.movementX - e.movementY) * parseInt(this.selectedNumericInput.step);
                     if (e.ctrlKey)
                         distance *= .1;
                     else if (e.shiftKey)
                         distance *= 10;
-                    this.selectedNumericInput.value = (parseFloat(this.selectedNumericInput.value) + distance).toFixed(2);
+                    this.selectedNumericInput.value = (parseInt(this.selectedNumericInput.value) + distance).toString();
                     this.selectedNumericInput.dispatchEvent(new Event('change', { 'bubbles': true }));
                 } else {
                     this.timeline.onMouseMove(e);
@@ -2267,7 +2270,11 @@ export class StudioPanel extends FloatingPanel {
                     drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.scratchVec3b, this.previewLineLookAtColor);
     
                     mat4.targetTo(this.scratchMat, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i].lookAtPos, Vec3UnitY);
-                    mat4.rotateZ(this.scratchMat, this.scratchMat, -this.animationPreviewSteps[i].bank);
+                    if (this.animationPreviewSteps[i].lookAtPos[0] < 0) {
+                        mat4.rotateZ(this.scratchMat, this.scratchMat, -this.animationPreviewSteps[i].bank);
+                    } else {
+                        mat4.rotateZ(this.scratchMat, this.scratchMat, this.animationPreviewSteps[i].bank);
+                    }
                     computeEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
                     vec3.copy(this.scratchVec3c, Vec3UnitY);
                     vec3.rotateZ(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[2]);
@@ -2282,7 +2289,7 @@ export class StudioPanel extends FloatingPanel {
             }
 
             for (const kfIcon of this.timeline.keyframeIcons) {
-                const stepIndex = Math.floor(kfIcon.getT() / 16);
+                const stepIndex = Math.floor(kfIcon.getT() / StudioPanel.PREVIEW_STEP_TIME_MS);
                 const color = kfIcon.selected ? this.previewLineKfDotSelectedColor : this.previewLineKfDotColor;
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[stepIndex].pos, color, 16);
             }
@@ -2543,11 +2550,12 @@ export class StudioPanel extends FloatingPanel {
 
     private onChangeValueInput(input: HTMLInputElement): void {
         if (this.timeline.selectedKeyframeIcons.length > 0 && input.value) {
-            const val = parseFloat(input.value);
+            let val = parseInt(input.value);
             if (!Number.isNaN(val)) {
                 const trackType = parseInt(input.dataset.track!, 10);
                 const kfIcon = this.timeline.getSelectedIconForTrack(trackType);
                 const kf = kfIcon.keyframesMap.get(trackType)!;
+                
                 let linkedKf = undefined;
                 if (this.animation.loop) {
                     if (kfIcon.type === KeyframeIconType.Loop_End)
@@ -2555,7 +2563,10 @@ export class StudioPanel extends FloatingPanel {
                     else if (kfIcon.type === KeyframeIconType.Start)
                         linkedKf = this.timeline.getLoopEndKeyframeForTrack(trackType);
                 }
-                if (this.lockPerspective) {
+                
+                if (trackType === KeyframeTrackType.bankTrack) {
+                    val *= MathConstants.DEG_TO_RAD;
+                } else if (this.lockPerspective) {
                     const diff = val - parseInt(input.dataset.prevValue!);
                     if (trackType === KeyframeTrackType.posXTrack
                         && this.lookAtXValueInputContainer.style.visibility !== 'hidden') {
@@ -2574,9 +2585,14 @@ export class StudioPanel extends FloatingPanel {
                         this.lookAtZValueInput.dispatchEvent(new Event('change', {bubbles: true}));
                     }
                 }
+
                 this.getTrackByType(this.animation, trackType).setValue(kf, val);
                 if (linkedKf)
                     this.getTrackByType(this.animation, trackType).setValue(linkedKf, val);
+                
+                if (trackType === KeyframeTrackType.bankTrack)
+                    this.drawBankRotationWheel(-val);
+                
                 this.updatePreviewSteps();
                 if (this.livePreviewCheckbox.checked)
                     this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
@@ -2604,6 +2620,37 @@ export class StudioPanel extends FloatingPanel {
             throw "whoops";
     }
 
+    private drawBankRotationWheel(angleRads: number, prevAngleRads?: number) {
+        this.bankRotationValCanvasCtx.clearRect(0, 0, this.bankRotationValCanvas.width, this.bankRotationValCanvas.height);
+        this.bankRotationValCanvasCtx.fillStyle = this.bankRotationLinGrad;
+        const width = this.bankRotationValCanvas.width;
+        const height = this.bankRotationValCanvas.height;
+        const outerRadius = 30;
+        const innerRadius = 23;
+
+        this.bankRotationValCanvasCtx.beginPath();
+        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, outerRadius, 0, 2 * Math.PI);
+        this.bankRotationValCanvasCtx.fill();
+
+        this.bankRotationValCanvasCtx.strokeStyle = '#a9a9a9';
+        this.bankRotationValCanvasCtx.beginPath();
+        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, innerRadius, 0, 2 * Math.PI);
+        this.bankRotationValCanvasCtx.stroke();
+        this.bankRotationValCanvasCtx.save();
+
+        this.bankRotationValCanvasCtx.translate(width / 2, height / 2);
+        this.bankRotationValCanvasCtx.rotate(angleRads);
+        this.bankRotationValCanvasCtx.translate(-width / 2, -height / 2);
+
+        this.bankRotationValCanvasCtx.strokeStyle = HIGHLIGHT_COLOR;
+        this.bankRotationValCanvasCtx.lineWidth = 3;
+        this.bankRotationValCanvasCtx.beginPath();
+        this.bankRotationValCanvasCtx.moveTo(width / 2, (height / 2) - innerRadius);
+        this.bankRotationValCanvasCtx.lineTo(width / 2, (height / 2) - innerRadius + 15);
+        this.bankRotationValCanvasCtx.stroke();
+        this.bankRotationValCanvasCtx.restore();
+    }
+
     private onKeyframeSelected() {
         const icon = this.timeline.selectedKeyframeIcons[0];
         let keyframeTracks = 0;
@@ -2611,30 +2658,32 @@ export class StudioPanel extends FloatingPanel {
         let commonEaseOutVal = 1;
         let commonInterpInType = 0;
         let commonInterpOutType = 0;
-        
-        icon.keyframesMap.forEach((kf, trackType) => {
+
+        const updateValueInputs = (kf: Keyframe, trackType: KeyframeTrackType) => {
             keyframeTracks |= trackType;
             const input = this.getValueInput(trackType);
-            input.value = kf.value.toFixed(0).toString();
+            if (trackType === KeyframeTrackType.bankTrack) {
+                input.value = (kf.value * MathConstants.RAD_TO_DEG).toFixed(0).toString();
+            } else {
+                input.value = kf.value.toFixed(0).toString();
+            }
             input.dataset.prevValue = input.value;
             commonEaseInVal = kf.easeInCoeff;
             commonEaseOutVal = kf.easeOutCoeff;
             commonInterpInType = kf.interpInType;
             commonInterpOutType = kf.interpOutType;
-        });
+        };
+
+        icon.keyframesMap.forEach((kf, trackType) => updateValueInputs(kf, trackType));
         
         for (let i = 1; i < this.timeline.selectedKeyframeIcons.length; i++) {
             const kfIcon = this.timeline.selectedKeyframeIcons[i];
             kfIcon.keyframesMap.forEach((kf, trackType) => {
                 if (keyframeTracks !== 0) {
-                    if (keyframeTracks & trackType) {
+                    if (keyframeTracks & trackType)
                         keyframeTracks = 0;
-                    } else {
-                        keyframeTracks |= trackType;
-                        const input = this.getValueInput(trackType);
-                        input.value = kf.value.toFixed(0).toString();
-                        input.dataset.prevValue = input.value;
-                    }
+                    else
+                        updateValueInputs(kf, trackType);
                 }
 
                 if (commonEaseInVal !== -1 && kf.easeInCoeff !== commonEaseInVal)
@@ -2682,8 +2731,10 @@ export class StudioPanel extends FloatingPanel {
             if (keyframeTracks & KeyframeTrackType.lookAtZTrack)
                 this.lookAtZValueInputContainer.style.visibility = '';
                 
-            if (keyframeTracks & KeyframeTrackType.bankTrack)
+            if ((keyframeTracks & KeyframeTrackType.bankTrack)) {
+                this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD);
                 this.bankValueInputContainer.style.visibility = '';
+            }
         }
             
         if (((keyframeTracks & KeyframeTrackType.posXTrack) && (keyframeTracks & KeyframeTrackType.lookAtXTrack))
@@ -2743,8 +2794,7 @@ export class StudioPanel extends FloatingPanel {
 
         if (this.timeline.keyframeIcons.length > 1) {
             // TODO(jstpierre): Don't rely on animationManager for this.
-            const PREVIEW_STEP_TIME_MS = 16;
-            for (let time = 0; time <= this.animationManager.durationMs; time += PREVIEW_STEP_TIME_MS) {
+            for (let time = 0; time <= this.animationManager.durationMs; time += StudioPanel.PREVIEW_STEP_TIME_MS) {
                 const step = new InterpolationStep();
                 this.animationManager.getAnimFrame(step, time);
                 steps.push(step);
