@@ -2291,7 +2291,32 @@ export class StudioPanel extends FloatingPanel {
             for (const kfIcon of this.timeline.keyframeIcons) {
                 const stepIndex = Math.floor(kfIcon.getT() / StudioPanel.PREVIEW_STEP_TIME_MS);
                 const color = kfIcon.selected ? this.previewLineKfDotSelectedColor : this.previewLineKfDotColor;
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[stepIndex].pos, color, 16);
+                if (this.timelineMode === TimelineMode.Consolidated 
+                    || kfIcon.keyframesMap.has(KeyframeTrackType.posXTrack)
+                    || kfIcon.keyframesMap.has(KeyframeTrackType.posYTrack)
+                    || kfIcon.keyframesMap.has(KeyframeTrackType.posZTrack)) {
+                    drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[stepIndex].pos, color, 16);
+                } else if (kfIcon.keyframesMap.has(KeyframeTrackType.lookAtXTrack)
+                        || kfIcon.keyframesMap.has(KeyframeTrackType.lookAtYTrack)
+                        || kfIcon.keyframesMap.has(KeyframeTrackType.lookAtZTrack)) {
+                    drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[stepIndex].lookAtPos, color, 16);
+                } else {
+                    mat4.targetTo(this.scratchMat, this.animationPreviewSteps[stepIndex].pos, this.animationPreviewSteps[stepIndex].lookAtPos, Vec3UnitY);
+                    if (this.animationPreviewSteps[stepIndex].lookAtPos[0] < 0) {
+                        mat4.rotateZ(this.scratchMat, this.scratchMat, -this.animationPreviewSteps[stepIndex].bank);
+                    } else {
+                        mat4.rotateZ(this.scratchMat, this.scratchMat, this.animationPreviewSteps[stepIndex].bank);
+                    }
+                    computeEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
+                    vec3.copy(this.scratchVec3c, Vec3UnitY);
+                    vec3.rotateZ(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[2]);
+                    vec3.rotateY(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[1]);
+                    vec3.rotateX(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[0]);
+                    this.scratchVec3c[2] = 0;
+                    vec3.normalize(this.scratchVec3c, this.scratchVec3c);
+                    vec3.scaleAndAdd(this.scratchVec3c, this.animationPreviewSteps[stepIndex].pos, this.scratchVec3c, 100);
+                    drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.scratchVec3c, color, 16);
+                }
             }
         }
     }
