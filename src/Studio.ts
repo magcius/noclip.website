@@ -1038,24 +1038,20 @@ export class CameraAnimationManager {
         let tIn = k1.tangentIn;
         let interpType = k0.interpOutType;
     
-        // TODO - Improve this. Discontinuities have been removed but still very janky.
+        // Here we have some makeshift logic for mixed interpolation types between keyframes.
+        // We lerp to/from the midpoint of the hermite curve rather than to the other keyframe.
+        // TODO - Improve this. There are no value discontinuities with this approach, but it's still very janky.
         if (k0.interpOutType !== k1.interpInType) {
             if (t > 0.5) {
-                t -= 0.5;
-                t /= 0.5;
                 interpType = k1.interpInType;
-
-                if (k0.interpOutType === InterpolationType.Ease) {
-                    p0 = getPointHermite(p0, p1, tOut, 0, 0.5);
-                } else {
-                    p0 = lerp(p0, p1, 0.5);
+                if (interpType === InterpolationType.Linear) {
+                    t -= 0.5;
+                    t /= 0.5;
+                    p0 = getPointHermite(p0, p1, tOut, tIn, 0.5);
                 }
-            } else if (k0.interpOutType === InterpolationType.Ease) {
-                tIn = 0;
-            }
-            if (k0.interpOutType === InterpolationType.Linear) {
-                tOut = 0;
-                tIn = 0;
+            } else if (interpType === InterpolationType.Linear) {
+                t /= 0.5;
+                p1 = getPointHermite(p0, p1, tOut, tIn, 0.5);
             }
         }
         
@@ -1131,7 +1127,7 @@ export class StudioPanel extends FloatingPanel {
     private animation: CameraAnimation;
     private studioStates: StudioState[] = [];
     private currentStateIndex: number = -1;
-    public animationPreviewSteps: InterpolationStep[] = [];
+    private animationPreviewSteps: InterpolationStep[] = [];
 
     private studioPanelContents: HTMLElement;
     private studioHelpText: HTMLElement;
