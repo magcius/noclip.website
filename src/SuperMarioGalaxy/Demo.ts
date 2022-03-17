@@ -415,7 +415,7 @@ export class DemoExecutor extends DemoCastGroup {
             this.stageSwitchCtrl.onSwitchDead(sceneObjHolder);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.timeKeeper.update(deltaTimeFrames);
@@ -498,11 +498,11 @@ export class DemoDirector extends NameObj {
         return this.demoSheetArchives[zoneId];
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.currentExecutor !== null) {
-            this.currentExecutor.movement(sceneObjHolder, viewerInput);
+            this.currentExecutor.movement(sceneObjHolder);
         }
     }
 

@@ -776,8 +776,8 @@ export class CollisionDirector extends NameObj {
         connectToScene(sceneObjHolder, this, MovementType.CollisionDirector, -1, -1, -1);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         for (let i = 0; i < this.keepers.length; i++)
             this.keepers[i].movement(sceneObjHolder);

@@ -158,7 +158,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public movement(sceneObjHolder: SceneObjHolder): void {
         // Default implementation; nothing.
     }
 
@@ -282,7 +282,7 @@ export class SceneNameObjListExecutor {
     public executeMovement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
             if (this.nameObjExecuteInfos[i].movementType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder, viewerInput);
+                this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder);
     }
 
     public executeCalcAnim(sceneObjHolder: SceneObjHolder): void {
@@ -371,7 +371,7 @@ export class SceneNameObjListExecutor {
 export class NameObjAdaptor extends NameObj {
     public calcAnimCallback: ((sceneObjHolder: SceneObjHolder) => void) | null = null;
     public calcViewAndEntryCallback: ((sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null) => void) | null = null;
-    public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public movementCallback: ((sceneObjHolder: SceneObjHolder) => void) | null = null;
     public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
 
     public override calcAnim(sceneObjHolder: SceneObjHolder): void {
@@ -384,9 +384,9 @@ export class NameObjAdaptor extends NameObj {
             this.calcViewAndEntryCallback(sceneObjHolder, camera, viewMatrix);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (this.movementCallback !== null)
-            this.movementCallback(sceneObjHolder, viewerInput);
+            this.movementCallback(sceneObjHolder);
     }
 
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

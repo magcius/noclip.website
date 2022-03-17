@@ -1020,8 +1020,8 @@ export class Unizo extends LiveActor<UnizoNrv> {
         super.makeActorDead(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.chaseSinTimer += sceneObjHolder.deltaTimeFrames;
 
@@ -1841,8 +1841,8 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.manualGravity)
             calcGravity(sceneObjHolder, this);
@@ -2087,8 +2087,8 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
@@ -2460,8 +2460,8 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
         return (this.isNerve(HomingKillerNrv.ChaseStart) || this.isNerve(HomingKillerNrv.Chase));
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         const isChasing = this.isChasing();
 
@@ -3228,8 +3228,8 @@ export class EyeBeamer extends LiveActor<EyeBeamerNrv> {
         }
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.updatePoseAndTrans(sceneObjHolder);
         this.updateWaterSurfaceMtx(sceneObjHolder);
@@ -3281,7 +3281,7 @@ export class EyeBeamer extends LiveActor<EyeBeamerNrv> {
 
             calcUpVec(scratchVec3a, this);
             vec3.scaleAndAdd(this.targetPos, this.translation, scratchVec3a, this.beamLength * 0.5);
-            this.railMover.movement(sceneObjHolder, sceneObjHolder.viewerInput);
+            this.railMover.movement(sceneObjHolder);
             vec3.copy(this.position, this.railMover.translation);
         }
     }
@@ -3742,8 +3742,8 @@ export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, scratchQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
         this.pointPassChecker.movement();
     }
 
@@ -3925,8 +3925,8 @@ export class KoteBug extends LiveActor<KoteBugNrv> {
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.axisZ);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (isInWater(sceneObjHolder, this.translation) || isInDeath(sceneObjHolder, this.translation)) {
             this.makeActorDead(sceneObjHolder);
@@ -4396,8 +4396,8 @@ export class Snakehead extends LiveActor<SnakeheadNrv> {
         return vec3.distance(scratchVec3a, scratchVec3b) <= this.distanceThreshold;
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         const body04Mtx = getJointMtxByName(this, 'Body04')!;
         getMatrixTranslation(scratchVec3a, body04Mtx);
@@ -4667,13 +4667,13 @@ export class Hanachan extends LiveActor<HanachanNrv> {
             this.parts[i].setNerve(partsNerve);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.parts.length; i++) {
             const parts = this.parts[i];
             if (isDead(parts))
                 continue;
 
-            parts.movement(sceneObjHolder, viewerInput);
+            parts.movement(sceneObjHolder);
             vec3.zero(parts.moveVelocity);
         }
     }
@@ -4812,7 +4812,7 @@ export class Kanina extends LiveActor<KaninaNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, scratchQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
         this.updateMovement(sceneObjHolder);
@@ -5435,8 +5435,8 @@ export class Gesso extends LiveActor<GessoNrv> {
         return false;
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.clipAndInitPos(sceneObjHolder))
             return;
@@ -5981,8 +5981,8 @@ export class TakoHei extends LiveActor<TakoHeiNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (!this.isNerve(TakoHeiNrv.NonActive)) {
             if (this.pushTimer > 0)
@@ -6412,8 +6412,8 @@ export class Metbo extends LiveActor<MetboNrv> {
         blendMtx(dst, dst, scratchMatrix, 0.3);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (isInDeath(sceneObjHolder, this.translation) || isInDarkMatter(sceneObjHolder, this.translation) || isInWater(sceneObjHolder, this.translation)) {
             this.makeActorDead(sceneObjHolder);
@@ -6623,8 +6623,8 @@ export class Mogucchi extends LiveActor<MogucchiNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.getCurrentNerve() !== MogucchiNrv.Scatter && this.getCurrentNerve() !== MogucchiNrv.Die)
             this.updateReferenceMtx();
@@ -7042,8 +7042,8 @@ export class SkeletalFishBaby extends LiveActor<SkeletalFishBabyNrv> {
         mat4.invert(this.railInvMtx, this.modelInstance!.modelMatrix);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.railControl.speed = this.railSpeed * sceneObjHolder.deltaTimeFrames;
         this.railControl.update();
@@ -7370,8 +7370,8 @@ export class Pukupuku extends LiveActor<PukupukuNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
         vec3.scale(this.binderOffset, this.gravityVector, -70.0);
     }
 
@@ -7508,8 +7508,8 @@ export class Jellyfish extends LiveActor<JellyfishNrv> {
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.axisZ);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         // requestPointLight
         if (!this.isNerve(JellyfishNrv.Death)) {
@@ -7741,8 +7741,8 @@ export class Meramera extends LiveActor<MerameraNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.updatePose();
         vec3.negate(scratchVec3a, this.gravityVector);

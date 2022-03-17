@@ -1049,7 +1049,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder): void {
     }
 
     private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
@@ -1066,7 +1066,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         // Don't do anything. All cleanup should have happened at offScenario time.
         if (!this.visibleScenario)
             return;
@@ -1099,7 +1099,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        this.control(sceneObjHolder, viewerInput);
+        this.control(sceneObjHolder);
 
         if (!this.visibleAlive)
             return;
@@ -1114,7 +1114,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // ActorPadAndCameraCtrl::update()
 
         if (this.actorLightCtrl !== null)
-            this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+            this.actorLightCtrl.update(sceneObjHolder, sceneObjHolder.viewerInput.camera, false, deltaTimeFrames);
 
         // tryUpdateHitSensorsAll()
         if (this.hitSensorKeeper !== null)
@@ -1176,8 +1176,8 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.pendingMessageType !== null) {
             for (let i = 0; i < this.objArray.length; i++) {

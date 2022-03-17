@@ -352,7 +352,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.planeEdges.push(new OceanSpherePlaneEdge(count, pos, Vec3NegZ,  Vec3UnitX, vec2.set(v1, 0.0, 0.0), vec2.set(v2, 1.0, 0.0)));
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         this.isCameraInside = false;
 
         // TODO(jstpierre): getCameraWaterInfo

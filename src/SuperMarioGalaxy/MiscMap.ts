@@ -99,10 +99,10 @@ export class WaterAreaHolder extends NameObj {
         // TODO(jstpierre)
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        getCamPos(scratchVec3, viewerInput.camera);
+        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
 
         const inWater = getWaterAreaObj(this.cameraWaterInfo, sceneObjHolder, scratchVec3);
         if (inWater) {
@@ -281,8 +281,8 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (isCameraInWater(sceneObjHolder)) {
             this.angle += 0.5 * sceneObjHolder.deltaTimeFrames;
@@ -417,7 +417,7 @@ export class SwitchArea extends AreaObj {
             return !this.switchCtrl.isOnSwitchA(sceneObjHolder);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (!this.isUpdate(sceneObjHolder))
             return;
 

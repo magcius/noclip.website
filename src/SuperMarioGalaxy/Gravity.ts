@@ -1363,8 +1363,8 @@ export class GlobalGravityObj extends LiveActor {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder) {
+        super.movement(sceneObjHolder);
         this.updateSwitch(sceneObjHolder);
     }
 

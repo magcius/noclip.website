@@ -180,18 +180,18 @@ class ClipAreaMovable extends ClipArea {
             this.railMover.end();
     }
 
-    private movementMoveFunction(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    private movementMoveFunction(sceneObjHolder: SceneObjHolder): void {
         if (this.rotator !== null)
-            this.rotator.movement(sceneObjHolder, viewerInput);
+            this.rotator.movement(sceneObjHolder);
         if (this.railMover !== null)
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (!isValidSwitchB(this) || isOnSwitchB(sceneObjHolder, this))
-            this.movementMoveFunction(sceneObjHolder, viewerInput);
+            this.movementMoveFunction(sceneObjHolder);
 
         this.updateMatrix();
     }
@@ -275,8 +275,8 @@ class ClipAreaDrop extends ClipArea<ClipAreaDropNrv> {
         this.setNerve(ClipAreaDropNrv.Wait);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
         mat4.fromTranslation(this.baseMtx, this.translation);
     }
 

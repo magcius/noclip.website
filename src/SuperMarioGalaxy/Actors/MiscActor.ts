@@ -427,8 +427,8 @@ export class CoinRotater extends NameObj {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.coinRotateY += sceneObjHolder.deltaTimeFrames * 8.0 * MathConstants.DEG_TO_RAD;
         this.coinInWaterRotateY += sceneObjHolder.deltaTimeFrames * 4.0 * MathConstants.DEG_TO_RAD;
@@ -599,7 +599,7 @@ class FlashingCtrl extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (this.isStopped)
             return;
 
@@ -1077,7 +1077,7 @@ class RailCoin extends CoinGroup {
 
     // Rail debugging code...
     /*
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public movement(sceneObjHolder: SceneObjHolder): void {
         this.railRider!.debugDrawRail(viewerInput.camera);
     }
     */
@@ -1321,8 +1321,8 @@ export class SimpleEffectObj extends LiveActor {
         return false;
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.getClippingCenterOffset(scratchVec3);
         vec3.add(scratchVec3, this.translation, scratchVec3);
@@ -1330,7 +1330,7 @@ export class SimpleEffectObj extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        const camera = viewerInput.camera;
+        const camera = sceneObjHolder.viewerInput.camera;
         const visibleCull = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
 
         if (this.visibleCull === visibleCull)
@@ -1431,8 +1431,8 @@ export class RandomEffectObj extends SimpleEffectObj {
         this.initNerve(0);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.counter === -1)
             this.counter = this.randBase + (Math.random() * this.randRange * 2 - this.randRange);
@@ -1886,11 +1886,11 @@ class ChipBase extends LiveActor<ChipBaseNrv> {
         }
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.railMover !== null) {
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover.translation);
         }
     }
@@ -2906,8 +2906,8 @@ class Fish extends LiveActor<FishNrv> {
         }
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         vec3.scale(this.velocity, this.velocity, 0.95);
 
@@ -2958,8 +2958,8 @@ export class FishGroup extends LiveActor {
         connectToSceneEnemyMovement(sceneObjHolder, this);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         // Update up vector from gravity vector
         vec3.negate(this.upVec, this.gravityVector);
@@ -3165,20 +3165,20 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     }
 
     private debug = false;
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         if (this.dryBirdCam) {
             this.camera();
 
-            const camera = viewerInput.camera;
+            const camera = sceneObjHolder.viewerInput.camera;
             mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
             mat4.invert(camera.worldMatrix, camera.viewMatrix);
             camera.worldMatrixUpdated();
         }
 
         if (this.debug)
-            this.debugDraw(viewerInput);
+            this.debugDraw(sceneObjHolder.viewerInput);
 
-        super.control(sceneObjHolder, viewerInput);
+        super.control(sceneObjHolder);
 
         this.updateHover(sceneObjHolder.deltaTimeFrames);
 
@@ -3358,8 +3358,8 @@ export class CoconutTreeLeafGroup extends LiveActor {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         const dist = calcDistanceToPlayer(sceneObjHolder, this);
         let a = 0, b = 0;
@@ -3988,12 +3988,12 @@ export class WaterPlantDrawInit extends NameObj {
         this.updateSwingPos();
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         this.updateSwingPos();
         this.angle += this.swingSpeed * sceneObjHolder.deltaTimeFrames;
 
-        const viewMtxInv = viewerInput.camera.worldMatrix;
+        const viewMtxInv = sceneObjHolder.viewerInput.camera.worldMatrix;
         vec3.set(this.drawVec, viewMtxInv[0], viewMtxInv[1], viewMtxInv[2]);
     }
 
@@ -4361,8 +4361,8 @@ export class ChooChooTrain extends LiveActor {
         startBck(this, 'Run');
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         moveCoordAndFollowTrans(this, this.speed * deltaTimeFrames);
@@ -4940,8 +4940,8 @@ export class Creeper extends LiveActor {
         return this.creeperPoints[this.creeperPoints.length - 1];
     }
 
-    public override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    public override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         const headPoint = this.getHeadPoint();
         setMtxAxisXYZ(this.creeperFlowerMtx, headPoint.axisX, headPoint.axisY, headPoint.axisZ);
@@ -5260,8 +5260,8 @@ class OceanRingPipeOutside extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         this.tex0Trans[0] += -0.004 * sceneObjHolder.deltaTimeFrames;
     }
 
@@ -5480,9 +5480,9 @@ class OceanRingPipe extends LiveActor {
         return points;
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-        this.outside.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+        this.outside.movement(sceneObjHolder);
     }
 
     public override destroy(device: GfxDevice): void {
@@ -5651,8 +5651,8 @@ export class OceanRing extends LiveActor {
         dst.depth = -vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.waveTheta2 += -0.06 * deltaTimeFrames;
@@ -6079,12 +6079,12 @@ export class Flag extends LiveActor {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.animCounter += sceneObjHolder.deltaTimeFrames * 5.0;
 
-        this.updateFlag(viewerInput.camera);
+        this.updateFlag(sceneObjHolder.viewerInput.camera);
     }
 
     public override destroy(device: GfxDevice): void {
@@ -6138,15 +6138,15 @@ export class ElectricRailHolder extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         for (let i = 0; i < this.models.length; i++) {
             const modelObj = this.models[i];
             if (modelObj === null)
                 continue;
 
-            modelObj.movement(sceneObjHolder, viewerInput);
+            modelObj.movement(sceneObjHolder);
         }
     }
 
@@ -6555,9 +6555,9 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.updatePointPos(sceneObjHolder);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-        this.move(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+        this.move(sceneObjHolder);
     }
 
     private getRepeatedCoord(coord: number): number {
@@ -6622,7 +6622,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         }
     }
 
-    private move(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    private move(sceneObjHolder: SceneObjHolder): void {
         this.coordPhaseAnim = this.getRepeatedCoord(this.coordPhaseAnim + this.speed * sceneObjHolder.deltaTimeFrames);
 
         const segmentLength = getRailTotalLength(this) / this.segmentCount;
@@ -6835,7 +6835,7 @@ export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
                 emitEffect(sceneObjHolder, this, 'RiseBubble');
             }
 
-            this.railMover!.movement(sceneObjHolder, sceneObjHolder.viewerInput);
+            this.railMover!.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover!.translation);
 
             if (!this.railMover!.isWorking()) {
@@ -6962,13 +6962,13 @@ export class PlantGroup extends LiveActor {
         this.hintTimer = getRandomInt(3, 10) * 10;
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         for (let i = 0; i < this.members.length; i++) {
             const member = this.members[i];
             member.animControl(sceneObjHolder);
-            member.movement(sceneObjHolder, viewerInput);
+            member.movement(sceneObjHolder);
         }
 
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
@@ -7230,8 +7230,8 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         }
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         // this.moveLimitParts.setMtx();
         // this.lodCtrl.update();
@@ -7239,7 +7239,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         // startLevelSound
 
         if (this.railMover !== null) {
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover.translation);
         }
     }
@@ -7396,27 +7396,27 @@ export class BrightSun extends LiveActor {
         this.brightObj.isFullyHidden = true;
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        getCamPos(scratchVec3, viewerInput.camera);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
 
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, this.rotation[0], this.rotation[1], this.rotation[2], scratchVec3[0], scratchVec3[1], scratchVec3[2]);
         vec3.set(scratchVec3, 0.0, 0.0, 100000.0);
         mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
         getMatrixTranslation(this.translation, scratchMatrix);
 
-        this.controlSunModel(sceneObjHolder, viewerInput);
+        this.controlSunModel(sceneObjHolder);
 
         if (sceneObjHolder.lensFlareDirector === null)
             return;
 
-        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, 3000.0, viewerInput);
+        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, 3000.0);
     }
 
-    private controlSunModel(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    private controlSunModel(sceneObjHolder: SceneObjHolder): void {
         vec3.copy(this.sun.translation, this.translation);
         vec3SetAll(this.sun.scale, 100.0);
 
-        getCamPos(scratchVec3, viewerInput.camera);
+        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
         vec3.sub(scratchVec3, scratchVec3, this.translation);
         vec3.normalize(scratchVec3, scratchVec3);
 
@@ -7445,8 +7445,8 @@ export class BrightObj extends LiveActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, this.radius, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, this.radius);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -7612,7 +7612,7 @@ export class TimerSwitch extends LiveActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         if (this.timer < 0 && isOnSwitchB(sceneObjHolder, this))
             this.timer = this.timerArg;
 
@@ -8011,8 +8011,8 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         setMatrixTranslation(this.shadowMtx, scratchVec3);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.orbit.calcGalaxyPos(this.translation);
         this.rotation[1] += 0.4 * MathConstants.DEG_TO_RAD * sceneObjHolder.deltaTimeFrames;
@@ -8213,8 +8213,8 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         this.button = new Button(zoneAndLayer, sceneObjHolder, this, scratchVec3, 120.0, 5000.0);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.button.move(sceneObjHolder);
     }
@@ -8338,14 +8338,14 @@ class HeatHazeEffect extends LiveActor {
         this.makeActorDead(sceneObjHolder);
     }
 
-    public override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    public override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
-        getCamZdir(scratchVec3, viewerInput.camera);
-        getMatrixTranslation(this.translation, viewerInput.camera.worldMatrix);
+        getCamZdir(scratchVec3, sceneObjHolder.viewerInput.camera);
+        getMatrixTranslation(this.translation, sceneObjHolder.viewerInput.camera.worldMatrix);
         vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, this.depth);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, viewerInput.camera.worldMatrix);
+        computeEulerAngleRotationFromSRTMatrix(this.rotation, sceneObjHolder.viewerInput.camera.worldMatrix);
 
         const scale = this.depth / 1000.0;
         vec3SetAll(this.scale, scale);
@@ -8366,8 +8366,8 @@ export class HeatHazeDirector extends NameObj {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         getPlayerPos(scratchVec3, sceneObjHolder);
         const hazeCube = getAreaObj<HazeCube>(sceneObjHolder, 'HazeCube', scratchVec3);
@@ -8740,8 +8740,8 @@ export class WhirlPoolAccelerator extends LiveActor {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.rotY -= 10.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
@@ -8833,11 +8833,11 @@ export class RainCloud extends LiveActor<RainCloudNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.railMover !== null && !this.isNerve(RainCloudNrv.End)) {
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover.translation);
 
             if (this.railMover.isPassedEndPointRepeat()) {

@@ -375,22 +375,22 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.railGuideDrawer.end(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.railPosture !== null)
-            this.railPosture.movement(sceneObjHolder, viewerInput);
+            this.railPosture.movement(sceneObjHolder);
         if (this.railMover !== null) {
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
             if (this.railMover.isWorking()) {
                 vec3.copy(this.translation, this.railMover.translation);
                 this.railMover.tryResetPositionRepeat(sceneObjHolder);
             }
         }
         if (this.rotator !== null)
-            this.rotator.movement(sceneObjHolder, viewerInput);
+            this.rotator.movement(sceneObjHolder);
         if (this.railGuideDrawer !== null)
-            this.railGuideDrawer.movement(sceneObjHolder, viewerInput);
+            this.railGuideDrawer.movement(sceneObjHolder);
     }
 
     protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
@@ -827,8 +827,8 @@ export class OceanWaveFloater extends MapObjActor {
         mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3a);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.waveForce.update(sceneObjHolder.deltaTimeFrames);
 
@@ -1211,8 +1211,8 @@ class Rock extends LiveActor<RockNrv> {
             emitEffect(sceneObjHolder, this, 'MiniBreak');
     }
 
-    public override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    public override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (!this.isNerve(RockNrv.Break)) {
             vec3.sub(scratchVec3a, this.translation, this.lastTranslation);
@@ -1759,8 +1759,8 @@ export class TreasureSpot extends MapObjActor<TreasureSpotNrv> {
         // declareCoin
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
         this.switchEmitGlow(sceneObjHolder);
     }
 
@@ -1904,8 +1904,8 @@ abstract class PressureBase extends LiveActor<PressureBaseNrv> {
             this.setNerve(PressureBaseNrv.WaitStart);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.shotType === PressureBaseShotType.TargetPlayer) {
             getPlayerPos(scratchVec3a, sceneObjHolder);
@@ -2062,8 +2062,8 @@ class WaterPressureBullet extends LiveActor<WaterPressureBulletNrv> {
         this.makeActorDead(sceneObjHolder);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (isNearZeroVec3(this.velocity, 0.001)) {
             vec3.copy(scratchVec3a, this.gravityVector);
@@ -4376,8 +4376,8 @@ export class SimpleClipPartsObj extends MapObjActor {
         connectToClippedMapParts(sceneObjHolder, this);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (isValidSwitchA(this)) {
             if (isOnSwitchA(sceneObjHolder, this))

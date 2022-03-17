@@ -1015,8 +1015,8 @@ class ImageEffectDirector extends NameObj {
         // ...
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.auto)
             this.updateAuto(sceneObjHolder);

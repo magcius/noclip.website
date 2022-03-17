@@ -130,13 +130,13 @@ class DayInTheLifeOfALumaController extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.tryPickNewTico(sceneObjHolder.deltaTimeFrames);
         this.camera();
 
-        const camera = viewerInput.camera;
+        const camera = sceneObjHolder.viewerInput.camera;
         mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
         mat4.invert(camera.worldMatrix, camera.viewMatrix);
         camera.worldMatrixUpdated();

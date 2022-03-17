@@ -1357,8 +1357,8 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         vec3.negate(scratchVec3a, this.gravityVector);
         blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.2, 0.2);

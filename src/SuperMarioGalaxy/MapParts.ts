@@ -94,7 +94,7 @@ class MapPartsFunction<TNerve extends number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.spine.changeNerve();
@@ -611,7 +611,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         const currentNerve = this.spine.getCurrentNerve();
 
         if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart) {
@@ -621,7 +621,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         }
 
         this.passChecker.movement();
-        super.movement(sceneObjHolder, viewerInput);
+        super.movement(sceneObjHolder);
     }
 
     public tryResetPositionRepeat(sceneObjHolder: SceneObjHolder): void {

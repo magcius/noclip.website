@@ -73,8 +73,8 @@ export class BrightObjBase {
     protected brightCenter = vec2.create();
     protected nowCenter = vec2.create();
 
-    public checkVisibilityOfSphere(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, radius: number, viewerInput: ViewerRenderInput): void {
-        getCamYdir(scratchVec3a, viewerInput.camera);
+    public checkVisibilityOfSphere(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, radius: number): void {
+        getCamYdir(scratchVec3a, sceneObjHolder.viewerInput.camera);
         vec3.sub(scratchVec3b, scratchVec3a, position);
         vec3.normalize(scratchVec3b, scratchVec3b);
 
@@ -87,9 +87,9 @@ export class BrightObjBase {
         checkArg.pointsVisibleNum = 0;
         vec2.set(checkArg.posCenterAccum, 0.0, 0.0);
 
-        project(scratchVec4, position, viewerInput);
-        calcScreenPosition(checkArg.posCenter, scratchVec4, viewerInput);
-        this.checkVisible(sceneObjHolder, checkArg, position, viewerInput);
+        project(scratchVec4, position, sceneObjHolder.viewerInput);
+        calcScreenPosition(checkArg.posCenter, scratchVec4, sceneObjHolder.viewerInput);
+        this.checkVisible(sceneObjHolder, checkArg, position);
 
         for (let i = 0; i < 8; i++) {
             const theta = MathConstants.TAU * (i / 8);
@@ -97,7 +97,7 @@ export class BrightObjBase {
             const rad = 0.4 * radius;
             vec3.set(scratchVec3a, rad * x, rad * y, 0.0);
             transformVec3Mat4w1(scratchVec3a, scratchMatrix, scratchVec3a);
-            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a, viewerInput);
+            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a);
         }
 
         for (let i = 0; i < 8; i++) {
@@ -106,15 +106,15 @@ export class BrightObjBase {
             const rad = 0.7 * radius;
             vec3.set(scratchVec3a, rad * x, rad * y, 0.0);
             transformVec3Mat4w1(scratchVec3a, scratchMatrix, scratchVec3a);
-            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a, viewerInput);
+            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a);
         }
 
         this.setResult(checkArg);
     }
 
-    private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, viewerInput: ViewerRenderInput): void {
-        project(scratchVec4, position, viewerInput);
-        calcScreenPosition(scratchVec2, scratchVec4, viewerInput);
+    private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: ReadonlyVec3): void {
+        project(scratchVec4, position, sceneObjHolder.viewerInput);
+        calcScreenPosition(scratchVec2, scratchVec4, sceneObjHolder.viewerInput);
 
         let peekZResult: PeekZResult;
         if (checkArg.pointsNum === checkArg.peekZ.length) {
@@ -125,8 +125,8 @@ export class BrightObjBase {
         }
 
         // Position is originally in screen space. Convert to NDC.
-        const x = (scratchVec2[0] / viewerInput.backbufferWidth) * 2 - 1;
-        const y = (scratchVec2[1] / viewerInput.backbufferHeight) * 2 - 1;
+        const x = (scratchVec2[0] / sceneObjHolder.viewerInput.backbufferWidth) * 2 - 1;
+        const y = (scratchVec2[1] / sceneObjHolder.viewerInput.backbufferHeight) * 2 - 1;
 
         sceneObjHolder.drawSyncManager.peekZ.newData(peekZResult, x, y);
 
@@ -447,7 +447,7 @@ export class LensFlareDirector extends NameObj {
         return false;
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         const areaFlags = this.checkArea(sceneObjHolder);
         const hasBrightObj = this.checkBrightObj(!!areaFlags);
 
