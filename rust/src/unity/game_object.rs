@@ -6,7 +6,8 @@ use crate::unity::mesh::Vec3f;
 use crate::unity::version::{ UnityVersion, VersionType };
 
 #[wasm_bindgen]
-struct PathPtr {
+#[derive(Debug, Copy, Clone)]
+pub struct PathPtr {
     pub file_index: u32,
     pub path_id: i64,
 }
@@ -50,6 +51,15 @@ impl GameObject {
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
+
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<GameObject, String> {
+        todo!()
+    }
+}
+
+pub struct GameObjectTree {
+    obj: GameObject,
+    children: Vec<GameObject>,
 }
 
 #[wasm_bindgen]
