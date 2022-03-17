@@ -6,7 +6,7 @@ import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers';
-import { SceneObjHolder, getDeltaTimeFrames } from './Main';
+import { SceneObjHolder } from './Main';
 import { ViewerRenderInput } from '../viewer';
 import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection, getRailPointNum } from './ActorUtil';
 import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow';
@@ -95,7 +95,7 @@ class MapPartsFunction<TNerve extends number> extends NameObj {
     }
 
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.spine.changeNerve();
         this.updateSpine(sceneObjHolder, this.spine.getCurrentNerve(), deltaTimeFrames);

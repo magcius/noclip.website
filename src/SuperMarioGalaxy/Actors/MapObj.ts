@@ -20,7 +20,7 @@ import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, get
 import { LayoutActor } from '../Layout';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, makeMtxTRSFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
-import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
+import { getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, getMapPartsArgShadowType, hasMapPartsShadow, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
 import { isInWater } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from '../NameObj';
@@ -830,7 +830,7 @@ export class OceanWaveFloater extends MapObjActor {
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        this.waveForce.update(getDeltaTimeFrames(viewerInput));
+        this.waveForce.update(sceneObjHolder.deltaTimeFrames);
 
         // controlEffect
         const sinkDepth = this.getCurrentSinkDepth();

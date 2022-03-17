@@ -1,7 +1,7 @@
 
 import { NameObj, MovementType, DrawType } from "./NameObj";
 import { OceanBowl } from "./Actors/OceanBowl";
-import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames, SceneObj } from "./Main";
+import { SceneObjHolder, SpecialTextureType, SceneObj } from "./Main";
 import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST, isValidSwitchA } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
@@ -285,7 +285,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         super.control(sceneObjHolder, viewerInput);
 
         if (isCameraInWater(sceneObjHolder)) {
-            this.angle += 0.5 * getDeltaTimeFrames(viewerInput);
+            this.angle += 0.5 * sceneObjHolder.deltaTimeFrames;
 
             const cameraDepth = saturate(sceneObjHolder.waterAreaHolder!.cameraWaterInfo.depth / 3000.0);
             colorLerp(this.color, this.colorShallow, this.colorDeep, cameraDepth);

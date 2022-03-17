@@ -5,7 +5,7 @@ import { ViewerRenderInput } from "../viewer";
 import { connectToScene, startAction } from "./ActorUtil";
 import { createCsvParser, createJMapIdInfoFromIter, JMapIdInfo, JMapInfoIter } from "./JMapInfo";
 import { LiveActor, LiveActorGroup, ZoneAndLayer } from "./LiveActor";
-import { getDeltaTimeFrames, SceneObj, SceneObjHolder } from "./Main";
+import { SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjGroup } from "./NameObj";
 import { createStageSwitchCtrl, getSwitchWatcherHolder, StageSwitchCtrl, SwitchFunctorEventListener } from "./Switch";
 
@@ -416,7 +416,7 @@ export class DemoExecutor extends DemoCastGroup {
     }
 
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.timeKeeper.update(deltaTimeFrames);
         if (this.timeKeeper.isDemoEnd()) {

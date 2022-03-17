@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
+import { SMGSceneDescBase, ModelCache, SceneObjHolder, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
 import { NameObj, MovementType, GameBits } from './NameObj';
@@ -133,7 +133,7 @@ class DayInTheLifeOfALumaController extends NameObj {
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        this.tryPickNewTico(getDeltaTimeFrames(viewerInput));
+        this.tryPickNewTico(sceneObjHolder.deltaTimeFrames);
         this.camera();
 
         const camera = viewerInput.camera;

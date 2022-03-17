@@ -33,7 +33,7 @@ import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSen
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
-import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
+import { getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
@@ -430,9 +430,9 @@ export class CoinRotater extends NameObj {
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        this.coinRotateY += getDeltaTimeFrames(viewerInput) * 8.0 * MathConstants.DEG_TO_RAD;
-        this.coinInWaterRotateY += getDeltaTimeFrames(viewerInput) * 4.0 * MathConstants.DEG_TO_RAD;
-        this.coinHiSpeedRotateY += getDeltaTimeFrames(viewerInput) * 16.0 * MathConstants.DEG_TO_RAD;
+        this.coinRotateY += sceneObjHolder.deltaTimeFrames * 8.0 * MathConstants.DEG_TO_RAD;
+        this.coinInWaterRotateY += sceneObjHolder.deltaTimeFrames * 4.0 * MathConstants.DEG_TO_RAD;
+        this.coinHiSpeedRotateY += sceneObjHolder.deltaTimeFrames * 16.0 * MathConstants.DEG_TO_RAD;
 
         computeModelMatrixR(this.coinRotateMtx, 0, this.coinRotateY, 0);
         computeModelMatrixR(this.coinInWaterRotateMtx, 0, this.coinInWaterRotateY, 0);
@@ -603,7 +603,7 @@ class FlashingCtrl extends NameObj {
         if (this.isStopped)
             return;
 
-        this.timer -= getDeltaTimeFrames(viewerInput);
+        this.timer -= sceneObjHolder.deltaTimeFrames;
         if (this.timer < 0.0 || isDead(this.actor)) {
             this.end()
             return;
@@ -1248,7 +1248,7 @@ export class MiniRouteGalaxy extends LiveActor {
     protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         super.calcAndSetBaseMtx(sceneObjHolder);
 
-        const rotateY = getTimeFrames(sceneObjHolder.viewerInput) * this.rotateSpeed;
+        const rotateY = sceneObjHolder.deltaTimeFrames * this.rotateSpeed;
         mat4.rotateY(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, rotateY);
     }
 }
@@ -2964,7 +2964,7 @@ export class FishGroup extends LiveActor {
         // Update up vector from gravity vector
         vec3.negate(this.upVec, this.gravityVector);
 
-        moveCoordAndFollowTrans(this, this.railSpeed * getDeltaTimeFrames(viewerInput));
+        moveCoordAndFollowTrans(this, this.railSpeed * sceneObjHolder.deltaTimeFrames);
 
         // this.railRider!.debugDrawRailLine(viewerInput.camera, 200);
     }
@@ -3180,7 +3180,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
 
         super.control(sceneObjHolder, viewerInput);
 
-        this.updateHover(getDeltaTimeFrames(viewerInput));
+        this.updateHover(sceneObjHolder.deltaTimeFrames);
 
         vec3.scale(this.velocity, this.velocity, 0.99);
 
@@ -3375,7 +3375,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
             b = 0.005;
         }
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         for (let i = 0; i < this.leaves.length; i++)
             this.leaves[i].update(a, b, deltaTimeFrames);
     }
@@ -3991,7 +3991,7 @@ export class WaterPlantDrawInit extends NameObj {
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
         this.updateSwingPos();
-        this.angle += this.swingSpeed * getDeltaTimeFrames(viewerInput);
+        this.angle += this.swingSpeed * sceneObjHolder.deltaTimeFrames;
 
         const viewMtxInv = viewerInput.camera.worldMatrix;
         vec3.set(this.drawVec, viewMtxInv[0], viewMtxInv[1], viewMtxInv[2]);
@@ -4363,7 +4363,7 @@ export class ChooChooTrain extends LiveActor {
 
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         moveCoordAndFollowTrans(this, this.speed * deltaTimeFrames);
 
@@ -5262,7 +5262,7 @@ class OceanRingPipeOutside extends LiveActor {
 
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
-        this.tex0Trans[0] += -0.004 * getDeltaTimeFrames(viewerInput);
+        this.tex0Trans[0] += -0.004 * sceneObjHolder.deltaTimeFrames;
     }
 
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -5654,7 +5654,7 @@ export class OceanRing extends LiveActor {
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.waveTheta2 += -0.06 * deltaTimeFrames;
         this.waveTheta1 += -0.04 * deltaTimeFrames;
         this.updatePoints();
@@ -6082,7 +6082,7 @@ export class Flag extends LiveActor {
     public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        this.animCounter += getDeltaTimeFrames(viewerInput) * 5.0;
+        this.animCounter += sceneObjHolder.deltaTimeFrames * 5.0;
 
         this.updateFlag(viewerInput.camera);
     }
@@ -6623,7 +6623,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     }
 
     private move(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.coordPhaseAnim = this.getRepeatedCoord(this.coordPhaseAnim + this.speed * getDeltaTimeFrames(viewerInput));
+        this.coordPhaseAnim = this.getRepeatedCoord(this.coordPhaseAnim + this.speed * sceneObjHolder.deltaTimeFrames);
 
         const segmentLength = getRailTotalLength(this) / this.segmentCount;
 
@@ -6971,7 +6971,7 @@ export class PlantGroup extends LiveActor {
             member.movement(sceneObjHolder, viewerInput);
         }
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.emitHintEffect(sceneObjHolder, deltaTimeFrames);
     }
 
@@ -7617,7 +7617,7 @@ export class TimerSwitch extends LiveActor {
             this.timer = this.timerArg;
 
         if (this.timer > 0) {
-            this.timer -= getDeltaTimeFrames(viewerInput);
+            this.timer -= sceneObjHolder.deltaTimeFrames;
             if (this.timer < 1.0) {
                 this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
                 this.makeActorDead(sceneObjHolder);
@@ -8015,7 +8015,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         super.control(sceneObjHolder, viewerInput);
 
         this.orbit.calcGalaxyPos(this.translation);
-        this.rotation[1] += 0.4 * MathConstants.DEG_TO_RAD * getDeltaTimeFrames(viewerInput);
+        this.rotation[1] += 0.4 * MathConstants.DEG_TO_RAD * sceneObjHolder.deltaTimeFrames;
     }
 
     protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MiniatureGalaxyNrv, deltaTimeFrames: number): void {
@@ -8743,7 +8743,7 @@ export class WhirlPoolAccelerator extends LiveActor {
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.rotY -= 10.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
         this.texCoordS += 0.01 * deltaTimeFrames;
         this.texCoordT -= -0.025 * deltaTimeFrames;

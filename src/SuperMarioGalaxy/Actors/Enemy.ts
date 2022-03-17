@@ -13,7 +13,7 @@ import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, add
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, resetPosition, ZoneAndLayer } from '../LiveActor';
-import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
+import { getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { MapPartsRailMover, MapPartsRailPointPassChecker } from '../MapParts';
 import { getWaterAreaInfo, isCameraInWater, isInWater, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType } from '../NameObj';
@@ -1023,7 +1023,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        this.chaseSinTimer += getDeltaTimeFrames(viewerInput);
+        this.chaseSinTimer += sceneObjHolder.deltaTimeFrames;
 
         if (!isNearZeroVec3(this.velocity, 0.001))
             this.updateRotate();
@@ -1847,7 +1847,7 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         if (this.manualGravity)
             calcGravity(sceneObjHolder, this);
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
 
         if (calcVelocityAreaOrRailMoveOnGround(scratchVec3a, sceneObjHolder, this))
@@ -2090,7 +2090,7 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
     }
 
@@ -4813,7 +4813,7 @@ export class Kanina extends LiveActor<KaninaNrv> {
     }
 
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
         this.updateMovement(sceneObjHolder);
     }
@@ -5441,7 +5441,7 @@ export class Gesso extends LiveActor<GessoNrv> {
         if (this.clipAndInitPos(sceneObjHolder))
             return;
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         turnVecToVecCosOnPlane(this.axisY, this.axisY, this.axisYTarget, this.axisZ, Math.cos(MathConstants.DEG_TO_RAD * 0.5 * deltaTimeFrames));
 
         const pushAmount = vec3.dot(this.velocity, this.pushVelocity);
@@ -7045,7 +7045,7 @@ export class SkeletalFishBaby extends LiveActor<SkeletalFishBabyNrv> {
     protected override control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        this.railControl.speed = this.railSpeed * getDeltaTimeFrames(viewerInput);
+        this.railControl.speed = this.railSpeed * sceneObjHolder.deltaTimeFrames;
         this.railControl.update();
         this.railControl.getPos(this.translation);
         // this.railRider!.debugDrawRailLine(viewerInput.camera);
@@ -7523,7 +7523,7 @@ export class Jellyfish extends LiveActor<JellyfishNrv> {
 
             const gravityStrength = Math.sin(this.frameCounter + MathConstants.TAU / 8);
             vec3.scale(this.velocity, this.gravityVector, gravityStrength);
-            this.frameCounter += getDeltaTimeFrames(viewerInput);
+            this.frameCounter += sceneObjHolder.deltaTimeFrames;
         }
     }
 

@@ -1,5 +1,5 @@
 
-import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
+import { SceneObjHolder, SceneObj } from "./Main";
 import { NameObj, CalcAnimType, MovementType } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
 import { vec3 } from "gl-matrix";
@@ -68,7 +68,7 @@ abstract class ImageEffectBase extends NameObj {
     }
 
     public override calcAnim(sceneObjHolder: SceneObjHolder): void {
-        const strengthAdj = getDeltaTimeFrames(sceneObjHolder.viewerInput) / 30.0;
+        const strengthAdj = sceneObjHolder.deltaTimeFrames / 30.0;
 
         if (this.active) {
             this.visible = true;

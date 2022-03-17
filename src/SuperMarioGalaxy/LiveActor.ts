@@ -16,7 +16,7 @@ import { EffectKeeper } from "./EffectSystem";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 import { createCsvParser, getJMapInfoBool, getJMapInfoRotateLocal, getJMapInfoTransLocal, JMapInfoIter } from "./JMapInfo";
 import { ActorLightCtrl } from "./LightData";
-import { getDeltaTimeFrames, getObjectName, SceneObjHolder, SpecialTextureType } from "./Main";
+import { getObjectName, SceneObjHolder, SpecialTextureType } from "./Main";
 import { MovementType, NameObj, NameObjGroup } from "./NameObj";
 import { RailRider } from "./RailRider";
 import { ShadowControllerList } from "./Shadow";
@@ -1080,7 +1080,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         if (this.modelManager !== null)
             this.modelManager.update(deltaTimeFrames);
