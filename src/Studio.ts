@@ -1170,6 +1170,8 @@ export class StudioPanel extends FloatingPanel {
     private livePreviewCheckbox: Checkbox;
     private autoSaveCheckbox: Checkbox;
 
+    private recordPlaybackBtn: HTMLButtonElement;
+
     private timeLineContainerElement: HTMLElement;
     private timelineControlsContainer: HTMLElement;
     private snapBtn: HTMLButtonElement;
@@ -1364,6 +1366,11 @@ export class StudioPanel extends FloatingPanel {
                 width: 85%;
                 margin: auto;
             }
+            #recordPlaybackBtn {
+                width: 10rem;
+                margin: auto;
+                height: 3rem;
+            }
             #studioHelpText {
                 line-height: 1.5;
                 min-height: 1rem;
@@ -1528,7 +1535,7 @@ export class StudioPanel extends FloatingPanel {
                 grid-template-columns: 3rem 10rem 3rem;
             }
         </style>
-        <div style="padding: 0.5rem; border-right: 2px dotted #696969">
+        <div style="padding: 0.5rem; border-right: 2px dotted #696969; position: relative;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <div id="undoRedoBtnContainer" hidden>
                     <button type="button" id="undoBtn" class="SettingsButton disabled" disabled></button>
@@ -1547,6 +1554,9 @@ export class StudioPanel extends FloatingPanel {
                         <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
                         <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
                         <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
+                    </div>
+                    <div style="position: absolute; bottom: 3rem; height: 3rem; left: 50%; transform: translate(-50%, 0);">
+                        <button type="button" id="recordPlaybackBtn" class="SettingsButton"></button>
                     </div>
                 </div>
                 <div id="settingsTab" class="StudioPanelTab" hidden>
@@ -1827,6 +1837,12 @@ export class StudioPanel extends FloatingPanel {
         this.studioSettingsContainer.insertAdjacentElement('beforeend', this.showPreviewLineCheckbox.elem);
         this.studioSettingsContainer.insertAdjacentElement('beforeend', this.livePreviewCheckbox.elem);
         this.studioSettingsContainer.insertAdjacentElement('beforeend', this.autoSaveCheckbox.elem);
+
+        this.recordPlaybackBtn = this.contents.querySelector('#recordPlaybackBtn') as HTMLButtonElement;
+        const icon = createDOMFromString(CLAPBOARD_ICON).querySelector('svg')!;
+        icon.setAttribute('height','30');
+        this.recordPlaybackBtn.appendChild(icon);
+        this.recordPlaybackBtn.onclick = () => this.playAnimation(true);
 
         this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
         this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
@@ -2276,18 +2292,17 @@ export class StudioPanel extends FloatingPanel {
             this.stopAnimationBtn.classList.remove('disabled');
             this.stopAnimationBtn.removeAttribute('hidden');
 
-            let startTime = this.timeline.getPlayheadTimeMs();
-            if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
-                startTime = 0;
-
             if (theater) {
                 this.ui.toggleUI(false);
                 this.elem.style.display = 'none';
                 setTimeout(() => {
-                    this.animationManager.initAnimationPlayback(this.animation, startTime);
+                    this.animationManager.initAnimationPlayback(this.animation, 0);
                     this.studioCameraController.isAnimationPlaying = true;
                 }, 2000);
             } else {
+                let startTime = this.timeline.getPlayheadTimeMs();
+                if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
+                    startTime = 0;
                 this.animationManager.initAnimationPlayback(this.animation, startTime);
                 this.studioCameraController.isAnimationPlaying = true;
             }
