@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use std::collections::HashMap;
 use crate::unity::version::UnityVersion;
 use crate::unity::reader::AssetReader;
-use crate::unity::game_object::GameObject;
+use crate::unity::game_object::{ GameObject };
 use crate::unity::class_id::UnityClassID;
 
 #[wasm_bindgen]
@@ -37,13 +37,12 @@ impl AssetInfo {
         let mut mesh_data: Vec<MeshMetadata> = self.objects.iter()
             .filter(|obj| obj.class_id == 43)
             .map(|obj| MeshMetadata {
-                offset: obj.byte_start as usize,
-                size: obj.byte_size as usize,
+                location: FileLocation::from_obj(obj),
                 name: String::new(),
             })
             .collect();
         for mesh in mesh_data.iter_mut() {
-            reader.seek(std::io::SeekFrom::Start(mesh.offset as u64)).unwrap();
+            reader.seek(std::io::SeekFrom::Start(mesh.location.offset as u64)).unwrap();
             mesh.name = reader.read_char_array().unwrap();
         }
         MeshMetadataArray {
@@ -52,17 +51,46 @@ impl AssetInfo {
         }
     }
 
-    fn get_game_object_tree(&self, data: Vec<u8>) -> GameObjectTree {
-        let objects: HashMap<i64, &UnityObject> = self.objects.iter()
-            .map(|obj| (obj.path_id, obj))
+    pub fn get_object_locations(&self, class_id: UnityClassID) -> FileLocationArray {
+        let data: Vec<FileLocation> = self.objects.iter()
+            .filter(|obj| obj.class_id == class_id.into())
+            .map(|obj| FileLocation::from_obj(obj))
             .collect();
-        todo!();
+        FileLocationArray {
+            length: data.len(),
+            data,
+        }
+    }
+
+    pub fn get_component_locations(&self, obj: &GameObject) -> FileLocationArray {
+        let data: Vec<FileLocation> = obj.components.iter()
+            .flat_map(|ptr| self.get_obj_location(ptr.path_id))
+            .collect();
+        FileLocationArray {
+            length: data.len(),
+            data,
+        }
+    }
+
+    pub fn get_obj_location(&self, path_id: i64) -> Option<FileLocation> {
+        match self.objects.iter().find(|obj| obj.path_id == path_id) {
+            Some(obj) => Some(FileLocation::from_obj(obj)),
+            None => None,
+        }
     }
 }
 
-struct GameObjectTree {
-    obj: GameObject,
-    children: Vec<GameObject>,
+#[wasm_bindgen]
+pub struct FileLocationArray {
+    pub length: usize,
+    data: Vec<FileLocation>,
+}
+
+#[wasm_bindgen]
+impl FileLocationArray {
+    pub fn get(&self, i: usize) -> FileLocation {
+        self.data[i]
+    }
 }
 
 #[wasm_bindgen]
@@ -79,10 +107,27 @@ impl MeshMetadataArray {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone)]
-pub struct MeshMetadata {
+#[derive(Debug, Copy, Clone)]
+pub struct FileLocation {
+    pub path_id: i64,
     pub offset: usize,
     pub size: usize,
+}
+
+impl FileLocation {
+    fn from_obj(obj: &UnityObject) -> FileLocation {
+        FileLocation {
+            path_id: obj.path_id,
+            offset: obj.byte_start as usize,
+            size: obj.byte_size as usize,
+        }
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct MeshMetadata {
+    pub location: FileLocation,
     name: String,
 }
 

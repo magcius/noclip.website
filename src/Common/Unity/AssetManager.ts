@@ -113,8 +113,8 @@ export class UnityAssetManager {
             let data = meshDataArray.get(i);
             result.push({
                 name: data.get_name(),
-                offset: data.offset,
-                size: data.size,
+                offset: data.location.offset,
+                size: data.location.size,
             })
         }
 

@@ -465,7 +465,7 @@ mod tests {
     fn test_cactus() {
         use std::collections::HashMap;
         use crate::unity::class_id::UnityClassID;
-        let path = "D:/games/SteamLibrary/steamapps/common/Cactus Simulator/Cactus Simulator_Data/level1";
+        let path = "../level1";
         let data = std::fs::read(path).unwrap();
         let mut reader = AssetReader::new(data);
         let asset = reader.read_asset_info().unwrap();
