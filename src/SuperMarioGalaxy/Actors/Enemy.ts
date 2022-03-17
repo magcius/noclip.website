@@ -74,6 +74,7 @@ export class Dossun extends LiveActor<DossunNrv> {
         }
         this.initNerve(DossunNrv.Upper);
         // setClippingTypeSphereContainsModelBoundingBox
+        this.makeActorAppeared(sceneObjHolder);
 
         this.calcParameters(sceneObjHolder);
     }

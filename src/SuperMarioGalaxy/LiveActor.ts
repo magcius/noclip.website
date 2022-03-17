@@ -380,6 +380,10 @@ export class ResourceHolder {
         return assertExists(this.modelTable.get(name.toLowerCase()));
     }
 
+    public getArcName(): string {
+        return this.arc.name;
+    }
+
     public getRes<T>(table: ResTable<T>, name: string): T | null {
         return nullify(table.get(name.toLowerCase()));
     }
@@ -405,7 +409,7 @@ export class ModelManager {
     public bvaPlayer: BvaPlayer | null = null;
     public bckCtrl: BckCtrl | null = null;
 
-    constructor(sceneObjHolder: SceneObjHolder, objName: string) {
+    constructor(sceneObjHolder: SceneObjHolder, public objName: string) {
         this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
 
         const bmdModel = this.resourceHolder.getModel(objName);

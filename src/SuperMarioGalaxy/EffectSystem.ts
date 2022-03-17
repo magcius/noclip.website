@@ -1,5 +1,4 @@
 
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
@@ -9,7 +8,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
-import { computeModelMatrixR, computeRotationMatrixFromSRTMatrix, getMatrixAxisX, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
+import { computeModelMatrixR, computeRotationMatrixFromSRTMatrix, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
@@ -1008,6 +1007,27 @@ export class ParticleEmitterHolder {
             if (this.particleEmitters[i].baseEmitter === null)
                 return this.particleEmitters[i];
         return null;
+    }
+
+    public printSummary(): void {
+        const countMap = new Map<string, number>();
+        for (let i = 0; i < this.particleEmitters.length; i++) {
+            const emitter = this.particleEmitters[i].baseEmitter;
+            const name = emitter !== null ? emitter.resData.name : `!Free`;
+            countMap.set(name, fallbackUndefined(countMap.get(name), 0) + 1);
+        }
+        const entries = [...countMap.entries()];
+        entries.sort((a, b) => b[1] - a[1]);
+        for (let i = 0; i < entries.length; i++)
+            console.log(entries[i]);
+    }
+
+    public calcFreeEmitters(): number {
+        let count = 0;
+        for (let i = 0; i < this.particleEmitters.length; i++)
+            if (this.particleEmitters[i].baseEmitter === null)
+                ++count;
+        return count;
     }
 
     public update(): void {
