@@ -4,7 +4,7 @@ import { FloatingPanel } from './DebugFloaters';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
 import { Blue, Color, Green, Red, Magenta, Cyan } from './Color';
 import { StudioCameraController } from './Camera';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants, angleDist } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
 import { getPointHermite } from './Spline';
@@ -36,6 +36,14 @@ export interface Keyframe {
     easeInCoeff: number;
     easeOutCoeff: number;
 }
+
+const commonKfFieldsEqual = (kf1: Keyframe, kf2: Keyframe): boolean => {
+    return kf1.time === kf2.time
+        && kf1.interpInType === kf2.interpInType
+        && kf1.interpOutType === kf2.interpOutType
+        && kf1.easeInCoeff === kf2.easeInCoeff
+        && kf1.easeOutCoeff === kf2.easeOutCoeff;
+};
 
 export class InterpolationStep {
     public pos: vec3 = vec3.create();
@@ -1020,7 +1028,7 @@ export class CameraAnimationManager {
         return duration;
     }
 
-    private getCurrentTrackValue(track: KeyframeTrack, time: number): number {
+    private getCurrentTrackValue(track: KeyframeTrack, time: number, normalizeAngleValue: boolean = false): number {
         const idx1 = this.findKeyframe(track.keyframes, time);
         if (idx1 === 0)
             return track.keyframes[0].value;
@@ -1034,6 +1042,14 @@ export class CameraAnimationManager {
         
         let p0 = k0.value;
         let p1 = k1.value;
+        if (normalizeAngleValue && track.keyframes.length > 1) {
+            p0 = track.keyframes[0].value;
+            p1 = p0 + angleDist(p0, track.keyframes[1].value);
+            for (let i = 2; i <= idx1; i++) {
+                p0 = p1;
+                p1 = p1 + angleDist(p1, track.keyframes[i].value);
+            }
+        }
         let tOut = k0.tangentOut;
         let tIn = k1.tangentIn;
         let interpType = k0.interpOutType;
@@ -1074,7 +1090,7 @@ export class CameraAnimationManager {
         const lookAtZ = this.getCurrentTrackValue(animation.lookAtZTrack, time);
         vec3.set(dst.pos, posX, posY, posZ);
         vec3.set(dst.lookAtPos, lookAtX, lookAtY, lookAtZ);
-        dst.bank = this.getCurrentTrackValue(animation.bankTrack, time);
+        dst.bank = this.getCurrentTrackValue(animation.bankTrack, time, true);
     }
 
     public initAnimationPlayback(animation: Readonly<CameraAnimation>, startTimeMs: number) {
@@ -1121,6 +1137,8 @@ interface studioSettings {
 }
 
 export class StudioPanel extends FloatingPanel {
+    static readonly FULL_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px, #494949 40px, #494949 59px, #a5a5a5 59px, #a5a5a5 61px, #2f2f2f 61px, #2f2f2f 80px, #494949 80px, #494949 100px, #2f2f2f 100px, #2f2f2f 119px, #a5a5a5 119px, #a5a5a5 121px)';
+    static DEFAULT_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px)';
     static readonly PREVIEW_STEP_TIME_MS: number = 16;
 
     private animationManager: CameraAnimationManager;
@@ -1241,7 +1259,22 @@ export class StudioPanel extends FloatingPanel {
         this.mainPanel.style.height = '100%';
         // Closing the panel will be done by disabling studio mode
         this.closeButton.style.display = 'none';
-        this.header.ondblclick = null;
+
+        const toggleMinimize = () => {
+            const bBar = document.querySelector('#BottomBar') as HTMLElement;
+            if (this.mainPanel.parentElement!.style.bottom === '-270px'){
+                this.mainPanel.parentElement!.style.bottom = '0px';
+                if (bBar)
+                    bBar.style.bottom = (this.elem.getBoundingClientRect().height + 24) + 'px';
+            }else {
+                this.mainPanel.parentElement!.style.bottom = '-270px';
+                if (bBar && bBar.dataset.ob)
+                    bBar.style.bottom = bBar.dataset.ob;
+            }
+        }
+
+        this.header.ondblclick = toggleMinimize;
+        this.minimizeButton.onclick = toggleMinimize;
         this.header.onmousedown = null;
 
         this.elem.onmouseover = () => {
@@ -1355,11 +1388,6 @@ export class StudioPanel extends FloatingPanel {
                 border: 2px solid white;
                 background-color: rgb(210, 30, 30);
             }
-            .label-col > div, .label-container > div {
-                display: flex;
-                align-items: center;
-                justify-content: end;
-            }
             .label-container {
                 display: flex;
                 align-items: center;
@@ -1371,6 +1399,14 @@ export class StudioPanel extends FloatingPanel {
                 margin-left: 0.5rem;
                 align-content: flex-end;
                 text-align: right;
+            }
+            .label-col > div {
+                height: 20px;
+            }
+            .label-col > div, .label-container > div {
+                display: flex;
+                align-items: center;
+                justify-content: end;
             }
             #timelineContainer {
                 padding: 0 15px;
@@ -1397,7 +1433,7 @@ export class StudioPanel extends FloatingPanel {
                 position: absolute;
                 height: ${Timeline.TRACK_HEIGHT}px;
                 top: ${Timeline.HEADER_HEIGHT}px;
-                background: repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px);
+                background: ${StudioPanel.DEFAULT_TIMELINE_BG};
                 z-index: 1;
             }
             #timelineMarkersCanvas {
@@ -1559,7 +1595,7 @@ export class StudioPanel extends FloatingPanel {
                             </div>
                         </div>
                         <div id="fullLabels" hidden>
-                            <div class="label-container">
+                            <div class="label-container" style="border-bottom: 1px solid white;">
                                 <span>Position</span>
                                 <div class="label-col">
                                     <div>X <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.posXTrack}"></div></div>
@@ -1567,7 +1603,7 @@ export class StudioPanel extends FloatingPanel {
                                     <div>Z <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.posZTrack}"></div></div>
                                 </div>
                             </div>
-                            <div class="label-container">
+                            <div class="label-container" style="margin-top: -1px; border-bottom: 1px solid white;">
                                 <span>LookAt</span>
                                 <div class="label-col">
                                     <div>X <div class="TrackSelectBox Selected" data-tracks="${KeyframeTrackType.lookAtXTrack}"></div></div>
@@ -1696,12 +1732,12 @@ export class StudioPanel extends FloatingPanel {
                         return false;
                 }
                 for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
-                    if (this.animation.posXTrack.keyframes[i].time !== this.animation.posYTrack.keyframes[i].time
-                        || this.animation.posXTrack.keyframes[i].time !== this.animation.posZTrack.keyframes[i].time
-                        || this.animation.posXTrack.keyframes[i].time !== this.animation.lookAtXTrack.keyframes[i].time
-                        || this.animation.posXTrack.keyframes[i].time !== this.animation.lookAtYTrack.keyframes[i].time
-                        || this.animation.posXTrack.keyframes[i].time !== this.animation.lookAtZTrack.keyframes[i].time
-                        || this.animation.posXTrack.keyframes[i].time !== this.animation.bankTrack.keyframes[i].time)
+                    if (!commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.posYTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.posZTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.lookAtXTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.lookAtYTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.lookAtZTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.bankTrack.keyframes[i]))
                         return false;
                 }
             } else if (newMode === TimelineMode.Position_LookAt_Bank) {
@@ -1712,13 +1748,13 @@ export class StudioPanel extends FloatingPanel {
                         return false;
                 }
                 for (let i = 0; i < this.animation.posXTrack.keyframes.length; i++) {
-                    if (this.animation.posXTrack.keyframes[i].time !== this.animation.posYTrack.keyframes[i].time
-                        || this.animation.posXTrack.keyframes[i].time !== this.animation.posZTrack.keyframes[i].time)
+                    if (!commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.posYTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.posXTrack.keyframes[i], this.animation.posZTrack.keyframes[i]))
                         return false;
                 }
                 for (let i = 0; i < this.animation.lookAtXTrack.keyframes.length; i++) {
-                    if (this.animation.lookAtXTrack.keyframes[i].time !== this.animation.lookAtYTrack.keyframes[i].time
-                        || this.animation.lookAtXTrack.keyframes[i].time !== this.animation.lookAtZTrack.keyframes[i].time)
+                    if (!commonKfFieldsEqual(this.animation.lookAtXTrack.keyframes[i], this.animation.lookAtYTrack.keyframes[i])
+                        || !commonKfFieldsEqual(this.animation.lookAtXTrack.keyframes[i], this.animation.lookAtZTrack.keyframes[i]))
                         return false;
                 }
             }
@@ -1737,6 +1773,7 @@ export class StudioPanel extends FloatingPanel {
             }
 
             this.trackSelectBoxes.forEach((e) => e.classList.add('Selected'));
+            this.timelineTracksBg.style.background = StudioPanel.DEFAULT_TIMELINE_BG;
             if (newMode === TimelineMode.Consolidated) {
                 this.positionLookAtBankLabels.setAttribute('hidden','');
                 this.fullLabels.setAttribute('hidden','');
@@ -1753,6 +1790,7 @@ export class StudioPanel extends FloatingPanel {
                     this.positionLookAtBankLabels.removeAttribute('hidden');
                     this.fullLabels.setAttribute('hidden','');
                 } else if (newMode === TimelineMode.Full) {
+                    this.timelineTracksBg.style.background = StudioPanel.FULL_TIMELINE_BG;
                     this.positionLookAtBankLabels.setAttribute('hidden','');
                     this.fullLabels.removeAttribute('hidden');
                 }
@@ -2145,12 +2183,19 @@ export class StudioPanel extends FloatingPanel {
             if (e.buttons === 1 && this.timeline && this.playheadTimePositionInput
                 && !this.studioCameraController.isAnimationPlaying) {
                 if (this.selectedNumericInput) {
-                    let distance = (e.movementX - e.movementY) * parseInt(this.selectedNumericInput.step);
-                    if (e.ctrlKey)
-                        distance *= .1;
-                    else if (e.shiftKey)
-                        distance *= 10;
-                    this.selectedNumericInput.value = (parseInt(this.selectedNumericInput.value) + distance).toString();
+                    if (parseFloat(this.selectedNumericInput.step) < 1) {
+                        const distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
+                        this.selectedNumericInput.value = (parseFloat(this.selectedNumericInput.value) + distance).toFixed(2);
+                    } else {
+                        let distance = (e.movementX - e.movementY) * parseInt(this.selectedNumericInput.step);
+
+                        if (e.ctrlKey)
+                            distance *= .1;
+                        else if (e.shiftKey)
+                            distance *= 10;
+
+                        this.selectedNumericInput.value = (parseInt(this.selectedNumericInput.value) + distance).toString();
+                    }
                     this.selectedNumericInput.dispatchEvent(new Event('change', { 'bubbles': true }));
                 } else {
                     this.timeline.onMouseMove(e);
@@ -2178,8 +2223,8 @@ export class StudioPanel extends FloatingPanel {
             }
         });
 
-        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeSelected());
-        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeDeselected());
+        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeIconSelected());
+        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeIconDeselected());
         this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
             for (const kfIcon of this.timeline.selectedKeyframeIcons) {
                 kfIcon.keyframesMap.forEach((v, trackType) => {
@@ -2259,7 +2304,7 @@ export class StudioPanel extends FloatingPanel {
     }
 
     public drawWorldHelpers(clipFromWorldMatrix: mat4) {
-        if (this.showPreviewLineCheckbox.checked && this.timeline.keyframeIcons.length > 1) {
+        if (this.showPreviewLineCheckbox.checked && this.animationPreviewSteps.length > 1) {
             for (let i = 0; i <= this.animationPreviewSteps.length - 2; i++) {
                 drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i + 1].pos, this.previewLineColor);
                 if (i % 30 === 0) {
@@ -2676,7 +2721,7 @@ export class StudioPanel extends FloatingPanel {
         this.bankRotationValCanvasCtx.restore();
     }
 
-    private onKeyframeSelected() {
+    private onKeyframeIconSelected() {
         const icon = this.timeline.selectedKeyframeIcons[0];
         let keyframeTracks = 0;
         let commonEaseInVal = 1;
@@ -2693,13 +2738,15 @@ export class StudioPanel extends FloatingPanel {
                 input.value = kf.value.toFixed(0).toString();
             }
             input.dataset.prevValue = input.value;
+        };
+
+        icon.keyframesMap.forEach((kf, trackType) => {
+            updateValueInputs(kf, trackType);
             commonEaseInVal = kf.easeInCoeff;
             commonEaseOutVal = kf.easeOutCoeff;
             commonInterpInType = kf.interpInType;
             commonInterpOutType = kf.interpOutType;
-        };
-
-        icon.keyframesMap.forEach((kf, trackType) => updateValueInputs(kf, trackType));
+        });
         
         for (let i = 1; i < this.timeline.selectedKeyframeIcons.length; i++) {
             const kfIcon = this.timeline.selectedKeyframeIcons[i];
@@ -2783,12 +2830,12 @@ export class StudioPanel extends FloatingPanel {
         this.interpOutTypeBtns.setSelectedIndex(commonInterpOutType);
     }
     
-    private onKeyframeDeselected(): void {
+    private onKeyframeIconDeselected(): void {
         if (this.timeline.selectedKeyframeIcons.length === 0) {
             this.hideKeyframeControls();
         } else {
             // Call onKeyframeSelected to update relevant keyframe editing inputs
-            this.onKeyframeSelected();
+            this.onKeyframeIconSelected();
         }
     }
 
@@ -3327,23 +3374,23 @@ export class StudioPanel extends FloatingPanel {
         // Now check the time value for each keyframe.
         // Again, any discrepancy between posX/posY/posZ or between lookAtX/lookAtY/lookAtZ implies a full timeline.
         for (let i = 0; i < anim.posXTrack.keyframes.length; i++) {
-            const t = anim.posXTrack.keyframes[i].time;
-            if (anim.posYTrack.keyframes[i].time !== t || anim.posZTrack.keyframes[i].time !== t) {
+            if (!commonKfFieldsEqual(anim.posXTrack.keyframes[i], anim.posYTrack.keyframes[i])
+                || !commonKfFieldsEqual(anim.posXTrack.keyframes[i], anim.posZTrack.keyframes[i])) {
                 return TimelineMode.Full;
             }
-            if (anim.lookAtXTrack.keyframes[i] === undefined || anim.lookAtXTrack.keyframes[i].time !== t 
-                || anim.lookAtYTrack.keyframes[i] === undefined || anim.lookAtYTrack.keyframes[i].time !== t 
-                || anim.lookAtZTrack.keyframes[i] === undefined || anim.lookAtZTrack.keyframes[i].time !== t 
-                || anim.bankTrack.keyframes[i] === undefined || anim.bankTrack.keyframes[i].time !== t) {
+            if (anim.lookAtXTrack.keyframes[i] === undefined || !commonKfFieldsEqual(anim.posXTrack.keyframes[i], anim.lookAtXTrack.keyframes[i])
+                || anim.lookAtYTrack.keyframes[i] === undefined || !commonKfFieldsEqual(anim.posXTrack.keyframes[i], anim.lookAtYTrack.keyframes[i])
+                || anim.lookAtZTrack.keyframes[i] === undefined || !commonKfFieldsEqual(anim.posXTrack.keyframes[i], anim.lookAtZTrack.keyframes[i])
+                || anim.bankTrack.keyframes[i] === undefined || !commonKfFieldsEqual(anim.posXTrack.keyframes[i], anim.bankTrack.keyframes[i])) {
                 tlMode = TimelineMode.Position_LookAt_Bank;
             }
         }
         for (let i = 0; i < anim.lookAtXTrack.keyframes.length; i++) {
-            const t = anim.lookAtXTrack.keyframes[i].time;
-            if (anim.lookAtYTrack.keyframes[i].time !== t || anim.lookAtZTrack.keyframes[i].time !== t) {
+            if (!commonKfFieldsEqual(anim.lookAtXTrack.keyframes[i], anim.lookAtYTrack.keyframes[i])
+              || !commonKfFieldsEqual(anim.lookAtXTrack.keyframes[i], anim.lookAtZTrack.keyframes[i])) {
                 return TimelineMode.Full;
             }
-            if (anim.bankTrack.keyframes[i] === undefined || anim.bankTrack.keyframes[i].time !== t) {
+            if (anim.bankTrack.keyframes[i] === undefined || !commonKfFieldsEqual(anim.lookAtXTrack.keyframes[i], anim.bankTrack.keyframes[i])) {
                 tlMode = TimelineMode.Position_LookAt_Bank;
             }
         }
@@ -3466,7 +3513,7 @@ export class StudioPanel extends FloatingPanel {
     };
 
     private handleGlobalInput = (ev: KeyboardEvent) => {
-        const canvasActive = document.activeElement === document.querySelector('canvas')
+        const canvasActive = document.activeElement === document.querySelector('canvas');
         if (ev.key === 'Delete' && this.timeline.selectedKeyframeIcons.length && !ev.repeat) {
             this.deleteSelectedKeyframeIcons();
         } else if (ev.key === 'j' && !canvasActive) {
@@ -3482,7 +3529,7 @@ export class StudioPanel extends FloatingPanel {
                 this.stopAnimation();
             else
                 this.playAnimation();
-        } else if (ev.key === 'Enter') {
+        } else if (ev.key === 'Enter' && !(ev.target instanceof HTMLInputElement)) {
             this.addKeyframesFromMat4(mat4.clone(this.studioCameraController.camera.worldMatrix));
         } else if (ev.key === 'Escape') {
             this.stopAnimation();
