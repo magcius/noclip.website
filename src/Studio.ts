@@ -2293,12 +2293,66 @@ export class StudioPanel extends FloatingPanel {
             this.stopAnimationBtn.removeAttribute('hidden');
 
             if (theater) {
-                this.ui.toggleUI(false);
+                const countdownCanvas = document.createElement('canvas');
+                countdownCanvas.width = window.innerWidth;
+                countdownCanvas.height = window.innerHeight;
+                countdownCanvas.style.position = 'absolute';
+                countdownCanvas.style.left = '0';
+                countdownCanvas.style.top = '0';
+                countdownCanvas.style.zIndex = '1024';
+                const countdownCtx = countdownCanvas.getContext('2d') as CanvasRenderingContext2D;
+                countdownCtx.font = '72px monospace';
+                countdownCtx.textAlign = 'center';
+                countdownCtx.textBaseline = 'middle';
+                countdownCtx.lineWidth = 5;
+                const drawStyle = '#ffffff';
+                const shadowStyle = '#121212';
+                this.ui.elem.appendChild(countdownCanvas);
                 this.elem.style.display = 'none';
-                setTimeout(() => {
-                    this.animationManager.initAnimationPlayback(this.animation, 0);
-                    this.studioCameraController.isAnimationPlaying = true;
-                }, 2000);
+                this.ui.toggleUI(false);
+                let countdownMs = 2000;
+                const x = countdownCanvas.width / 2;
+                const y = countdownCanvas.height / 2;
+                const countdown = setInterval(() => {
+                    countdownMs -= 10;
+                    const seconds = countdownMs / 1000;
+
+                    countdownCtx.save();
+                    countdownCtx.clearRect(0, 0, countdownCanvas.width, countdownCanvas.height);
+                    countdownCtx.fillStyle = shadowStyle;
+                    countdownCtx.strokeStyle = shadowStyle;
+
+                    countdownCtx.beginPath();
+                    countdownCtx.save();
+                    countdownCtx.translate(x,y);
+                    countdownCtx.rotate(-Math.PI / 2);
+                    countdownCtx.translate(-x,-y);
+                    countdownCtx.arc(x - 3, y + 4, 100, 0, ((countdownMs % 1000) / 1000) * (2*Math.PI));
+                    countdownCtx.stroke();
+                    countdownCtx.restore();
+                    countdownCtx.fillText(Math.ceil(seconds).toFixed(0), x + 3, y + 3);
+
+                    countdownCtx.fillStyle = drawStyle;
+                    countdownCtx.strokeStyle = drawStyle;
+
+                    countdownCtx.beginPath();
+                    countdownCtx.save();
+                    countdownCtx.translate(x,y);
+                    countdownCtx.rotate(-Math.PI / 2);
+                    countdownCtx.translate(-x,-y);
+                    countdownCtx.arc(x, y, 100, 0, ((countdownMs % 1000) / 1000) * (2*Math.PI));
+                    countdownCtx.stroke();
+                    countdownCtx.restore();
+                    countdownCtx.fillText(Math.ceil(seconds).toFixed(0), x, y);
+                    countdownCtx.restore();
+
+                    if (countdownMs <= 0) {
+                        this.ui.elem.removeChild(countdownCanvas);
+                        this.animationManager.initAnimationPlayback(this.animation, 0);
+                        this.studioCameraController.isAnimationPlaying = true;
+                        clearInterval(countdown);
+                    }
+                }, 10);
             } else {
                 let startTime = this.timeline.getPlayheadTimeMs();
                 if (!this.animation.loop && startTime >= this.timeline.getLastKeyframeTimeMs())
@@ -2310,12 +2364,14 @@ export class StudioPanel extends FloatingPanel {
     }
 
     public stopAnimation() {
-        this.studioCameraController.isAnimationPlaying = false;
-        this.enableControls();
-        this.playAnimationBtn.removeAttribute('hidden');
-        this.stopAnimationBtn.setAttribute('hidden', '');
-        this.ui.toggleUI(true);
-        this.elem.style.display = '';
+        if (this.studioCameraController.isAnimationPlaying) {
+            this.studioCameraController.isAnimationPlaying = false;
+            this.enableControls();
+            this.playAnimationBtn.removeAttribute('hidden');
+            this.stopAnimationBtn.setAttribute('hidden', '');
+            this.ui.toggleUI(true);
+            this.elem.style.display = '';
+        }
     }
 
     public drawWorldHelpers(clipFromWorldMatrix: mat4) {
@@ -3501,6 +3557,7 @@ export class StudioPanel extends FloatingPanel {
         this.keyframeControlsContents.setAttribute('hidden', '');
         this.studioControlsContainer.setAttribute('hidden', '');
         this.keyframeControlsDock.setAttribute('hidden', '');
+        this.recordPlaybackBtn.setAttribute('hidden', '');
     }
 
     private showEditingUI(): void {
@@ -3508,6 +3565,7 @@ export class StudioPanel extends FloatingPanel {
         this.undoRedoBtnContainer.removeAttribute('hidden');
         this.saveAnimationBtn.removeAttribute('hidden');
         this.keyframeControlsDock.removeAttribute('hidden');
+        this.recordPlaybackBtn.removeAttribute('hidden');
     }
 
     private onTabBtnClick = function(this: HTMLButtonElement, ev: MouseEvent) {
