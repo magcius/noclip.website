@@ -181,20 +181,10 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderer = new SubnauticaRenderer(device);
-        const chunks: MeshMetadata[] = await context.dataFetcher.fetchData('subnautica/chunks.json')
-            .then(data => {
-                let decoder = new TextDecoder();
-                return JSON.parse(decoder.decode(data.arrayBuffer)).chunks;
-            });
-        let assets = new UnityAssetManager('subnautica/resources.assets', context, device);
+        let assets = new UnityAssetManager('level1', context, device);
         await assets.loadAssetInfo();
-
-        chunks.forEach(chunk => {
-            let offset = parseOffset(chunk.name);
-            assets.loadMesh(chunk).then(mesh => {
-                renderer.addMesh(mesh, offset);
-            });
-        });
+        let f = await assets.getGameObjectTree();
+        console.log(f);
 
         return renderer;
     }

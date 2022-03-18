@@ -101,6 +101,11 @@ class DataFetcherRequest {
             const rangeStart = this.options.rangeStart;
             const rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
             this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
+        } else if (this.options.ranges !== undefined) {
+            let rangeHeaderStr = this.options.ranges
+                .map(([start, size], i) => `bytes=${start}-${size}`)
+                .join(', ');
+            this.request.setRequestHeader('Range', rangeHeaderStr);
         }
         this.request.send();
         this.request.onload = (e) => {
@@ -165,6 +170,8 @@ interface DataFetcherOptions {
      * Must be specified together with rangeStart.
      */
     rangeSize?: number;
+
+    ranges?: [number, number][],
 }
 
 export class DataFetcher {

@@ -7,26 +7,29 @@ use crate::unity::version::{ UnityVersion, VersionType };
 
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
-pub struct PathPtr {
+pub struct PPtr {
     pub file_index: u32,
     pub path_id: i64,
 }
 
-impl Deserialize for PathPtr {
+impl Deserialize for PPtr {
     fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         let file_index = reader.read_u32()?;
         assert_eq!(file_index, 0); // not sure what this means if > 0
 
         let path_id = reader.read_i64()?;
-        Ok(PathPtr { file_index, path_id })
+        Ok(PPtr { file_index, path_id })
     }
 }
 
 #[wasm_bindgen]
 pub struct GameObject {
-    components: Vec<PathPtr>,
-    transform: Option<Transform>,
-    mesh_filter: Option<MeshFilter>,
+    #[wasm_bindgen(skip)]
+    pub components: Vec<PPtr>,
+    #[wasm_bindgen(skip)]
+    pub transform: Option<Transform>,
+    #[wasm_bindgen(skip)]
+    pub mesh_filter: Option<MeshFilter>,
     // TODO: MeshRenderer
     pub layer: u32,
     name: String,
@@ -36,7 +39,7 @@ pub struct GameObject {
 impl Deserialize for GameObject {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         Ok(GameObject {
-            components: PathPtr::deserialize_array(reader, asset)?,
+            components: PPtr::deserialize_array(reader, asset)?,
             transform: None,
             mesh_filter: None,
             layer: reader.read_u32()?,
@@ -51,10 +54,6 @@ impl GameObject {
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
-
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<GameObject, String> {
-        todo!()
-    }
 }
 
 pub struct GameObjectTree {
@@ -63,8 +62,8 @@ pub struct GameObjectTree {
 }
 
 #[wasm_bindgen]
-#[derive(Clone, Copy)]
-struct Quaternion {
+#[derive(Clone, Copy, Debug)]
+pub struct Quaternion {
     pub x: f32,
     pub y: f32,
     pub z: f32,
@@ -83,16 +82,21 @@ impl Deserialize for Quaternion {
 }
 
 #[wasm_bindgen]
-struct Transform {
+#[derive(Debug, Clone)]
+pub struct Transform {
+    pub game_object: PPtr,
     pub local_rotation: Quaternion,
     pub local_position: Vec3f,
     pub local_scale: Vec3f,
-    children: Vec<PathPtr>,
-    parent: PathPtr,
+    #[wasm_bindgen(skip)]
+    pub children: Vec<PPtr>, // pointer to Transforms
+    #[wasm_bindgen(skip)]
+    pub parent: PPtr, // pointer to Transform
 }
 
 impl Deserialize for Transform {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let game_object = PPtr::deserialize(reader, asset)?;
         let local_rotation = Quaternion::deserialize(reader, asset)?;
         let local_position = Vec3f::deserialize(reader, asset)?;
         let local_scale = Vec3f::deserialize(reader, asset)?;
@@ -103,12 +107,29 @@ impl Deserialize for Transform {
             }
             reader.align()?;
         }
-        let children = PathPtr::deserialize_array(reader, asset)?;
-        let parent = PathPtr::deserialize(reader, asset)?;
-        Ok(Transform { local_position, local_rotation, local_scale, children, parent })
+        let children = PPtr::deserialize_array(reader, asset)?;
+        let parent = PPtr::deserialize(reader, asset)?;
+        Ok(Transform {
+            game_object,
+            local_position,
+            local_rotation,
+            local_scale,
+            children,
+            parent,
+        })
     }
 }
 
-struct MeshFilter {
-    mesh_ptr: PathPtr,
+#[wasm_bindgen]
+impl Transform {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Transform, String> {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(asset.header.endianness);
+        Transform::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
+    }
+}
+
+pub struct MeshFilter {
+    pub game_object: PPtr,
+    pub mesh_ptr: PPtr,
 }
