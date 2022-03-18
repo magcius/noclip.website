@@ -104,6 +104,21 @@ export class UnityAssetManager {
         this.assetInfo = wasm.AssetInfo.deserialize(headerBytes);
     }
 
+    public async getGameObjectTree() {
+        let wasm = await loadWasm();
+        let locations = this.assetInfo.get_object_locations(wasm.UnityClassID.Transform);
+        let ranges: [number, number][] = [];
+        let sum = 0;
+        for (let i=0; i<locations.length; i++) {
+            let loc = locations.get(i);
+            ranges.push([loc.offset, loc.offset + loc.size]);
+            sum += loc.size;
+        }
+        let res = await this.context.dataFetcher.fetchData(this.assetPath, { ranges: ranges });
+        let transformData = new Uint8Array(res.arrayBuffer);
+        console.log(wasm.Transform.from_bytes(transformData, this.assetInfo));
+    }
+
     public async downloadMeshMetadata() {
         let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
         let assetBytes = new Uint8Array(assetData.arrayBuffer);

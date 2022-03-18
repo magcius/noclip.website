@@ -251,9 +251,6 @@ impl AssetReader {
 
     fn read_unity_type(&mut self, is_ref_type: bool, enable_type_tree: bool) -> Result<SerializedType> {
         let class_id = self.read_i32()?;
-        if class_id == -21 {
-            dbg!("lmfao");
-        }
         let is_stripped_type = self.read_bool()?;
         let script_type_index = self.read_i16()?;
         let mut script_id = Vec::new();
@@ -465,25 +462,20 @@ mod tests {
     fn test_cactus() {
         use std::collections::HashMap;
         use crate::unity::class_id::UnityClassID;
+        use crate::unity::game_object::Transform;
         let path = "../level1";
         let data = std::fs::read(path).unwrap();
         let mut reader = AssetReader::new(data);
         let asset = reader.read_asset_info().unwrap();
-        let mut stats: HashMap<i32, usize> = HashMap::new();
         for obj in &asset.objects {
-            *stats.entry(obj.class_id).or_insert(0) += 1;
-        }
-        for obj in &asset.objects {
-            if UnityClassID::try_from(obj.class_id).unwrap() == UnityClassID::GameObject {
-                dbg!(obj);
-                break;
+            if UnityClassID::try_from(obj.class_id).unwrap() == UnityClassID::Transform {
+                reader.seek(SeekFrom::Start(obj.byte_start as u64)).unwrap();
+                let t = Transform::deserialize(&mut reader, &asset).unwrap();
+                if t.children.len() > 0 {
+                    dbg!(t);
+                    break;
+                }
             }
-        }
-        dbg!(asset.metadata.unity_version);
-        dbg!(asset.objects.len());
-        for key in stats.keys() {
-            let class = UnityClassID::try_from(*key).unwrap();
-            println!("{:?}: {}", class, stats[&key]);
         }
     }
 }
