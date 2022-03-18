@@ -741,8 +741,6 @@ class Timeline {
             this.selectedKeyframeIcons.push(this.keyframeIcons[i]);
             this.keyframeIcons[i].selected = true;
         }
-        if (this.selectedKeyframeIcons.length)
-            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
     
     private deselectKeyframeIcon(kfIcon: KeyframeIcon) {
@@ -766,11 +764,14 @@ class Timeline {
     }
 
     public deselectAllKeyframeIcons() {
+        let deselected = false;
         for (const kfIcon of this.selectedKeyframeIcons) {
             kfIcon.selected = false;
+            deselected = true;
         }
         this.selectedKeyframeIcons = [];
-        this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
+        if (deselected)
+            this.elementsCtx.canvas.dispatchEvent(new Event('keyframeDeselected', { bubbles: false }));
     }
 
     public getSelectedKeyframeIndices(): number[] {
@@ -2234,7 +2235,7 @@ export class StudioPanel extends FloatingPanel {
                 this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
                 if (this.livePreviewCheckbox.checked)
                     this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
-            } else if (kfSelectedCountBefore !== this.timeline.selectedKeyframeIcons.length) {
+            } else if (kfSelectedCountBefore < this.timeline.selectedKeyframeIcons.length) {
                 this.saveState();
             }
         });
@@ -2262,7 +2263,7 @@ export class StudioPanel extends FloatingPanel {
         })
 
         document.addEventListener('mouseup', () => {
-            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectionBoxActive) {
+            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectedKeyframeIcons.length) {
                 this.saveState();
             }
 
@@ -2494,13 +2495,16 @@ export class StudioPanel extends FloatingPanel {
         const animString = JSON.stringify(this.animation);
         if (this.studioStates.length) {
             // Don't save if the most recent state is identical.
-            const lastState = this.studioStates[this.studioStates.length - 1];
+            const lastState = this.studioStates[this.currentStateIndex];
             const selectedKeyframeIndices = this.timeline.getSelectedKeyframeIndices();
             if (JSON.stringify(lastState.animation) === animString 
               && lastState.timelineLengthMs === this.timeline.getTimelineLengthMs() 
+              && selectedKeyframeIndices.every((v) => {
+                  return lastState.selectedKeyframeIndices.includes(v);
+                })
               && lastState.selectedKeyframeIndices.every((v) => {
-                  return selectedKeyframeIndices.includes(v);
-              })) {
+                return selectedKeyframeIndices.includes(v);
+                })) {
                 return;
             }
         } 
@@ -2580,12 +2584,18 @@ export class StudioPanel extends FloatingPanel {
         this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
         setElementHighlighted(this.loopAnimationBtn, this.animation.loop);
         this.timeline.reselectKeyframes(state.selectedKeyframeIndices);
+        if (this.timeline.selectedKeyframeIcons.length === 0) {
+            this.hideKeyframeControls();
+        } else {
+            // Call onKeyframeSelected to update relevant keyframe editing inputs
+            this.onKeyframeIconSelected();
+        }
         this.timeline.draw();
         this.updatePreviewSteps();
     }
 
     private reAddAllKeyframeIcons(): void {
-        this.timeline.deselectAllKeyframeIcons();
+        this.timeline.selectedKeyframeIcons = [];
         this.timeline.keyframeIcons = [];
 
         const inferKfType = (i: number, track: KeyframeTrack) => {
@@ -2908,6 +2918,7 @@ export class StudioPanel extends FloatingPanel {
             // Call onKeyframeSelected to update relevant keyframe editing inputs
             this.onKeyframeIconSelected();
         }
+        this.saveState();
     }
 
     private hideKeyframeControls() {
