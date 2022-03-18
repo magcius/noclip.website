@@ -971,7 +971,7 @@ class Timeline {
     
     public getLoopEndKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
         for (const kfIcon of this.keyframeIcons) {
-            if (kfIcon.type === KeyframeIconType.Start) {
+            if (kfIcon.type === KeyframeIconType.Loop_End) {
                 const kf = kfIcon.keyframesMap.get(trackType);
                 if (kf !== undefined)
                     return kf;
@@ -983,7 +983,7 @@ class Timeline {
 
     public getStartKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
         for (const kfIcon of this.keyframeIcons) {
-            if (kfIcon.type === KeyframeIconType.Loop_End) {
+            if (kfIcon.type === KeyframeIconType.Start) {
                 const kf = kfIcon.keyframesMap.get(trackType);
                 if (kf !== undefined)
                     return kf;
@@ -1165,6 +1165,7 @@ export class StudioPanel extends FloatingPanel {
     private saveAnimationBtn: HTMLButtonElement;
     private importAnimationBtn: HTMLButtonElement;
     private exportAnimationBtn: HTMLButtonElement;
+    private helpBtn: HTMLButtonElement;
     private studioSettingsContainer: HTMLElement;
     private timelineModeSelect: HTMLSelectElement;
     private showPreviewLineCheckbox: Checkbox;
@@ -1555,6 +1556,7 @@ export class StudioPanel extends FloatingPanel {
                         <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
                         <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
                         <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
+                        <button type="button" id="helpBtn" class="SettingsButton">Help</button>
                     </div>
                     <div style="position: absolute; bottom: 3rem; height: 3rem; left: 50%; transform: translate(-50%, 0);">
                         <button type="button" id="recordPlaybackBtn" class="SettingsButton"></button>
@@ -1708,6 +1710,15 @@ export class StudioPanel extends FloatingPanel {
         this.exportAnimationBtn = this.contents.querySelector('#exportAnimationBtn') as HTMLButtonElement;
         this.exportAnimationBtn.title = 'Save the current animation as a JSON file.';
 
+        this.helpBtn = this.contents.querySelector('#helpBtn') as HTMLButtonElement;
+        this.helpBtn.onclick = () => {
+            const helpLink = document.createElement('a') as HTMLAnchorElement;
+            helpLink.rel = 'noopener noreferrer';
+            helpLink.target = '_blank';
+            helpLink.href = 'https://github.com/magcius/noclip.website/wiki/Studio';
+            helpLink.click();
+        }
+
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
 
         this.studioDataTabBtn.addEventListener('click', this.onTabBtnClick);
@@ -1778,7 +1789,7 @@ export class StudioPanel extends FloatingPanel {
             const newMode = parseInt(this.timelineModeSelect.value);
             if (!canChangeToMode(newMode)) {
                 this.displayError('Cannot flatten timeline unless keyframes are aligned. ',
-                  'See Wiki for details.', 'https://github.com/magcius/noclip.website/wiki/Studio-Mode#Consolidating-Timeline');
+                  'See Help for details.', 'https://github.com/magcius/noclip.website/wiki/Studio-Mode#Consolidating-Timeline');
                 this.timelineModeSelect.selectedIndex = this.timelineMode;
                 return;
             }
@@ -2004,23 +2015,28 @@ export class StudioPanel extends FloatingPanel {
                 return;
 
             if (this.timeline.selectedKeyframeIcons.length) {
+                let linkedKfIconEdited = false;
                 for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                    kfIcon.keyframesMap.forEach((kf) => {
+                    kfIcon.keyframesMap.forEach((kf, track) => {
                         kf.interpInType = this.interpInTypeBtns.selectedIndex;
+                        let linkedKf = undefined;
+                        if (this.animation.loop) {
+                            if (kfIcon.type === KeyframeIconType.Loop_End)
+                                linkedKf = this.timeline.getStartKeyframeForTrack(track);
+                            else if (kfIcon.type === KeyframeIconType.Start)
+                                linkedKf = this.timeline.getLoopEndKeyframeForTrack(track);
+                        }
+                        if (linkedKf) {
+                            linkedKfIconEdited = true;
+                            linkedKf.interpInType = this.interpInTypeBtns.selectedIndex;
+                        }
+                            
                     });
                     kfIcon.updatePaths();
-                    let linkedKfIcon = undefined;
-                    if (this.animation.loop) {
-                        if (kfIcon.type === KeyframeIconType.Loop_End)
-                            linkedKfIcon = this.timeline.keyframeIcons[0];
-                        else if (kfIcon.type === KeyframeIconType.Start)
-                            linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                    }
-                    if (linkedKfIcon) {
-                        linkedKfIcon.keyframesMap.forEach((kf) => {
-                            kf.interpInType = this.interpInTypeBtns.selectedIndex;
-                        });
-                        linkedKfIcon.updatePaths();
+                }
+                if (linkedKfIconEdited) {
+                    for (const kfIcon of this.timeline.keyframeIcons) {
+                        kfIcon.updatePaths();
                     }
                 }
                 this.timeline.draw();
@@ -2041,23 +2057,27 @@ export class StudioPanel extends FloatingPanel {
                 return;
 
             if (this.timeline.selectedKeyframeIcons.length) {
+                let linkedKfIconEdited = false;
                 for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                    kfIcon.keyframesMap.forEach((kf) => {
+                    kfIcon.keyframesMap.forEach((kf, track) => {
                         kf.interpOutType = this.interpOutTypeBtns.selectedIndex;
+                        let linkedKf = undefined;
+                        if (this.animation.loop) {
+                            if (kfIcon.type === KeyframeIconType.Loop_End)
+                                linkedKf = this.timeline.getStartKeyframeForTrack(track);
+                            else if (kfIcon.type === KeyframeIconType.Start)
+                                linkedKf = this.timeline.getLoopEndKeyframeForTrack(track);
+                        }
+                        if (linkedKf) {
+                            linkedKfIconEdited = true;
+                            linkedKf.interpOutType = this.interpOutTypeBtns.selectedIndex;
+                        }
                     });
                     kfIcon.updatePaths();
-                    let linkedKfIcon = undefined;
-                    if (this.animation.loop) {
-                        if (kfIcon.type === KeyframeIconType.Loop_End)
-                            linkedKfIcon = this.timeline.keyframeIcons[0];
-                        else if (kfIcon.type === KeyframeIconType.Start)
-                            linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                    }
-                    if (linkedKfIcon) {
-                        linkedKfIcon.keyframesMap.forEach((kf) => {
-                            kf.interpOutType = this.interpOutTypeBtns.selectedIndex;
-                        });
-                        linkedKfIcon.updatePaths();
+                }
+                if (linkedKfIconEdited) {
+                    for (const kfIcon of this.timeline.keyframeIcons) {
+                        kfIcon.updatePaths();
                     }
                 }
                 this.timeline.draw();
@@ -2077,21 +2097,18 @@ export class StudioPanel extends FloatingPanel {
         this.easeInSlider.onvalue = (value) => {
             if (this.timeline.selectedKeyframeIcons.length) {
                 for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                    kfIcon.keyframesMap.forEach((kf) => {
+                    kfIcon.keyframesMap.forEach((kf, track) => {
                         kf.easeInCoeff = value;
+                        let linkedKf = undefined;
+                        if (this.animation.loop) {
+                            if (kfIcon.type === KeyframeIconType.Loop_End)
+                                linkedKf = this.timeline.getStartKeyframeForTrack(track);
+                            else if (kfIcon.type === KeyframeIconType.Start)
+                                linkedKf = this.timeline.getLoopEndKeyframeForTrack(track);
+                        }
+                        if (linkedKf)
+                            linkedKf.easeInCoeff = value;
                     });
-                    let linkedKfIcon = undefined;
-                    if (this.animation.loop) {
-                        if (kfIcon.type === KeyframeIconType.Loop_End)
-                            linkedKfIcon = this.timeline.keyframeIcons[0];
-                        else if (kfIcon.type === KeyframeIconType.Start)
-                            linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                    }
-                    if (linkedKfIcon) {
-                        linkedKfIcon.keyframesMap.forEach((kf) => {
-                            kf.easeInCoeff = value;
-                        });
-                    }
                 }
                 this.updatePreviewSteps();
             }
@@ -2113,21 +2130,18 @@ export class StudioPanel extends FloatingPanel {
         this.easeOutSlider.onvalue = (value) => {
             if (this.timeline.selectedKeyframeIcons.length) {
                 for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                    kfIcon.keyframesMap.forEach((kf) => {
+                    kfIcon.keyframesMap.forEach((kf, track) => {
                         kf.easeOutCoeff = value;
+                        let linkedKf = undefined;
+                        if (this.animation.loop) {
+                            if (kfIcon.type === KeyframeIconType.Loop_End)
+                                linkedKf = this.timeline.getStartKeyframeForTrack(track);
+                            else if (kfIcon.type === KeyframeIconType.Start)
+                                linkedKf = this.timeline.getLoopEndKeyframeForTrack(track);
+                        }
+                        if (linkedKf)
+                            linkedKf.easeOutCoeff = value;
                     });
-                    let linkedKfIcon = undefined;
-                    if (this.animation.loop) {
-                        if (kfIcon.type === KeyframeIconType.Loop_End)
-                            linkedKfIcon = this.timeline.keyframeIcons[0];
-                        else if (kfIcon.type === KeyframeIconType.Start)
-                            linkedKfIcon = this.timeline.keyframeIcons[this.timeline.keyframeIcons.length - 1];
-                    }
-                    if (linkedKfIcon) {
-                        linkedKfIcon.keyframesMap.forEach((kf) => {
-                            kf.easeOutCoeff = value;
-                        });
-                    }
                 }
                 this.updatePreviewSteps();
             }
