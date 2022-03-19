@@ -1,12 +1,13 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index';
+import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, FileLocation, Vec3f, Quaternion, PPtr } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
-import { vec3 } from 'gl-matrix';
+import { mat4, vec3, quat } from 'gl-matrix';
+import { setChildren } from '../../ui';
 
 let _wasm: typeof import('../../../rust/pkg/index') | null = null;
 
@@ -49,6 +50,103 @@ export enum UnityChannel {
     Tangent,
 }
 
+type Map<T> = { [pathID: number]: T };
+
+class BatchRequest {
+    public pathIDs: number[];
+    public indices: number[];
+    public results: [number, Uint8Array][];
+
+    constructor(public fileIndex: number) {
+        this.pathIDs = [];
+        this.results = [];
+        this.indices = [];
+    }
+}
+
+class BatchRequestManager {
+    batches: { [fileIndex: number]: BatchRequest }
+    constructor() {
+        this.batches = {};
+    }
+
+    add(ptr: PPtr, index: number) {
+        if (!(ptr.file_index in this.batches)) {
+            this.batches[ptr.file_index] = new BatchRequest(ptr.file_index);
+        }
+        this.batches[ptr.file_index].pathIDs.push(ptr.path_id);
+        this.batches[ptr.file_index].indices.push(index);
+    }
+}
+
+export class GameObjectTree {
+    constructor(public meshes: Map<UnityMesh>, public nodes: Map<GameObjectTreeNode>, public rootPathIDs: number[]) {
+        this.rootPathIDs.forEach(transformID => this.propagateModel(transformID));
+    }
+
+    propagateModel(transformID: number) {
+        let node = this.nodes[transformID];
+        node.transformChildrenPathIDs.forEach(childID => {
+            let child = this.nodes[childID];
+            if (child === undefined) {
+                console.log(childID);
+                return;
+            }
+            mat4.mul(child.modelMatrix, child.modelMatrix, node.modelMatrix);
+            this.propagateModel(childID);
+        });
+    }
+}
+
+function convertVec3f(v: Vec3f): vec3 {
+    return vec3.fromValues(v.x, v.y, v.z);
+}
+
+function convertQuat(q: Quaternion): quat {
+    return quat.fromValues(q.x, q.y, q.z, q.w);
+}
+
+export class GameObjectTreeNode {
+    modelMatrix: mat4;
+    transformPathID: number;
+    gameObjectPathID: number;
+    transformChildrenPathIDs: number[];
+    name: string|undefined;
+    isActive: boolean|undefined;
+    meshPathID: number|undefined;
+    gameObjectSet: boolean;
+    meshSet: boolean;
+
+    constructor(transform: Transform) {
+        this.modelMatrix = mat4.create();
+        let rot = convertQuat(transform.local_rotation);
+        let translation = convertVec3f(transform.local_position);
+        let scale = convertVec3f(transform.local_scale);
+        mat4.fromRotationTranslationScale(this.modelMatrix, rot, translation, scale);
+        this.transformPathID = transform.path_id!;
+        this.gameObjectPathID = transform.game_object.path_id;
+        this.transformChildrenPathIDs = Array.from(transform.get_children_path_ids());
+
+        this.gameObjectSet = false;
+        this.meshSet = false;
+    }
+
+    setGameObject(gameObject: GameObject) {
+        this.name = gameObject.get_name();
+        this.isActive = gameObject.is_active;
+        this.gameObjectSet = true;
+    }
+
+    setMeshPathID(meshPathID: number) {
+        this.meshPathID = meshPathID;
+        this.meshSet = true;
+    }
+
+    isValid(): boolean {
+        return this.meshSet && this.gameObjectSet;
+    }
+}
+
 export class UnityMesh {
     public bbox: Geometry.AABB; 
 
@@ -68,55 +166,175 @@ export class UnityMesh {
 
 export class UnityAssetManager {
     private assetInfo: AssetInfo;
+    private externalAssets: { [fileIndex: number]: AssetInfo };
 
     constructor(public assetPath: string, private context: SceneContext, public device: GfxDevice) {
+        this.externalAssets = {};
     }
 
-    private async loadBytes(range: Range, path = this.assetPath): Promise<Uint8Array> {
+    private async loadBytes(range?: Range, path = this.assetPath): Promise<Uint8Array> {
         let res = await this.context.dataFetcher.fetchData(path, range);
         return new Uint8Array(res.arrayBuffer);
     }
 
+    private async loadMultipleData(ranges: [number, number][], path = this.assetPath): Promise<Uint8Array[]> {
+        let bufs = await this.context.dataFetcher.fetchMultipleData(path, ranges);
+        return bufs.map(buf => new Uint8Array(buf.arrayBuffer));
+    }
+
+    private getSiblingPath(path: string): string {
+        let parts = this.assetPath.split('/');
+        parts.pop();
+        parts.push(path);
+        return parts.join('/');
+    }
+
     private async loadStreamingData(streamingInfo: StreamingInfo): Promise<Uint8Array> {
-        let path = this.assetPath.split('/');
-        path.pop();
-        path.push(streamingInfo.get_path());
         return await this.loadBytes({
             rangeStart: streamingInfo.offset,
             rangeSize: streamingInfo.size,
-        }, path.join('/'));
+        }, this.getSiblingPath(streamingInfo.get_path()));
     }
 
     public async loadAssetInfo() {
+        this.assetInfo = await this._loadAssetInfo(this.assetPath);
+    }
+
+    private async _loadAssetInfo(path: string) {
         let wasm = await loadWasm();
         let headerBytes = await this.loadBytes({
             rangeStart: 0,
             rangeSize: MAX_HEADER_LENGTH,
-        });
+        }, path);
         let assetHeader = wasm.AssetHeader.deserialize(headerBytes);
         if (assetHeader.data_offset > headerBytes.byteLength) {
             let extraBytes = await this.loadBytes({
                 rangeStart: headerBytes.byteLength,
                 rangeSize: assetHeader.data_offset - headerBytes.byteLength,
-            });
+            }, path);
             headerBytes = concatBufs(headerBytes, extraBytes);
         }
-        this.assetInfo = wasm.AssetInfo.deserialize(headerBytes);
+        return wasm.AssetInfo.deserialize(headerBytes);
     }
 
-    public async getGameObjectTree() {
-        let wasm = await loadWasm();
-        let locations = this.assetInfo.get_object_locations(wasm.UnityClassID.Transform);
-        let ranges: [number, number][] = [];
-        let sum = 0;
-        for (let i=0; i<locations.length; i++) {
-            let loc = locations.get(i);
-            ranges.push([loc.offset, loc.offset + loc.size]);
-            sum += loc.size;
+    private async loadUnityObjects(classID: UnityClassID): Promise<[number, Uint8Array][]> {
+        let array = this.assetInfo.get_object_locations(classID);
+        let locations = [];
+        for (let i=0; i<array.length; i++) {
+            locations.push(array.get(i));
         }
-        let res = await this.context.dataFetcher.fetchData(this.assetPath, { ranges: ranges });
-        let transformData = new Uint8Array(res.arrayBuffer);
-        console.log(wasm.Transform.from_bytes(transformData, this.assetInfo));
+        return this.loadUnityLocations(locations);
+    }
+
+    private async loadExternalAsset(fileIndex: number) {
+        if (fileIndex === 0 || fileIndex in this.externalAssets) {
+            return;
+        }
+        let path = this.getSiblingPath(this.assetInfo.get_external_path(fileIndex)!);
+        this.externalAssets[fileIndex] = await this._loadAssetInfo(path);
+    }
+
+    private async loadUnityLocations(locations: FileLocation[], fileIndex = 0): Promise<[number, Uint8Array][]> {
+        let ranges: [number, number][] = [];
+        for (let i=0; i<locations.length; i++) {
+            let loc = locations[i];
+            ranges.push([loc.offset, loc.offset + loc.size])
+        }
+        let data;
+        if (fileIndex !== 0) {
+            let path = this.getSiblingPath(this.assetInfo.get_external_path(fileIndex)!);
+            data = await this.loadMultipleData(ranges, path);
+        } else {
+            data = await this.loadMultipleData(ranges);
+        }
+        return data.map((blob, i) => [locations[i].path_id, blob]);
+    }
+
+    private readObjectLocations(pathIDs: number[], fileIndex = 0): FileLocation[] {
+        let assetInfo = this.assetInfo;
+        if (fileIndex !== 0) {
+            assetInfo = this.externalAssets[fileIndex];
+        }
+        return pathIDs.map(pathID => assetInfo.get_obj_location(pathID)!);
+    }
+
+    public async getGameObjectTree(): Promise<GameObjectTree> {
+        let wasm = await loadWasm();
+
+        let nodesByGameObject: Map<GameObjectTreeNode> = {};
+
+        let transformData = await this.loadUnityObjects(wasm.UnityClassID.Transform);
+        let transforms: Map<Transform> = {};
+        let rootTransforms: Transform[] = [];
+        transformData.forEach(([pathID, data]) => {
+            let transform = wasm.Transform.from_bytes(data, this.assetInfo, pathID);
+            if (transform.is_root()) {
+                rootTransforms.push(transform);
+            }
+            transforms[pathID] = transform;
+            nodesByGameObject[transform.game_object.path_id] = new GameObjectTreeNode(transform);
+        });
+        console.log(`loaded ${transformData.length} transforms (${rootTransforms.length} roots)`)
+
+        let gameObjectData = await this.loadUnityObjects(wasm.UnityClassID.GameObject);
+        let gameObjects: Map<GameObject> = {};
+        gameObjectData.forEach(([pathID, data]) => {
+            gameObjects[pathID] = wasm.GameObject.from_bytes(data, this.assetInfo, pathID);
+            if (!(pathID in nodesByGameObject)) {
+                let name = gameObjects[pathID].get_name();
+                console.log(`No transform found for ${name} (${pathID}), skipping`);
+                return;
+            }
+            nodesByGameObject[pathID].setGameObject(gameObjects[pathID]);
+        });
+        console.log(`loaded ${gameObjectData.length} gameobjects`)
+
+        let meshFilterData = await this.loadUnityObjects(wasm.UnityClassID.MeshFilter);
+        let meshes: Map<UnityMesh> = {};
+        let meshesToGameObjects: { [combinedMeshID: string]: number[]} = {};
+        let batchRequestManager = new BatchRequestManager();
+        let meshFilters = meshFilterData.map(([pathID, data], i) => {
+            let filter = wasm.MeshFilter.from_bytes(data, this.assetInfo, pathID);
+            // check for a null ptr
+            if (filter.mesh_ptr.path_id === 0) {
+                return;
+            }
+
+            let combinedMeshID = `${filter.mesh_ptr.file_index}-${filter.mesh_ptr.path_id}`;
+            if (!(combinedMeshID in meshesToGameObjects)) {
+                meshesToGameObjects[combinedMeshID] = [];
+            }
+            meshesToGameObjects[combinedMeshID].push(filter.game_object.path_id);
+            batchRequestManager.add(filter.mesh_ptr, i);
+            return filter;
+        });
+        for (let i in batchRequestManager.batches) {
+            let batch = batchRequestManager.batches[i];
+            await this.loadExternalAsset(batch.fileIndex);
+            let locations = this.readObjectLocations(batch.pathIDs, batch.fileIndex);
+            let results = await this.loadUnityLocations(locations, batch.fileIndex);
+            for (let i=0; i<results.length; i++) {
+                let [pathID, data] = results[i];
+                if (!(pathID in meshes)) {
+                    meshes[pathID] = await this.createMesh(data, pathID, batch.fileIndex);
+                }
+                let combinedMeshID = `${batch.fileIndex}-${pathID}`;
+                meshesToGameObjects[combinedMeshID].forEach(gameObjectPathID => {
+                    nodesByGameObject[gameObjectPathID].setMeshPathID(pathID);
+                });
+            }
+        }
+
+        let rootPathIDs = rootTransforms.map(root => root.path_id!);
+
+        // Re-key nodes by transform ID for easier tree traversal
+        let nodesByTransform: Map<GameObjectTreeNode> = {};
+        for (let k in nodesByGameObject) {
+            let node = nodesByGameObject[k];
+            nodesByTransform[node.transformPathID] = node;
+        }
+
+        return new GameObjectTree(meshes, nodesByTransform, rootPathIDs);
     }
 
     public async downloadMeshMetadata() {
@@ -137,21 +355,28 @@ export class UnityAssetManager {
     }
 
     public async loadMesh(meshData: MeshMetadata): Promise<UnityMesh> {
-        let wasm = await loadWasm();
-        let meshBytes = await this.loadBytes({
+        return this.createMesh(await this.loadBytes({
             rangeStart: meshData.offset,
             rangeSize: meshData.size,
-        });
-        let mesh = wasm.Mesh.from_bytes(meshBytes, this.assetInfo);
+        }));
+    }
+
+    private async createMesh(data: Uint8Array, pathID?: number, fileIndex = 0): Promise<UnityMesh> {
+        let wasm = await loadWasm();
+        let assetInfo = this.assetInfo;
+        if (fileIndex !== 0) {
+            assetInfo = this.externalAssets[fileIndex];
+        }
+        let mesh = wasm.Mesh.from_bytes(data, assetInfo, pathID);
         let streamingInfo: StreamingInfo | undefined = mesh.get_streaming_info();
         if (streamingInfo !== undefined) {
             mesh.set_vertex_data(await this.loadStreamingData(streamingInfo));
         }
 
         if (mesh.is_compressed()) {
-            return await loadCompressedMesh(this.device, mesh);
+            return loadCompressedMesh(this.device, mesh);
         } else {
-            return await loadMesh(this.device, mesh);
+            return loadMesh(this.device, mesh);
         }
     }
 }

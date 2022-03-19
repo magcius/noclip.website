@@ -92,6 +92,21 @@ impl Deserialize for ChannelInfo {
 }
 
 #[derive(Debug)]
+pub struct Mat4x4f {
+    xs: Vec<f32>,
+}
+
+impl Deserialize for Mat4x4f {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let mut xs = Vec::new();
+        for _ in 0..16 {
+            xs.push(reader.read_f32()?);
+        }
+        Ok(Mat4x4f { xs })
+    }
+}
+
+#[derive(Debug)]
 pub struct PackedIntVector {
     num_items: u32,
     data: Vec<u8>,
@@ -211,10 +226,18 @@ impl StreamingInfo {
 
 impl Deserialize for StreamingInfo {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let unity2020 = UnityVersion { major: 2020, ..Default::default() };
+        let offset = if asset.metadata.unity_version > unity2020 {
+            reader.read_i64()? as u32
+        } else {
+            reader.read_u32()?
+        };
+        let size = reader.read_u32()?;
+        let path = reader.read_char_array()?;
         Ok(StreamingInfo {
-            size: reader.read_u32()?,
-            offset: reader.read_u32()?,
-            path: reader.read_char_array()?,
+            size: size,
+            offset: offset,
+            path: path,
         })
     }
 }
@@ -415,14 +438,17 @@ pub struct Mesh {
     baked_convex_collision_mesh: Vec<u8>,
     baked_triangle_collision_mesh: Vec<u8>,
     streaming_info: StreamingInfo,
+    pub path_id: Option<i32>,
 }
 
 #[wasm_bindgen]
 impl Mesh {
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Mesh, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: Option<i32>) -> std::result::Result<Mesh, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        Mesh::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
+        let mut mesh = Mesh::deserialize(&mut reader, asset)?;
+        mesh.path_id = path_id;
+        return Ok(mesh);
     }
 
     pub fn get_name(&self) -> String {
@@ -508,11 +534,11 @@ impl Deserialize for Mesh {
 
         let submeshes = SubMesh::deserialize_array(reader, asset)?;
         let _shapes = Shape::deserialize(reader, asset)?;
-        let _bind_pose = NoOp::deserialize_array(reader, asset)?;
-        let _bone_name_hashes = NoOp::deserialize_array(reader, asset)?;
+        let _bind_pose = Mat4x4f::deserialize_array(reader, asset)?;
+        let _bone_name_hashes = reader.read_u32_array()?;
         let _root_bone_name_hash = reader.read_u32()?;
-        let _bones_aabb = NoOp::deserialize_array(reader, asset)?;
-        let _variable_bone_count_weights = NoOp::deserialize_array(reader, asset)?;
+        let _bones_aabb = AABB::deserialize_array(reader, asset)?;
+        let _variable_bone_count_weights = reader.read_u32_array()?;
         let mesh_compression = MeshCompression::deserialize(reader, asset)?;
         let is_readable = reader.read_bool()?;
         let keep_vertices = reader.read_bool()?;
@@ -550,6 +576,7 @@ impl Deserialize for Mesh {
             baked_convex_collision_mesh,
             baked_triangle_collision_mesh,
             streaming_info,
+            path_id: None,
         })
     }
 }
