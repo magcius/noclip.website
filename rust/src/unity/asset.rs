@@ -31,6 +31,14 @@ impl AssetInfo {
             .map_err(|err| format!("{:?}", err))
     }
 
+    pub fn get_external_path(&self, file_index: u32) -> Option<String> {
+        let idx = (file_index as usize) - 1;
+        if idx >= self.externals.len() {
+            return None;
+        }
+        Some(self.externals[idx].path_name.clone())
+    }
+
     pub fn get_mesh_metadata(&self, data: Vec<u8>) -> MeshMetadataArray {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(self.header.endianness);
@@ -72,7 +80,7 @@ impl AssetInfo {
         }
     }
 
-    pub fn get_obj_location(&self, path_id: i64) -> Option<FileLocation> {
+    pub fn get_obj_location(&self, path_id: i32) -> Option<FileLocation> {
         match self.objects.iter().find(|obj| obj.path_id == path_id) {
             Some(obj) => Some(FileLocation::from_obj(obj)),
             None => None,
@@ -109,7 +117,7 @@ impl MeshMetadataArray {
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
 pub struct FileLocation {
-    pub path_id: i64,
+    pub path_id: i32,
     pub offset: usize,
     pub size: usize,
 }
@@ -148,12 +156,12 @@ pub struct External {
 #[derive(Debug)]
 pub struct ScriptType {
     pub local_serialized_file_index: i32,
-    pub local_identifier_in_file: i64,
+    pub local_identifier_in_file: i32,
 }
 
 #[derive(Debug)]
 pub struct UnityObject {
-    pub path_id: i64,
+    pub path_id: i32,
     pub byte_start: i64,
     pub byte_size: u32,
     pub type_id: i32,

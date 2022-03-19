@@ -260,4 +260,28 @@ export class DataFetcher {
         const url = getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
         return this.fetchURL(url, options);
     }
+
+    public fetchMultipleData(path: string, ranges: [number, number][]): Promise<NamedArrayBufferSlice[]> {
+        const url = getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
+        if (true || IS_DEVELOPMENT) {
+            return this.fetchURL(url, {})
+                .then(buffer => {
+                    let buffers: NamedArrayBufferSlice[] = [];
+                    for (let i=0; i<ranges.length; i++) {
+                        let [start, end] = ranges[i];
+                        let slice = buffer.slice(start, end, true);
+                        const namedSlice = slice as NamedArrayBufferSlice;
+                        namedSlice.name = url;
+                        buffers.push(namedSlice);
+                    }
+                    return buffers;
+                });
+        } else {
+            return this.fetchURL(url, { ranges: ranges })
+                .then(buffer => {
+                    // todo: handle multipart response
+                    return [];
+                });
+        }
+    }
 }

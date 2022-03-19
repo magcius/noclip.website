@@ -9,21 +9,20 @@ use crate::unity::version::{ UnityVersion, VersionType };
 #[derive(Debug, Copy, Clone)]
 pub struct PPtr {
     pub file_index: u32,
-    pub path_id: i64,
+    pub path_id: i32,
 }
 
 impl Deserialize for PPtr {
     fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         let file_index = reader.read_u32()?;
-        assert_eq!(file_index, 0); // not sure what this means if > 0
-
-        let path_id = reader.read_i64()?;
+        let path_id = reader.read_i64()? as i32;
         Ok(PPtr { file_index, path_id })
     }
 }
 
 #[wasm_bindgen]
 pub struct GameObject {
+    pub path_id: Option<i32>,
     #[wasm_bindgen(skip)]
     pub components: Vec<PPtr>,
     #[wasm_bindgen(skip)]
@@ -38,13 +37,21 @@ pub struct GameObject {
 
 impl Deserialize for GameObject {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let components = PPtr::deserialize_array(reader, asset)?;
+        if components.iter().find(|ptr| ptr.file_index != 0).is_some() {
+            let err_str = format!("Found GameObject component with non-zero file index");
+            return Err(AssetReaderError::UnsupportedFeature(err_str));
+        }
+
         Ok(GameObject {
-            components: PPtr::deserialize_array(reader, asset)?,
-            transform: None,
-            mesh_filter: None,
+            components,
             layer: reader.read_u32()?,
             name: reader.read_char_array()?,
             is_active: reader.read_bool()?,
+
+            path_id: None,
+            transform: None,
+            mesh_filter: None,
         })
     }
 }
@@ -54,12 +61,16 @@ impl GameObject {
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
+
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<GameObject, String> {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(asset.header.endianness);
+        let mut obj = GameObject::deserialize(&mut reader, asset)?;
+        obj.path_id = Some(path_id);
+        return Ok(obj);
+    }
 }
 
-pub struct GameObjectTree {
-    obj: GameObject,
-    children: Vec<GameObject>,
-}
 
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +82,7 @@ pub struct Quaternion {
 }
 
 impl Deserialize for Quaternion {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, _: &AssetInfo) -> Result<Self> {
         Ok(Quaternion {
             x: reader.read_f32()?,
             y: reader.read_f32()?,
@@ -84,6 +95,7 @@ impl Deserialize for Quaternion {
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct Transform {
+    pub path_id: Option<i32>,
     pub game_object: PPtr,
     pub local_rotation: Quaternion,
     pub local_position: Vec3f,
@@ -97,6 +109,10 @@ pub struct Transform {
 impl Deserialize for Transform {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let game_object = PPtr::deserialize(reader, asset)?;
+        if game_object.file_index != 0 {
+            let err_str = format!("Found Transform with non-zero GameObject file index");
+            return Err(AssetReaderError::UnsupportedFeature(err_str));
+        }
         let local_rotation = Quaternion::deserialize(reader, asset)?;
         let local_position = Vec3f::deserialize(reader, asset)?;
         let local_scale = Vec3f::deserialize(reader, asset)?;
@@ -110,6 +126,7 @@ impl Deserialize for Transform {
         let children = PPtr::deserialize_array(reader, asset)?;
         let parent = PPtr::deserialize(reader, asset)?;
         Ok(Transform {
+            path_id: None,
             game_object,
             local_position,
             local_rotation,
@@ -122,14 +139,45 @@ impl Deserialize for Transform {
 
 #[wasm_bindgen]
 impl Transform {
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Transform, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<Transform, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        Transform::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
+        let mut obj = Transform::deserialize(&mut reader, asset)?;
+        obj.path_id = Some(path_id);
+        return Ok(obj);
+    }
+
+    pub fn is_root(&self) -> bool {
+        self.parent.path_id == 0
+    }
+
+    pub fn get_children_path_ids(&self) -> Vec<i32> {
+        self.children.iter().map(|ptr| ptr.path_id).collect()
     }
 }
 
+#[wasm_bindgen]
 pub struct MeshFilter {
+    pub path_id: Option<i32>,
     pub game_object: PPtr,
     pub mesh_ptr: PPtr,
+}
+
+impl Deserialize for MeshFilter {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let game_object = PPtr::deserialize(reader, asset)?;
+        let mesh_ptr = PPtr::deserialize(reader, asset)?;
+        Ok(MeshFilter { path_id: None, game_object, mesh_ptr })
+    }
+}
+
+#[wasm_bindgen]
+impl MeshFilter {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<MeshFilter, String> {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(asset.header.endianness);
+        let mut obj = MeshFilter::deserialize(&mut reader, asset)?;
+        obj.path_id = Some(path_id);
+        return Ok(obj);
+    }
 }

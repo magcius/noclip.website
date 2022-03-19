@@ -68,11 +68,13 @@ class MeshRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        /*
         const bbox = new AABB();
         bbox.transform(this.mesh.bbox, this.modelMatrix);
         if (!viewerInput.camera.frustum.contains(bbox)) {
             return;
         }
+        */
 
         const template = renderInstManager.pushTemplateRenderInst();
 
@@ -109,11 +111,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         this.program = this.renderHelper.renderCache.createProgram(new ChunkProgram());
     }
 
-    addMesh(mesh: UnityMesh, offset: vec3) {
-        let model = mat4.create();
-        let scaling = vec3.fromValues(this.scaleFactor, this.scaleFactor, this.scaleFactor);
-        mat4.fromScaling(model, scaling);
-        mat4.translate(model, model, offset);
+    addMesh(mesh: UnityMesh, model: mat4) {
         this.meshRenderers.push(new MeshRenderer(this.device, mesh, model));
     }
 
@@ -181,10 +179,17 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderer = new SubnauticaRenderer(device);
-        let assets = new UnityAssetManager('level1', context, device);
+        let assets = new UnityAssetManager('hike/level2', context, device);
         await assets.loadAssetInfo();
-        let f = await assets.getGameObjectTree();
-        console.log(f);
+        let tree = await assets.getGameObjectTree();
+        for (let id in tree.nodes) {
+            let node = tree.nodes[id];
+            if (!node.isValid()) {
+                console.error(`invalid node! gameObject ${node.gameObjectSet}, mesh ${node.meshSet}`);
+                continue;
+            }
+            renderer.addMesh(tree.meshes[node.meshPathID!], node.modelMatrix);
+        }
 
         return renderer;
     }
