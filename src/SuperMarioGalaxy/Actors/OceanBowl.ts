@@ -307,9 +307,9 @@ export class OceanBowl extends LiveActor {
         this.materialHelperBloom = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         // Every frame, we add -0.04 onto the counter.
-        this.animationController.setTimeFromViewerInput(viewerInput);
+        this.animationController.setTimeFromViewerInput(sceneObjHolder.viewerInput);
         const time = this.animationController.getTimeInFrames();
 
         const posTime = time * -0.04;

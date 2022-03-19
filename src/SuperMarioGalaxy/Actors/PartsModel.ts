@@ -80,14 +80,14 @@ export class PartsModel extends LiveActor {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (!isDead(this) && !isDead(this.parentActor) && (this.isAttached || !isHiddenModel(this.parentActor))) {
             if (this.isDead) {
                 this.isDead = false;
                 this.visibleModel = true;
             }
 
-            super.movement(sceneObjHolder, viewerInput);
+            super.movement(sceneObjHolder);
         } else {
             if (!this.isDead) {
                 this.isDead = true;

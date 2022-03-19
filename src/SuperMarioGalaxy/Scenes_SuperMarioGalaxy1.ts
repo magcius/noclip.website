@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
+import { SMGSceneDescBase, ModelCache, SceneObjHolder, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
 import { NameObj, MovementType, GameBits } from './NameObj';
@@ -130,13 +130,13 @@ class DayInTheLifeOfALumaController extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        this.tryPickNewTico(getDeltaTimeFrames(viewerInput));
+        this.tryPickNewTico(sceneObjHolder.deltaTimeFrames);
         this.camera();
 
-        const camera = viewerInput.camera;
+        const camera = sceneObjHolder.viewerInput.camera;
         mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
         mat4.invert(camera.worldMatrix, camera.viewMatrix);
         camera.worldMatrixUpdated();

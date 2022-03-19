@@ -501,7 +501,13 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
                 const dstAttachment = this.gpuColorAttachments[i];
                 dstAttachment.view = colorAttachment.gpuTextureView;
-                dstAttachment.loadValue = descriptor.colorClearColor[i];
+                const clearColor = descriptor.colorClearColor[i];
+                if (clearColor === 'load') {
+                    dstAttachment.loadOp = 'load';
+                } else {
+                    dstAttachment.loadOp = 'clear';
+                    dstAttachment.clearValue = clearColor;
+                }
                 dstAttachment.storeOp = descriptor.colorStore[i] ? 'store' : 'discard';
                 dstAttachment.resolveTarget = undefined;
                 if (colorResolveTo !== null) {
@@ -772,7 +778,7 @@ fn fs() -> FragmentOutput {
     public render(device: GPUDevice, onscreenTexture: GPUTextureView): void {
         const encoder = device.createCommandEncoder();
         const renderPass = encoder.beginRenderPass({
-            colorAttachments: [{ view: onscreenTexture, loadValue: 'load', storeOp: 'store', }],
+            colorAttachments: [{ view: onscreenTexture, loadOp: 'load', storeOp: 'store', }],
         });
         renderPass.setPipeline(this.pipeline);
         renderPass.draw(3);

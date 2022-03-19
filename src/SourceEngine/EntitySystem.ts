@@ -401,6 +401,12 @@ export class BaseEntity {
     }
 
     public setParentEntity(parentEntity: BaseEntity | null, parentAttachment: number | null = null): void {
+        // TODO(jstpierre): How is this supposed to work? Happens in infra_c4_m2_furnace...
+        if (parentEntity === this) {
+            parentEntity = null;
+            parentAttachment = null;
+        }
+
         if (parentEntity === this.parentEntity && parentAttachment === this.parentAttachment)
             return;
 

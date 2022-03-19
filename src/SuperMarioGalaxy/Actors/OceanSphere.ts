@@ -4,7 +4,7 @@ import { LiveActor, ZoneAndLayer, isDead } from "../LiveActor";
 import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { assert } from "../../util";
 import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ, computeMatrixWithoutTranslation } from "../../MathHelpers";
-import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "../Main";
+import { SceneObjHolder, SceneObj } from "../Main";
 import { JMapInfoIter } from "../JMapInfo";
 import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "../ActorUtil";
 import { DrawType, MovementType } from "../NameObj";
@@ -352,7 +352,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.planeEdges.push(new OceanSpherePlaneEdge(count, pos, Vec3NegZ,  Vec3UnitX, vec2.set(v1, 0.0, 0.0), vec2.set(v2, 1.0, 0.0)));
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         this.isCameraInside = false;
 
         // TODO(jstpierre): getCameraWaterInfo
@@ -360,7 +360,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             this.isCameraInside = true;
         }
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.wave1Time += 0.1 * deltaTimeFrames;
         this.wave2Time += 0.1 * deltaTimeFrames;

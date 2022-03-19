@@ -4,7 +4,7 @@
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
@@ -1904,4 +1904,23 @@ export function blendMtx(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4, t: number)
     vec3.lerp(scratchVec3a, scratchVec3a, scratchVec3b, t);
     mat4.fromQuat(dst, scratchQuata);
     setMatrixTranslation(dst, scratchVec3a);
+}
+
+export class ProjmapEffectMtxSetter {
+    private effectMtx = mat4.create();
+
+    constructor(private model: J3DModelInstance) {
+        for (let i = 0; i < this.model.materialInstances.length; i++)
+            this.model.materialInstances[i].effectMtx = this.effectMtx;
+    }
+
+    public updateMtxUseBaseMtx(): void {
+        mat4.invert(this.effectMtx, this.model.modelMatrix);
+    }
+
+    public updateMtxUseBaseMtxWithLocalOffset(offset: ReadonlyVec3): void {
+        mat4.fromTranslation(scratchMatrix, offset);
+        mat4.mul(scratchMatrix, scratchMatrix, this.model.modelMatrix);
+        mat4.invert(this.effectMtx, scratchMatrix);
+    }
 }

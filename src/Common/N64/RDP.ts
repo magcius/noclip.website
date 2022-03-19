@@ -10,6 +10,109 @@ import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescript
 import { mat4 } from "gl-matrix";
 import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers";
 
+export const enum RENDER_MODES {
+    G_RM_AA_ZB_OPA_SURF = 0x442078,
+    G_RM_AA_ZB_OPA_SURF2 = 0x112078,
+    G_RM_AA_ZB_XLU_SURF = 0x4049d8,
+    G_RM_AA_ZB_XLU_SURF2 = 0x1049d8,
+    G_RM_AA_ZB_OPA_DECAL = 0x442d58,
+    G_RM_AA_ZB_OPA_DECAL2 = 0x112d58,
+    G_RM_AA_ZB_XLU_DECAL = 0x404dd8,
+    G_RM_AA_ZB_XLU_DECAL2 = 0x104dd8,
+    G_RM_AA_ZB_OPA_INTER = 0x442478,
+    G_RM_AA_ZB_OPA_INTER2 = 0x112478,
+    G_RM_AA_ZB_XLU_INTER = 0x4045d8,
+    G_RM_AA_ZB_XLU_INTER2 = 0x1045d8,
+    G_RM_AA_ZB_XLU_LINE = 0x407858,
+    G_RM_AA_ZB_XLU_LINE2 = 0x107858,
+    G_RM_AA_ZB_DEC_LINE = 0x407f58,
+    G_RM_AA_ZB_DEC_LINE2 = 0x107f58,
+    G_RM_AA_ZB_TEX_EDGE = 0x443078,
+    G_RM_AA_ZB_TEX_EDGE2 = 0x113078,
+    G_RM_AA_ZB_TEX_INTER = 0x443478,
+    G_RM_AA_ZB_TEX_INTER2 = 0x113478,
+    G_RM_AA_ZB_SUB_SURF = 0x442278,
+    G_RM_AA_ZB_SUB_SURF2 = 0x112278,
+    G_RM_AA_ZB_PCL_SURF = 0x40007b,
+    G_RM_AA_ZB_PCL_SURF2 = 0x10007b,
+    G_RM_AA_ZB_OPA_TERR = 0x402078,
+    G_RM_AA_ZB_OPA_TERR2 = 0x102078,
+    G_RM_AA_ZB_TEX_TERR = 0x403078,
+    G_RM_AA_ZB_TEX_TERR2 = 0x103078,
+    G_RM_AA_ZB_SUB_TERR = 0x402278,
+    G_RM_AA_ZB_SUB_TERR2 = 0x102278,
+
+    G_RM_RA_ZB_OPA_SURF = 0x442038,
+    G_RM_RA_ZB_OPA_SURF2 = 0x112038,
+    G_RM_RA_ZB_OPA_DECAL = 0x442d18,
+    G_RM_RA_ZB_OPA_DECAL2 = 0x112d18,
+    G_RM_RA_ZB_OPA_INTER = 0x442438,
+    G_RM_RA_ZB_OPA_INTER2 = 0x112438,
+
+    G_RM_AA_OPA_SURF = 0x442048,
+    G_RM_AA_OPA_SURF2 = 0x112048,
+    G_RM_AA_XLU_SURF = 0x4041c8,
+    G_RM_AA_XLU_SURF2 = 0x1041c8,
+    G_RM_AA_XLU_LINE = 0x407048,
+    G_RM_AA_XLU_LINE2 = 0x107048,
+    G_RM_AA_DEC_LINE = 0x407248,
+    G_RM_AA_DEC_LINE2 = 0x107248,
+    G_RM_AA_TEX_EDGE = 0x443048,
+    G_RM_AA_TEX_EDGE2 = 0x113048,
+    G_RM_AA_SUB_SURF = 0x442248,
+    G_RM_AA_SUB_SURF2 = 0x112248,
+    G_RM_AA_PCL_SURF = 0x40004b,
+    G_RM_AA_PCL_SURF2 = 0x10004b,
+    G_RM_AA_OPA_TERR = 0x402048,
+    G_RM_AA_OPA_TERR2 = 0x102048,
+    G_RM_AA_TEX_TERR = 0x403048,
+    G_RM_AA_TEX_TERR2 = 0x103048,
+    G_RM_AA_SUB_TERR = 0x402248,
+    G_RM_AA_SUB_TERR2 = 0x102248,
+
+    G_RM_RA_OPA_SURF = 0x442008,
+    G_RM_RA_OPA_SURF2 = 0x112008,
+
+    G_RM_ZB_OPA_SURF = 0x442230,
+    G_RM_ZB_OPA_SURF2 = 0x112230,
+    G_RM_ZB_XLU_SURF = 0x404a50,
+    G_RM_ZB_XLU_SURF2 = 0x104a50,
+    G_RM_ZB_OPA_DECAL = 0x442e10,
+    G_RM_ZB_OPA_DECAL2 = 0x112e10,
+    G_RM_ZB_XLU_DECAL = 0x404e50,
+    G_RM_ZB_XLU_DECAL2 = 0x104e50,
+    G_RM_ZB_CLD_SURF = 0x404b50,
+    G_RM_ZB_CLD_SURF2 = 0x104b50,
+    G_RM_ZB_OVL_SURF = 0x404f50,
+    G_RM_ZB_OVL_SURF2 = 0x104f50,
+    G_RM_ZB_PCL_SURF = 0xc080233,
+    G_RM_ZB_PCL_SURF2 = 0x3020233,
+
+    G_RM_OPA_SURF = 0xc084000,
+    G_RM_OPA_SURF2 = 0x3024000,
+    G_RM_XLU_SURF = 0x404240,
+    G_RM_XLU_SURF2 = 0x104240,
+    G_RM_CLD_SURF = 0x404340,
+    G_RM_CLD_SURF2 = 0x104340,
+    G_RM_TEX_EDGE = 0xc087008,
+    G_RM_TEX_EDGE2 = 0x3027008,
+    G_RM_PCL_SURF = 0xc084203,
+    G_RM_PCL_SURF2 = 0x3024203,
+    G_RM_ADD = 0x4484340,
+    G_RM_ADD2 = 0x1124340,
+    G_RM_NOOP = 0x0,
+    G_RM_NOOP2 = 0x0,
+    G_RM_VISCVG = 0xc844040,
+    G_RM_VISCVG2 = 0x3214040,
+    G_RM_OPA_CI = 0xc080000,
+    G_RM_OPA_CI2 = 0x3020000,
+
+
+    G_RM_FOG_SHADE_A = 0xc8000000,
+    G_RM_FOG_PRIM_A = 0xc4000000,
+    G_RM_PASS = 0xc080000
+}
+
 export const enum CCMUX {
     COMBINED    = 0,
     TEXEL0      = 1,
@@ -365,11 +468,10 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 }
 
 // figure out if two textures with the same underlying data can reuse the same texture object
-// we assume that a texture has only one real size/tiling behavior, so just match on coords
 
 // TODO(jstpierre): Build a better upload tracker
 function textureMatch(a: TileState, b: TileState): boolean {
-    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey;
+    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey && a.cms === b.cms && a.cmt === b.cmt;
 }
 
 export class TextureCache {
@@ -450,7 +552,10 @@ export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
 }
 
 export const enum OtherModeL_Layout {
-    // cycle-independent
+    // non-render-mode fields
+    G_MDSFT_ALPHACOMPARE = 0,
+    G_MDSFT_ZSRCSEL = 2,
+    // cycle-independent render-mode bits
     AA_EN         = 3,
     Z_CMP         = 4,
     Z_UPD         = 5,
@@ -462,7 +567,7 @@ export const enum OtherModeL_Layout {
     ALPHA_CVG_SEL = 13,
     FORCE_BL      = 14,
     // bit 15 unused, was "TEX_EDGE"
-    // cycle-dependent
+    // cycle-dependent render-mode bits
     B_2 = 16,
     B_1 = 18,
     M_2 = 20,

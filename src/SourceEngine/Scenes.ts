@@ -1,15 +1,16 @@
 
-import { SourceFileSystem, SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext } from "./Main";
+import { SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext, SourceLoadContext } from "./Main";
 import { SceneContext } from "../SceneBase";
 import { BSPFile } from "./BSPFile";
 import { assertExists } from "../util";
 
-export async function createScene(context: SceneContext, filesystem: SourceFileSystem, mapId: string, mapPath: string, loadMapFromVpk: boolean = false, renderContext: SourceRenderContext | null = null): Promise<SourceRenderer> {
+export async function createScene(context: SceneContext, loadContext: SourceLoadContext, mapId: string, mapPath: string, loadMapFromVpk: boolean = false): Promise<SourceRenderer> {
+    const filesystem = loadContext.filesystem;
+
     // Clear out old filesystem pakfile.
     filesystem.pakfiles.length = 0;
 
-    if (renderContext === null)
-        renderContext = new SourceRenderContext(context.device, filesystem);
+    const renderContext = new SourceRenderContext(context.device, loadContext);
     const renderer = new SourceRenderer(context, renderContext);
 
     const bspFile = await context.dataShare.ensureObject(`SourceEngine/${mapPath}`, async () => {

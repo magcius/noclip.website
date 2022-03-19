@@ -86,9 +86,7 @@ export class MessageData {
     private getStringByIndex(i: number): string {
         const inf1View = this.inf1.createDataView();
         const inf1Offs = 0x10 + (i * this.inf1ItemSize) + 0x00;
-        console.log(`INF1 ${i}: ${hexzero0x(this.inf1.byteOffset - this.offs + inf1Offs, 8)}`);
         const dat1Offs = 0x08 + inf1View.getUint32(inf1Offs);
-        console.log(`DAT1 ${i}: ${hexzero0x(this.dat1.byteOffset - this.offs + dat1Offs, 8)}`);
 
         const view = this.dat1.createDataView();
         let idx = dat1Offs;

@@ -222,6 +222,11 @@ export function gfxColorCopy(dst: GfxColor, src: Readonly<GfxColor>): void {
     dst.a = src.a;
 }
 
+export function gfxColorNewCopy(src: Readonly<GfxColor>): GfxColor {
+    const { r, g, b, a } = src;
+    return { r, g, b, a };
+}
+
 // Copied from toplevel util.ts
 
 export function assert(b: boolean, message: string = ""): asserts b {
@@ -271,4 +276,8 @@ export function align(n: number, multiple: number): number {
 
 export function alignNonPowerOfTwo(n: number, multiple: number): number {
     return (((n + multiple - 1) / multiple) | 0) * multiple;
+}
+
+export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
+    return (v !== null && v !== undefined) ? v : fallback;
 }

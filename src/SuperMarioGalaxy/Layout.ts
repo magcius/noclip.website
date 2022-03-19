@@ -1,5 +1,5 @@
 
-import { getDeltaTimeFrames, ModelCache, SceneObjHolder } from "./Main";
+import { ModelCache, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { Spine } from "./Spine";
 import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane, LayoutTextbox } from "../Common/NW4R/lyt/Layout";
@@ -68,7 +68,7 @@ class LayoutAnmPlayer {
     public movement(sceneObjHolder: SceneObjHolder): void {
         if (this.curAnim === null)
             return;
-        let deltaTimeFrames = getDeltaTimeFrames(sceneObjHolder.viewerInput);
+        let deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         // Layout animations expect 30fps, we're timed for 60fps.
         deltaTimeFrames /= 2;
         this.frameCtrl.update(deltaTimeFrames);
@@ -486,7 +486,7 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        const deltaTimeFrames = getDeltaTimeFrames(sceneObjHolder.viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         if (this.spine !== null) {
             this.spine.changeNerve();

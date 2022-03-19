@@ -776,8 +776,8 @@ export class CollisionDirector extends NameObj {
         connectToScene(sceneObjHolder, this, MovementType.CollisionDirector, -1, -1, -1);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         for (let i = 0; i < this.keepers.length; i++)
             this.keepers[i].movement(sceneObjHolder);
@@ -1105,13 +1105,13 @@ export class Binder {
                 ret = BinderFindBindedPositionRet.Collide;
             }
 
-            // Compute our final velocity based on where we ended up...
-            vec3.sub(dstVel, posCurr, posOrig);
-
             this.storeContactPlane();
 
             if (this.moveWithCollision)
-                this.moveWithCollisionParts(posCurr, velCurr);
+                this.moveWithCollisionParts(posCurr);
+
+            // Compute our final velocity based on where we ended up...
+            vec3.sub(dstVel, posCurr, posOrig);
         }
 
         if (this.exCollisionPartsValid)
@@ -1215,7 +1215,7 @@ export class Binder {
         }
     }
 
-    private moveWithCollisionParts(dstPos: vec3, dstVel: vec3): void {
+    private moveWithCollisionParts(dstPos: vec3): void {
         if (this.floorHitInfo.distance <= 0.0)
             return;
         if (!isHostMoved(this.floorHitInfo))
@@ -1223,7 +1223,6 @@ export class Binder {
 
         this.floorHitInfo.collisionParts!.calcForceMovePower(scratchVec3a, dstPos);
         vec3.add(dstPos, dstPos, scratchVec3a);
-        vec3.add(dstVel, dstVel, scratchVec3a);
     }
 
     private storeContactPlane(): void {

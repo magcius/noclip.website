@@ -161,7 +161,7 @@ export interface BSPLeaf {
 interface BSPLeafWaterData {
     surfaceZ: number;
     minZ: number;
-    surfaceTexInfoID: number;
+    surfaceMaterialName: string;
 }
 
 export interface Model {
@@ -561,8 +561,8 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
             const baseVertex = vertex.length;
             vertex.push(...overlayPoints);
             const dstIndexOffs = indices.length;
-            indices.length = indices.length + getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, overlayPoints.length);
-            convertToTrianglesRange(indices, dstIndexOffs, GfxTopology.TRIFAN, baseVertex, overlayPoints.length);
+            indices.length = indices.length + getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, overlayPoints.length);
+            convertToTrianglesRange(indices, dstIndexOffs, GfxTopology.TriFans, baseVertex, overlayPoints.length);
         }
 
         if (vertex.length === 0)
@@ -650,6 +650,13 @@ class BSPVisibility {
     }
 }
 
+interface LightmapAlloc {
+    readonly width: number;
+    readonly height: number;
+    pagePosX: number;
+    pagePosY: number;
+}
+
 export class LightmapPackerPage {
     public skyline: Uint16Array;
 
@@ -662,7 +669,7 @@ export class LightmapPackerPage {
         this.skyline = new Uint16Array(this.maxHeight);
     }
 
-    public allocate(allocation: SurfaceLightmapData): boolean {
+    public allocate(allocation: LightmapAlloc): boolean {
         const w = allocation.width, h = allocation.height;
 
         // March downwards until we find a span of skyline that will fit.
@@ -841,7 +848,6 @@ export class BSPFile {
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
             const idx = lumpsStart + lumpType * 0x10;
-            const view = buffer.createDataView();
             const offs = view.getUint32(idx + 0x00, true);
             const size = view.getUint32(idx + 0x04, true);
             const version = view.getUint32(idx + 0x08, true);
@@ -1064,8 +1070,6 @@ export class BSPFile {
             plane: ReadonlyVec3;
         }
 
-        const faces: Face[] = [];
-
         // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
         let vertnormalIdx = 0;
 
@@ -1078,12 +1082,18 @@ export class BSPFile {
             }
         };
 
+        const faces: Face[] = [];
+        let numfaces = 0;
+
         // Do some initial surface parsing, pack lightmaps.
-        for (let i = 0, idx = 0x00; idx < facelist.byteLength; i++, idx += 0x38) {
+        for (let i = 0, idx = 0x00; idx < facelist.byteLength; i++, idx += 0x38, numfaces++) {
             const planenum = facelist.getUint16(idx + 0x00, true);
             const numedges = facelist.getUint16(idx + 0x08, true);
             const texinfo = facelist.getUint16(idx + 0x0A, true);
             const tex = texinfoa[texinfo];
+
+            if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
+                continue;
 
             // Normals are stored in the data for all surfaces, even for displacements.
             const vertnormalBase = vertnormalIdx;
@@ -1154,7 +1164,8 @@ export class BSPFile {
             const surfaceZ = leafwaterdata.getFloat32(idx + 0x00, true);
             const minZ = leafwaterdata.getFloat32(idx + 0x04, true);
             const surfaceTexInfoID = leafwaterdata.getUint16(idx + 0x08, true);
-            this.leafwaterdata.push({ surfaceZ, minZ, surfaceTexInfoID });
+            const surfaceMaterialName = texinfoa[surfaceTexInfoID].texName;
+            this.leafwaterdata.push({ surfaceZ, minZ, surfaceMaterialName });
         }
 
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
@@ -1182,7 +1193,7 @@ export class BSPFile {
         }
 
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
-        const faceToLeafIdx: number[][] = nArray(faces.length, () => []);
+        const faceToLeafIdx: number[][] = nArray(numfaces, () => []);
         for (let i = 0, idx = 0x00; idx < leafs.byteLength; i++) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
@@ -1306,7 +1317,7 @@ export class BSPFile {
         // Sort faces by texinfo to prepare for splitting into surfaces.
         faces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
-        const faceToSurfaceInfo: FaceToSurfaceInfo[] = nArray(faces.length, () => new FaceToSurfaceInfo());
+        const faceToSurfaceInfo: FaceToSurfaceInfo[] = nArray(numfaces, () => new FaceToSurfaceInfo());
 
         const vertexBuffer = new ResizableArrayBuffer();
         const indexBuffer = new ResizableArrayBuffer();
@@ -1542,7 +1553,7 @@ export class BSPFile {
                 addVertexDataToBuffer(vertex, tex, center, tangentW);
 
                 // index buffer
-                indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
                 const indexData = indexBuffer.addUint32(indexCount);
                 if (m_NumPrims !== 0) {
                     let primType, primFirstIndex, primIndexCount, primFirstVert, primVertCount;
@@ -1574,7 +1585,7 @@ export class BSPFile {
                     for (let k = 0; k < indexCount; k++)
                         indexData[dstOffsIndex + k] = dstIndexBase + primindices[primFirstIndex + k];
                 } else {
-                    convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
+                    convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
                 }
 
                 surface = mergeSurface;
@@ -1835,7 +1846,7 @@ export class BSPFile {
         return leafidx >= 0 ? this.leaflist[leafidx] : null;
     }
 
-    public findLeafWaterForPoint(p: ReadonlyVec3, liveLeafSet: Set<number>, nodeid: number = 0): BSPLeafWaterData | null {
+    private findLeafWaterForPointR(p: ReadonlyVec3, liveLeafSet: Set<number>, nodeid: number): BSPLeafWaterData | null {
         if (nodeid < 0) {
             const leafidx = -nodeid - 1;
             if (liveLeafSet.has(leafidx)) {
@@ -1852,14 +1863,21 @@ export class BSPFile {
         const check1 = dot >= 0.0 ? node.child0 : node.child1;
         const check2 = dot >= 0.0 ? node.child1 : node.child0;
 
-        const w1 = this.findLeafWaterForPoint(p, liveLeafSet, check1);
+        const w1 = this.findLeafWaterForPointR(p, liveLeafSet, check1);
         if (w1 !== null)
             return w1;
-        const w2 = this.findLeafWaterForPoint(p, liveLeafSet, check2);
+        const w2 = this.findLeafWaterForPointR(p, liveLeafSet, check2);
         if (w2 !== null)
             return w2;
 
         return null;
+    }
+
+    public findLeafWaterForPoint(p: ReadonlyVec3, liveLeafSet: Set<number>): BSPLeafWaterData | null {
+        if (this.leafwaterdata.length === 0)
+            return null;
+
+        return this.findLeafWaterForPointR(p, liveLeafSet, 0);
     }
 
     private markLeafSet(dst: number[], aabb: AABB, nodeid: number = 0): void {

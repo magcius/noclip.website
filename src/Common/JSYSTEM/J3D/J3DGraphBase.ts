@@ -313,7 +313,7 @@ export class MaterialInstance {
     public colorCalc: (ColorCalc | null)[] = [];
     public texMtxCalc: (TexMtxCalc | null)[] = [];
     public texNoCalc: (TexNoCalc | null)[] = [];
-    public effectMtxCallback: EffectMtxCallback | null = null;
+    public effectMtx: mat4 | null = null;
     public name: string;
     public materialData: MaterialData;
     public materialHelper: GXMaterialHelperGfx;
@@ -465,15 +465,6 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
         const flipYScale = flipY ? -1.0 : 1.0;
 
-        // If this uses a custom effect matrix and we have a callback, give the user an opportunity to create one.
-        let effectMtx = texMtx.effectMatrix;
-
-        const hasCustomEffectMtx = matrixMode === TexMtxMapMode.EnvmapEffectMtx || matrixMode === TexMtxMapMode.EnvmapOldEffectMtx;
-        if (hasCustomEffectMtx && this.effectMtxCallback !== null) {
-            this.effectMtxCallback(scratchMat4d, texMtx);
-            effectMtx = scratchMat4d;
-        }
-
         // ref. J3DTexMtx::calc()
         const tmp1 = scratchMat4a;
         const tmp2 = scratchMat4b;
@@ -565,10 +556,14 @@ export class MaterialInstance {
                     buildEnvMtx(tmp1, flipYScale);
                     mat43Concat(tmp2, tmp2, tmp1);
 
-                    // Multiply the effect matrix by the inverse of the model matrix.
-                    // In Galaxy, this is done in ProjmapEffectMtxSetter.
-                    mat4.invert(tmp1, modelMatrix);
-                    mat4.mul(tmp1, texMtx.effectMatrix, tmp1);
+                    if (this.effectMtx !== null) {
+                        mat4.mul(tmp1, this.effectMtx, tmp1);
+                    } else {
+                        // Multiply the effect matrix by the inverse of the model matrix.
+                        // In Galaxy, this is done in ProjmapEffectMtxSetter.
+                        mat4.invert(tmp1, modelMatrix);
+                        mat4.mul(tmp1, texMtx.effectMatrix, tmp1);
+                    }
 
                     // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
                     J3DMtxProjConcat(tmp1, tmp2, tmp1);
@@ -578,6 +573,7 @@ export class MaterialInstance {
                     mat43Concat(tmp2, tmp2, tmp1);
 
                     // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                    const effectMtx = this.effectMtx !== null ? this.effectMtx : texMtx.effectMatrix;
                     J3DMtxProjConcat(tmp1, tmp2, effectMtx);
                 }
 
@@ -596,6 +592,7 @@ export class MaterialInstance {
                 mat43Concat(tmp2, tmp2, tmp1);
 
                 // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                const effectMtx = this.effectMtx !== null ? this.effectMtx : texMtx.effectMatrix;
                 J3DMtxProjConcat(tmp1, tmp2, effectMtx);
 
                 // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
@@ -613,9 +610,7 @@ export class MaterialInstance {
             break;
 
         default:
-            {
-                throw "whoops";
-            }
+            throw "whoops";
         }
     }
 

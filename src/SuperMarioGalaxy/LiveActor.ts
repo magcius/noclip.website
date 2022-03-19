@@ -16,7 +16,7 @@ import { EffectKeeper } from "./EffectSystem";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 import { createCsvParser, getJMapInfoBool, getJMapInfoRotateLocal, getJMapInfoTransLocal, JMapInfoIter } from "./JMapInfo";
 import { ActorLightCtrl } from "./LightData";
-import { getDeltaTimeFrames, getObjectName, SceneObjHolder, SpecialTextureType } from "./Main";
+import { getObjectName, SceneObjHolder, SpecialTextureType } from "./Main";
 import { MovementType, NameObj, NameObjGroup } from "./NameObj";
 import { RailRider } from "./RailRider";
 import { ShadowControllerList } from "./Shadow";
@@ -380,6 +380,10 @@ export class ResourceHolder {
         return assertExists(this.modelTable.get(name.toLowerCase()));
     }
 
+    public getArcName(): string {
+        return this.arc.name;
+    }
+
     public getRes<T>(table: ResTable<T>, name: string): T | null {
         return nullify(table.get(name.toLowerCase()));
     }
@@ -405,7 +409,7 @@ export class ModelManager {
     public bvaPlayer: BvaPlayer | null = null;
     public bckCtrl: BckCtrl | null = null;
 
-    constructor(sceneObjHolder: SceneObjHolder, objName: string) {
+    constructor(sceneObjHolder: SceneObjHolder, public objName: string) {
         this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
 
         const bmdModel = this.resourceHolder.getModel(objName);
@@ -1049,14 +1053,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder): void {
     }
 
     private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
         if (this.binder !== null) {
             if (this.calcBinderFlag) {
                 this.binder.bind(sceneObjHolder, scratchVec3a, this.velocity);
-                vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
+                vec3.add(this.translation, this.translation, scratchVec3a);
             } else {
                 vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
                 this.binder.clear();
@@ -1066,7 +1070,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         // Don't do anything. All cleanup should have happened at offScenario time.
         if (!this.visibleScenario)
             return;
@@ -1080,7 +1084,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         if (this.modelManager !== null)
             this.modelManager.update(deltaTimeFrames);
@@ -1099,7 +1103,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        this.control(sceneObjHolder, viewerInput);
+        this.control(sceneObjHolder);
 
         if (!this.visibleAlive)
             return;
@@ -1114,7 +1118,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // ActorPadAndCameraCtrl::update()
 
         if (this.actorLightCtrl !== null)
-            this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+            this.actorLightCtrl.update(sceneObjHolder, sceneObjHolder.viewerInput.camera, false, deltaTimeFrames);
 
         // tryUpdateHitSensorsAll()
         if (this.hitSensorKeeper !== null)
@@ -1176,8 +1180,8 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.pendingMessageType !== null) {
             for (let i = 0; i < this.objArray.length; i++) {

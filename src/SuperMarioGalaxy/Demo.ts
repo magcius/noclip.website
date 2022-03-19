@@ -5,7 +5,7 @@ import { ViewerRenderInput } from "../viewer";
 import { connectToScene, startAction } from "./ActorUtil";
 import { createCsvParser, createJMapIdInfoFromIter, JMapIdInfo, JMapInfoIter } from "./JMapInfo";
 import { LiveActor, LiveActorGroup, ZoneAndLayer } from "./LiveActor";
-import { getDeltaTimeFrames, SceneObj, SceneObjHolder } from "./Main";
+import { SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjGroup } from "./NameObj";
 import { createStageSwitchCtrl, getSwitchWatcherHolder, StageSwitchCtrl, SwitchFunctorEventListener } from "./Switch";
 
@@ -415,8 +415,8 @@ export class DemoExecutor extends DemoCastGroup {
             this.stageSwitchCtrl.onSwitchDead(sceneObjHolder);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.timeKeeper.update(deltaTimeFrames);
         if (this.timeKeeper.isDemoEnd()) {
@@ -498,11 +498,11 @@ export class DemoDirector extends NameObj {
         return this.demoSheetArchives[zoneId];
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.currentExecutor !== null) {
-            this.currentExecutor.movement(sceneObjHolder, viewerInput);
+            this.currentExecutor.movement(sceneObjHolder);
         }
     }
 

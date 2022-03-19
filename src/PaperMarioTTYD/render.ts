@@ -77,8 +77,8 @@ class BackgroundBillboardRenderer {
     private textureMappings = nArray(1, () => new TextureMapping());
     public scroll: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
-        this.gfxProgram = device.createProgram(this.program);
+    constructor(cache: GfxRenderCache, public textureHolder: TPLTextureHolder, public textureName: string) {
+        this.gfxProgram = cache.createProgram(this.program);
         // Fill texture mapping.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
@@ -112,7 +112,6 @@ class BackgroundBillboardRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -541,7 +540,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         // this.playAllAnimations();
 
         if (backgroundTextureName !== null)
-            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
+            this.backgroundRenderer = new BackgroundBillboardRenderer(this.getCache(), textureHolder, backgroundTextureName);
     }
 
     public spawnMOBJ(mobjName: string, animPoseName: string): MOBJ {

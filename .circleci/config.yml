@@ -7,7 +7,7 @@ jobs:
         - master
 
     docker:
-      - image: cimg/rust:1.54-node
+      - image: cimg/rust:1.58-node
         auth:
           username: jasperrlz
           password: $DOCKERHUB_PASSWORD
@@ -29,11 +29,6 @@ jobs:
 
       - run: pnpm install
 
-      # wasm-pack is amazingly ridiculous and puts a binary in .config/, which
-      # won't get cached even when node_modules does. Force it to reinstall with
-      # an 'upgrade'.
-      - run: pnpm upgrade wasm-pack
-
       - run: pnpm run build
 
       - save_cache:
@@ -41,7 +36,7 @@ jobs:
             - node_modules
             - .cache
             - .cargo
-          key: v3-dependencies-{{ checksum "package.json" }}
+          key: v4-dependencies-{{ checksum "package.json" }}
 
       - add_ssh_keys:
           fingerprints:

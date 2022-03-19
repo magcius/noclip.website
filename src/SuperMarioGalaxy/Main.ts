@@ -62,17 +62,9 @@ import { getLayoutMessageDirect, MessageHolder } from './MessageData';
 export const FPS = 60;
 const FPS_RATE = FPS/1000;
 
-export function getDeltaTimeFramesRaw(viewerInput: Viewer.ViewerRenderInput): number {
-    return viewerInput.deltaTime * FPS_RATE;
-}
-
-export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
+function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     // Clamp to reasonable values.
-    return clamp(getDeltaTimeFramesRaw(viewerInput), 0.0, 1.5);
-}
-
-export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
-    return viewerInput.time * FPS_RATE;
+    return clamp(viewerInput.deltaTime * FPS_RATE, 0.0, 1.5);
 }
 
 function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
@@ -313,6 +305,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         sceneObjHolder.drawSyncManager.beginFrame(device);
 
+        sceneObjHolder.deltaTimeFrames = getDeltaTimeFrames(viewerInput);
         executor.executeMovement(sceneObjHolder, viewerInput);
         executor.executeCalcAnim(sceneObjHolder);
 
@@ -334,7 +327,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const effectSystem = sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
-            const deltaTime = getDeltaTimeFrames(viewerInput);
+            const deltaTime = sceneObjHolder.deltaTimeFrames;
             effectSystem.calc(deltaTime);
 
             const indDummy = effectSystem.particleResourceHolder.getTextureMappingReference('IndDummy');
@@ -1139,6 +1132,7 @@ export class SceneObjHolder {
     public objNameTable: JMapInfoIter;
 
     // Noclip-specific stuff.
+    public deltaTimeFrames: number;
     public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
     public graphBuilder: GfxrGraphBuilder;
@@ -1755,6 +1749,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.uiContainer = context.uiContainer;
         // TODO(jstpierre): This is ugly.
         sceneObjHolder.viewerInput = window.main.viewer.viewerRenderInput;
+        sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);

@@ -9,7 +9,7 @@ import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, S
 import { decodeString } from "../util";
 import { SceneGfx } from "../viewer";
 import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
-import { BSPRenderer, SourceFileSystem, SourceRenderContext } from "./Main";
+import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
 import { BSPEntity } from "./VMT";
 
@@ -162,7 +162,7 @@ class prop_testchamber_door extends BaseEntity {
     }
 }
 
-async function createPortal2SourceRenderContext(context: SceneContext): Promise<SourceRenderContext> {
+async function createPortal2SourceLoadContext(context: SceneContext): Promise<SourceLoadContext> {
     function registerEntityFactories(registry: EntityFactoryRegistry): void {
         registry.registerFactory(trigger_portal_button);
         registry.registerFactory(prop_button);
@@ -185,9 +185,9 @@ async function createPortal2SourceRenderContext(context: SceneContext): Promise<
         return filesystem;
     });
 
-    const renderContext = new SourceRenderContext(context.device, filesystem);
-    registerEntityFactories(renderContext.entityFactoryRegistry);
-    return renderContext;
+    const loadContext = new SourceLoadContext(filesystem);
+    registerEntityFactories(loadContext.entityFactoryRegistry);
+    return loadContext;
 }
 
 class Portal2SceneDesc implements SceneDesc {
@@ -195,8 +195,8 @@ class Portal2SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const renderContext = await createPortal2SourceRenderContext(context);
-        return createScene(context, renderContext.filesystem, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, false, renderContext);
+        const loadContext = await createPortal2SourceLoadContext(context);
+        return createScene(context, loadContext, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, false);
     }
 }
 
@@ -248,8 +248,8 @@ class Portal2WorkshopSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const renderContext = await createPortal2SourceRenderContext(context);
-        return createScene(context, renderContext.filesystem, this.id, this.url, false, renderContext);
+        const loadContext = await createPortal2SourceLoadContext(context);
+        return createScene(context, loadContext, this.id, this.url, false);
     }
 }
 

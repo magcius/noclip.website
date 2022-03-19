@@ -743,12 +743,12 @@ function tryStartTurnAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): bo
 
     if (isNearPlayer(sceneObjHolder, actor, actor.talkParam.turnDistance)) {
         if (actor.talkParam.turnOnWait) {
-            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed, actor.talkParam.turnVerticalSpeed, actor.talkParam.turnVerticalMaxAngle);
+            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalMaxAngle);
             shouldUseTurnAction = !doneTurning;
         }
     } else {
         if (actor.talkParam.turnOnWait) {
-            const doneTurning = actor.turnToDefault(actor.talkParam.turnSpeed);
+            const doneTurning = actor.turnToDefault(actor.talkParam.turnSpeed * sceneObjHolder.deltaTimeFrames);
             shouldUseTurnAction = !doneTurning;
         }
     }
@@ -769,7 +769,7 @@ function tryStartTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): bo
     if (actor.talkCtrl !== null && actor.talkCtrl.isTalking()) {
         let shouldUseTurnAction = false;
         if (actor.talkParam.turnOnTalk) {
-            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed, actor.talkParam.turnVerticalSpeed, actor.talkParam.turnVerticalMaxAngle);
+            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalMaxAngle);
             shouldUseTurnAction = !doneTurning;
         }
 
@@ -1357,8 +1357,8 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected override control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         vec3.negate(scratchVec3a, this.gravityVector);
         blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.2, 0.2);

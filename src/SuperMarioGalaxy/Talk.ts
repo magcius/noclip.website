@@ -515,7 +515,7 @@ export class TalkDirector extends NameObj {
         return balloon;
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (this.talkCtrlPotential !== this.talkCtrlCurrent) {
             if (this.talkCtrlCurrent !== null) {
                 const balloon = this.findBalloonShort(sceneObjHolder, this.talkCtrlCurrent);

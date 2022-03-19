@@ -33,7 +33,6 @@ import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelper
 import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
-import InputManager from "../InputManager";
 import { dfRange, dfShow } from "../DebugFloaters";
 
 export class CustomMount {
@@ -44,7 +43,7 @@ export class CustomMount {
         return this.files.includes(resolvedPath);
     }
 
-    public fetchFileData(dataFetcher: DataFetcher, resolvedPath: string): Promise<ArrayBufferSlice> {
+    public fetchEntryData(dataFetcher: DataFetcher, resolvedPath: string): Promise<ArrayBufferSlice> {
         return dataFetcher.fetchData(`${this.path}/${resolvedPath}`);
     }
 }
@@ -160,13 +159,13 @@ export class SourceFileSystem {
         for (let i = 0; i < this.custom.length; i++) {
             const custom = this.custom[i];
             if (custom.hasEntry(resolvedPath))
-                return custom.fetchFileData(this.dataFetcher, resolvedPath);
+                return custom.fetchEntryData(this.dataFetcher, resolvedPath);
         }
 
         for (let i = 0; i < this.vpk.length; i++) {
             const entry = this.vpk[i].findEntry(resolvedPath);
             if (entry !== null)
-                return this.vpk[i].fetchFileData(entry);
+                return this.vpk[i].fetchFileData(this.dataFetcher, entry);
         }
 
         for (let i = 0; i < this.pakfiles.length; i++) {
@@ -925,8 +924,6 @@ export class ProjectedLightRenderer {
     public debugName: string = 'ProjectedLight';
     public depthTextureValid = false;
 
-    private lastInstCount = -1;
-
     public prepareRenderTarget(renderContext: SourceRenderContext): void {
         const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
@@ -949,16 +946,6 @@ export class ProjectedLightRenderer {
             bspRenderer.prepareToRenderView(renderContext, renderInstManager);
         }
 
-        // Use the inst count as an approximation for which objects have been drawn into the shadow map.
-        // Doesn't work if the objects or the lights move...
-        const instCount = renderContext.currentView.mainList.renderInsts.length;
-        this.depthTextureValid = false;
-        if (this.depthTextureValid && this.lastInstCount === instCount) {
-            this.light.frustumView.reset();
-        } else {
-            this.depthTextureValid = false;
-        }
-
         renderContext.currentView = null!;
     }
 
@@ -977,7 +964,7 @@ export class ProjectedLightRenderer {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, depthTargetID);
 
             pass.exec((passRenderer) => {
-                this.lastInstCount = this.light.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                this.light.frustumView.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -1043,8 +1030,16 @@ class Flashlight {
     }
 }
 
-export class SourceRenderContext {
+export class SourceLoadContext {
     public entityFactoryRegistry = new EntityFactoryRegistry();
+
+    constructor(public filesystem: SourceFileSystem) {
+    }
+}
+
+export class SourceRenderContext {
+    public entityFactoryRegistry: EntityFactoryRegistry;
+    public filesystem: SourceFileSystem;
     public lightmapManager: LightmapManager;
     public studioModelCache: StudioModelCache;
     public materialCache: MaterialCache;
@@ -1075,7 +1070,10 @@ export class SourceRenderContext {
 
     public debugStatistics = new DebugStatistics();
 
-    constructor(public device: GfxDevice, public filesystem: SourceFileSystem) {
+    constructor(public device: GfxDevice, loadContext: SourceLoadContext) {
+        this.entityFactoryRegistry = loadContext.entityFactoryRegistry;
+        this.filesystem = loadContext.filesystem;
+
         this.renderCache = new GfxRenderCache(device);
         this.lightmapManager = new LightmapManager(device, this.renderCache);
         this.materialCache = new MaterialCache(device, this.renderCache, this.filesystem);
@@ -1608,12 +1606,12 @@ export class SourceRenderer implements SceneGfx {
             this.renderContext.colorCorrection.setEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableColorCorrection.elem);
-        const useExpensiveWater = new UI.Checkbox('Use Expensive Water', true);
-        useExpensiveWater.onchanged = () => {
-            const v = useExpensiveWater.checked;
+        const enableExtensiveWater = new UI.Checkbox('Use Expensive Water', true);
+        enableExtensiveWater.onchanged = () => {
+            const v = enableExtensiveWater.checked;
             this.renderContext.enableExpensiveWater = v;
         };
-        renderHacksPanel.contents.appendChild(useExpensiveWater.elem);
+        renderHacksPanel.contents.appendChild(enableExtensiveWater.elem);
         const showToolMaterials = new UI.Checkbox('Show Tool-only Materials', false);
         showToolMaterials.onchanged = () => {
             const v = showToolMaterials.checked;

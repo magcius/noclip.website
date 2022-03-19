@@ -2912,9 +2912,11 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
 void mainPS() {
     bool use_flowmap = ${getDefineBool(m, `USE_FLOWMAP`)};
 
+    vec2 t_BumpmapCoord0 = CalcScaleBias(v_TexCoord1.xy, u_BumpScaleBias);
+
 #ifdef USE_FLOWMAP
 
-    vec2 t_FlowTexCoord = v_TexCoord1.xy * u_FlowTexCoordScale;
+    vec2 t_FlowTexCoord = t_BumpmapCoord0.xy * u_FlowTexCoordScale;
 
     vec2 t_TexCoordWorldBase = vec2(v_PositionWorld.x, -v_PositionWorld.y);
     vec2 t_FlowNoiseTexCoord = t_TexCoordWorldBase * u_FlowNoiseTexCoordScale;
@@ -2935,7 +2937,6 @@ void mainPS() {
 #else
 
     // Sample our normal map with scroll offsets.
-    vec2 t_BumpmapCoord0 = CalcScaleBias(v_TexCoord1.xy, u_BumpScaleBias);
     vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0);
 #ifdef USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = CalcScaleBias(vec2(v_TexCoord1.x + v_TexCoord1.y, -v_TexCoord1.x + v_TexCoord1.y) * 0.1, u_TexScroll0ScaleBias);
@@ -3848,6 +3849,42 @@ ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     Mat4x2 u_BaseTextureTransform;
+    vec4 u_ColorScale;
+};
+
+varying vec2 v_TexCoord0;
+
+layout(binding = 0) uniform sampler2D u_Texture;
+
+#ifdef VERT
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 0.0, 1.0));
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_FinalColor = texture(SAMPLER_2D(u_Texture), v_TexCoord0.xy);
+
+    OutputLinearColor(vec4(t_FinalColor.rgb * u_ColorScale.rgb, 1.0));
+}
+#endif
+`;
+}
+
+class ShaderTemplate_SkyHDRCompressed extends MaterialShaderTemplateBase {
+    public static ub_ObjectParams = 2;
+
+    public override program = `
+precision mediump float;
+
+${MaterialShaderTemplateBase.Common}
+
+layout(std140) uniform ub_ObjectParams {
+    Mat4x2 u_BaseTextureTransform;
     vec4 u_TextureSizeInfo;
     vec4 u_ColorScale;
 };
@@ -3906,12 +3943,17 @@ void mainPS() {
 `;
 }
 
+const enum Material_Sky_Type {
+    SkyHDRCompressed, Sky,
+}
+
 class Material_Sky extends BaseMaterial {
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
-    private textureSizeInfo: vec4;
+    private textureSizeInfo: vec4 | null = null;
+    private type: Material_Sky_Type;
 
     protected override initParameters(): void {
         super.initParameters();
@@ -3919,12 +3961,26 @@ class Material_Sky extends BaseMaterial {
         const p = this.param;
 
         p['$hdrcompressedtexture'] = new ParameterTexture(false);
+        p['$hdrbasetexture']       = new ParameterTexture(true);
     }
 
     protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
-        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Sky);
+        if (this.paramGetVTF('$hdrcompressedtexture') !== null) {
+            this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.SkyHDRCompressed);
+
+            const texture = assertExists(this.paramGetVTF('$hdrcompressedtexture'));
+            const w = texture.width, h = texture.height;
+            const fudge = 0.01 / Math.max(w, h);
+            this.textureSizeInfo = vec4.fromValues(0.5 / w - fudge, 0.5 / h - fudge, w, h);
+
+            this.type = Material_Sky_Type.SkyHDRCompressed;
+        } else {
+            this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Sky);
+
+            this.type = Material_Sky_Type.Sky;
+        }
 
         this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.None);
         this.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
@@ -3933,18 +3989,21 @@ class Material_Sky extends BaseMaterial {
         this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
-        const texture = assertExists(this.paramGetVTF('$hdrcompressedtexture'));
-        const w = texture.width, h = texture.height;
-        const fudge = 0.01 / Math.max(w, h);
-        this.textureSizeInfo = vec4.fromValues(0.5 / w - fudge, 0.5 / h - fudge, w, h);
-
         this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
     private updateTextureMappings(dst: TextureMapping[]): void {
         resetTextureMappings(dst);
-        this.paramGetTexture('$hdrcompressedtexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'))
+
+        if (this.type === Material_Sky_Type.SkyHDRCompressed) {
+            this.paramGetTexture('$hdrcompressedtexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'));
+        } else if (this.type === Material_Sky_Type.Sky) {
+            let texture = this.paramGetTexture('$hdrbasetexture');
+            if (texture === null)
+                texture = assertExists(this.paramGetTexture('$basetexture'));
+            texture.fillTextureMapping(dst[0], this.paramGetInt('$frame'));
+        }
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
@@ -3953,16 +4012,25 @@ class Material_Sky extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Sky.ub_ObjectParams, 16);
-        const d = renderInst.mapUniformBufferF32(ShaderTemplate_Sky.ub_ObjectParams);
-        offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$hdrcompressedtexture'));
-        offs += fillVec4v(d, offs, this.textureSizeInfo);
+        if (this.type === Material_Sky_Type.SkyHDRCompressed) {
+            let offs = renderInst.allocateUniformBuffer(ShaderTemplate_SkyHDRCompressed.ub_ObjectParams, 16);
+            const d = renderInst.mapUniformBufferF32(ShaderTemplate_SkyHDRCompressed.ub_ObjectParams);
+            offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+            offs += fillVec4v(d, offs, this.textureSizeInfo!);
 
-        this.paramGetVector('$color').fillColor(scratchColor, 1.0);
-        scratchColor.r *= 8.0;
-        scratchColor.g *= 8.0;
-        scratchColor.b *= 8.0;
-        offs += fillColor(d, offs, scratchColor);
+            this.paramGetVector('$color').fillColor(scratchColor, 1.0);
+            scratchColor.r *= 8.0;
+            scratchColor.g *= 8.0;
+            scratchColor.b *= 8.0;
+    
+            offs += fillColor(d, offs, scratchColor);
+        } else if (this.type === Material_Sky_Type.Sky) {
+            let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Sky.ub_ObjectParams, 12);
+            const d = renderInst.mapUniformBufferF32(ShaderTemplate_Sky.ub_ObjectParams);
+            offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform');
+            this.paramGetVector('$color').fillColor(scratchColor, 1.0);
+            offs += fillColor(d, offs, scratchColor);
+        }
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -4044,6 +4112,7 @@ class ShaderTemplates {
     public Refract = new ShaderTemplate_Refract();
     public SolidEnergy = new ShaderTemplate_SolidEnergy();
     public Sky = new ShaderTemplate_Sky();
+    public SkyHDRCompressed = new ShaderTemplate_SkyHDRCompressed();
 
     public destroy(device: GfxDevice): void {
         this.Generic.destroy(device);
@@ -4053,6 +4122,7 @@ class ShaderTemplates {
         this.Refract.destroy(device);
         this.SolidEnergy.destroy(device);
         this.Sky.destroy(device);
+        this.SkyHDRCompressed.destroy(device);
     }
 }
 
@@ -4143,7 +4213,7 @@ export class MaterialCache {
     public async createMaterialInstance(path: string): Promise<BaseMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
-        if (vmt['%compilesky'] || vmt['%compiletrigger'] || vmt['%compile2dsky'])
+        if (vmt['%compiletrigger'])
             materialInstance.isToolMaterial = true;
         return materialInstance;
     }

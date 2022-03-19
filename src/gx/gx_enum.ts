@@ -475,6 +475,16 @@ export const enum AttrType {
     DIRECT = 1,
     INDEX8 = 2,
     INDEX16 = 3,
+
+    // Used when loading MP1 data to build an index mapping from the web vertex
+    // buffer to the original POS array indices. This is used to resolve envelope
+    // matrix slots via the CKSR table.
+    //
+    // To use this, only set GX_VtxDesc.enableOutput on the position attribute with
+    // this enum as GX_VtxDesc.type and run a compiled loader as normal. The output
+    // will be a buffer containing the original 16-bit POS indices without
+    // dereferencing vertex data.
+    UNRESOLVED_INDEX16 = 4,
 }
 
 export const enum TexMapID {

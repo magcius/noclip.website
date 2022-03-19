@@ -1127,8 +1127,8 @@ export class ShadowControllerHolder extends NameObj {
         }
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         this.updateController(sceneObjHolder);
     }
 

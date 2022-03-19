@@ -12,7 +12,7 @@ function getDataStorageBaseURL(isDevelopment: boolean): string {
     if (isDevelopment)
         return `/data`;
     else
-        return `https://gznoclip1.b-cdn.net`;
+        return `https://noclip.beyond3d.com`;
 }
 
 export function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT): string {
@@ -97,10 +97,9 @@ class DataFetcherRequest {
         this.request.open("GET", this.url, true);
         this.request.responseType = "arraybuffer";
 
-        let rangeStart = -1, rangeEnd = -1;
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
-            rangeStart = this.options.rangeStart;
-            rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
+            const rangeStart = this.options.rangeStart;
+            const rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
             this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
         }
         this.request.send();

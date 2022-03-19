@@ -501,7 +501,7 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 
-    public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
+    public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         const device = cache.device;
         this.setAttachmentFormatsFromRenderPass(device, passRenderer);
 
@@ -510,7 +510,7 @@ export class GfxRenderInst {
         const pipelineReady = device.pipelineQueryReady(gfxPipeline);
         if (!pipelineReady) {
             if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady))
-                return false;
+                return;
 
             device.pipelineForceReady(gfxPipeline);
         }
@@ -533,8 +533,6 @@ export class GfxRenderInst {
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);
         }
-
-        return true;
     }
 }
 //#endregion
@@ -618,21 +616,16 @@ export class GfxRenderInstList {
         }
     }
 
-    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): number {
+    private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         this.ensureSorted();
 
-        let numDrawn = 0;
         if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
             for (let i = 0; i < this.renderInsts.length; i++)
-                if (this.renderInsts[i].drawOnPass(cache, passRenderer))
-                    numDrawn++;
+                this.renderInsts[i].drawOnPass(cache, passRenderer);
         } else {
             for (let i = this.renderInsts.length - 1; i >= 0; i--)
-                if (this.renderInsts[i].drawOnPass(cache, passRenderer))
-                    numDrawn++;
+                this.renderInsts[i].drawOnPass(cache, passRenderer);
         }
-
-        return numDrawn;
     }
 
     public reset(): void {
@@ -644,10 +637,9 @@ export class GfxRenderInstList {
      * using {@param device} and {@param cache} to create any device-specific resources
      * necessary to complete the draws.
      */
-    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): number {
-        const numDrawn = this.drawOnPassRendererNoReset(cache, passRenderer);
+    public drawOnPassRenderer(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+        this.drawOnPassRendererNoReset(cache, passRenderer);
         this.reset();
-        return numDrawn;
     }
 }
 //#endregion

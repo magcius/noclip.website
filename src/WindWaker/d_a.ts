@@ -1248,17 +1248,13 @@ class d_a_obj_zouK extends fopAc_ac_c {
         this.bckAnm.play(0.0);
 
         for (let i = 0; i < this.model.materialInstances.length; i++)
-            this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
+            this.model.materialInstances[i].effectMtx = this.effectMtx;
 
         this.cullMtx = this.model.modelMatrix;
         this.setCullSizeBox(-1000.0, 0.0, -1000.0, 1000.0, 2800.0, 1000.0);
 
         return cPhs__Status.Next;
     }
-
-    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
-        mat4.copy(dst, this.effectMtx);
-    };
 
     private set_mtx(): void {
         vec3.copy(this.model.baseScale, this.scale);
@@ -3753,7 +3749,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.model.jointMatrixCalcCallback = this.nodeControl;
 
         for (let i = 0; i < this.model.materialInstances.length; i++)
-            this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
+            this.model.materialInstances[i].effectMtx = this.effectMtx;
 
         if (modelType === 0xFF)
             this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, 0x04, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
