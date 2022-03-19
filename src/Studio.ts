@@ -850,7 +850,7 @@ class Timeline {
                 const jumpIcon = this.keyframeIcons[i];
                 this.deselectAllKeyframeIcons();
                 this.playhead.updatePosition(jumpIcon.getX(), jumpIcon.getT());
-                this.selectKeyframeIcon(jumpIcon);
+                this.selectKeyframeIconsAtTime(jumpIcon.getT());
                 break;
             }
         }
@@ -864,7 +864,7 @@ class Timeline {
                 const jumpIcon = this.keyframeIcons[i];
                 this.deselectAllKeyframeIcons();
                 this.playhead.updatePosition(jumpIcon.getX(), jumpIcon.getT());
-                this.selectKeyframeIcon(jumpIcon);
+                this.selectKeyframeIconsAtTime(jumpIcon.getT());
                 break;
             }
         }
