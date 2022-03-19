@@ -7,7 +7,6 @@ import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatf
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
 import { mat4, vec3, quat } from 'gl-matrix';
-import { setChildren } from '../../ui';
 
 let _wasm: typeof import('../../../rust/pkg/index') | null = null;
 
@@ -92,7 +91,7 @@ export class GameObjectTree {
                 console.log(childID);
                 return;
             }
-            mat4.mul(child.modelMatrix, child.modelMatrix, node.modelMatrix);
+            mat4.mul(child.modelMatrix, node.modelMatrix, child.modelMatrix);
             this.propagateModel(childID);
         });
     }
@@ -406,7 +405,12 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
 
     let buffers = [vertsBuf, normsBuf, trisBuf];
 
-    return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers);
+    let has_submeshes = mesh.has_submeshes;
+    let numIndices = indices.length;
+    if (has_submeshes)
+        numIndices = 0;
+
+    return new UnityMesh(layout, state, numIndices, mesh.local_aabb, buffers);
 }
 
 function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
@@ -436,6 +440,8 @@ function vertexFormatToGfxFormat(vertexFormat: VertexFormat, dimension: number):
 
 function channelInfoToVertexAttributeDescriptor(location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor {
     const { stream, offset, format, dimension } = channelInfo;
+    // if (dimension === 0)
+    //     debugger;
     const gfxFormat = vertexFormatToGfxFormat(format, dimension);
     assert(stream === 0); // TODO: Handle more than one stream
     return { location: location, bufferIndex: stream, bufferByteOffset: offset, format: gfxFormat };
@@ -461,6 +467,10 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
         numIndices = indices.length / 2;
     }
 
+    let has_submeshes = mesh.has_submeshes;
+    if (has_submeshes)
+        numIndices = 0;
+
     let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data());
     let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices);
 
@@ -470,5 +480,5 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     ], { buffer: trisBuf, byteOffset: 0 });
     let buffers = [vertsBuf, trisBuf];
 
-    return new UnityMesh(layout, state,  numIndices, mesh.local_aabb, buffers);
+    return new UnityMesh(layout, state, numIndices, mesh.local_aabb, buffers);
 }

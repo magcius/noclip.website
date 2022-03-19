@@ -364,10 +364,11 @@ impl Deserialize for AABB {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
+#[wasm_bindgen]
 pub struct SubMesh {
-    first_byte: u32,
-    index_count: u32,
+    pub first_byte: u32,
+    pub index_count: u32,
     topology: u32,
     base_vertex: u32,
     first_vertex: u32,
@@ -423,6 +424,7 @@ pub enum IndexFormat {
 #[wasm_bindgen]
 pub struct Mesh {
     name: String,
+    pub has_submeshes: bool,
     submeshes: Vec<SubMesh>,
     mesh_compression: MeshCompression,
     is_readable: bool,
@@ -561,6 +563,7 @@ impl Deserialize for Mesh {
 
         Ok(Mesh {
             name,
+            has_submeshes: submeshes.len() >= 2,
             submeshes,
             mesh_compression,
             is_readable,

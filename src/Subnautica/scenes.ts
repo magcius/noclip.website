@@ -1,8 +1,8 @@
 import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxDevice, GfxBuffer, GfxInputState, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxDevice, GfxBuffer, GfxInputState, GfxProgram, GfxBindingLayoutDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
@@ -11,6 +11,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager';
 import { AABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -25,19 +26,21 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_ShapeParams {
-    Mat4x4 u_ChunkModel;
+    Mat4x3 u_ChunkModel;
 };
 
 varying vec2 v_LightIntensity;
 
 #ifdef VERT
+${GfxShaderLibrary.MulNormalMatrix}
+
 layout(location = ${UnityChannel.Vertex}) attribute vec3 a_Position;
 layout(location = ${UnityChannel.Normal}) attribute vec3 a_Normal;
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(u_ChunkModel, vec4(a_Position, 1.0))));
+    gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(_Mat4x4(u_ChunkModel), vec4(a_Position, 1.0))));
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    vec3 normal = normalize(a_Normal);
+    vec3 normal = MulNormalMatrix(u_ChunkModel, vec4(normalize(a_Normal), 0.0));
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
@@ -59,15 +62,19 @@ void mainPS() {
 const CHUNK_SCALE = 32;
 
 class MeshRenderer {
-    public normsBuf: GfxBuffer;
-    public vertsBuf: GfxBuffer;
-    public trisBuf: GfxBuffer;
-    public numVertices: number;
+    public visible = true;
+    public name: string = '';
 
     constructor(device: GfxDevice, public mesh: UnityMesh, public modelMatrix: mat4) {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        if (this.mesh.numIndices === 0)
+            return;
+
         /*
         const bbox = new AABB();
         bbox.transform(this.mesh.bbox, this.modelMatrix);
@@ -78,12 +85,13 @@ class MeshRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
 
-        let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
+        let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 12);
         const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
-        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+        offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.mesh.inputLayout, this.mesh.inputState);
+        renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         renderInst.drawIndexes(this.mesh.numIndices);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
@@ -112,7 +120,9 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     }
 
     addMesh(mesh: UnityMesh, model: mat4) {
-        this.meshRenderers.push(new MeshRenderer(this.device, mesh, model));
+        const renderer = new MeshRenderer(this.device, mesh, model);
+        this.meshRenderers.push(renderer);
+        return renderer;
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -188,7 +198,10 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
                 console.error(`invalid node! gameObject ${node.gameObjectSet}, mesh ${node.meshSet}`);
                 continue;
             }
-            renderer.addMesh(tree.meshes[node.meshPathID!], node.modelMatrix);
+            if (tree.meshes[node.meshPathID!].numIndices === 0)
+                continue;
+            const r = renderer.addMesh(tree.meshes[node.meshPathID!], node.modelMatrix);
+            r.name = node.name ?? '(un-named)';
         }
 
         return renderer;
