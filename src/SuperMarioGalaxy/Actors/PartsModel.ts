@@ -19,7 +19,7 @@ export class PartsModel extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        let movementType = MovementType.Parts;
+        let movementType = MovementType.EnemyDecoration;
         let calcAnimType = CalcAnimType.MapObjDecoration;
 
         if (drawBufferType < 0)

@@ -5229,7 +5229,7 @@ class OceanRingPipeOutside extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private pipe: OceanRingPipe) {
         super(zoneAndLayer, sceneObjHolder, 'OceanRingPipeOutside');
 
-        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanRingOutside);
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanRingPipeOutside);
 
         const arc = sceneObjHolder.modelCache.getObjectData('OceanRing');
         this.waterPipeIndirect = loadBTIData(sceneObjHolder, arc, 'WaterPipeIndirect.bti');

@@ -501,7 +501,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 }
 
                 // executeDrawListOpa();
-                this.execute(passRenderer, DrawType.OceanRingOutside);
+                this.execute(passRenderer, DrawType.OceanRingPipeOutside);
                 this.execute(passRenderer, DrawType.SwingRope);
                 this.execute(passRenderer, DrawType.Creeper);
                 this.execute(passRenderer, DrawType.Trapeze);
@@ -533,7 +533,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Ride);
                 this.drawXlu(passRenderer, DrawBufferType.Enemy);
                 this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
-                this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
+                this.drawXlu(passRenderer, DrawBufferType.PlayerDecoration);
                 // executeDrawListXlu()
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.execute(passRenderer, DrawType.ClipAreaDropLaser);

@@ -162,7 +162,6 @@ abstract class PlanetGravity {
 
     protected abstract calcOwnGravityVector(dst: vec3, pos: ReadonlyVec3): number;
 
-    // TODO(jstpierre): BaseMatrixFollower
     public updateMtx(parentMtx: ReadonlyMat4): void {
     }
 
@@ -201,7 +200,7 @@ function settingGravityParamFromJMap(gravity: PlanetGravity, infoIter: JMapInfoI
     if (priority !== null)
         gravity.priority = priority;
 
-    const gravity_id = infoIter.getValueNumberNoInit('Gravity_id');
+    const gravity_id = infoIter.getValueNumberNoInit('l_id');
     if (gravity_id !== null)
         gravity.id = gravity_id;
 
