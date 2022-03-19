@@ -8,9 +8,10 @@ import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager';
+import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel, GameObjectTreeNode } from '../Common/Unity/AssetManager';
 import { AABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { getFormatCompByteSize } from '../gfx/platform/GfxPlatformFormat';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -63,28 +64,53 @@ class MeshRenderer {
     public vertsBuf: GfxBuffer;
     public trisBuf: GfxBuffer;
     public numVertices: number;
+    public visible = true;
+    public name: string;
 
-    constructor(device: GfxDevice, public mesh: UnityMesh, public modelMatrix: mat4) {
+    constructor(device: GfxDevice, public mesh: UnityMesh, public node: GameObjectTreeNode) {
+        this.name = node.name!;
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         /*
         const bbox = new AABB();
-        bbox.transform(this.mesh.bbox, this.modelMatrix);
+        bbox.transform(this.mesh.bbox, this.node.modelMatrix);
         if (!viewerInput.camera.frustum.contains(bbox)) {
             return;
         }
         */
+        let keepLayers = [
+            0, //default
+            9, //player
+            10, //ground
+            12, //softground
+            13, //hiddenitems
+            17, //debris
+            18, //waterdrifters
+            23, //npc
+        ];
+        if (!this.visible || !keepLayers.includes(this.node.layer!)) return;
 
         const template = renderInstManager.pushTemplateRenderInst();
 
         let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
         const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
-        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.node.modelMatrix);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.mesh.inputLayout, this.mesh.inputState);
-        renderInst.drawIndexes(this.mesh.numIndices);
+        if (this.node.meshRenderer === undefined) {
+            renderInst.drawIndexes(this.mesh.numIndices);
+        } else {
+            let batchInfo = this.node.meshRenderer.static_batch_info;
+            let submeshCount = batchInfo.submesh_count > 0 ? batchInfo.submesh_count : this.mesh.submeshes.length;
+            for (let i=0; i<submeshCount; i++) {
+                let submeshIdx = batchInfo.first_submesh + i;
+                let submesh = this.mesh.submeshes[submeshIdx];
+                let offset = submesh.first_byte / getFormatCompByteSize(this.mesh.indexBufferFormat);
+                renderInst.drawIndexes(submesh.index_count, offset);
+            }
+        }
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
@@ -111,8 +137,8 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         this.program = this.renderHelper.renderCache.createProgram(new ChunkProgram());
     }
 
-    addMesh(mesh: UnityMesh, model: mat4) {
-        this.meshRenderers.push(new MeshRenderer(this.device, mesh, model));
+    addMesh(mesh: UnityMesh, node: GameObjectTreeNode) {
+        this.meshRenderers.push(new MeshRenderer(this.device, mesh, node));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -184,11 +210,14 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
         let tree = await assets.getGameObjectTree();
         for (let id in tree.nodes) {
             let node = tree.nodes[id];
-            if (!node.isValid()) {
-                console.error(`invalid node! gameObject ${node.gameObjectSet}, mesh ${node.meshSet}`);
+            if (!node.meshSet) {
                 continue;
             }
-            renderer.addMesh(tree.meshes[node.meshPathID!], node.modelMatrix);
+            if (!node.gameObjectSet) {
+                console.error(`invalid node! ${node.name}`)
+                continue;
+            }
+            renderer.addMesh(tree.meshes[node.meshPathID!], node);
         }
 
         return renderer;

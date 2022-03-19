@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::unity::reader::*;
 use crate::unity::asset::AssetInfo;
-use crate::unity::mesh::Vec3f;
+use crate::unity::mesh::{ Vec3f, Vec4f };
 use crate::unity::version::{ UnityVersion, VersionType };
 
 #[wasm_bindgen]
@@ -179,5 +179,103 @@ impl MeshFilter {
         let mut obj = MeshFilter::deserialize(&mut reader, asset)?;
         obj.path_id = Some(path_id);
         return Ok(obj);
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy)]
+pub struct StaticBatchInfo {
+    pub first_submesh: u16,
+    pub submesh_count: u16,
+}
+
+impl Deserialize for StaticBatchInfo {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        Ok(StaticBatchInfo {
+            first_submesh: reader.read_u16()?,
+            submesh_count: reader.read_u16()?,
+        })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct MeshRenderer {
+    pub path_id: Option<i32>,
+    pub game_object: PPtr,
+    pub enabled: bool,
+    materials: Vec<PPtr>,
+    pub static_batch_info: StaticBatchInfo,
+}
+
+#[wasm_bindgen]
+impl MeshRenderer {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<MeshRenderer, String> {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(asset.header.endianness);
+        let mut obj = MeshRenderer::deserialize(&mut reader, asset)?;
+        obj.path_id = Some(path_id);
+        return Ok(obj);
+    }
+}
+
+impl Deserialize for MeshRenderer {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let game_object = PPtr::deserialize(reader, asset)?;
+        let enabled = reader.read_bool()?;
+        let _cast_shadows = reader.read_u8()?;
+        let _receive_shadows = reader.read_u8()?;
+        let v2017_2 = UnityVersion { major: 2017, minor: 2, ..Default::default() };
+        if asset.metadata.unity_version >= v2017_2 {
+            let _dynamic_occludee = reader.read_u8()?;
+        }
+        let v2021 = UnityVersion { major: 2021, ..Default::default() };
+        if asset.metadata.unity_version >= v2021 {
+            let _static_shadow_caster = reader.read_u8()?;
+        }
+        let _motion_vectors = reader.read_u8()?;
+        let _light_probe_usage = reader.read_u8()?;
+        let _reflection_probe_usage = reader.read_u8()?;
+        let v2019_3 = UnityVersion { major: 2019, minor: 3, ..Default::default() };
+        if asset.metadata.unity_version >= v2019_3 {
+            let _ray_tracing_mode = reader.read_u8()?;
+        }
+        let v2020 = UnityVersion { major: 2020, ..Default::default() };
+        if asset.metadata.unity_version >= v2020 {
+            let _ray_trace_procedural = reader.read_u8()?;
+        }
+        reader.align()?;
+        let v2018 = UnityVersion { major: 2018, ..Default::default() };
+        if asset.metadata.unity_version >= v2018 {
+            let _rendering_layer_mask = reader.read_u32()?;
+        }
+        let v2018_3 = UnityVersion { major: 2018, minor: 3, ..Default::default() };
+        if asset.metadata.unity_version >= v2018_3 {
+            let _renderer_priority = reader.read_u32()?;
+        }
+        if asset.metadata.unity_version.version_type == VersionType::Final {
+            let _lightmap_index = reader.read_u16()?;
+            let _lightmap_index_dynamic = reader.read_u16()?;
+            let _lightmap_tiling_offset = Vec4f::deserialize(reader, asset)?;
+            let _lightmap_tiling_ffset_dynamic = Vec4f::deserialize(reader, asset)?;
+        }
+        let materials = PPtr::deserialize_array(reader, asset)?;
+        let static_batch_info = StaticBatchInfo::deserialize(reader, asset)?;
+        let _static_batch_root = PPtr::deserialize(reader, asset)?;
+        let _probe_anchor = PPtr::deserialize(reader, asset)?;
+        let _light_probe_volume_override = PPtr::deserialize(reader, asset)?;
+        reader.align()?;
+        let _sorting_layer_id = reader.read_i16()?;
+        let _sorting_layer = reader.read_i16()?;
+        let _sorting_order = reader.read_i16()?;
+        reader.align()?;
+        Ok(MeshRenderer {
+            game_object,
+            enabled,
+            materials,
+            static_batch_info,
+
+            path_id: None,
+        })
     }
 }

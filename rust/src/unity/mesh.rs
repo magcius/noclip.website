@@ -350,6 +350,26 @@ impl Deserialize for Vec3f {
 
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
+pub struct Vec4f {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl Deserialize for Vec4f {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        Ok(Vec4f {
+            x: reader.read_f32()?,
+            y: reader.read_f32()?,
+            z: reader.read_f32()?,
+            w: reader.read_f32()?,
+        })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
 pub struct AABB {
     pub center: Vec3f,
     pub extent: Vec3f,
@@ -364,15 +384,16 @@ impl Deserialize for AABB {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[wasm_bindgen]
 pub struct SubMesh {
-    first_byte: u32,
-    index_count: u32,
-    topology: u32,
-    base_vertex: u32,
+    pub first_byte: u32,
+    pub index_count: u32,
+    pub topology: u32,
+    pub base_vertex: u32,
     first_vertex: u32,
     vertex_count: u32,
-    local_aabb: AABB,
+    pub local_aabb: AABB,
 }
 
 impl Deserialize for SubMesh {
@@ -386,6 +407,19 @@ impl Deserialize for SubMesh {
             vertex_count: reader.read_u32()?,
             local_aabb: AABB::deserialize(reader, asset)?,
         })
+    }
+}
+
+#[wasm_bindgen]
+pub struct SubMeshArray {
+    pub length: usize,
+    submeshes: Vec<SubMesh>,
+}
+
+#[wasm_bindgen]
+impl SubMeshArray {
+    pub fn get(&self, i: usize) -> SubMesh {
+        self.submeshes[i].clone()
     }
 }
 
@@ -519,6 +553,13 @@ impl Mesh {
         match self.vertex_data.streams.get(i) {
             Some(s) => Some(s.clone()),
             None => None,
+        }
+    }
+
+    pub fn get_submeshes(&self) -> SubMeshArray {
+        SubMeshArray {
+            length: self.submeshes.len(),
+            submeshes: self.submeshes.clone(),
         }
     }
 }

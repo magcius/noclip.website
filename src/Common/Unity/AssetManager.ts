@@ -1,13 +1,14 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, FileLocation, Vec3f, Quaternion, PPtr } from '../../../rust/pkg/index';
+import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, FileLocation, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
 import { mat4, vec3, quat } from 'gl-matrix';
 import { setChildren } from '../../ui';
+import { CoinHolder } from '../../SuperMarioGalaxy/Actors/MiscActor';
 
 let _wasm: typeof import('../../../rust/pkg/index') | null = null;
 
@@ -89,10 +90,10 @@ export class GameObjectTree {
         node.transformChildrenPathIDs.forEach(childID => {
             let child = this.nodes[childID];
             if (child === undefined) {
-                console.log(childID);
+                console.error(`couldn't find ${node.name}'s child (tranform ID ${childID})`)
                 return;
             }
-            mat4.mul(child.modelMatrix, child.modelMatrix, node.modelMatrix);
+            mat4.mul(child.modelMatrix, node.modelMatrix, child.modelMatrix);
             this.propagateModel(childID);
         });
     }
@@ -112,8 +113,10 @@ export class GameObjectTreeNode {
     gameObjectPathID: number;
     transformChildrenPathIDs: number[];
     name: string|undefined;
+    layer: number|undefined;
     isActive: boolean|undefined;
     meshPathID: number|undefined;
+    meshRenderer: MeshRenderer|undefined;
     gameObjectSet: boolean;
     meshSet: boolean;
 
@@ -134,7 +137,12 @@ export class GameObjectTreeNode {
     setGameObject(gameObject: GameObject) {
         this.name = gameObject.get_name();
         this.isActive = gameObject.is_active;
+        this.layer = gameObject.layer;
         this.gameObjectSet = true;
+    }
+
+    setMeshRenderer(meshRenderer: MeshRenderer) {
+        this.meshRenderer = meshRenderer;
     }
 
     setMeshPathID(meshPathID: number) {
@@ -143,18 +151,23 @@ export class GameObjectTreeNode {
     }
 
     isValid(): boolean {
-        return this.meshSet && this.gameObjectSet;
+        return (this.meshSet && this.gameObjectSet);
     }
 }
 
 export class UnityMesh {
     public bbox: Geometry.AABB; 
+    public submeshes: SubMesh[];
 
-    constructor(public inputLayout: GfxInputLayout, public inputState: GfxInputState, public numIndices: number, bbox: UnityAABB, public buffers: GfxBuffer[]) {
+    constructor(public inputLayout: GfxInputLayout, public inputState: GfxInputState, public numIndices: number, bbox: UnityAABB, public buffers: GfxBuffer[], submeshes: SubMeshArray, public indexBufferFormat: GfxFormat) {
         let center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
         let extent = vec3.fromValues(bbox.extent.x, bbox.extent.y, bbox.extent.z);
         this.bbox = new Geometry.AABB();
         this.bbox.setFromCenterAndExtents(center, extent);
+        this.submeshes = [];
+        for (let i=0; i<submeshes.length; i++) {
+            this.submeshes.push(submeshes.get(i))
+        }
     }
 
     public destroy(device: GfxDevice) {
@@ -289,12 +302,19 @@ export class UnityAssetManager {
         });
         console.log(`loaded ${gameObjectData.length} gameobjects`)
 
+        let meshRendererData = await this.loadUnityObjects(wasm.UnityClassID.MeshRenderer);
+        meshRendererData.forEach(([pathID, data]) => {
+            let meshRenderer = wasm.MeshRenderer.from_bytes(data, this.assetInfo, pathID);
+            nodesByGameObject[meshRenderer.game_object.path_id].setMeshRenderer(meshRenderer);
+        });
+
         let meshFilterData = await this.loadUnityObjects(wasm.UnityClassID.MeshFilter);
         let meshes: Map<UnityMesh> = {};
         let meshesToGameObjects: { [combinedMeshID: string]: number[]} = {};
         let batchRequestManager = new BatchRequestManager();
-        let meshFilters = meshFilterData.map(([pathID, data], i) => {
+        meshFilterData.forEach(([pathID, data], i) => {
             let filter = wasm.MeshFilter.from_bytes(data, this.assetInfo, pathID);
+
             // check for a null ptr
             if (filter.mesh_ptr.path_id === 0) {
                 return;
@@ -306,7 +326,6 @@ export class UnityAssetManager {
             }
             meshesToGameObjects[combinedMeshID].push(filter.game_object.path_id);
             batchRequestManager.add(filter.mesh_ptr, i);
-            return filter;
         });
         for (let i in batchRequestManager.batches) {
             let batch = batchRequestManager.batches[i];
@@ -406,7 +425,7 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
 
     let buffers = [vertsBuf, normsBuf, trisBuf];
 
-    return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers);
+    return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
 }
 
 function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
@@ -470,5 +489,5 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     ], { buffer: trisBuf, byteOffset: 0 });
     let buffers = [vertsBuf, trisBuf];
 
-    return new UnityMesh(layout, state,  numIndices, mesh.local_aabb, buffers);
+    return new UnityMesh(layout, state,  numIndices, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
 }
