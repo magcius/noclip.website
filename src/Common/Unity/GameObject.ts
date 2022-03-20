@@ -6,11 +6,12 @@ import { AssetObjectData, UnityAssetSystem, RustModule, AssetLocation, UnityMesh
 import type * as wasm from '../../../rust/pkg/index';
 import { mat4, quat, vec3 } from "gl-matrix";
 import { assert, assertExists, fallbackUndefined, nArray } from "../../util";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
+import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../../viewer";
 import { DeviceProgram } from "../../Program";
-import { fillMatrix4x3 } from "../../gfx/helpers/UniformBufferHelpers";
+import { fillColor, fillMatrix4x3, fillVec4, fillVec4v } from "../../gfx/helpers/UniformBufferHelpers";
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary";
+import { TextureMapping } from "../../TextureHolder";
 
 interface WasmBindgenArray<T> {
     length: number;
@@ -117,13 +118,21 @@ layout(std140) uniform ub_ShapeParams {
     Mat4x3 u_ChunkModel;
 };
 
+layout(std140) uniform ub_ColorParams {
+    vec4 u_Color;
+    vec4 u_MainTexST;
+};
+
 varying vec2 v_LightIntensity;
+varying vec2 v_TexCoord0;
 
 #ifdef VERT
 layout(location = ${UnityChannel.Vertex}) attribute vec3 a_Position;
 layout(location = ${UnityChannel.Normal}) attribute vec3 a_Normal;
+layout(location = ${UnityChannel.TexCoord0}) attribute vec2 a_TexCoord0;
 
 ${GfxShaderLibrary.MulNormalMatrix}
+${GfxShaderLibrary.CalcScaleBias}
 
 void mainVS() {
     gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(_Mat4x4(u_ChunkModel), vec4(a_Position, 1.0))));
@@ -132,12 +141,15 @@ void mainVS() {
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
+    v_TexCoord0 = CalcScaleBias(a_TexCoord0, u_MainTexST);
 }
 #endif
 
 #ifdef FRAG
+uniform sampler2D u_Texture;
+
 void mainPS() {
-    vec4 color = vec4(.4, .4, .4, 1.0);
+    vec4 color = u_Color * texture(u_Texture, v_TexCoord0);
     float t_LightIntensity = gl_FrontFacing ? v_LightIntensity.x : v_LightIntensity.y;
     float t_LightTint = 0.5 * t_LightIntensity;
     gl_FragColor = sqrt(color + vec4(t_LightTint, t_LightTint, t_LightTint, 0.0));
@@ -147,7 +159,23 @@ void mainPS() {
 }
 
 class MaterialInstance {
+    private textureMapping = nArray(1, () => new TextureMapping());
+
     constructor(private materialData: UnityMaterialData) {
+        if (this.materialData.mainTex !== null) {
+            this.textureMapping[0].gfxTexture = this.materialData.mainTex.gfxTexture;
+            this.textureMapping[0].gfxSampler = this.materialData.mainTex.gfxSampler;
+        }
+    }
+
+    public prepareToRender(renderInst: GfxRenderInst): void {
+        let offs = renderInst.allocateUniformBuffer(2, 8);
+        const d = renderInst.mapUniformBufferF32(2);
+
+        offs += fillColor(d, offs, this.materialData.color);
+        offs += fillVec4v(d, offs, this.materialData.mainTexST);
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
     }
 }
 
@@ -232,6 +260,7 @@ export class MeshRenderer extends UnityComponent {
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
+            material.prepareToRender(renderInst);
             const firstIndex = submesh.first_byte / meshData.indexBufferStride;
             renderInst.drawIndexes(submesh.index_count, firstIndex);
             renderInstManager.submitRenderInst(renderInst);

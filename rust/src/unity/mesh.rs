@@ -299,6 +299,22 @@ impl Deserialize for Shape {
 
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
+pub struct Vec2f {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Deserialize for Vec2f {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
+        Ok(Vec2f {
+            x: reader.read_f32()?,
+            y: reader.read_f32()?,
+        })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
 pub struct Vec3f {
     pub x: f32,
     pub y: f32,
@@ -306,7 +322,7 @@ pub struct Vec3f {
 }
 
 impl Deserialize for Vec3f {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         Ok(Vec3f {
             x: reader.read_f32()?,
             y: reader.read_f32()?,
@@ -325,7 +341,7 @@ pub struct Vec4f {
 }
 
 impl Deserialize for Vec4f {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         Ok(Vec4f {
             x: reader.read_f32()?,
             y: reader.read_f32()?,

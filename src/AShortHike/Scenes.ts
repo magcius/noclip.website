@@ -9,7 +9,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { createUnityRuntime, UnityRuntime, MeshRenderer as UnityMeshRenderer } from '../Common/Unity/GameObject';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 0 },
+    { numUniformBuffers: 3, numSamplers: 1 },
 ];
 
 class UnityRenderer implements Viewer.SceneGfx {

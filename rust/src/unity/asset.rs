@@ -1,3 +1,4 @@
+
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::version::UnityVersion;
 use crate::unity::reader::{ AssetReader, Deserialize, Result as ReaderResult };
@@ -191,8 +192,51 @@ impl Deserialize for PPtr {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Map<TKey, TVal> {
+    pub keys: Vec<TKey>,
+    pub vals: Vec<TVal>,
+}
+
+impl<TKey: Eq, TVal: Clone> Map<TKey, TVal> {
+    pub fn find_idx(&self, k: TKey) -> Option<usize> {
+        for i in 0..(self.keys.len()) {
+            if self.keys[i] == k {
+                return Some(i);
+            }
+        }
+
+        None
+    }
+
+    pub fn find(&self, k: TKey) -> Option<TVal> {
+        self.find_idx(k).map(|idx| self.vals[idx].clone())
+    }
+}
+
+impl<TKey: Deserialize, TVal: Deserialize> Deserialize for Map<TKey, TVal> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> ReaderResult<Map<TKey, TVal>> {
+        let mut keys = Vec::new();
+        let mut vals = Vec::new();
+        let n = reader.read_u32()?;
+        for _ in 0..n {
+            let key = TKey::deserialize(reader, asset)?;
+            keys.push(key);
+            let val = TVal::deserialize(reader, asset)?;
+            vals.push(val);
+        }
+        Ok(Map{ keys, vals })
+    }
+}
+
 impl Deserialize for String {
     fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<String> {
         reader.read_char_array()
+    }
+}
+
+impl Deserialize for f32 {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<f32> {
+        reader.read_f32()
     }
 }

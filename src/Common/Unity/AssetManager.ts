@@ -1,15 +1,16 @@
-import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 
+import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D, UnityMaterial, UnityShader } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxTexture, GfxSampler, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxWrapMode, GfxSamplerDescriptor, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert, assertExists } from '../../util';
 import * as Geometry from '../../Geometry';
-import { vec3 } from 'gl-matrix';
+import { vec3, vec4 } from 'gl-matrix';
 import { DataFetcher } from '../../DataFetcher';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { Destroyable } from '../../SceneBase';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { colorCopy, colorMult, colorNewCopy, colorNewFromRGBA, White } from '../../Color';
 
 export type RustModule = typeof import('../../../rust/pkg/index');
 
@@ -135,7 +136,7 @@ type ResType<T extends UnityAssetResourceType> =
     T extends UnityAssetResourceType.Shader ? UnityShaderData :
     never;
 
-type CreateFunc<T> = (assetSystem: UnityAssetSystem, objData: AssetObjectData) => Promise<T>;
+type CreateFunc<T> = (assetSystem: UnityAssetSystem, objData: AssetObjectData) => Promise<T | null>;
 
 class AssetFile {
     public unityObject: UnityObject[] = [];
@@ -145,8 +146,8 @@ class AssetFile {
     public fullData: ArrayBufferSlice | null;
 
     private waitForHeaderPromise: Promise<void> | null;
-    private dataCache = new Map<number, Destroyable>();
-    private promiseCache = new Map<number, Promise<Destroyable>>();
+    private dataCache = new Map<number, Destroyable | null>();
+    private promiseCache = new Map<number, Promise<Destroyable | null>>();
 
     constructor(private path: string) {
     }
@@ -257,7 +258,10 @@ class AssetFile {
         }
     };
 
-    private createTexture2DData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityTexture2DData> => {
+    private createTexture2DData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityTexture2DData | null> => {
+        if (objData.classID !== assetSystem.wasm.UnityClassID.Texture2D)
+            return null;
+
         const header = assetSystem.wasm.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
         const data = await assetSystem.fetchStreamingInfo(header.streaming_info);
         return new UnityTexture2DData(assetSystem.wasm, assetSystem.renderCache, header, data);
@@ -275,7 +279,7 @@ class AssetFile {
         return new UnityShaderData(objData.location, header);
     };
 
-    private fetchFromCache<T extends Destroyable>(assetSystem: UnityAssetSystem, pathID: number, createFunc: CreateFunc<T>): Promise<T> {
+    private fetchFromCache<T extends Destroyable>(assetSystem: UnityAssetSystem, pathID: number, createFunc: CreateFunc<T>): Promise<T | null> {
         if (this.promiseCache.has(pathID))
             return this.promiseCache.get(pathID)! as Promise<T>;
 
@@ -311,7 +315,8 @@ class AssetFile {
         for (let i = 0; i < this.unityObject.length; i++)
             this.unityObject[i].free();
         for (const v of this.dataCache.values())
-            v.destroy(device);
+            if (v !== null)
+                v.destroy(device);
     }
 }
 
@@ -531,6 +536,10 @@ function translateTextureFormat(wasm: RustModule, fmt: UnityTextureFormat, color
         return GfxFormat.BC1;
     else if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.SRGB)
         return GfxFormat.BC1_SRGB;
+    else if (fmt === wasm.UnityTextureFormat.BC3 && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.BC3;
+    else if (fmt === wasm.UnityTextureFormat.BC3 && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.BC3_SRGB;
     else
         throw "whoops";
 }
@@ -598,11 +607,30 @@ export class UnityMaterialData {
     public name: string;
     public shaderName: string;
 
+    public mainTex: UnityTexture2DData | null = null;
+    public mainTexST = vec4.create();
+    public color = colorNewFromRGBA(0.4, 0.4, 0.4, 1.0);
+
     constructor(private location: AssetLocation, private header: UnityMaterial) {
         this.name = this.header.name;
     }
 
     public async load(assetSystem: UnityAssetSystem) {
+        const mainTex = this.header.saved_properties.find_tex_env('_MainTex');
+        if (mainTex !== undefined) {
+            this.mainTex = (await assetSystem.fetchResource(UnityAssetResourceType.Texture2D, this.location, mainTex.texture))!;
+            this.mainTexST[0] = mainTex.scale.x;
+            this.mainTexST[1] = mainTex.scale.y;
+            this.mainTexST[2] = mainTex.offset.x;
+            this.mainTexST[3] = mainTex.offset.y;
+        }
+
+        for (let i = 0; i < this.header.saved_properties.get_color_count(); i++) {
+            const name = this.header.saved_properties.get_color_name(i);
+            if (name === '_Color')
+                colorMult(this.color, this.color, this.header.saved_properties.get_color(i));
+        }
+
         const shader = (await assetSystem.fetchResource(UnityAssetResourceType.Shader, this.location, this.header.shader))!;
         this.shaderName = shader.name;
     }
