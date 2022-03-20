@@ -1,24 +1,9 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::unity::reader::*;
-use crate::unity::asset::AssetInfo;
+use crate::unity::asset::{ AssetInfo, PPtr };
 use crate::unity::mesh::{ Vec3f, Vec4f };
 use crate::unity::version::{ UnityVersion, VersionType };
-
-#[wasm_bindgen]
-#[derive(Debug, Copy, Clone)]
-pub struct PPtr {
-    pub file_index: u32,
-    pub path_id: i32,
-}
-
-impl Deserialize for PPtr {
-    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
-        let file_index = reader.read_u32()?;
-        let path_id = reader.read_i64()? as i32;
-        Ok(PPtr { file_index, path_id })
-    }
-}
 
 #[wasm_bindgen(getter_with_clone)]
 pub struct GameObject {
@@ -208,7 +193,7 @@ impl Deserialize for StaticBatchInfo {
 pub struct MeshRenderer {
     pub game_object: PPtr,
     pub enabled: bool,
-    _materials: Vec<PPtr>,
+    materials: Vec<PPtr>,
     pub static_batch_info: StaticBatchInfo,
 }
 
@@ -219,6 +204,13 @@ impl MeshRenderer {
         reader.set_endianness(asset.header.endianness);
         let obj = MeshRenderer::deserialize(&mut reader, asset)?;
         return Ok(obj);
+    }
+
+    pub fn get_materials(&self) -> PPtrArray {
+        return PPtrArray {
+            length: self.materials.len(),
+            data: self.materials.clone()
+        }
     }
 }
 
@@ -275,7 +267,7 @@ impl Deserialize for MeshRenderer {
         Ok(MeshRenderer {
             game_object,
             enabled,
-            _materials: materials,
+            materials,
             static_batch_info,
         })
     }

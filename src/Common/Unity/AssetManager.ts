@@ -1,6 +1,6 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 
-import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D } from '../../../rust/pkg/index';
+import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D, UnityMaterial, UnityShader } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxTexture, GfxSampler, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxWrapMode, GfxSamplerDescriptor, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert, assertExists } from '../../util';
@@ -119,69 +119,34 @@ export interface AssetObjectData {
     data: Uint8Array;
 }
 
-abstract class PromiseCache<T extends Destroyable> {
-    protected promiseCache = new Map<number, Promise<T>>();
-    protected cache = new Map<number, T>();
-
-    protected abstract fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<T>;
-
-    public fetch(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<T> {
-        if (this.promiseCache.has(key))
-            return this.promiseCache.get(key)!;
-
-        const promise = this.fetchInternal(assetSystem, assetFile, key);
-        this.promiseCache.set(key, promise);
-        return promise.then((v) => {
-            this.cache.set(key, v);
-            return v;
-        });
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (const v of this.cache.values())
-            v.destroy(device);
-    }
-}
-
-class UnityMeshDataCache extends PromiseCache<UnityMeshData> {
-    protected async fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<UnityMeshData> {
-        const objData = await assetFile.fetchObject(key);
-
-        const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo);
-        const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
-        if (streamingInfo !== undefined)
-            mesh.set_vertex_data(await assetSystem.fetchStreamingInfo(streamingInfo));
-
-        if (mesh.is_compressed()) {
-            return loadCompressedMesh(assetSystem.device, mesh);
-        } else {
-            return loadMesh(assetSystem.wasm, assetSystem.device, mesh);
-        }
-    }
-}
-
-class UnityTexture2DDataCache extends PromiseCache<UnityTexture2DData> {
-    protected async fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<UnityTexture2DData> {
-        const objData = await assetFile.fetchObject(key);
-
-        const header = assetSystem.wasm.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
-        const data = await assetSystem.fetchStreamingInfo(header.streaming_info);
-        return new UnityTexture2DData(assetSystem.wasm, assetSystem.renderCache, header, data);
-    }
-}
-
 // An AssetFile is a single serialized asset file in the filesystem, aka sharedassets or a level file.
+
+export const enum UnityAssetResourceType {
+    Mesh,
+    Texture2D,
+    Material,
+    Shader,
+}
+
+type ResType<T extends UnityAssetResourceType> =
+    T extends UnityAssetResourceType.Mesh ? UnityMeshData :
+    T extends UnityAssetResourceType.Texture2D ? UnityTexture2DData :
+    T extends UnityAssetResourceType.Material ? UnityMaterialData :
+    T extends UnityAssetResourceType.Shader ? UnityShaderData :
+    never;
+
+type CreateFunc<T> = (assetSystem: UnityAssetSystem, objData: AssetObjectData) => Promise<T>;
 
 class AssetFile {
     public unityObject: UnityObject[] = [];
     public unityObjectByPathID = new Map<number, UnityObject>();
     public assetInfo: AssetInfo;
-    public finishLoadingPromise: Promise<void>;
     public fetcher: FileDataFetcher | null = null;
     public fullData: ArrayBufferSlice | null;
 
-    private meshDataCache = new UnityMeshDataCache();
-    private texture2DDataCache = new UnityTexture2DDataCache();
+    private waitForHeaderPromise: Promise<void> | null;
+    private dataCache = new Map<number, Destroyable>();
+    private promiseCache = new Map<number, Promise<Destroyable>>();
 
     constructor(private path: string) {
     }
@@ -191,6 +156,11 @@ class AssetFile {
         this.unityObject = loadWasmBindgenArray(this.assetInfo.get_objects());
         for (let i = 0; i < this.unityObject.length; i++)
             this.unityObjectByPathID.set(this.unityObject[i].path_id, this.unityObject[i]);
+        this.waitForHeaderPromise = null;
+    }
+
+    public waitForHeader(): Promise<void> {
+        return assertExists(this.waitForHeaderPromise);
     }
 
     private async initFullInternal(wasm: RustModule, dataFetcher: DataFetcher): Promise<void> {
@@ -199,8 +169,8 @@ class AssetFile {
     }
 
     public initFull(wasm: RustModule, dataFetcher: DataFetcher): void {
-        assert(this.finishLoadingPromise === undefined);
-        this.finishLoadingPromise = this.initFullInternal(wasm, dataFetcher);
+        assert(this.waitForHeaderPromise === undefined);
+        this.waitForHeaderPromise = this.initFullInternal(wasm, dataFetcher);
     }
 
     private async initPartialInternal(wasm: RustModule, dataFetcher: DataFetcher): Promise<void> {
@@ -225,8 +195,8 @@ class AssetFile {
     }
 
     public initPartial(wasm: RustModule, dataFetcher: DataFetcher): void {
-        assert(this.finishLoadingPromise === undefined);
-        this.finishLoadingPromise = this.initPartialInternal(wasm, dataFetcher);
+        assert(this.waitForHeaderPromise === undefined);
+        this.waitForHeaderPromise = this.initPartialInternal(wasm, dataFetcher);
     }
 
     public hasDataToFetch(): boolean {
@@ -245,6 +215,9 @@ class AssetFile {
     }
 
     public async fetchObject(pathID: number): Promise<AssetObjectData> {
+        if (this.waitForHeaderPromise !== null)
+            await this.waitForHeaderPromise;
+
         const obj = assertExists(this.unityObjectByPathID.get(pathID));
 
         let buffer: ArrayBufferSlice;
@@ -262,50 +235,75 @@ class AssetFile {
         return { location, classID, assetInfo, data };
     }
 
-    private fetchExternalFile(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<AssetFile> {
-        const externalFilename = assertExists(this.assetInfo.get_external_path(pptr.file_index));
-        return assetSystem.fetchAssetFile(externalFilename, true);
-    }
-
-    public async fetchPPtr(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<AssetObjectData> {
+    public getPPtrFile(assetSystem: UnityAssetSystem, pptr: PPtr): AssetFile {
         if (pptr.file_index === 0) {
-            return this.fetchObject(pptr.path_id);
+            return this;
         } else {
-            const externalFile = await this.fetchExternalFile(assetSystem, pptr);
-            return externalFile.fetchObject(pptr.path_id);
+            const externalFilename = assertExists(this.assetInfo.get_external_path(pptr.file_index));
+            return assetSystem.fetchAssetFile(externalFilename, true);
         }
     }
 
-    private fetchMeshDataInternal(assetSystem: UnityAssetSystem, pathID: number): Promise<UnityMeshData> {
-        return this.meshDataCache.fetch(assetSystem, this, pathID);
+    private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
+        const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo);
+        const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
+        if (streamingInfo !== undefined)
+            mesh.set_vertex_data(await assetSystem.fetchStreamingInfo(streamingInfo));
+
+        if (mesh.is_compressed()) {
+            return loadCompressedMesh(assetSystem.device, mesh);
+        } else {
+            return loadMesh(assetSystem.wasm, assetSystem.device, mesh);
+        }
+    };
+
+    private createTexture2DData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityTexture2DData> => {
+        const header = assetSystem.wasm.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
+        const data = await assetSystem.fetchStreamingInfo(header.streaming_info);
+        return new UnityTexture2DData(assetSystem.wasm, assetSystem.renderCache, header, data);
+    };
+
+    private createMaterialData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMaterialData> => {
+        const header = assetSystem.wasm.UnityMaterial.from_bytes(objData.data, objData.assetInfo);
+        const materialData = new UnityMaterialData(objData.location, header);
+        await materialData.load(assetSystem);
+        return materialData;
+    };
+
+    private createShaderData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityShaderData> => {
+        const header = assetSystem.wasm.UnityShader.from_bytes(objData.data, objData.assetInfo);
+        debugger;
+        return new UnityShaderData(objData.location, header);
+    };
+
+    private fetchFromCache<T extends Destroyable>(assetSystem: UnityAssetSystem, pathID: number, createFunc: CreateFunc<T>): Promise<T> {
+        if (this.promiseCache.has(pathID))
+            return this.promiseCache.get(pathID)! as Promise<T>;
+
+        const promise = this.fetchObject(pathID).then((objData) => {
+            return createFunc(assetSystem, objData).then((v) => {
+                this.dataCache.set(pathID, v);
+                return v;
+            });
+        });
+        this.promiseCache.set(pathID, promise);
+        return promise;
     }
 
-    public async fetchMeshData(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<UnityMeshData | null> {
-        if (pptr.path_id === 0)
+    public async fetchResource<T extends UnityAssetResourceType>(assetSystem: UnityAssetSystem, type: T, pathID: number): Promise<ResType<T> | null> {
+        if (pathID === 0)
             return null;
 
-        if (pptr.file_index === 0) {
-            return this.fetchMeshDataInternal(assetSystem, pptr.path_id);
-        } else {
-            const externalFile = await this.fetchExternalFile(assetSystem, pptr);
-            return externalFile.fetchMeshDataInternal(assetSystem, pptr.path_id);
-        }
-    }
-
-    private fetchTexture2DDataInternal(assetSystem: UnityAssetSystem, pathID: number): Promise<UnityTexture2DData> {
-        return this.texture2DDataCache.fetch(assetSystem, this, pathID);
-    }
-
-    public async fetchTexture2DData(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<UnityTexture2DData | null> {
-        if (pptr.path_id === 0)
-            return null;
-
-        if (pptr.file_index === 0) {
-            return this.fetchTexture2DDataInternal(assetSystem, pptr.path_id);
-        } else {
-            const externalFile = await this.fetchExternalFile(assetSystem, pptr);
-            return externalFile.fetchTexture2DDataInternal(assetSystem, pptr.path_id);
-        }
+        if (type === UnityAssetResourceType.Mesh)
+            return this.fetchFromCache(assetSystem, pathID, this.createMeshData) as Promise<ResType<T>>;
+        else if (type === UnityAssetResourceType.Texture2D)
+            return this.fetchFromCache(assetSystem, pathID, this.createTexture2DData) as Promise<ResType<T>>;
+        else if (type === UnityAssetResourceType.Material)
+            return this.fetchFromCache(assetSystem, pathID, this.createMaterialData) as Promise<ResType<T>>;
+        else if (type === UnityAssetResourceType.Shader)
+            return this.fetchFromCache(assetSystem, pathID, this.createShaderData) as Promise<ResType<T>>;
+        else
+            throw "whoops";
     }
 
     public destroy(device: GfxDevice): void {
@@ -313,7 +311,8 @@ class AssetFile {
             this.assetInfo.free();
         for (let i = 0; i < this.unityObject.length; i++)
             this.unityObject[i].free();
-        this.meshDataCache.destroy(device);
+        for (const v of this.dataCache.values())
+            v.destroy(device);
     }
 }
 
@@ -337,7 +336,7 @@ export class UnityAssetSystem {
         });
     }
 
-    public fetchAssetFile(filename: string, partial: boolean): Promise<AssetFile> {
+    public fetchAssetFile(filename: string, partial: boolean): AssetFile {
         if (!this.assetFiles.has(filename)) {
             const path = `${this.basePath}/${filename}`;
             const assetFile = new AssetFile(path);
@@ -349,7 +348,17 @@ export class UnityAssetSystem {
         }
 
         const assetFile = this.assetFiles.get(filename)!;
-        return assetFile.finishLoadingPromise.then(() => assetFile);
+        return assetFile;
+    }
+
+    public async fetchPPtr(location: AssetLocation, pptr: PPtr): Promise<AssetObjectData> {
+        const assetFile = location.file.getPPtrFile(this, pptr);
+        return assetFile.fetchObject(pptr.path_id);
+    }
+
+    public async fetchResource<T extends UnityAssetResourceType>(type: T, location: AssetLocation, pptr: PPtr): Promise<ResType<T> | null> {
+        const assetFile = location.file.getPPtrFile(this, pptr);
+        return assetFile.fetchResource(this, type, pptr.path_id);
     }
 
     private hasDataToFetch(): boolean {
@@ -563,7 +572,7 @@ export class UnityTexture2DData {
 
     // public viewerTexture: Viewer.Texture;
 
-    constructor(wasm: RustModule, cache: GfxRenderCache, header: UnityTexture2D, data: Uint8Array) {
+    constructor(wasm: RustModule, cache: GfxRenderCache, private header: UnityTexture2D, data: Uint8Array) {
         const device = cache.device;
         const pixelFormat = translateTextureFormat(wasm, header.texture_format, header.color_space);
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(pixelFormat, header.width, header.height, header.mipmap_count));
@@ -582,5 +591,36 @@ export class UnityTexture2DData {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
+        this.header.free();
+    }
+}
+
+export class UnityMaterialData {
+    public name: string;
+    public shaderName: string;
+
+    constructor(private location: AssetLocation, private header: UnityMaterial) {
+        this.name = this.header.name;
+    }
+
+    public async load(assetSystem: UnityAssetSystem) {
+        const shader = (await assetSystem.fetchResource(UnityAssetResourceType.Shader, this.location, this.header.shader))!;
+        this.shaderName = shader.name;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.header.free();
+    }
+}
+
+export class UnityShaderData {
+    public name: string;
+
+    constructor(private location: AssetLocation, header: UnityShader) {
+        this.name = header.name;
+        header.free();
+    }
+
+    public destroy(device: GfxDevice): void {
     }
 }

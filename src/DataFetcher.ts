@@ -34,7 +34,7 @@ class DataFetcherRequest {
     public promise: Promise<NamedArrayBufferSlice>;
     private resolve: (slice: NamedArrayBufferSlice) => void;
     private reject: (e: Error | null) => void;
-    private retriesLeft = 2;
+    private retriesLeft = 10;
 
     constructor(public url: string, private options: DataFetcherOptions) {
         this.promise = new Promise((resolve, reject) => {

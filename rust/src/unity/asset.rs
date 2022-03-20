@@ -175,3 +175,18 @@ impl Deserialize for UnityStreamingInfo {
         })
     }
 }
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
+pub struct PPtr {
+    pub file_index: u32,
+    pub path_id: i32,
+}
+
+impl Deserialize for PPtr {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<Self> {
+        let file_index = reader.read_u32()?;
+        let path_id = reader.read_i64()? as i32;
+        Ok(PPtr { file_index, path_id })
+    }
+}

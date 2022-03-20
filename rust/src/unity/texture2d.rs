@@ -1,6 +1,4 @@
 
-#![allow(dead_code, unused_variables)]
-
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::asset::*;
 use crate::unity::reader::*;
@@ -39,23 +37,23 @@ impl Deserialize for UnityTexture2D {
         reader.align()?;
         let width = reader.read_u32()?;
         let height = reader.read_u32()?;
-        let complete_image_size = reader.read_u32()?;
+        let _complete_image_size = reader.read_u32()?;
         let texture_format = reader.read_u32()?;
         let mipmap_count = reader.read_u32()?;
-        let is_readable = reader.read_bool()?;
-        let is_preprocessed = reader.read_bool()?;
-        let is_ignore_master_texture_limit = reader.read_bool()?;
-        let is_streaming_mipmaps = reader.read_bool()?;
+        let _is_readable = reader.read_bool()?;
+        let _is_preprocessed = reader.read_bool()?;
+        let _is_ignore_master_texture_limit = reader.read_bool()?;
+        let _is_streaming_mipmaps = reader.read_bool()?;
         reader.align()?;
-        let streaming_mipmaps_priority = reader.read_u32()?;
+        let _streaming_mipmaps_priority = reader.read_u32()?;
         reader.align()?;
-        let image_count = reader.read_u32()?;
-        let dimension = reader.read_u32()?;
+        let _image_count = reader.read_u32()?;
+        let _dimension = reader.read_u32()?;
         let texture_settings = UnityTextureSettings::deserialize(reader, asset)?;
-        let usage_mode = reader.read_u32()?;
+        let _usage_mode = reader.read_u32()?;
         let color_space = reader.read_u32()?;
 
-        let image_data = reader.read_byte_array();
+        let _image_data = reader.read_byte_array();
         reader.align()?;
         let streaming_info = UnityStreamingInfo::deserialize(reader, asset)?;
         Ok(UnityTexture2D {
@@ -126,7 +124,7 @@ pub struct UnityTextureSettings {
 }
 
 impl Deserialize for UnityTextureSettings {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         let filter_mode = reader.read_u32()?;
         let aniso = reader.read_u32()?;
         let mip_bias = reader.read_f32()?;
