@@ -1,7 +1,6 @@
 use wasm_bindgen::prelude::wasm_bindgen;
-use std::collections::HashMap;
 use crate::unity::version::UnityVersion;
-use crate::unity::reader::AssetReader;
+use crate::unity::reader::{ AssetReader, Deserialize, Result as ReaderResult };
 use crate::unity::game_object::{ GameObject };
 use crate::unity::class_id::UnityClassID;
 
@@ -235,4 +234,30 @@ pub struct AssetMetadata {
     pub target_platform: u32,
     pub enable_type_tree: bool,
     pub types: Vec<SerializedType>,
+}
+
+#[wasm_bindgen(getter_with_clone)]
+#[derive(Debug, Clone)]
+pub struct UnityStreamingInfo {
+    pub size: u32,
+    pub offset: u32,
+    pub path: String,
+}
+
+impl Deserialize for UnityStreamingInfo {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> ReaderResult<Self> {
+        let unity2020 = UnityVersion { major: 2020, ..Default::default() };
+        let offset = if asset.metadata.unity_version > unity2020 {
+            reader.read_i64()? as u32
+        } else {
+            reader.read_u32()?
+        };
+        let size = reader.read_u32()?;
+        let path = reader.read_char_array()?;
+        Ok(UnityStreamingInfo {
+            size: size,
+            offset: offset,
+            path: path,
+        })
+    }
 }

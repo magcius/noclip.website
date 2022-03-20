@@ -475,9 +475,6 @@ mod tests {
 
     #[test]
     fn test_cactus() {
-        use std::collections::HashMap;
-        use crate::unity::class_id::UnityClassID;
-        use crate::unity::game_object::Transform;
         use crate::unity::mesh::Mesh;
         let data = std::fs::read("../data/hike/level2").unwrap();
         let mut reader = AssetReader::new(data);
@@ -488,6 +485,6 @@ mod tests {
         let asset = reader.read_asset_info().unwrap();
         let m = asset.objects.iter().find(|obj| obj.path_id == 612).unwrap();
         reader.seek_to_object(&m).unwrap();
-        let x = Mesh::deserialize(&mut reader, &asset);
+        let _x = Mesh::deserialize(&mut reader, &asset);
     }
 }

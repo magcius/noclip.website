@@ -190,7 +190,7 @@ pub struct StaticBatchInfo {
 }
 
 impl Deserialize for StaticBatchInfo {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         Ok(StaticBatchInfo {
             first_submesh: reader.read_u16()?,
             submesh_count: reader.read_u16()?,

@@ -211,39 +211,6 @@ impl Deserialize for CompressedMesh {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
-pub struct StreamingInfo {
-    pub size: u32,
-    pub offset: u32,
-    path: String,
-}
-
-#[wasm_bindgen]
-impl StreamingInfo {
-    pub fn get_path(&self) -> String {
-        return self.path.clone();
-    }
-}
-
-impl Deserialize for StreamingInfo {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
-        let unity2020 = UnityVersion { major: 2020, ..Default::default() };
-        let offset = if asset.metadata.unity_version > unity2020 {
-            reader.read_i64()? as u32
-        } else {
-            reader.read_u32()?
-        };
-        let size = reader.read_u32()?;
-        let path = reader.read_char_array()?;
-        Ok(StreamingInfo {
-            size: size,
-            offset: offset,
-            path: path,
-        })
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Clone)]
 pub struct VertexStreamInfo {
     channel_mask: u32,
     pub offset: u32,
@@ -471,7 +438,7 @@ pub struct Mesh {
     hash_metrics: [f32; 2],
     baked_convex_collision_mesh: Vec<u8>,
     baked_triangle_collision_mesh: Vec<u8>,
-    streaming_info: StreamingInfo,
+    streaming_info: UnityStreamingInfo,
     pub path_id: Option<i32>,
 }
 
@@ -518,7 +485,7 @@ impl Mesh {
         }
     }
 
-    pub fn get_streaming_info(&self) -> Option<StreamingInfo> {
+    pub fn get_streaming_info(&self) -> Option<UnityStreamingInfo> {
         if self.streaming_info.path.is_empty() {
             None
         } else {
@@ -598,7 +565,7 @@ impl Deserialize for Mesh {
         let baked_triangle_collision_mesh = reader.read_byte_array()?;
         reader.align()?;
         let hash_metrics = [reader.read_f32()?, reader.read_f32()?];
-        let streaming_info = StreamingInfo::deserialize(reader, asset)?;
+        let streaming_info = UnityStreamingInfo::deserialize(reader, asset)?;
 
         Ok(Mesh {
             name,

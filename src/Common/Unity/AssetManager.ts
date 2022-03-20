@@ -1,14 +1,12 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, FileLocation, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer } from '../../../rust/pkg/index';
+import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, FileLocation, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
 import { mat4, vec3, quat } from 'gl-matrix';
-import { setChildren } from '../../ui';
-import { CoinHolder } from '../../SuperMarioGalaxy/Actors/MiscActor';
 
 let _wasm: typeof import('../../../rust/pkg/index') | null = null;
 
@@ -202,11 +200,11 @@ export class UnityAssetManager {
         return parts.join('/');
     }
 
-    private async loadStreamingData(streamingInfo: StreamingInfo): Promise<Uint8Array> {
+    private async loadStreamingData(streamingInfo: UnityStreamingInfo): Promise<Uint8Array> {
         return await this.loadBytes({
             rangeStart: streamingInfo.offset,
             rangeSize: streamingInfo.size,
-        }, this.getSiblingPath(streamingInfo.get_path()));
+        }, this.getSiblingPath(streamingInfo.path));
     }
 
     public async loadAssetInfo() {
@@ -387,7 +385,7 @@ export class UnityAssetManager {
             assetInfo = this.externalAssets[fileIndex];
         }
         let mesh = wasm.Mesh.from_bytes(data, assetInfo, pathID);
-        let streamingInfo: StreamingInfo | undefined = mesh.get_streaming_info();
+        let streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
         if (streamingInfo !== undefined) {
             mesh.set_vertex_data(await this.loadStreamingData(streamingInfo));
         }
