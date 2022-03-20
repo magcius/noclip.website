@@ -272,7 +272,6 @@ class AssetFile {
 
     private createShaderData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityShaderData> => {
         const header = assetSystem.wasm.UnityShader.from_bytes(objData.data, objData.assetInfo);
-        debugger;
         return new UnityShaderData(objData.location, header);
     };
 

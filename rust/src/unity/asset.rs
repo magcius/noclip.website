@@ -190,3 +190,9 @@ impl Deserialize for PPtr {
         Ok(PPtr { file_index, path_id })
     }
 }
+
+impl Deserialize for String {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<String> {
+        reader.read_char_array()
+    }
+}
