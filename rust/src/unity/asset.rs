@@ -1,8 +1,6 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::version::UnityVersion;
 use crate::unity::reader::{ AssetReader, Deserialize, Result as ReaderResult };
-use crate::unity::game_object::{ GameObject };
-use crate::unity::class_id::UnityClassID;
 
 #[wasm_bindgen]
 #[derive(Debug)]
@@ -24,6 +22,19 @@ pub struct AssetInfo {
 }
 
 #[wasm_bindgen]
+pub struct UnityObjectArray {
+    pub length: usize,
+    data: Vec<UnityObject>,
+}
+
+#[wasm_bindgen]
+impl UnityObjectArray {
+    pub fn get(&self, i: usize) -> UnityObject {
+        self.data[i].clone()
+    }
+}
+
+#[wasm_bindgen]
 impl AssetInfo {
     pub fn deserialize(data: Vec<u8>) -> Result<AssetInfo, String> {
         AssetReader::new(data).read_asset_info()
@@ -38,110 +49,11 @@ impl AssetInfo {
         Some(self.externals[idx].path_name.clone())
     }
 
-    pub fn get_mesh_metadata(&self, data: Vec<u8>) -> MeshMetadataArray {
-        let mut reader = AssetReader::new(data);
-        reader.set_endianness(self.header.endianness);
-        let mut mesh_data: Vec<MeshMetadata> = self.objects.iter()
-            .filter(|obj| obj.class_id == 43)
-            .map(|obj| MeshMetadata {
-                location: FileLocation::from_obj(obj),
-                name: String::new(),
-            })
-            .collect();
-        for mesh in mesh_data.iter_mut() {
-            reader.seek(std::io::SeekFrom::Start(mesh.location.offset as u64)).unwrap();
-            mesh.name = reader.read_char_array().unwrap();
+    pub fn get_objects(&self) -> UnityObjectArray {
+        UnityObjectArray {
+            length: self.objects.len(),
+            data: self.objects.clone(),
         }
-        MeshMetadataArray {
-            length: mesh_data.len(),
-            data: mesh_data,
-        }
-    }
-
-    pub fn get_object_locations(&self, class_id: UnityClassID) -> FileLocationArray {
-        let data: Vec<FileLocation> = self.objects.iter()
-            .filter(|obj| obj.class_id == class_id.into())
-            .map(|obj| FileLocation::from_obj(obj))
-            .collect();
-        FileLocationArray {
-            length: data.len(),
-            data,
-        }
-    }
-
-    pub fn get_component_locations(&self, obj: &GameObject) -> FileLocationArray {
-        let data: Vec<FileLocation> = obj.components.iter()
-            .flat_map(|ptr| self.get_obj_location(ptr.path_id))
-            .collect();
-        FileLocationArray {
-            length: data.len(),
-            data,
-        }
-    }
-
-    pub fn get_obj_location(&self, path_id: i32) -> Option<FileLocation> {
-        match self.objects.iter().find(|obj| obj.path_id == path_id) {
-            Some(obj) => Some(FileLocation::from_obj(obj)),
-            None => None,
-        }
-    }
-}
-
-#[wasm_bindgen]
-pub struct FileLocationArray {
-    pub length: usize,
-    data: Vec<FileLocation>,
-}
-
-#[wasm_bindgen]
-impl FileLocationArray {
-    pub fn get(&self, i: usize) -> FileLocation {
-        self.data[i]
-    }
-}
-
-#[wasm_bindgen]
-pub struct MeshMetadataArray {
-    pub length: usize,
-    data: Vec<MeshMetadata>,
-}
-
-#[wasm_bindgen]
-impl MeshMetadataArray {
-    pub fn get(&self, i: usize) -> MeshMetadata {
-        self.data[i].clone()
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Copy, Clone)]
-pub struct FileLocation {
-    pub path_id: i32,
-    pub offset: usize,
-    pub size: usize,
-}
-
-impl FileLocation {
-    fn from_obj(obj: &UnityObject) -> FileLocation {
-        FileLocation {
-            path_id: obj.path_id,
-            offset: obj.byte_start as usize,
-            size: obj.byte_size as usize,
-        }
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Clone)]
-pub struct MeshMetadata {
-    pub location: FileLocation,
-    name: String,
-}
-
-#[wasm_bindgen]
-impl MeshMetadata {
-    pub fn get_name(&self) -> String {
-        self.name.clone()
     }
 }
 
@@ -158,12 +70,14 @@ pub struct ScriptType {
     pub local_identifier_in_file: i32,
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct UnityObject {
     pub path_id: i32,
     pub byte_start: i64,
     pub byte_size: u32,
     pub type_id: i32,
+    #[wasm_bindgen(skip)]
     pub serialized_type: SerializedType,
     pub class_id: i32,
 }

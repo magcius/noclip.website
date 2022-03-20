@@ -1,24 +1,30 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
-import { SceneContext } from '../../SceneBase';
-import { downloadBlob } from '../../DownloadUtils';
-import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, FileLocation, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer } from '../../../rust/pkg/index';
+
+import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer, UnityObject } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
-import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
-import { assert } from '../../util';
+import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
+import { assert, assertExists } from '../../util';
 import * as Geometry from '../../Geometry';
 import { mat4, vec3, quat } from 'gl-matrix';
+import { DataFetcher } from '../../DataFetcher';
+import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { Destroyable } from '../../SceneBase';
 
-let _wasm: typeof import('../../../rust/pkg/index') | null = null;
+export type RustModule = typeof import('../../../rust/pkg/index');
 
-async function loadWasm() {
-    if (_wasm === null) {
-        _wasm = await import('../../../rust/pkg/index');
-    }
-    return _wasm;
+interface WasmBindgenArray<T> {
+    length: number;
+    get(i: number): T;
+    free(): void;
 }
 
-// this is a ballpark estimate, it's probably much lower
-const MAX_HEADER_LENGTH = 4096;
+function loadWasmBindgenArray<T>(wasmArr: WasmBindgenArray<T>): T[] {
+    const jsArr: T[] = Array<T>(wasmArr.length);
+    for (let i = 0; i < wasmArr.length; i++)
+        jsArr[i] = wasmArr.get(i);
+    wasmArr.free();
+    return jsArr;
+}
 
 function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array {
     let result = new Uint8Array(a.byteLength + b.byteLength);
@@ -28,14 +34,281 @@ function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array {
 }
 
 interface Range {
-    rangeStart: number;
+    rangeStart: number | bigint;
     rangeSize: number;
 }
 
-export interface MeshMetadata {
-    name: string;
-    offset: number;
-    size: number;
+// This is a ballpark estimate, it's probably much lower...
+const MAX_HEADER_LENGTH = 4096;
+
+interface FileDataFetchRequest {
+    rangeStart: bigint;
+    rangeSize: number;
+    promise: Promise<ArrayBufferSlice>;
+    resolve: (v: ArrayBufferSlice) => void;
+}
+
+function getRangeEnd(r: Range): bigint {
+    return BigInt(r.rangeStart) + BigInt(r.rangeSize);
+}
+
+function getRangeSlice(buffer: ArrayBufferSlice, haystack: Range, needle: Range): ArrayBufferSlice | null {
+    if (needle.rangeStart >= haystack.rangeStart && getRangeEnd(needle) <= getRangeEnd(haystack))
+        return buffer.subarray(Number(BigInt(needle.rangeStart) - BigInt(haystack.rangeStart)), needle.rangeSize);
+    return null;
+}
+
+class FileDataFetcher {
+    public pendingRequests: FileDataFetchRequest[] = [];
+
+    public addRequest(rangeStart: bigint, rangeSize: number) {
+        let req: FileDataFetchRequest = { rangeStart, rangeSize, promise: null!, resolve: null! };
+        req.promise = new Promise<ArrayBufferSlice>((resolve, reject) => {
+            req.resolve = resolve;
+        });
+        this.pendingRequests.push(req);
+        return req.promise;
+    }
+
+    public async fetch(dataFetcher: DataFetcher, path: string) {
+        if (this.pendingRequests.length === 0)
+            return;
+
+        // Merge overlapping requests.
+        const requests = this.pendingRequests;
+        this.pendingRequests = [];
+        requests.sort((a, b) => a.rangeStart > b.rangeStart ? 1 : -1);
+
+        const ranges: Range[] = requests.map((req) => ({ rangeStart: req.rangeStart, rangeSize: req.rangeSize }));
+        for (let i = 1; i < ranges.length; i++) {
+            const a = ranges[i - 1], b = ranges[i];
+            if (b.rangeStart <= getRangeEnd(a) + BigInt(16)) {
+                a.rangeSize = Number(getRangeEnd(b) - BigInt(a.rangeStart));
+                ranges.splice(i--, 1);
+            }
+        }
+
+        const datas = await Promise.all(ranges.map((range) => dataFetcher.fetchData(path, range)));
+
+        let rangeIdx = 0;
+        for (let i = 0; i < requests.length; i++) {
+            const req = requests[i];
+
+            while (true) {
+                const slice = getRangeSlice(datas[rangeIdx], ranges[rangeIdx], req);
+                if (slice !== null) {
+                    req.resolve(slice);
+                    break;
+                }
+                rangeIdx++;
+            }
+        }
+    }
+}
+
+export class AssetLocation {
+    file: AssetFile;
+    pathID: number;
+}
+
+export interface AssetObjectData {
+    location: AssetLocation;
+    classID: UnityClassID;
+    assetInfo: AssetInfo;
+    data: Uint8Array;
+}
+
+abstract class PromiseCache<T extends Destroyable> {
+    protected promiseCache = new Map<number, Promise<T>>();
+    protected cache = new Map<number, T>();
+
+    protected abstract fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<T>;
+
+    public fetch(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<T> {
+        if (this.promiseCache.has(key))
+            return this.promiseCache.get(key)!;
+
+        const promise = this.fetchInternal(assetSystem, assetFile, key);
+        this.promiseCache.set(key, promise);
+        return promise.then((v) => {
+            this.cache.set(key, v);
+            return v;
+        });
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.cache.values())
+            v.destroy(device);
+    }
+}
+
+class MeshCache extends PromiseCache<UnityMesh> {
+    protected async fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<UnityMesh> {
+        const objData = await assetFile.fetchObject(key);
+
+        const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo, objData.location.pathID);
+        const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
+        if (streamingInfo !== undefined)
+            mesh.set_vertex_data(await assetSystem.fetchStreamingInfo(streamingInfo));
+
+        if (mesh.is_compressed()) {
+            return loadCompressedMesh(assetSystem.device, mesh);
+        } else {
+            return loadMesh(assetSystem.wasm, assetSystem.device, mesh);
+        }
+    }
+}
+
+// An AssetFile is a single serialized asset file in the filesystem, aka sharedassets or a level file.
+
+class AssetFile {
+    public unityObject: UnityObject[] = [];
+    public unityObjectByPathID = new Map<number, UnityObject>();
+    public assetInfo: AssetInfo;
+    public finishLoadingPromise: Promise<void>;
+    public fetcher = new FileDataFetcher();
+
+    private meshCache = new MeshCache();
+
+    constructor(wasm: RustModule, dataFetcher: DataFetcher, private path: string, private filename: string) {
+        this.finishLoadingPromise = new Promise(async (resolve, reject) => {
+            let headerBytes = (await dataFetcher.fetchData(path, {
+                rangeStart: 0,
+                rangeSize: MAX_HEADER_LENGTH,
+            })).createTypedArray(Uint8Array);
+
+            const assetHeader = wasm.AssetHeader.deserialize(headerBytes);
+            if (assetHeader.data_offset > headerBytes.byteLength) {
+                // Oops, need to fetch extra bytes...
+                const extraBytes = (await dataFetcher.fetchData(path, {
+                    rangeStart: headerBytes.byteLength,
+                    rangeSize: assetHeader.data_offset - headerBytes.byteLength,
+                })).createTypedArray(Uint8Array);
+                headerBytes = concatBufs(headerBytes, extraBytes);
+            }
+
+            assetHeader.free();
+            this.assetInfo = wasm.AssetInfo.deserialize(headerBytes);
+            this.unityObject = loadWasmBindgenArray(this.assetInfo.get_objects());
+            for (let i = 0; i < this.unityObject.length; i++)
+                this.unityObjectByPathID.set(this.unityObject[i].path_id, this.unityObject[i]);
+            resolve(null!);
+        });
+    }
+
+    public fetchData(dataFetcher: DataFetcher): Promise<void> {
+        return this.fetcher.fetch(dataFetcher, this.path);
+    }
+
+    private createLocation(pathID: number): AssetLocation {
+        return { file: this, pathID };
+    }
+
+    public async fetchObject(pathID: number): Promise<AssetObjectData> {
+        const obj = assertExists(this.unityObjectByPathID.get(pathID));
+        const buffer = await this.fetcher.addRequest(obj.byte_start.valueOf(), obj.byte_size);
+
+        const location = this.createLocation(pathID);
+        const classID = obj.class_id;
+        const assetInfo = this.assetInfo;
+        const data = buffer.createTypedArray(Uint8Array);
+        return { location, classID, assetInfo, data };
+    }
+
+    private fetchExternalFile(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<AssetFile> {
+        const externalFilename = assertExists(this.assetInfo.get_external_path(pptr.file_index));
+        return assetSystem.fetchAssetFile(externalFilename);
+    }
+
+    public async fetchPPtr(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<AssetObjectData> {
+        if (pptr.file_index === 0) {
+            return this.fetchObject(pptr.path_id);
+        } else {
+            const externalFile = await this.fetchExternalFile(assetSystem, pptr);
+            return externalFile.fetchObject(pptr.path_id);
+        }
+    }
+
+    private fetchMeshDataInternal(assetSystem: UnityAssetSystem, pathID: number): Promise<UnityMesh> {
+        return this.meshCache.fetch(assetSystem, this, pathID);
+    }
+
+    public async fetchMeshData(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<UnityMesh | null> {
+        if (pptr.path_id === 0)
+            return null;
+
+        if (pptr.file_index === 0) {
+            return this.fetchMeshDataInternal(assetSystem, pptr.path_id);
+        } else {
+            const externalFile = await this.fetchExternalFile(assetSystem, pptr);
+            return externalFile.fetchMeshDataInternal(assetSystem, pptr.path_id);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.assetInfo !== null)
+            this.assetInfo.free();
+        for (let i = 0; i < this.unityObject.length; i++)
+            this.unityObject[i].free();
+        this.meshCache.destroy(device);
+    }
+}
+
+export class UnityAssetSystem {
+    private assetFiles = new Map<string, AssetFile>();
+
+    constructor(public wasm: RustModule, public device: GfxDevice, private dataFetcher: DataFetcher, private basePath: string) {
+    }
+
+    public async fetchBytes(filename: string, range: Range): Promise<Uint8Array> {
+        let res = await this.dataFetcher.fetchData(`${this.basePath}/${filename}`, range);
+        return new Uint8Array(res.arrayBuffer);
+    }
+
+    public async fetchStreamingInfo(streamingInfo: UnityStreamingInfo): Promise<Uint8Array> {
+        return await this.fetchBytes(streamingInfo.path, {
+            rangeStart: streamingInfo.offset,
+            rangeSize: streamingInfo.size,
+        });
+    }
+
+    public fetchAssetFile(filename: string): Promise<AssetFile> {
+        if (!this.assetFiles.has(filename)) {
+            const path = `${this.basePath}/${filename}`;
+            const assetFile = new AssetFile(this.wasm, this.dataFetcher, path, filename);
+            this.assetFiles.set(filename, assetFile);
+        }
+
+        const assetFile = this.assetFiles.get(filename)!;
+        return this.assetFiles.get(filename)!.finishLoadingPromise.then(() => assetFile);
+    }
+
+    private hasDataToFetch(): boolean {
+        for (const v of this.assetFiles.values())
+            if (v.fetcher.pendingRequests.length > 0)
+                return true;
+        return false;
+    }
+
+    private fetchData(): Promise<void> {
+        const assetFiles = [...this.assetFiles.values()];
+        return Promise.all(assetFiles.map((v) => v.fetchData(this.dataFetcher))) as unknown as Promise<void>;
+    }
+
+    public async waitForLoad(): Promise<void> {
+        while (this.hasDataToFetch())
+            await this.fetchData();
+    }
+
+    public update(): void {
+        for (const v of this.assetFiles.values())
+            v.fetchData(this.dataFetcher);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.assetFiles.values())
+            v.destroy(device);
+    }
 }
 
 export enum UnityChannel {
@@ -49,113 +322,10 @@ export enum UnityChannel {
     Tangent,
 }
 
-type Map<T> = { [pathID: number]: T };
-
-class BatchRequest {
-    public pathIDs: number[];
-    public indices: number[];
-    public results: [number, Uint8Array][];
-
-    constructor(public fileIndex: number) {
-        this.pathIDs = [];
-        this.results = [];
-        this.indices = [];
-    }
-}
-
-class BatchRequestManager {
-    batches: { [fileIndex: number]: BatchRequest }
-    constructor() {
-        this.batches = {};
-    }
-
-    add(ptr: PPtr, index: number) {
-        if (!(ptr.file_index in this.batches)) {
-            this.batches[ptr.file_index] = new BatchRequest(ptr.file_index);
-        }
-        this.batches[ptr.file_index].pathIDs.push(ptr.path_id);
-        this.batches[ptr.file_index].indices.push(index);
-    }
-}
-
-export class GameObjectTree {
-    constructor(public meshes: Map<UnityMesh>, public nodes: Map<GameObjectTreeNode>, public rootPathIDs: number[]) {
-        this.rootPathIDs.forEach(transformID => this.propagateModel(transformID));
-    }
-
-    propagateModel(transformID: number) {
-        let node = this.nodes[transformID];
-        node.transformChildrenPathIDs.forEach(childID => {
-            let child = this.nodes[childID];
-            if (child === undefined) {
-                console.error(`couldn't find ${node.name}'s child (tranform ID ${childID})`)
-                return;
-            }
-            mat4.mul(child.modelMatrix, node.modelMatrix, child.modelMatrix);
-            this.propagateModel(childID);
-        });
-    }
-}
-
-function convertVec3f(v: Vec3f): vec3 {
-    return vec3.fromValues(v.x, v.y, v.z);
-}
-
-function convertQuat(q: Quaternion): quat {
-    return quat.fromValues(q.x, q.y, q.z, q.w);
-}
-
-export class GameObjectTreeNode {
-    modelMatrix: mat4;
-    transformPathID: number;
-    gameObjectPathID: number;
-    transformChildrenPathIDs: number[];
-    name: string|undefined;
-    layer: number|undefined;
-    isActive: boolean|undefined;
-    meshPathID: number|undefined;
-    meshRenderer: MeshRenderer|undefined;
-    gameObjectSet: boolean;
-    meshSet: boolean;
-
-    constructor(transform: Transform) {
-        this.modelMatrix = mat4.create();
-        let rot = convertQuat(transform.local_rotation);
-        let translation = convertVec3f(transform.local_position);
-        let scale = convertVec3f(transform.local_scale);
-        mat4.fromRotationTranslationScale(this.modelMatrix, rot, translation, scale);
-        this.transformPathID = transform.path_id!;
-        this.gameObjectPathID = transform.game_object.path_id;
-        this.transformChildrenPathIDs = Array.from(transform.get_children_path_ids());
-
-        this.gameObjectSet = false;
-        this.meshSet = false;
-    }
-
-    setGameObject(gameObject: GameObject) {
-        this.name = gameObject.get_name();
-        this.isActive = gameObject.is_active;
-        this.layer = gameObject.layer;
-        this.gameObjectSet = true;
-    }
-
-    setMeshRenderer(meshRenderer: MeshRenderer) {
-        this.meshRenderer = meshRenderer;
-    }
-
-    setMeshPathID(meshPathID: number) {
-        this.meshPathID = meshPathID;
-        this.meshSet = true;
-    }
-
-    isValid(): boolean {
-        return (this.meshSet && this.gameObjectSet);
-    }
-}
-
 export class UnityMesh {
     public bbox: Geometry.AABB; 
     public submeshes: SubMesh[];
+    public indexBufferStride: number;
 
     constructor(public inputLayout: GfxInputLayout, public inputState: GfxInputState, public numIndices: number, bbox: UnityAABB, public buffers: GfxBuffer[], submeshes: SubMeshArray, public indexBufferFormat: GfxFormat) {
         let center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
@@ -166,235 +336,14 @@ export class UnityMesh {
         for (let i=0; i<submeshes.length; i++) {
             this.submeshes.push(submeshes.get(i))
         }
+
+        this.indexBufferStride = getFormatCompByteSize(this.indexBufferFormat);
     }
 
     public destroy(device: GfxDevice) {
         this.buffers.forEach(buf => device.destroyBuffer(buf));
         device.destroyInputState(this.inputState);
         device.destroyInputLayout(this.inputLayout);
-    }
-}
-
-export class UnityAssetManager {
-    private assetInfo: AssetInfo;
-    private externalAssets: { [fileIndex: number]: AssetInfo };
-
-    constructor(public assetPath: string, private context: SceneContext, public device: GfxDevice) {
-        this.externalAssets = {};
-    }
-
-    private async loadBytes(range?: Range, path = this.assetPath): Promise<Uint8Array> {
-        let res = await this.context.dataFetcher.fetchData(path, range);
-        return new Uint8Array(res.arrayBuffer);
-    }
-
-    private async loadMultipleData(ranges: [number, number][], path = this.assetPath): Promise<Uint8Array[]> {
-        let bufs = await this.context.dataFetcher.fetchMultipleData(path, ranges);
-        return bufs.map(buf => new Uint8Array(buf.arrayBuffer));
-    }
-
-    private getSiblingPath(path: string): string {
-        let parts = this.assetPath.split('/');
-        parts.pop();
-        parts.push(path);
-        return parts.join('/');
-    }
-
-    private async loadStreamingData(streamingInfo: UnityStreamingInfo): Promise<Uint8Array> {
-        return await this.loadBytes({
-            rangeStart: streamingInfo.offset,
-            rangeSize: streamingInfo.size,
-        }, this.getSiblingPath(streamingInfo.path));
-    }
-
-    public async loadAssetInfo() {
-        this.assetInfo = await this._loadAssetInfo(this.assetPath);
-    }
-
-    private async _loadAssetInfo(path: string) {
-        let wasm = await loadWasm();
-        let headerBytes = await this.loadBytes({
-            rangeStart: 0,
-            rangeSize: MAX_HEADER_LENGTH,
-        }, path);
-        let assetHeader = wasm.AssetHeader.deserialize(headerBytes);
-        if (assetHeader.data_offset > headerBytes.byteLength) {
-            let extraBytes = await this.loadBytes({
-                rangeStart: headerBytes.byteLength,
-                rangeSize: assetHeader.data_offset - headerBytes.byteLength,
-            }, path);
-            headerBytes = concatBufs(headerBytes, extraBytes);
-        }
-        return wasm.AssetInfo.deserialize(headerBytes);
-    }
-
-    private async loadUnityObjects(classID: UnityClassID): Promise<[number, Uint8Array][]> {
-        let array = this.assetInfo.get_object_locations(classID);
-        let locations = [];
-        for (let i=0; i<array.length; i++) {
-            locations.push(array.get(i));
-        }
-        return this.loadUnityLocations(locations);
-    }
-
-    private async loadExternalAsset(fileIndex: number) {
-        if (fileIndex === 0 || fileIndex in this.externalAssets) {
-            return;
-        }
-        let path = this.getSiblingPath(this.assetInfo.get_external_path(fileIndex)!);
-        this.externalAssets[fileIndex] = await this._loadAssetInfo(path);
-    }
-
-    private async loadUnityLocations(locations: FileLocation[], fileIndex = 0): Promise<[number, Uint8Array][]> {
-        let ranges: [number, number][] = [];
-        for (let i=0; i<locations.length; i++) {
-            let loc = locations[i];
-            ranges.push([loc.offset, loc.offset + loc.size])
-        }
-        let data;
-        if (fileIndex !== 0) {
-            let path = this.getSiblingPath(this.assetInfo.get_external_path(fileIndex)!);
-            data = await this.loadMultipleData(ranges, path);
-        } else {
-            data = await this.loadMultipleData(ranges);
-        }
-        return data.map((blob, i) => [locations[i].path_id, blob]);
-    }
-
-    private readObjectLocations(pathIDs: number[], fileIndex = 0): FileLocation[] {
-        let assetInfo = this.assetInfo;
-        if (fileIndex !== 0) {
-            assetInfo = this.externalAssets[fileIndex];
-        }
-        return pathIDs.map(pathID => assetInfo.get_obj_location(pathID)!);
-    }
-
-    public async getGameObjectTree(): Promise<GameObjectTree> {
-        let wasm = await loadWasm();
-
-        let nodesByGameObject: Map<GameObjectTreeNode> = {};
-
-        let transformData = await this.loadUnityObjects(wasm.UnityClassID.Transform);
-        let transforms: Map<Transform> = {};
-        let rootTransforms: Transform[] = [];
-        transformData.forEach(([pathID, data]) => {
-            let transform = wasm.Transform.from_bytes(data, this.assetInfo, pathID);
-            if (transform.is_root()) {
-                rootTransforms.push(transform);
-            }
-            transforms[pathID] = transform;
-            nodesByGameObject[transform.game_object.path_id] = new GameObjectTreeNode(transform);
-        });
-        console.log(`loaded ${transformData.length} transforms (${rootTransforms.length} roots)`)
-
-        let gameObjectData = await this.loadUnityObjects(wasm.UnityClassID.GameObject);
-        let gameObjects: Map<GameObject> = {};
-        gameObjectData.forEach(([pathID, data]) => {
-            gameObjects[pathID] = wasm.GameObject.from_bytes(data, this.assetInfo, pathID);
-            if (!(pathID in nodesByGameObject)) {
-                let name = gameObjects[pathID].get_name();
-                console.log(`No transform found for ${name} (${pathID}), skipping`);
-                return;
-            }
-            nodesByGameObject[pathID].setGameObject(gameObjects[pathID]);
-        });
-        console.log(`loaded ${gameObjectData.length} gameobjects`)
-
-        let meshRendererData = await this.loadUnityObjects(wasm.UnityClassID.MeshRenderer);
-        meshRendererData.forEach(([pathID, data]) => {
-            let meshRenderer = wasm.MeshRenderer.from_bytes(data, this.assetInfo, pathID);
-            nodesByGameObject[meshRenderer.game_object.path_id].setMeshRenderer(meshRenderer);
-        });
-
-        let meshFilterData = await this.loadUnityObjects(wasm.UnityClassID.MeshFilter);
-        let meshes: Map<UnityMesh> = {};
-        let meshesToGameObjects: { [combinedMeshID: string]: number[]} = {};
-        let batchRequestManager = new BatchRequestManager();
-        meshFilterData.forEach(([pathID, data], i) => {
-            let filter = wasm.MeshFilter.from_bytes(data, this.assetInfo, pathID);
-
-            // check for a null ptr
-            if (filter.mesh_ptr.path_id === 0) {
-                return;
-            }
-
-            let combinedMeshID = `${filter.mesh_ptr.file_index}-${filter.mesh_ptr.path_id}`;
-            if (!(combinedMeshID in meshesToGameObjects)) {
-                meshesToGameObjects[combinedMeshID] = [];
-            }
-            meshesToGameObjects[combinedMeshID].push(filter.game_object.path_id);
-            batchRequestManager.add(filter.mesh_ptr, i);
-        });
-        for (let i in batchRequestManager.batches) {
-            let batch = batchRequestManager.batches[i];
-            await this.loadExternalAsset(batch.fileIndex);
-            let locations = this.readObjectLocations(batch.pathIDs, batch.fileIndex);
-            let results = await this.loadUnityLocations(locations, batch.fileIndex);
-            for (let i=0; i<results.length; i++) {
-                let [pathID, data] = results[i];
-                if (!(pathID in meshes)) {
-                    meshes[pathID] = await this.createMesh(data, pathID, batch.fileIndex);
-                }
-                let combinedMeshID = `${batch.fileIndex}-${pathID}`;
-                meshesToGameObjects[combinedMeshID].forEach(gameObjectPathID => {
-                    nodesByGameObject[gameObjectPathID].setMeshPathID(pathID);
-                });
-            }
-        }
-
-        let rootPathIDs = rootTransforms.map(root => root.path_id!);
-
-        // Re-key nodes by transform ID for easier tree traversal
-        let nodesByTransform: Map<GameObjectTreeNode> = {};
-        for (let k in nodesByGameObject) {
-            let node = nodesByGameObject[k];
-            nodesByTransform[node.transformPathID] = node;
-        }
-
-        return new GameObjectTree(meshes, nodesByTransform, rootPathIDs);
-    }
-
-    public async downloadMeshMetadata() {
-        let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
-        let assetBytes = new Uint8Array(assetData.arrayBuffer);
-        let meshDataArray = this.assetInfo.get_mesh_metadata(assetBytes);
-        let result: MeshMetadata[] = [];
-        for (let i=0; i<meshDataArray.length; i++) {
-            let data = meshDataArray.get(i);
-            result.push({
-                name: data.get_name(),
-                offset: data.location.offset,
-                size: data.location.size,
-            })
-        }
-
-        downloadBlob('meshData.json', new Blob([JSON.stringify(result, null, 2)]));
-    }
-
-    public async loadMesh(meshData: MeshMetadata): Promise<UnityMesh> {
-        return this.createMesh(await this.loadBytes({
-            rangeStart: meshData.offset,
-            rangeSize: meshData.size,
-        }));
-    }
-
-    private async createMesh(data: Uint8Array, pathID?: number, fileIndex = 0): Promise<UnityMesh> {
-        let wasm = await loadWasm();
-        let assetInfo = this.assetInfo;
-        if (fileIndex !== 0) {
-            assetInfo = this.externalAssets[fileIndex];
-        }
-        let mesh = wasm.Mesh.from_bytes(data, assetInfo, pathID);
-        let streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
-        if (streamingInfo !== undefined) {
-            mesh.set_vertex_data(await this.loadStreamingData(streamingInfo));
-        }
-
-        if (mesh.is_compressed()) {
-            return loadCompressedMesh(this.device, mesh);
-        } else {
-            return loadMesh(this.device, mesh);
-        }
     }
 }
 
@@ -426,42 +375,42 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
 }
 
-function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
+function vertexFormatToGfxFormatBase(wasm: RustModule, vertexFormat: VertexFormat): GfxFormat {
     switch (vertexFormat) {
-        case _wasm!.VertexFormat.Float: return GfxFormat.F32_R;
-        case _wasm!.VertexFormat.Float16: return GfxFormat.F16_R;
-        case _wasm!.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
-        case _wasm!.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
-        case _wasm!.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
-        case _wasm!.VertexFormat.SNorm16: return GfxFormat.S16_RG_NORM;
-        case _wasm!.VertexFormat.UInt8: return GfxFormat.U8_R;
-        case _wasm!.VertexFormat.SInt8: return GfxFormat.S8_R;
-        case _wasm!.VertexFormat.UInt16: return GfxFormat.U16_R;
-        case _wasm!.VertexFormat.SInt16: return GfxFormat.S16_R;
-        case _wasm!.VertexFormat.UInt32: return GfxFormat.U32_R;
-        case _wasm!.VertexFormat.SInt32: return GfxFormat.S32_R;
+        case wasm!.VertexFormat.Float: return GfxFormat.F32_R;
+        case wasm!.VertexFormat.Float16: return GfxFormat.F16_R;
+        case wasm!.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
+        case wasm!.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
+        case wasm!.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
+        case wasm!.VertexFormat.SNorm16: return GfxFormat.S16_R_NORM;
+        case wasm!.VertexFormat.UInt8: return GfxFormat.U8_R;
+        case wasm!.VertexFormat.SInt8: return GfxFormat.S8_R;
+        case wasm!.VertexFormat.UInt16: return GfxFormat.U16_R;
+        case wasm!.VertexFormat.SInt16: return GfxFormat.S16_R;
+        case wasm!.VertexFormat.UInt32: return GfxFormat.U32_R;
+        case wasm!.VertexFormat.SInt32: return GfxFormat.S32_R;
         default:
             throw new Error(`didn't recognize format ${vertexFormat}`);
     }
 }
 
-function vertexFormatToGfxFormat(vertexFormat: VertexFormat, dimension: number): GfxFormat {
-    const baseFormat = vertexFormatToGfxFormatBase(vertexFormat);
+function vertexFormatToGfxFormat(wasm: RustModule, vertexFormat: VertexFormat, dimension: number): GfxFormat {
+    const baseFormat = vertexFormatToGfxFormatBase(wasm, vertexFormat);
     const compFlags = dimension as FormatCompFlags;
     return setFormatCompFlags(baseFormat, compFlags);
 }
 
-function channelInfoToVertexAttributeDescriptor(location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor {
+function channelInfoToVertexAttributeDescriptor(wasm: RustModule, location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor {
     const { stream, offset, format, dimension } = channelInfo;
-    const gfxFormat = vertexFormatToGfxFormat(format, dimension);
+    const gfxFormat = vertexFormatToGfxFormat(wasm, format, dimension);
     assert(stream === 0); // TODO: Handle more than one stream
     return { location: location, bufferIndex: stream, bufferByteOffset: offset, format: gfxFormat };
 }
 
-function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
+function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMesh {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-    vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(UnityChannel.Vertex, mesh.get_channel_info(0)!));
-    vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(UnityChannel.Normal, mesh.get_channel_info(1)!));
+    vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(wasm, UnityChannel.Vertex, mesh.get_channel_info(0)!));
+    vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(wasm, UnityChannel.Normal, mesh.get_channel_info(1)!));
     const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [{
         byteStride: mesh.get_vertex_stream_info(0)!.stride,
         frequency: GfxVertexBufferFrequency.PerVertex,
@@ -470,7 +419,7 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     let indices = mesh.get_index_data();
     let indexBufferFormat: GfxFormat;
     let numIndices = 0;
-    if (mesh.index_format === _wasm!.IndexFormat.UInt32) {
+    if (mesh.index_format === wasm.IndexFormat.UInt32) {
         indexBufferFormat = GfxFormat.U32_R;
         numIndices = indices.length / 4;
     } else {

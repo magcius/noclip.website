@@ -98,8 +98,8 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
 
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
-            const rangeStart = this.options.rangeStart;
-            const rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
+            const rangeStart = BigInt(this.options.rangeStart);
+            const rangeEnd = rangeStart + BigInt(this.options.rangeSize + 1); // Range header is inclusive.
             this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
         } else if (this.options.ranges !== undefined) {
             let rangeHeaderStr = this.options.ranges
@@ -164,7 +164,7 @@ interface DataFetcherOptions {
      * rangeStart: 0-based byte index for the range Header. Use to request part of a file.
      * Must be specified in tandem with rangeSize.
      */
-    rangeStart?: number;
+    rangeStart?: number | bigint;
     /**
      * rangeSize: Length for the range header.
      * Must be specified together with rangeStart.

@@ -71,28 +71,13 @@ class UnityRenderer implements Viewer.SceneGfx {
     }
 }
 
-class SubnauticaSceneDesc implements Viewer.SceneDesc {
+class AShortHikeSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        /*let assets = new UnityAssetManager('hike/level2', context, device);
-        await assets.loadAssetInfo();
-        let tree = await assets.getGameObjectTree();
-        for (let id in tree.nodes) {
-            let node = tree.nodes[id];
-            if (!node.meshSet) {
-                continue;
-            }
-            if (!node.gameObjectSet) {
-                console.error(`invalid node! ${node.name}`)
-                continue;
-            }
-            renderer.addMesh(tree.meshes[node.meshPathID!], node);
-        }*/
-
         const runtime = await createUnityRuntime(context, `AShortHike`);
-        await runtime.loadLevel(`level2`);
+        await runtime.loadLevel(this.id);
 
         const renderer = new UnityRenderer(runtime);
         return renderer;
@@ -100,11 +85,11 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
 
 }
 
-const id = 'Subnautica';
-const name = 'Subnautica';
+const id = 'AShortHike';
+const name = 'A Short Hike';
 
 const sceneDescs = [
-    new SubnauticaSceneDesc("Scanner Map", "Scanner Map"),
+    new AShortHikeSceneDesc(`level2`, "The Island"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: true };

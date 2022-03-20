@@ -20,18 +20,12 @@ impl Deserialize for PPtr {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 pub struct GameObject {
-    pub path_id: Option<i32>,
     #[wasm_bindgen(skip)]
     pub components: Vec<PPtr>,
-    #[wasm_bindgen(skip)]
-    pub transform: Option<Transform>,
-    #[wasm_bindgen(skip)]
-    pub mesh_filter: Option<MeshFilter>,
-    // TODO: MeshRenderer
     pub layer: u32,
-    name: String,
+    pub name: String,
     pub is_active: bool,
 }
 
@@ -48,29 +42,39 @@ impl Deserialize for GameObject {
             layer: reader.read_u32()?,
             name: reader.read_char_array()?,
             is_active: reader.read_bool()?,
-
-            path_id: None,
-            transform: None,
-            mesh_filter: None,
         })
     }
 }
 
 #[wasm_bindgen]
-impl GameObject {
-    pub fn get_name(&self) -> String {
-        self.name.clone()
-    }
+pub struct PPtrArray {
+    pub length: usize,
+    data: Vec<PPtr>,
+}
 
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<GameObject, String> {
-        let mut reader = AssetReader::new(data);
-        reader.set_endianness(asset.header.endianness);
-        let mut obj = GameObject::deserialize(&mut reader, asset)?;
-        obj.path_id = Some(path_id);
-        return Ok(obj);
+#[wasm_bindgen]
+impl PPtrArray {
+    pub fn get(&self, i: usize) -> PPtr {
+        self.data[i]
     }
 }
 
+#[wasm_bindgen]
+impl GameObject {
+    pub fn get_components(&self) -> PPtrArray {
+        PPtrArray {
+            length: self.components.len(),
+            data: self.components.clone(),
+        }
+    }
+
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<GameObject, String> {
+        let mut reader = AssetReader::new(data);
+        reader.set_endianness(asset.header.endianness);
+        let obj = GameObject::deserialize(&mut reader, asset)?;
+        return Ok(obj);
+    }
+}
 
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug)]
@@ -95,14 +99,12 @@ impl Deserialize for Quaternion {
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct Transform {
-    pub path_id: Option<i32>,
     pub game_object: PPtr,
     pub local_rotation: Quaternion,
     pub local_position: Vec3f,
     pub local_scale: Vec3f,
     #[wasm_bindgen(skip)]
     pub children: Vec<PPtr>, // pointer to Transforms
-    #[wasm_bindgen(skip)]
     pub parent: PPtr, // pointer to Transform
 }
 
@@ -126,7 +128,6 @@ impl Deserialize for Transform {
         let children = PPtr::deserialize_array(reader, asset)?;
         let parent = PPtr::deserialize(reader, asset)?;
         Ok(Transform {
-            path_id: None,
             game_object,
             local_position,
             local_rotation,
@@ -139,16 +140,22 @@ impl Deserialize for Transform {
 
 #[wasm_bindgen]
 impl Transform {
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<Transform, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Transform, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        let mut obj = Transform::deserialize(&mut reader, asset)?;
-        obj.path_id = Some(path_id);
+        let obj = Transform::deserialize(&mut reader, asset)?;
         return Ok(obj);
     }
 
     pub fn is_root(&self) -> bool {
         self.parent.path_id == 0
+    }
+
+    pub fn get_children(&self) -> PPtrArray {
+        PPtrArray {
+            length: self.children.len(),
+            data: self.children.clone()
+        }
     }
 
     pub fn get_children_path_ids(&self) -> Vec<i32> {
@@ -158,7 +165,6 @@ impl Transform {
 
 #[wasm_bindgen]
 pub struct MeshFilter {
-    pub path_id: Option<i32>,
     pub game_object: PPtr,
     pub mesh_ptr: PPtr,
 }
@@ -167,17 +173,16 @@ impl Deserialize for MeshFilter {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let game_object = PPtr::deserialize(reader, asset)?;
         let mesh_ptr = PPtr::deserialize(reader, asset)?;
-        Ok(MeshFilter { path_id: None, game_object, mesh_ptr })
+        Ok(MeshFilter { game_object, mesh_ptr })
     }
 }
 
 #[wasm_bindgen]
 impl MeshFilter {
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<MeshFilter, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<MeshFilter, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        let mut obj = MeshFilter::deserialize(&mut reader, asset)?;
-        obj.path_id = Some(path_id);
+        let obj = MeshFilter::deserialize(&mut reader, asset)?;
         return Ok(obj);
     }
 }
@@ -201,20 +206,18 @@ impl Deserialize for StaticBatchInfo {
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct MeshRenderer {
-    pub path_id: Option<i32>,
     pub game_object: PPtr,
     pub enabled: bool,
-    materials: Vec<PPtr>,
+    _materials: Vec<PPtr>,
     pub static_batch_info: StaticBatchInfo,
 }
 
 #[wasm_bindgen]
 impl MeshRenderer {
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: i32) -> std::result::Result<MeshRenderer, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<MeshRenderer, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        let mut obj = MeshRenderer::deserialize(&mut reader, asset)?;
-        obj.path_id = Some(path_id);
+        let obj = MeshRenderer::deserialize(&mut reader, asset)?;
         return Ok(obj);
     }
 }
@@ -272,10 +275,8 @@ impl Deserialize for MeshRenderer {
         Ok(MeshRenderer {
             game_object,
             enabled,
-            materials,
+            _materials: materials,
             static_batch_info,
-
-            path_id: None,
         })
     }
 }
