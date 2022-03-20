@@ -1789,7 +1789,7 @@ export class StudioPanel extends FloatingPanel {
             const newMode = parseInt(this.timelineModeSelect.value);
             if (!canChangeToMode(newMode)) {
                 this.displayError('Cannot flatten timeline unless keyframes are aligned. ',
-                  'See Help for details.', 'https://github.com/magcius/noclip.website/wiki/Studio-Mode#Consolidating-Timeline');
+                  'See Help for details.', 'https://github.com/magcius/noclip.website/wiki/Studio#consolidating-timeline');
                 this.timelineModeSelect.selectedIndex = this.timelineMode;
                 return;
             }
