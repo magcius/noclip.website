@@ -1387,6 +1387,10 @@ Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
 
 ${GfxShaderLibrary.MulNormalMatrix}
 
+vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
+    return MulNormalMatrix(t_Matrix, t_Value.xyz);
+}
+
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
     return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
 }

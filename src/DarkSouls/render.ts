@@ -338,11 +338,11 @@ void main() {
     v_PositionWorld = t_PositionWorld.xyz;
     gl_Position = Mul(u_ProjectionView, t_PositionWorld);
 
-    vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0));
-    vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0));
+    vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Normal.xyz));
+    vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Tangent.xyz));
 
 #ifdef HAS_BITANGENT
-    vec3 t_TangentTWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0));
+    vec3 t_TangentTWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Bitangent.xyz));
 #else
     vec3 t_TangentTWorld = normalize(cross(t_NormalWorld, t_TangentSWorld));
 #endif
