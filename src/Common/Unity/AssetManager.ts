@@ -1,7 +1,7 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 
 import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer, UnityObject } from '../../../rust/pkg/index';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert, assertExists } from '../../util';
 import * as Geometry from '../../Geometry';
@@ -314,29 +314,31 @@ export class UnityAssetSystem {
 export enum UnityChannel {
     Vertex,
     Normal,
+    Tangent,
     Color,
     TexCoord0,
     TexCoord1,
     TexCoord2,
     TexCoord3,
-    Tangent,
+    TexCoord4,
+    TexCoord5,
+    TexCoord6,
+    TexCoord7,
+    BlendWeight,
+    BlendIndices,
+    Max,
 }
 
 export class UnityMesh {
-    public bbox: Geometry.AABB; 
+    public bbox = new Geometry.AABB();
     public submeshes: SubMesh[];
     public indexBufferStride: number;
 
-    constructor(public inputLayout: GfxInputLayout, public inputState: GfxInputState, public numIndices: number, bbox: UnityAABB, public buffers: GfxBuffer[], submeshes: SubMeshArray, public indexBufferFormat: GfxFormat) {
-        let center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
-        let extent = vec3.fromValues(bbox.extent.x, bbox.extent.y, bbox.extent.z);
-        this.bbox = new Geometry.AABB();
+    constructor(public inputLayout: GfxInputLayout, public inputState: GfxInputState, bbox: UnityAABB, public buffers: GfxBuffer[], submeshes: SubMeshArray, public indexBufferFormat: GfxFormat) {
+        const center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
+        const extent = vec3.fromValues(bbox.extent.x, bbox.extent.y, bbox.extent.z);
         this.bbox.setFromCenterAndExtents(center, extent);
-        this.submeshes = [];
-        for (let i=0; i<submeshes.length; i++) {
-            this.submeshes.push(submeshes.get(i))
-        }
-
+        this.submeshes = loadWasmBindgenArray(submeshes);
         this.indexBufferStride = getFormatCompByteSize(this.indexBufferFormat);
     }
 
@@ -372,7 +374,7 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
 
     let buffers = [vertsBuf, normsBuf, trisBuf];
 
-    return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
+    return new UnityMesh(layout, state, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
 }
 
 function vertexFormatToGfxFormatBase(wasm: RustModule, vertexFormat: VertexFormat): GfxFormat {
@@ -400,41 +402,44 @@ function vertexFormatToGfxFormat(wasm: RustModule, vertexFormat: VertexFormat, d
     return setFormatCompFlags(baseFormat, compFlags);
 }
 
-function channelInfoToVertexAttributeDescriptor(wasm: RustModule, location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor {
+function channelInfoToVertexAttributeDescriptor(wasm: RustModule, location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor | null {
+    if (channelInfo === undefined)
+        return null;
+
     const { stream, offset, format, dimension } = channelInfo;
+    if (dimension === 0)
+        return null;
+
     const gfxFormat = vertexFormatToGfxFormat(wasm, format, dimension);
-    assert(stream === 0); // TODO: Handle more than one stream
     return { location: location, bufferIndex: stream, bufferByteOffset: offset, format: gfxFormat };
 }
 
 function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMesh {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-    vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(wasm, UnityChannel.Vertex, mesh.get_channel_info(0)!));
-    vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(wasm, UnityChannel.Normal, mesh.get_channel_info(1)!));
-    const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [{
-        byteStride: mesh.get_vertex_stream_info(0)!.stride,
-        frequency: GfxVertexBufferFrequency.PerVertex,
-    }];
+    const layoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+    const stateBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
-    let indices = mesh.get_index_data();
-    let indexBufferFormat: GfxFormat;
-    let numIndices = 0;
-    if (mesh.index_format === wasm.IndexFormat.UInt32) {
-        indexBufferFormat = GfxFormat.U32_R;
-        numIndices = indices.length / 4;
-    } else {
-        indexBufferFormat = GfxFormat.U16_R;
-        numIndices = indices.length / 2;
+    const vertData = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data());
+    const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.get_index_data());
+
+    for (let i = 0; i < mesh.get_channel_count(); i++) {
+        const desc = channelInfoToVertexAttributeDescriptor(wasm, i, mesh.get_channel_info(i)!);
+        if (desc !== null)
+            vertexAttributeDescriptors.push(desc);
     }
 
-    let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data());
-    let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices);
+    for (let i = 0; i < mesh.get_vertex_stream_count(); i++) {
+        const stream = mesh.get_vertex_stream_info(i)!;
+        layoutBufferDescriptors.push({
+            byteStride: stream.stride,
+            frequency: GfxVertexBufferFrequency.PerVertex,
+        });
+        stateBufferDescriptors.push({ buffer: vertData, byteOffset: stream.offset });
+    }
 
-    let layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-    let state = device.createInputState(layout, [
-        { buffer: vertsBuf, byteOffset: 0 },
-    ], { buffer: trisBuf, byteOffset: 0 });
-    let buffers = [vertsBuf, trisBuf];
-
-    return new UnityMesh(layout, state,  numIndices, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
+    const indexBufferFormat = (mesh.index_format === wasm.IndexFormat.UInt32) ? GfxFormat.U32_R : GfxFormat.U16_R;
+    const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: layoutBufferDescriptors, indexBufferFormat });
+    const state = device.createInputState(layout, stateBufferDescriptors, { buffer: indexData, byteOffset: 0 });
+    const buffers = [vertData, indexData];
+    return new UnityMesh(layout, state, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
 }

@@ -212,11 +212,11 @@ impl Deserialize for CompressedMesh {
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct VertexStreamInfo {
-    channel_mask: u32,
+    pub channel_mask: u32,
     pub offset: u32,
     pub stride: u32,
-    divider_op: u8,
-    frequency: u32,
+    pub divider_op: u8,
+    pub frequency: u32,
 }
 
 impl VertexStreamInfo {
@@ -509,11 +509,19 @@ impl Mesh {
         self.raw_index_buffer.clone()
     }
 
+    pub fn get_channel_count(&self) -> usize {
+        self.vertex_data.channels.len()
+    }
+
     pub fn get_channel_info(&self, i: usize) -> Option<ChannelInfo> {
         match self.vertex_data.channels.get(i) {
             Some(c) => Some(c.clone()),
             None => None,
         }
+    }
+
+    pub fn get_vertex_stream_count(&self) -> usize {
+        self.vertex_data.streams.len()
     }
 
     pub fn get_vertex_stream_info(&self, i: usize) -> Option<VertexStreamInfo> {
