@@ -421,9 +421,9 @@ pub enum IndexFormat {
 }
 
 #[derive(Debug)]
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Mesh {
-    name: String,
+    pub name: String,
     submeshes: Vec<SubMesh>,
     mesh_compression: MeshCompression,
     is_readable: bool,
@@ -439,21 +439,15 @@ pub struct Mesh {
     baked_convex_collision_mesh: Vec<u8>,
     baked_triangle_collision_mesh: Vec<u8>,
     streaming_info: UnityStreamingInfo,
-    pub path_id: Option<i32>,
 }
 
 #[wasm_bindgen]
 impl Mesh {
-    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo, path_id: Option<i32>) -> std::result::Result<Mesh, String> {
+    pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Mesh, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        let mut mesh = Mesh::deserialize(&mut reader, asset)?;
-        mesh.path_id = path_id;
+        let mesh = Mesh::deserialize(&mut reader, asset)?;
         return Ok(mesh);
-    }
-
-    pub fn get_name(&self) -> String {
-        self.name.clone()
     }
 
     pub fn is_compressed(&self) -> bool {
@@ -592,7 +586,6 @@ impl Deserialize for Mesh {
             baked_convex_collision_mesh,
             baked_triangle_collision_mesh,
             streaming_info,
-            path_id: None,
         })
     }
 }

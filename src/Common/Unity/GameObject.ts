@@ -2,7 +2,7 @@
 import type { UnityObject } from "../../../rust/pkg/index";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { SceneContext } from "../../SceneBase";
-import { AssetObjectData, UnityAssetSystem, RustModule, AssetLocation, UnityMesh, UnityChannel } from "./AssetManager";
+import { AssetObjectData, UnityAssetSystem, RustModule, AssetLocation, UnityMeshData, UnityChannel } from "./AssetManager";
 import type * as wasm from '../../../rust/pkg/index';
 import { mat4, quat, vec3 } from "gl-matrix";
 import { assert, assertExists, fallbackUndefined } from "../../util";
@@ -80,7 +80,7 @@ export class Transform extends UnityComponent {
 }
 
 export class MeshFilter extends UnityComponent {
-    public meshData: UnityMesh | null = null;
+    public meshData: UnityMeshData | null = null;
 
     constructor(runtime: UnityRuntime, public gameObject: GameObject, wasmObj: wasm.MeshFilter) {
         super();

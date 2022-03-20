@@ -1,14 +1,15 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 
-import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, Transform, GameObject, UnityClassID, Vec3f, Quaternion, PPtr, SubMesh, SubMeshArray, MeshRenderer, UnityObject } from '../../../rust/pkg/index';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from '../../gfx/platform/GfxPlatform';
+import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D } from '../../../rust/pkg/index';
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxTexture, GfxSampler, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxWrapMode, GfxSamplerDescriptor, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
-import { assert, assertExists } from '../../util';
+import { assertExists } from '../../util';
 import * as Geometry from '../../Geometry';
-import { mat4, vec3, quat } from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { DataFetcher } from '../../DataFetcher';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { Destroyable } from '../../SceneBase';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 
 export type RustModule = typeof import('../../../rust/pkg/index');
 
@@ -142,11 +143,11 @@ abstract class PromiseCache<T extends Destroyable> {
     }
 }
 
-class MeshCache extends PromiseCache<UnityMesh> {
-    protected async fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<UnityMesh> {
+class UnityMeshDataCache extends PromiseCache<UnityMeshData> {
+    protected async fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<UnityMeshData> {
         const objData = await assetFile.fetchObject(key);
 
-        const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo, objData.location.pathID);
+        const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo);
         const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
         if (streamingInfo !== undefined)
             mesh.set_vertex_data(await assetSystem.fetchStreamingInfo(streamingInfo));
@@ -159,6 +160,16 @@ class MeshCache extends PromiseCache<UnityMesh> {
     }
 }
 
+class UnityTexture2DDataCache extends PromiseCache<UnityTexture2DData> {
+    protected async fetchInternal(assetSystem: UnityAssetSystem, assetFile: AssetFile, key: number): Promise<UnityTexture2DData> {
+        const objData = await assetFile.fetchObject(key);
+
+        const header = assetSystem.wasm.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
+        const data = await assetSystem.fetchStreamingInfo(header.streaming_info);
+        return new UnityTexture2DData(assetSystem.wasm, assetSystem.renderCache, header, data);
+    }
+}
+
 // An AssetFile is a single serialized asset file in the filesystem, aka sharedassets or a level file.
 
 class AssetFile {
@@ -168,7 +179,8 @@ class AssetFile {
     public finishLoadingPromise: Promise<void>;
     public fetcher = new FileDataFetcher();
 
-    private meshCache = new MeshCache();
+    private meshDataCache = new UnityMeshDataCache();
+    private texture2DDataCache = new UnityTexture2DDataCache();
 
     constructor(wasm: RustModule, dataFetcher: DataFetcher, private path: string, private filename: string) {
         this.finishLoadingPromise = new Promise(async (resolve, reject) => {
@@ -229,11 +241,11 @@ class AssetFile {
         }
     }
 
-    private fetchMeshDataInternal(assetSystem: UnityAssetSystem, pathID: number): Promise<UnityMesh> {
-        return this.meshCache.fetch(assetSystem, this, pathID);
+    private fetchMeshDataInternal(assetSystem: UnityAssetSystem, pathID: number): Promise<UnityMeshData> {
+        return this.meshDataCache.fetch(assetSystem, this, pathID);
     }
 
-    public async fetchMeshData(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<UnityMesh | null> {
+    public async fetchMeshData(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<UnityMeshData | null> {
         if (pptr.path_id === 0)
             return null;
 
@@ -245,19 +257,37 @@ class AssetFile {
         }
     }
 
+    private fetchTexture2DDataInternal(assetSystem: UnityAssetSystem, pathID: number): Promise<UnityTexture2DData> {
+        return this.texture2DDataCache.fetch(assetSystem, this, pathID);
+    }
+
+    public async fetchTexture2DData(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<UnityTexture2DData | null> {
+        if (pptr.path_id === 0)
+            return null;
+
+        if (pptr.file_index === 0) {
+            return this.fetchTexture2DDataInternal(assetSystem, pptr.path_id);
+        } else {
+            const externalFile = await this.fetchExternalFile(assetSystem, pptr);
+            return externalFile.fetchTexture2DDataInternal(assetSystem, pptr.path_id);
+        }
+    }
+
     public destroy(device: GfxDevice): void {
         if (this.assetInfo !== null)
             this.assetInfo.free();
         for (let i = 0; i < this.unityObject.length; i++)
             this.unityObject[i].free();
-        this.meshCache.destroy(device);
+        this.meshDataCache.destroy(device);
     }
 }
 
 export class UnityAssetSystem {
     private assetFiles = new Map<string, AssetFile>();
+    public renderCache: GfxRenderCache;
 
     constructor(public wasm: RustModule, public device: GfxDevice, private dataFetcher: DataFetcher, private basePath: string) {
+        this.renderCache = new GfxRenderCache(this.device);
     }
 
     public async fetchBytes(filename: string, range: Range): Promise<Uint8Array> {
@@ -306,6 +336,7 @@ export class UnityAssetSystem {
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderCache.destroy();
         for (const v of this.assetFiles.values())
             v.destroy(device);
     }
@@ -329,7 +360,7 @@ export enum UnityChannel {
     Max,
 }
 
-export class UnityMesh {
+export class UnityMeshData {
     public bbox = new Geometry.AABB();
     public submeshes: SubMesh[];
     public indexBufferStride: number;
@@ -349,7 +380,7 @@ export class UnityMesh {
     }
 }
 
-function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
+function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMeshData {
     let vertices = mesh.unpack_vertices()!;
     let normals = mesh.unpack_normals()!;
     let indices = mesh.unpack_indices()!;
@@ -374,7 +405,7 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
 
     let buffers = [vertsBuf, normsBuf, trisBuf];
 
-    return new UnityMesh(layout, state, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
+    return new UnityMeshData(layout, state, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
 }
 
 function vertexFormatToGfxFormatBase(wasm: RustModule, vertexFormat: VertexFormat): GfxFormat {
@@ -414,7 +445,7 @@ function channelInfoToVertexAttributeDescriptor(wasm: RustModule, location: numb
     return { location: location, bufferIndex: stream, bufferByteOffset: offset, format: gfxFormat };
 }
 
-function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMesh {
+function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMeshData {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     const layoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
     const stateBufferDescriptors: GfxVertexBufferDescriptor[] = [];
@@ -441,5 +472,72 @@ function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMesh {
     const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: layoutBufferDescriptors, indexBufferFormat });
     const state = device.createInputState(layout, stateBufferDescriptors, { buffer: indexData, byteOffset: 0 });
     const buffers = [vertData, indexData];
-    return new UnityMesh(layout, state, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
+    return new UnityMeshData(layout, state, mesh.local_aabb, buffers, mesh.get_submeshes(), indexBufferFormat);
+}
+
+function translateTextureFormat(wasm: RustModule, fmt: UnityTextureFormat, colorSpace: UnityColorSpace): GfxFormat {
+    if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.BC1;
+    else if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.BC1_SRGB;
+    else
+        throw "whoops";
+}
+
+function translateWrapMode(wasm: RustModule, v: number): GfxWrapMode {
+    if (v === wasm.UnityTextureWrapMode.Repeat)
+        return GfxWrapMode.Repeat;
+    else if (v === wasm.UnityTextureWrapMode.Clamp)
+        return GfxWrapMode.Clamp;
+    else if (v === wasm.UnityTextureWrapMode.Mirror)
+        return GfxWrapMode.Mirror;
+    else if (v === wasm.UnityTextureWrapMode.MirrorOnce)
+        return GfxWrapMode.Mirror; // TODO(jstpierre): what to do here?
+    else
+        throw "whoops";
+}
+
+function translateSampler(wasm: RustModule, header: UnityTextureSettings): GfxSamplerDescriptor {
+    const mipFilterMode = (header.filter_mode === wasm.UnityTextureFilterMode.Trilinear) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+    const texFilterMode = (header.filter_mode >= wasm.UnityTextureFilterMode.Bilinear) ? GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point;
+
+    // Mip bias needs to be handled in shader...
+
+    return {
+        magFilter: texFilterMode,
+        minFilter: texFilterMode,
+        mipFilter: mipFilterMode,
+        wrapS: translateWrapMode(wasm, header.wrap_u),
+        wrapT: translateWrapMode(wasm, header.wrap_v),
+        wrapQ: translateWrapMode(wasm, header.wrap_w),
+        maxAnisotropy: header.aniso,
+    };
+}
+
+export class UnityTexture2DData {
+    public gfxTexture: GfxTexture;
+    public gfxSampler: GfxSampler;
+
+    // public viewerTexture: Viewer.Texture;
+
+    constructor(wasm: RustModule, cache: GfxRenderCache, header: UnityTexture2D, data: Uint8Array) {
+        const device = cache.device;
+        const pixelFormat = translateTextureFormat(wasm, header.texture_format, header.color_space);
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(pixelFormat, header.width, header.height, header.mipmap_count));
+
+        this.gfxSampler = cache.createSampler(translateSampler(wasm, header.texture_settings));
+
+        // Load in the actual streaming texture data... limited to first mip for now
+        // TODO(jstpierre): Full mip chain
+        device.uploadTextureData(this.gfxTexture, 0, [data]);
+
+        // const canvas = document.createElement('canvas');
+        // const rgbaTexture = decompressBC({ type: 'BC1', flag: (pixelFormat & FormatFlags.sRGB) ? 'SRGB' : 'UNORM', width: header.width, height: header.height, depth: 1, pixels: data });
+        // surfaceToCanvas(canvas, rgbaTexture);
+        // this.viewerTexture = { name: header.name, surfaces: [canvas] };
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
 }
