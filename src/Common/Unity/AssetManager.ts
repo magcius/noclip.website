@@ -3,7 +3,7 @@ import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxTexture, GfxSampler, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxWrapMode, GfxSamplerDescriptor, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
-import { assertExists } from '../../util';
+import { assert, assertExists } from '../../util';
 import * as Geometry from '../../Geometry';
 import { vec3 } from 'gl-matrix';
 import { DataFetcher } from '../../DataFetcher';
@@ -177,38 +177,66 @@ class AssetFile {
     public unityObjectByPathID = new Map<number, UnityObject>();
     public assetInfo: AssetInfo;
     public finishLoadingPromise: Promise<void>;
-    public fetcher = new FileDataFetcher();
+    public fetcher: FileDataFetcher | null = null;
+    public fullData: ArrayBufferSlice | null;
 
     private meshDataCache = new UnityMeshDataCache();
     private texture2DDataCache = new UnityTexture2DDataCache();
 
-    constructor(wasm: RustModule, dataFetcher: DataFetcher, private path: string, private filename: string) {
-        this.finishLoadingPromise = new Promise(async (resolve, reject) => {
-            let headerBytes = (await dataFetcher.fetchData(path, {
-                rangeStart: 0,
-                rangeSize: MAX_HEADER_LENGTH,
+    constructor(private path: string) {
+    }
+
+    private doneLoadingHeader(wasm: RustModule, buffer: Uint8Array): void {
+        this.assetInfo = wasm.AssetInfo.deserialize(buffer);
+        this.unityObject = loadWasmBindgenArray(this.assetInfo.get_objects());
+        for (let i = 0; i < this.unityObject.length; i++)
+            this.unityObjectByPathID.set(this.unityObject[i].path_id, this.unityObject[i]);
+    }
+
+    private async initFullInternal(wasm: RustModule, dataFetcher: DataFetcher): Promise<void> {
+        this.fullData = await dataFetcher.fetchData(this.path);
+        this.doneLoadingHeader(wasm, this.fullData.createTypedArray(Uint8Array));
+    }
+
+    public initFull(wasm: RustModule, dataFetcher: DataFetcher): void {
+        assert(this.finishLoadingPromise === undefined);
+        this.finishLoadingPromise = this.initFullInternal(wasm, dataFetcher);
+    }
+
+    private async initPartialInternal(wasm: RustModule, dataFetcher: DataFetcher): Promise<void> {
+        let headerBytes = (await dataFetcher.fetchData(this.path, {
+            rangeStart: 0,
+            rangeSize: MAX_HEADER_LENGTH,
+        })).createTypedArray(Uint8Array);
+
+        const assetHeader = wasm.AssetHeader.deserialize(headerBytes);
+        if (assetHeader.data_offset > headerBytes.byteLength) {
+            // Oops, need to fetch extra bytes...
+            const extraBytes = (await dataFetcher.fetchData(this.path, {
+                rangeStart: headerBytes.byteLength,
+                rangeSize: assetHeader.data_offset - headerBytes.byteLength,
             })).createTypedArray(Uint8Array);
+            headerBytes = concatBufs(headerBytes, extraBytes);
+        }
 
-            const assetHeader = wasm.AssetHeader.deserialize(headerBytes);
-            if (assetHeader.data_offset > headerBytes.byteLength) {
-                // Oops, need to fetch extra bytes...
-                const extraBytes = (await dataFetcher.fetchData(path, {
-                    rangeStart: headerBytes.byteLength,
-                    rangeSize: assetHeader.data_offset - headerBytes.byteLength,
-                })).createTypedArray(Uint8Array);
-                headerBytes = concatBufs(headerBytes, extraBytes);
-            }
+        assetHeader.free();
+        this.fetcher = new FileDataFetcher();
+        this.doneLoadingHeader(wasm, headerBytes);
+    }
 
-            assetHeader.free();
-            this.assetInfo = wasm.AssetInfo.deserialize(headerBytes);
-            this.unityObject = loadWasmBindgenArray(this.assetInfo.get_objects());
-            for (let i = 0; i < this.unityObject.length; i++)
-                this.unityObjectByPathID.set(this.unityObject[i].path_id, this.unityObject[i]);
-            resolve(null!);
-        });
+    public initPartial(wasm: RustModule, dataFetcher: DataFetcher): void {
+        assert(this.finishLoadingPromise === undefined);
+        this.finishLoadingPromise = this.initPartialInternal(wasm, dataFetcher);
+    }
+
+    public hasDataToFetch(): boolean {
+        if (this.fetcher !== null)
+            return this.fetcher.pendingRequests.length > 0;
+        return false;
     }
 
     public fetchData(dataFetcher: DataFetcher): Promise<void> {
+        assert(this.fetcher !== null && this.hasDataToFetch());
         return this.fetcher.fetch(dataFetcher, this.path);
     }
 
@@ -218,7 +246,14 @@ class AssetFile {
 
     public async fetchObject(pathID: number): Promise<AssetObjectData> {
         const obj = assertExists(this.unityObjectByPathID.get(pathID));
-        const buffer = await this.fetcher.addRequest(obj.byte_start.valueOf(), obj.byte_size);
+
+        let buffer: ArrayBufferSlice;
+        if (this.fetcher !== null)
+            buffer = await this.fetcher.addRequest(obj.byte_start.valueOf(), obj.byte_size);
+        else if (this.fullData !== null)
+            buffer = this.fullData.subarray(Number(obj.byte_start), obj.byte_size);
+        else
+            throw "whoops";
 
         const location = this.createLocation(pathID);
         const classID = obj.class_id;
@@ -229,7 +264,7 @@ class AssetFile {
 
     private fetchExternalFile(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<AssetFile> {
         const externalFilename = assertExists(this.assetInfo.get_external_path(pptr.file_index));
-        return assetSystem.fetchAssetFile(externalFilename);
+        return assetSystem.fetchAssetFile(externalFilename, true);
     }
 
     public async fetchPPtr(assetSystem: UnityAssetSystem, pptr: PPtr): Promise<AssetObjectData> {
@@ -302,27 +337,34 @@ export class UnityAssetSystem {
         });
     }
 
-    public fetchAssetFile(filename: string): Promise<AssetFile> {
+    public fetchAssetFile(filename: string, partial: boolean): Promise<AssetFile> {
         if (!this.assetFiles.has(filename)) {
             const path = `${this.basePath}/${filename}`;
-            const assetFile = new AssetFile(this.wasm, this.dataFetcher, path, filename);
+            const assetFile = new AssetFile(path);
+            if (partial)
+                assetFile.initPartial(this.wasm, this.dataFetcher);
+            else
+                assetFile.initFull(this.wasm, this.dataFetcher);
             this.assetFiles.set(filename, assetFile);
         }
 
         const assetFile = this.assetFiles.get(filename)!;
-        return this.assetFiles.get(filename)!.finishLoadingPromise.then(() => assetFile);
+        return assetFile.finishLoadingPromise.then(() => assetFile);
     }
 
     private hasDataToFetch(): boolean {
         for (const v of this.assetFiles.values())
-            if (v.fetcher.pendingRequests.length > 0)
+            if (v.hasDataToFetch())
                 return true;
         return false;
     }
 
     private fetchData(): Promise<void> {
-        const assetFiles = [...this.assetFiles.values()];
-        return Promise.all(assetFiles.map((v) => v.fetchData(this.dataFetcher))) as unknown as Promise<void>;
+        const promises = [];
+        for (const v of this.assetFiles.values())
+            if (v.hasDataToFetch())
+                promises.push(v.fetchData(this.dataFetcher));
+        return Promise.all(promises) as unknown as Promise<void>;
     }
 
     public async waitForLoad(): Promise<void> {
@@ -332,7 +374,8 @@ export class UnityAssetSystem {
 
     public update(): void {
         for (const v of this.assetFiles.values())
-            v.fetchData(this.dataFetcher);
+            if (v.hasDataToFetch())
+                v.fetchData(this.dataFetcher);
     }
 
     public destroy(device: GfxDevice): void {

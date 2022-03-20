@@ -290,7 +290,7 @@ export class UnityRuntime {
     }
 
     public async loadLevel(filename: string) {
-        const assetFile = await this.assetSystem.fetchAssetFile(filename);
+        const assetFile = await this.assetSystem.fetchAssetFile(filename, false);
 
         // Instantiate all the GameObjects.
         const loadGameObject = async (unityObject: UnityObject) => {
@@ -312,15 +312,17 @@ export class UnityRuntime {
             wasmGameObject.free();
         };
 
+        const promises = [];
         for (let i = 0; i < assetFile.unityObject.length; i++) {
             const unityObject = assetFile.unityObject[i];
             if (unityObject.class_id !== this.wasm.UnityClassID.GameObject)
                 continue;
 
-            loadGameObject(unityObject);
+            promises.push(loadGameObject(unityObject));
         }
 
         await this.assetSystem.waitForLoad();
+        await Promise.all(promises);
 
         // Spawn all the components.
         for (const component of this.components.values())
