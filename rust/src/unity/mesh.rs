@@ -251,7 +251,7 @@ impl VertexStreamInfo {
                 frequency: 0,
             });
             offset += (vertex_count * stride) as u32;
-            offset = (offset + 15) & 15;
+            offset = (offset + 0x0F) & !0x0F;
         }
         return result;
     }
