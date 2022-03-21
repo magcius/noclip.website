@@ -15,6 +15,7 @@ pub struct UnityTexture2D {
     pub texture_format: u32,
     pub color_space: u32,
     pub texture_settings: UnityTextureSettings,
+    pub image_data: Vec<u8>,
     pub streaming_info: UnityStreamingInfo,
 }
 
@@ -53,7 +54,7 @@ impl Deserialize for UnityTexture2D {
         let _usage_mode = reader.read_u32()?;
         let color_space = reader.read_u32()?;
 
-        let _image_data = reader.read_byte_array();
+        let image_data = reader.read_byte_array()?;
         reader.align()?;
         let streaming_info = UnityStreamingInfo::deserialize(reader, asset)?;
         Ok(UnityTexture2D {
@@ -67,6 +68,7 @@ impl Deserialize for UnityTexture2D {
             color_space,
             texture_settings,
             streaming_info,
+            image_data,
         })
     }
 }
@@ -100,10 +102,14 @@ pub enum UnityTextureWrapMode {
 #[wasm_bindgen]
 #[derive(Debug)]
 pub enum UnityTextureFormat {
-    Alpha8 = 0x01,
-    BC1    = 0x0A,
-    BC2    = 0x0B,
-    BC3    = 0x0C,
+    Alpha8       = 0x01,
+    RGB24        = 0x03,
+    RGBA32       = 0x04,
+    ARGB32       = 0x05,
+    BC1          = 0x0A,
+    BC2          = 0x0B,
+    BC3          = 0x0C,
+    DXT1Crunched = 0x1C,
 }
 
 #[wasm_bindgen]

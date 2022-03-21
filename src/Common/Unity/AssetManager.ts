@@ -1,16 +1,18 @@
 
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
-import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D, UnityMaterial, UnityShader } from '../../../rust/pkg/index';
+import type { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, UnityStreamingInfo, ChannelInfo, UnityClassID, PPtr, SubMesh, SubMeshArray, UnityObject, UnityTextureFormat, UnityTextureFilterMode, UnityTextureWrapMode, UnityColorSpace, UnityTextureSettings, UnityTexture2D, UnityMaterial, UnityShader, UnityTexEnv } from '../../../rust/pkg/index';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxTexture, GfxSampler, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxWrapMode, GfxSamplerDescriptor, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
-import { assert, assertExists } from '../../util';
+import { assert, assertExists, fallbackUndefined, nArray } from '../../util';
 import * as Geometry from '../../Geometry';
 import { vec3, vec4 } from 'gl-matrix';
 import { DataFetcher } from '../../DataFetcher';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { Destroyable } from '../../SceneBase';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { colorCopy, colorMult, colorNewCopy, colorNewFromRGBA, White } from '../../Color';
+import { Color, colorCopy, colorMult, colorNewCopy, colorNewFromRGBA, TransparentBlack, White } from '../../Color';
+import { TextureMapping } from '../../TextureHolder';
+import { fillColor, fillVec4, fillVec4v } from '../../gfx/helpers/UniformBufferHelpers';
 
 export type RustModule = typeof import('../../../rust/pkg/index');
 
@@ -248,8 +250,10 @@ class AssetFile {
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
         const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo);
         const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
-        if (streamingInfo !== undefined)
-            mesh.set_vertex_data(await assetSystem.fetchStreamingInfo(streamingInfo));
+        if (streamingInfo !== undefined) {
+            const vertexData = await assetSystem.fetchStreamingInfo(streamingInfo);
+            mesh.set_vertex_data(vertexData.createTypedArray(Uint8Array));
+        }
 
         if (mesh.is_compressed()) {
             return loadCompressedMesh(assetSystem.device, mesh);
@@ -263,7 +267,13 @@ class AssetFile {
             return null;
 
         const header = assetSystem.wasm.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
-        const data = await assetSystem.fetchStreamingInfo(header.streaming_info);
+        let data = header.image_data;
+        if (data.length === 0) {
+            const streaming_info = header.streaming_info;
+            assert(streaming_info.size > 0);
+            data = (await assetSystem.fetchStreamingInfo(streaming_info)).createTypedArray(Uint8Array);
+            streaming_info.free();
+        }
         return new UnityTexture2DData(assetSystem.wasm, assetSystem.renderCache, header, data);
     };
 
@@ -328,12 +338,12 @@ export class UnityAssetSystem {
         this.renderCache = new GfxRenderCache(this.device);
     }
 
-    public async fetchBytes(filename: string, range: Range): Promise<Uint8Array> {
-        let res = await this.dataFetcher.fetchData(`${this.basePath}/${filename}`, range);
-        return new Uint8Array(res.arrayBuffer);
+    public async fetchBytes(filename: string, range: Range): Promise<ArrayBufferSlice> {
+        return await this.dataFetcher.fetchData(`${this.basePath}/${filename}`, range);
     }
 
-    public async fetchStreamingInfo(streamingInfo: UnityStreamingInfo): Promise<Uint8Array> {
+    public async fetchStreamingInfo(streamingInfo: UnityStreamingInfo): Promise<ArrayBufferSlice> {
+        assert(streamingInfo.size !== 0);
         return await this.fetchBytes(streamingInfo.path, {
             rangeStart: streamingInfo.offset,
             rangeSize: streamingInfo.size,
@@ -540,6 +550,22 @@ function translateTextureFormat(wasm: RustModule, fmt: UnityTextureFormat, color
         return GfxFormat.BC3;
     else if (fmt === wasm.UnityTextureFormat.BC3 && colorSpace === wasm.UnityColorSpace.SRGB)
         return GfxFormat.BC3_SRGB;
+    else if (fmt === wasm.UnityTextureFormat.RGB24 && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.U8_RGB_NORM;
+    else if (fmt === wasm.UnityTextureFormat.RGB24 && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.U8_RGB_SRGB;
+    else if (fmt === wasm.UnityTextureFormat.RGBA32 && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.U8_RGBA_NORM;
+    else if (fmt === wasm.UnityTextureFormat.RGBA32 && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.U8_RGBA_SRGB;
+    else if (fmt === wasm.UnityTextureFormat.ARGB32 && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.U8_RGBA_NORM;
+    else if (fmt === wasm.UnityTextureFormat.ARGB32 && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.U8_RGBA_SRGB;
+    else if (fmt === wasm.UnityTextureFormat.DXT1Crunched && colorSpace === wasm.UnityColorSpace.Linear)
+        return GfxFormat.BC1;
+    else if (fmt === wasm.UnityTextureFormat.DXT1Crunched && colorSpace === wasm.UnityColorSpace.SRGB)
+        return GfxFormat.BC1_SRGB;
     else
         throw "whoops";
 }
@@ -570,15 +596,60 @@ function translateSampler(wasm: RustModule, header: UnityTextureSettings): GfxSa
         wrapS: translateWrapMode(wasm, header.wrap_u),
         wrapT: translateWrapMode(wasm, header.wrap_v),
         wrapQ: translateWrapMode(wasm, header.wrap_w),
-        maxAnisotropy: header.aniso,
+        maxAnisotropy: header.filter_mode === wasm.UnityTextureFilterMode.Trilinear ? header.aniso : 1,
     };
+}
+
+function calcLevelSize(wasm: RustModule, fmt: UnityTextureFormat, w: number, h: number): number {
+    if (fmt === wasm.UnityTextureFormat.BC1 || fmt === wasm.UnityTextureFormat.BC2 || fmt === wasm.UnityTextureFormat.BC3 || fmt === wasm.UnityTextureFormat.DXT1Crunched) {
+        w = (w + 0x03) & ~0x03;
+        h = (h + 0x03) & ~0x03;
+        const numPixels = w * h;
+        if (fmt === wasm.UnityTextureFormat.BC1)
+            return numPixels >>> 1;
+        else
+            return numPixels;
+    } else if (fmt === wasm.UnityTextureFormat.Alpha8) {
+        return w * h;
+    } else if (fmt === wasm.UnityTextureFormat.RGB24) {
+        return w * h * 3;
+    } else if (fmt === wasm.UnityTextureFormat.RGBA32) {
+        return w * h * 4;
+    } else if (fmt === wasm.UnityTextureFormat.ARGB32) {
+        return w * h * 4;
+    } else {
+        throw "whoops";
+    }
+}
+
+function imageFormatConvertData(wasm: RustModule, d: Uint8Array, fmt: UnityTextureFormat): Uint8Array {
+    if (fmt === wasm.UnityTextureFormat.ARGB32) {
+        for (let i = 0; i < d.length; i += 4) {
+            const a = d[i+0], r = d[i+1], g = d[i+2], b = d[i+3];
+            d[i+0] = r; d[i+1] = g; d[i+2] = b; d[i+3] = a;
+        }
+        return d;
+    } else {
+        return d;
+    }
+}
+
+function calcLevels(wasm: RustModule, buffer: Uint8Array, fmt: UnityTextureFormat, w: number, h: number, numLevels: number): ArrayBufferView[] {
+    let offset = 0;
+    const views: ArrayBufferView[] = [];
+    for (let i = 0; i < numLevels; i++) {
+        const levelSize = calcLevelSize(wasm, fmt, w, h);
+        views.push(buffer.subarray(offset, offset + levelSize));
+        offset += levelSize;
+        w = Math.max(w >>> 1, 1);
+        h = Math.max(h >>> 1, 1);
+    }
+    return views;
 }
 
 export class UnityTexture2DData {
     public gfxTexture: GfxTexture;
     public gfxSampler: GfxSampler;
-
-    // public viewerTexture: Viewer.Texture;
 
     constructor(wasm: RustModule, cache: GfxRenderCache, private header: UnityTexture2D, data: Uint8Array) {
         const device = cache.device;
@@ -587,14 +658,17 @@ export class UnityTexture2DData {
 
         this.gfxSampler = cache.createSampler(translateSampler(wasm, header.texture_settings));
 
-        // Load in the actual streaming texture data... limited to first mip for now
-        // TODO(jstpierre): Full mip chain
-        device.uploadTextureData(this.gfxTexture, 0, [data]);
+        if (header.texture_format === wasm.UnityTextureFormat.DXT1Crunched)
+            return;
 
-        // const canvas = document.createElement('canvas');
-        // const rgbaTexture = decompressBC({ type: 'BC1', flag: (pixelFormat & FormatFlags.sRGB) ? 'SRGB' : 'UNORM', width: header.width, height: header.height, depth: 1, pixels: data });
-        // surfaceToCanvas(canvas, rgbaTexture);
-        // this.viewerTexture = { name: header.name, surfaces: [canvas] };
+        data = imageFormatConvertData(wasm, data, header.texture_format);
+        const levels = calcLevels(wasm, data, header.texture_format, header.width, header.height, header.mipmap_count);
+        device.uploadTextureData(this.gfxTexture, 0, levels);
+    }
+
+    public fillTextureMapping(dst: TextureMapping): void {
+        dst.gfxTexture = this.gfxTexture;
+        dst.gfxSampler = this.gfxSampler;
     }
 
     public destroy(device: GfxDevice): void {
@@ -607,29 +681,93 @@ export class UnityMaterialData {
     public name: string;
     public shaderName: string;
 
-    public mainTex: UnityTexture2DData | null = null;
-    public mainTexST = vec4.create();
-    public color = colorNewFromRGBA(0.4, 0.4, 0.4, 1.0);
+    public texEnvName: string[] = [];
+    public texture: (UnityTexture2DData | null)[] = [];
+    public textureST: vec4[] = [];
+
+    public colorName: string[] = [];
+    public color: Color[] = [];
+
+    public floatName: string[] = [];
+    public float: number[] = [];
 
     constructor(private location: AssetLocation, private header: UnityMaterial) {
         this.name = this.header.name;
     }
 
+    public findTexEnv(name: string): number {
+        return this.texEnvName.indexOf(name);
+    }
+
+    public fillTextureMapping(dst: TextureMapping, name: string): void {
+        const idx = this.findTexEnv(name);
+        if (idx >= 0 && this.texture[idx] !== null) {
+            dst.gfxTexture = this.texture[idx]!.gfxTexture;
+            dst.gfxSampler = this.texture[idx]!.gfxSampler;
+        } else {
+            dst.reset();
+        }
+    }
+
+    public fillTexEnvScaleBias(d: Float32Array, offs: number, name: string): number {
+        const idx = this.findTexEnv(name);
+        if (idx >= 0) {
+            return fillVec4v(d, offs, this.textureST[idx]);
+        } else {
+            return fillVec4(d, offs, 0);
+        }
+    }
+
+    public getColor(name: string): Color | null {
+        const idx = this.colorName.indexOf(name);
+        return fallbackUndefined(this.color[idx], null);
+    }
+
+    public fillColor(d: Float32Array, offs: number, name: string): number {
+        const idx = this.colorName.indexOf(name);
+        if (idx >= 0) {
+            return fillColor(d, offs, this.color[idx]);
+        } else {
+            return fillColor(d, offs, TransparentBlack);
+        }
+    }
+
+    public getFloat(name: string): number | null {
+        const idx = this.floatName.indexOf(name);
+        return fallbackUndefined(this.float[idx], null);
+    }
+
     public async load(assetSystem: UnityAssetSystem) {
-        const mainTex = this.header.saved_properties.find_tex_env('_MainTex');
-        if (mainTex !== undefined) {
-            this.mainTex = (await assetSystem.fetchResource(UnityAssetResourceType.Texture2D, this.location, mainTex.texture))!;
-            this.mainTexST[0] = mainTex.scale.x;
-            this.mainTexST[1] = mainTex.scale.y;
-            this.mainTexST[2] = mainTex.offset.x;
-            this.mainTexST[3] = mainTex.offset.y;
+        const saved_properties = this.header.saved_properties;
+
+        const texEnvCount = saved_properties.get_tex_env_count();
+        for (let i = 0; i < texEnvCount; i++) {
+            const texEnvName = saved_properties.get_tex_env_name(i);
+            this.texEnvName[i] = texEnvName;
+
+            const texEnv = saved_properties.get_tex_env(i)!;
+            this.texture[i] = await assetSystem.fetchResource(UnityAssetResourceType.Texture2D, this.location, texEnv.texture);
+            this.textureST[i] = vec4.fromValues(texEnv.scale.x, texEnv.scale.y, texEnv.offset.x, texEnv.offset.y);
+            texEnv.free();
         }
 
-        for (let i = 0; i < this.header.saved_properties.get_color_count(); i++) {
-            const name = this.header.saved_properties.get_color_name(i);
-            if (name === '_Color')
-                colorMult(this.color, this.color, this.header.saved_properties.get_color(i));
+        for (let i = 0; i < saved_properties.get_color_count(); i++) {
+            const colorName = saved_properties.get_color_name(i);
+            this.colorName[i] = colorName;
+
+            const color = saved_properties.get_color(i);
+            this.color[i] = colorNewFromRGBA(color.r, color.g, color.b, color.a);
+            color.free();
         }
+
+        for (let i = 0; i < saved_properties.get_float_count(); i++) {
+            const floatName = saved_properties.get_float_name(i);
+            this.floatName[i] = floatName;
+
+            this.float[i] = saved_properties.get_float(i);
+        }
+
+        saved_properties.free();
 
         const shader = (await assetSystem.fetchResource(UnityAssetResourceType.Shader, this.location, this.header.shader))!;
         this.shaderName = shader.name;

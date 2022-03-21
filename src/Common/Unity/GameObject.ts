@@ -1,10 +1,10 @@
 
 import type { UnityObject } from "../../../rust/pkg/index";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { GfxCullMode, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { SceneContext } from "../../SceneBase";
 import { AssetObjectData, UnityAssetSystem, RustModule, AssetLocation, UnityMeshData, UnityChannel, UnityMaterialData, UnityAssetResourceType } from "./AssetManager";
 import type * as wasm from '../../../rust/pkg/index';
-import { mat4, quat, vec3 } from "gl-matrix";
+import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import { assert, assertExists, fallbackUndefined, nArray } from "../../util";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../../viewer";
@@ -102,81 +102,49 @@ export class MeshFilter extends UnityComponent {
     }
 }
 
-class ChunkProgram extends DeviceProgram {
+export class UnityShaderProgramBase extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
 
-    public override both = `
+    public static Common = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    Mat4x4 u_ModelView;
+    Mat4x4 u_ProjectionView;
 };
 
 layout(std140) uniform ub_ShapeParams {
-    Mat4x3 u_ChunkModel;
+    // TODO(jstpierre): Skinned mesh
+    Mat4x3 u_BoneMatrix[1];
 };
-
-layout(std140) uniform ub_ColorParams {
-    vec4 u_Color;
-    vec4 u_MainTexST;
-};
-
-varying vec2 v_LightIntensity;
-varying vec2 v_TexCoord0;
 
 #ifdef VERT
 layout(location = ${UnityChannel.Vertex}) attribute vec3 a_Position;
 layout(location = ${UnityChannel.Normal}) attribute vec3 a_Normal;
+layout(location = ${UnityChannel.Tangent}) attribute vec3 a_Tangent;
 layout(location = ${UnityChannel.TexCoord0}) attribute vec2 a_TexCoord0;
+layout(location = ${UnityChannel.TexCoord1}) attribute vec2 a_TexCoord1;
+layout(location = ${UnityChannel.TexCoord2}) attribute vec2 a_TexCoord2;
+layout(location = ${UnityChannel.TexCoord3}) attribute vec2 a_TexCoord3;
+layout(location = ${UnityChannel.TexCoord4}) attribute vec2 a_TexCoord4;
+layout(location = ${UnityChannel.TexCoord5}) attribute vec2 a_TexCoord5;
+layout(location = ${UnityChannel.TexCoord6}) attribute vec2 a_TexCoord6;
+layout(location = ${UnityChannel.TexCoord7}) attribute vec2 a_TexCoord7;
+layout(location = ${UnityChannel.BlendIndices}) attribute vec4 a_BlendIndices;
+layout(location = ${UnityChannel.BlendWeight}) attribute vec4 a_BlendWeight;
 
 ${GfxShaderLibrary.MulNormalMatrix}
 ${GfxShaderLibrary.CalcScaleBias}
 
-void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(_Mat4x4(u_ChunkModel), vec4(a_Position, 1.0))));
-    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    vec3 normal = MulNormalMatrix(u_ChunkModel, normalize(a_Normal));
-    float t_LightIntensityF = dot(-normal, t_LightDirection);
-    float t_LightIntensityB = dot( normal, t_LightDirection);
-    v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
-    v_TexCoord0 = CalcScaleBias(a_TexCoord0, u_MainTexST);
-}
-#endif
-
-#ifdef FRAG
-uniform sampler2D u_Texture;
-
-void mainPS() {
-    vec4 color = u_Color * texture(u_Texture, v_TexCoord0);
-    float t_LightIntensity = gl_FrontFacing ? v_LightIntensity.x : v_LightIntensity.y;
-    float t_LightTint = 0.5 * t_LightIntensity;
-    gl_FragColor = sqrt(color + vec4(t_LightTint, t_LightTint, t_LightTint, 0.0));
+Mat4x3 CalcWorldFromLocalMatrix() {
+    return u_BoneMatrix[0];
 }
 #endif
 `;
 }
 
-class MaterialInstance {
-    private textureMapping = nArray(1, () => new TextureMapping());
-
-    constructor(private materialData: UnityMaterialData) {
-        if (this.materialData.mainTex !== null) {
-            this.textureMapping[0].gfxTexture = this.materialData.mainTex.gfxTexture;
-            this.textureMapping[0].gfxSampler = this.materialData.mainTex.gfxSampler;
-        }
-    }
-
-    public prepareToRender(renderInst: GfxRenderInst): void {
-        let offs = renderInst.allocateUniformBuffer(2, 8);
-        const d = renderInst.mapUniformBufferF32(2);
-
-        offs += fillColor(d, offs, this.materialData.color);
-        offs += fillVec4v(d, offs, this.materialData.mainTexST);
-
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-    }
+export abstract class UnityMaterialInstance {
+    public abstract prepareToRender(renderInst: GfxRenderInst): void;
 }
 
 export class MeshRenderer extends UnityComponent {
@@ -184,8 +152,7 @@ export class MeshRenderer extends UnityComponent {
     private staticBatchSubmeshCount = 0;
     private visible = true;
     private modelMatrix = mat4.create();
-    private program = new ChunkProgram();
-    private materials: (MaterialInstance | null)[];
+    private materials: (UnityMaterialInstance | null)[];
 
     constructor(runtime: UnityRuntime, public gameObject: GameObject, private header: wasm.MeshRenderer) {
         super();
@@ -211,7 +178,7 @@ export class MeshRenderer extends UnityComponent {
         if (materialData === null)
             return;
 
-        this.materials[i] = new MaterialInstance(materialData);
+        this.materials[i] = runtime.materialFactory.createMaterialInstance(runtime, materialData);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -238,21 +205,18 @@ export class MeshRenderer extends UnityComponent {
 
         const template = renderInstManager.pushTemplateRenderInst();
 
-        let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 12);
-        const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
+        let offs = template.allocateUniformBuffer(UnityShaderProgramBase.ub_ShapeParams, 12);
+        const mapped = template.mapUniformBufferF32(UnityShaderProgramBase.ub_ShapeParams);
 
         offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
 
         template.setInputLayoutAndState(meshData.inputLayout, meshData.inputState);
 
-        const chunkProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
-        template.setGfxProgram(chunkProgram);
-
         let submeshIndex = 0;
         const submeshCount = this.staticBatchSubmeshCount !== 0 ? this.staticBatchSubmeshCount : meshData.submeshes.length;
         for (let i = 0; i < this.materials.length; i++) {
             const submesh = meshData.submeshes[this.staticBatchSubmeshStart + submeshIndex];
-            if (submeshIndex < submeshCount)
+            if (submeshIndex < submeshCount - 1)
                 submeshIndex++;
 
             const material = this.materials[i];
@@ -263,6 +227,7 @@ export class MeshRenderer extends UnityComponent {
             material.prepareToRender(renderInst);
             const firstIndex = submesh.first_byte / meshData.indexBufferStride;
             renderInst.drawIndexes(submesh.index_count, firstIndex);
+            renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -326,11 +291,16 @@ interface ComponentConstructor<CompT, WasmT> {
     new(runtime: UnityRuntime, gameObject: GameObject, wasm: WasmT): CompT;
 }
 
+export abstract class UnityMaterialFactory {
+    public abstract createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance;
+}
+
 export class UnityRuntime {
     public gameObjects: GameObject[] = [];
     public components = new Map<number, UnityComponent>();
     public rootGameObjects: GameObject[] = [];
     public assetSystem: UnityAssetSystem;
+    public materialFactory: UnityMaterialFactory;
 
     constructor(private wasm: RustModule, public context: SceneContext, basePath: string) {
         this.assetSystem = new UnityAssetSystem(this.wasm, context.device, context.dataFetcher, basePath);

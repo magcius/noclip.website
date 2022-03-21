@@ -102,6 +102,10 @@ impl UnityPropertySheet {
         self.tex_envs.keys[idx].clone()
     }
 
+    pub fn get_tex_env(&self, idx: usize) -> Option<UnityTexEnv> {
+        Some(self.tex_envs.vals[idx].clone())
+    }
+
     pub fn find_tex_env(&self, name: String) -> Option<UnityTexEnv> {
         self.tex_envs.find(name)
     }
