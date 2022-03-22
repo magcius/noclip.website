@@ -1139,7 +1139,7 @@ interface studioSettings {
 
 export class StudioPanel extends FloatingPanel {
     static readonly FULL_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px, #494949 40px, #494949 59px, #a5a5a5 59px, #a5a5a5 61px, #2f2f2f 61px, #2f2f2f 80px, #494949 80px, #494949 100px, #2f2f2f 100px, #2f2f2f 119px, #a5a5a5 119px, #a5a5a5 121px)';
-    static DEFAULT_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px)';
+    static readonly DEFAULT_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px)';
     static readonly PREVIEW_STEP_TIME_MS: number = 16;
 
     private animationManager: CameraAnimationManager;
@@ -1175,7 +1175,6 @@ export class StudioPanel extends FloatingPanel {
     private recordPlaybackBtn: HTMLButtonElement;
 
     private timeLineContainerElement: HTMLElement;
-    private timelineControlsContainer: HTMLElement;
     private snapBtn: HTMLButtonElement;
     private playheadTimePositionInput: HTMLInputElement;
     private timelineLengthInput: HTMLInputElement;
@@ -1210,7 +1209,6 @@ export class StudioPanel extends FloatingPanel {
     private easeInSlider: Slider;
     private easeOutSlider: Slider;
 
-    private customValuesContainer: HTMLElement;
     private posXValueInputContainer: HTMLElement;
     private posYValueInputContainer: HTMLElement;
     private posZValueInputContainer: HTMLElement;
@@ -1857,7 +1855,6 @@ export class StudioPanel extends FloatingPanel {
         this.recordPlaybackBtn.onclick = () => this.playAnimation(true);
 
         this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
-        this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
 
         this.positionLookAtBankLabels = this.contents.querySelector('#positionLookAtBankLabels') as HTMLElement;
         this.fullLabels = this.contents.querySelector('#fullLabels') as HTMLElement;
@@ -1972,7 +1969,6 @@ export class StudioPanel extends FloatingPanel {
         this.selectKeyframeMsg = this.contents.querySelector('#selectKeyframeMsg') as HTMLElement;
         this.interpolationTab = this.contents.querySelector('#interpolationTab') as HTMLElement;
 
-        this.customValuesContainer = this.contents.querySelector('#customValuesContainer') as HTMLElement;
         this.posXValueInputContainer = this.contents.querySelector('#posXValueInputContainer') as HTMLElement;
         this.posYValueInputContainer = this.contents.querySelector('#posYValueInputContainer') as HTMLElement;
         this.posZValueInputContainer = this.contents.querySelector('#posZValueInputContainer') as HTMLElement;
