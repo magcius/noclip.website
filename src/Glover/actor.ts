@@ -576,8 +576,6 @@ class GloverMeshRenderer {
 
     // General rendering attributes
     private rspOutput: Render.GloverRSPOutput | null;
-    private vertexColorsEnabled = true;
-    private backfaceCullingEnabled = false;
     private drawCallInstances: Render.DrawCallInstance[] = [];
 
     private sprites: Sprite.GloverSpriteRenderer[] = [];
@@ -822,11 +820,13 @@ class GloverMeshRenderer {
     }
 
     public setBackfaceCullingEnabled(enabled: boolean): void {
-        this.backfaceCullingEnabled = enabled;
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setBackfaceCullingEnabled(enabled);
     }
 
     public setVertexColorsEnabled(enabled: boolean): void {
-        this.vertexColorsEnabled = enabled;        
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setVertexColorsEnabled(enabled);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawMatrix: mat4): void {
@@ -861,12 +861,6 @@ class GloverMeshRenderer {
                         drawCall.lastTextureUpdate = viewerInput.time;
                         drawCall.renderData!.updateTextures();
                     }
-                }
-                if (this.backfaceCullingEnabled) {
-                    drawCallInstance.setBackfaceCullingEnabled(true);
-                }
-                if (!this.vertexColorsEnabled) {
-                    drawCallInstance.setVertexColorsEnabled(false);
                 }
                 drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, false);
             }
