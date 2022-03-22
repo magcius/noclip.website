@@ -14,7 +14,7 @@ import * as GX from '../gx/gx_enum';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, texProjCameraSceneTex } from '../Camera';
-import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, DrawParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxChannelWriteMask, GfxProgram, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
@@ -47,7 +47,7 @@ import { d_a_sea } from './d_a_sea';
 import { dPa_control_c } from './d_particle';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
-import { GfxShaderLibrary } from '../gfx/helpers/ShaderHelpers';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
@@ -141,7 +141,7 @@ class dDlst_alphaModelData_c {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const materialParams = new MaterialParams();
 class dDlst_alphaModel_c {
     public color = colorNewCopy(White);
@@ -241,8 +241,8 @@ class dDlst_alphaModel_c {
 
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
-                mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
-                this.materialHelperBackRevZ.allocatePacketParamsDataOnInst(template, packetParams);
+                mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
+                this.materialHelperBackRevZ.allocatedrawParamsDataOnInst(template, drawParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
 
@@ -269,8 +269,8 @@ class dDlst_alphaModel_c {
         colorCopy(materialParams.u_Color[ColorKind.MAT0], this.color);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.orthoQuad.setOnRenderInst(renderInst);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.identity(drawParams.u_PosMtx[0]);
+        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
 
         this.reset();
@@ -945,7 +945,7 @@ class d_s_play extends fopScn {
 
     public vrboxLoaded: boolean = false;
 
-    public load(globals: dGlobals, userData: any): cPhs__Status {
+    public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
         this.treePacket = new TreePacket(globals);
@@ -957,7 +957,7 @@ class d_s_play extends fopScn {
         return cPhs__Status.Complete;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
         // Grass/Flowers/Trees
@@ -978,7 +978,7 @@ class d_s_play extends fopScn {
         this.grassPacket.draw(globals, renderInstManager, viewerInput);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         const device = globals.modelCache.device;
@@ -1052,8 +1052,8 @@ class SceneDesc {
             fpcCt_Handler(globals.frameworkGlobals, globals);
         };
 
-        const ret = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
-        assert(ret);
+        const pcId = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
+        assert(pcId !== null);
 
         fpcCt_Handler(globals.frameworkGlobals, globals);
         assert(globals.scnPlay !== undefined);

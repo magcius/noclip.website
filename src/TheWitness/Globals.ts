@@ -10,6 +10,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { assert, decodeString } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Occlusion_Manager } from "./Occlusion";
+import { Render_Material_Cache as Device_Material_Cache } from "./Render";
 
 const noclipSpaceFromTheWitnessSpace = mat4.fromValues(
     1, 0,  0, 0,
@@ -101,10 +102,12 @@ export class TheWitnessGlobals {
     public all_variables: Variables;
     public sky_variables: Variables;
     public occlusion_manager: Occlusion_Manager;
+    public device_material_cache: Device_Material_Cache;
 
     constructor(public device: GfxDevice, public asset_manager: Asset_Manager) {
         this.cache = new GfxRenderCache(this.device);
         this.occlusion_manager = new Occlusion_Manager(this.device);
+        this.device_material_cache = new Device_Material_Cache(this.cache);
 
         this.all_variables = parse_variables(this.asset_manager.load_asset(Asset_Type.Raw, `All.variables`)!);
         this.sky_variables = parse_variables(this.asset_manager.load_asset(Asset_Type.Raw, `sky.variables`)!);

@@ -17,6 +17,33 @@ import { GrezzoTextureHolder, MultiCmbScene } from './scenes';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';
 
+function bcsvHashLM(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash <<= 8;
+        hash += str.charCodeAt(i);
+        // const r6 = Math.floor((4993 * hash) >>> 32);
+        const r6 = Math.floor((4993 * hash) / 0x100000000);
+        const r0 = (((hash - r6) / 2) + r6) >> 24;
+        hash -= r0 * 33554393;
+    }
+    return hash;
+}
+
+function getField<T extends string | number>(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, name: string): T | null {
+    const hash = bcsvHashLM(name);
+    const index = BCSV.getFieldIndexFromHash(bcsv, hash);
+    if (index === -1)
+        return null;
+    return record[index] as T;
+}
+
+function getEntriesWithField<T extends string | number>(bcsv: BCSV.Bcsv, name: string, value: T): BCSV.Bcsv {
+    const fields: BCSV.BcsvField[] = bcsv.fields;
+    const records = bcsv.records.filter((record) => getField<T>(bcsv, record, name) === value);
+    return { fields, records };
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     public id: string;
 
@@ -80,7 +107,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         cmbRenderer.bindCMAB(cmab);
                     }
 
-                    const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
+                    const roomFurnitureEntries: BCSV.Bcsv = getEntriesWithField(furnitureInfo, "room_no", i);
                     for (let j = 0; j < roomFurnitureEntries.records.length; j++) {
                         const record = roomFurnitureEntries.records[j];
 
@@ -103,12 +130,12 @@ class SceneDesc implements Viewer.SceneDesc {
 
                         const cmbRenderer = new CmbInstance(device, textureHolder, cmbData, cmb.name);
 
-                        const rotationX = assertExists(BCSV.getField<number>(roomFurnitureEntries, record, "dir_x")) / 180 * Math.PI;
-                        const rotationY = assertExists(BCSV.getField<number>(roomFurnitureEntries, record, "dir_y")) / 180 * Math.PI;
-                        const rotationZ = assertExists(BCSV.getField<number>(roomFurnitureEntries, record, "dir_z")) / 180 * Math.PI;
-                        const translationX = assertExists(BCSV.getField<number>(roomFurnitureEntries, record, "pos_x"));
-                        const translationY = assertExists(BCSV.getField<number>(roomFurnitureEntries, record, "pos_y"));
-                        const translationZ = assertExists(BCSV.getField<number>(roomFurnitureEntries, record, "pos_z"));
+                        const rotationX = assertExists(getField<number>(roomFurnitureEntries, record, "dir_x")) / 180 * Math.PI;
+                        const rotationY = assertExists(getField<number>(roomFurnitureEntries, record, "dir_y")) / 180 * Math.PI;
+                        const rotationZ = assertExists(getField<number>(roomFurnitureEntries, record, "dir_z")) / 180 * Math.PI;
+                        const translationX = assertExists(getField<number>(roomFurnitureEntries, record, "pos_x"));
+                        const translationY = assertExists(getField<number>(roomFurnitureEntries, record, "pos_y"));
+                        const translationZ = assertExists(getField<number>(roomFurnitureEntries, record, "pos_z"));
                         computeModelMatrixSRT(cmbRenderer.modelMatrix, 1, 1, 1, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
                         renderer.cmbRenderers.push(cmbRenderer);

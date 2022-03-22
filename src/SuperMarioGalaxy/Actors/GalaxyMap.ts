@@ -16,6 +16,7 @@ import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from ".
 import { isFirstStep } from "../Spine";
 import { GalaxyNameSortTable } from "./MiscActor";
 import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers";
+import { getLayoutMessageDirect } from "../MessageData";
 
 export class GalaxyMapBackground extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder) {
@@ -24,12 +25,12 @@ export class GalaxyMapBackground extends LayoutActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.startAnim('Wait', 0);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('MapGalaxyBg');
     }
@@ -52,12 +53,12 @@ class GalaxyMapIcon extends LayoutActor {
         this.layoutManager!.getPaneCtrl('GalaxyIcon').start(this.layoutManager!, 'ButtonWait', 0);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         setLayoutScalePosAtPaneScaleTrans(this, this.parent, this.mapPaneName);
         super.calcAnim(sceneObjHolder);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.syncStatus(sceneObjHolder);
     }
@@ -91,7 +92,7 @@ class GalaxyMapIcon extends LayoutActor {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('MapGalaxyIcon');
     }
@@ -114,7 +115,7 @@ class GalaxyNamePlate extends LayoutActor {
         this.setAnimFrameAndStop(unknown, 1);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('GalaxyNamePlate');
     }
@@ -132,29 +133,29 @@ class GalaxyMapDomeIcon extends LayoutActor {
 
         this.namePlate = new GalaxyNamePlate(sceneObjHolder);
 
-        const namePlateText = sceneObjHolder.messageDataHolder!.getStringById(`ScenarioName_AstroDome${this.domeIndex}`)!;
+        const namePlateText = getLayoutMessageDirect(sceneObjHolder, `ScenarioName_AstroDome${this.domeIndex}`)!;
         this.namePlate.show(namePlateText, 2, false, true);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.namePlate.makeActorAppeared(sceneObjHolder);
         this.syncStatus(sceneObjHolder);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         setLayoutScalePosAtPaneScaleTrans(this, this.parent, this.mapPaneName);
         setLayoutScalePosAtPaneScaleTrans(this.namePlate, this.parent, this.mapPaneName);
         super.calcAnim(sceneObjHolder);
         this.namePlate.calcAnim(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         super.movement(sceneObjHolder);
         this.namePlate.movement(sceneObjHolder);
     }
 
-    public drawLayout(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
+    public override drawLayout(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
         super.drawLayout(sceneObjHolder, renderInstManager, drawInfo);
         this.namePlate.drawLayout(sceneObjHolder, renderInstManager, drawInfo);
     }
@@ -175,7 +176,7 @@ class GalaxyMapDomeIcon extends LayoutActor {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('MapDomeIcon');
         GalaxyNamePlate.requestArchives(sceneObjHolder);
@@ -192,7 +193,7 @@ class GalaxyMapMarioIcon extends LayoutActor {
         this.setAnimFrameAndStop(isLuigi ? 1 : 0, 1);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         setLayoutScalePosAtPaneScaleTrans(this, this.parent, this.mapPaneName);
         this.layoutManager!.getRootPane().alpha = this.parent.layoutManager!.getPane(this.mapPaneName).alpha;
         super.calcAnim(sceneObjHolder);
@@ -203,7 +204,7 @@ class GalaxyMapMarioIcon extends LayoutActor {
         this.startAnim('Wait', 0);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('IconMario');
     }
@@ -256,7 +257,7 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
         });
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         for (let i = 0; i < this.galaxyMapIcon.length; i++)
             this.galaxyMapIcon[i].makeActorAppeared(sceneObjHolder);
@@ -267,7 +268,7 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
         setTextBoxRecursive(this, 'Star', '131');
     }
 
-    public movement(sceneObjHolder: SceneObjHolder): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         super.movement(sceneObjHolder);
         for (let i = 0; i < this.galaxyMapIcon.length; i++)
             this.galaxyMapIcon[i].movement(sceneObjHolder);
@@ -276,7 +277,7 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
         this.galaxyMapMarioIcon.movement(sceneObjHolder);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         super.calcAnim(sceneObjHolder);
         for (let i = 0; i < this.galaxyMapIcon.length; i++)
             this.galaxyMapIcon[i].calcAnim(sceneObjHolder);
@@ -294,7 +295,7 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
         this.galaxyMapMarioIcon.drawLayout(sceneObjHolder, renderInstManager, drawInfo);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: GalaxyMapNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: GalaxyMapNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === GalaxyMapNrv.FadeinGalaxyMap) {
@@ -331,7 +332,7 @@ class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
         // Nothing to do.
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         GalaxyNameSortTable.requestArchives(sceneObjHolder);
         GalaxyMapIcon.requestArchives(sceneObjHolder);
@@ -363,14 +364,14 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
         connectToSceneLayoutOnPause(sceneObjHolder, this);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         super.calcAnim(sceneObjHolder);
 
         this.galaxyMap.calcAnim(sceneObjHolder);
         this.galaxyMapBackground.calcAnim(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         super.movement(sceneObjHolder);
 
         this.galaxyMap.movement(sceneObjHolder);
@@ -438,7 +439,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
         return layoutTargetID;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         super.requestArchives(sceneObjHolder);
         GalaxyMapBackground.requestArchives(sceneObjHolder);
         GalaxyMap.requestArchives(sceneObjHolder);

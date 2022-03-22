@@ -41,7 +41,3 @@ export interface SceneGroup {
     hidden?: boolean;
     altName?: string;
 }
-
-export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
-    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
-}

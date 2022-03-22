@@ -1,4 +1,4 @@
-import { Checkbox, Panel, RENDER_HACKS_ICON, setElementHighlighted, SingleSelect, Slider } from "../ui";
+import { RENDER_HACKS_ICON, Slider } from "../ui";
 
 const CAMERA_ICON = '<svg viewBox="11.873 3.208 20.716 18.675" width="20.716" height="18.675"><rect x="12.926" y="10.569" width="1.388" height="4.019" style="fill: rgb(255, 255, 255);"></rect><rect x="14.16" y="10.955" width="3.508" height="2.997" style="fill: rgb(255, 255, 255);"></rect><rect x="17.514" y="9.769" width="0.867" height="7.932" style="fill: rgb(255, 255, 255);"></rect><rect x="18.256" y="8.911" width="10.457" height="8.79" style="fill: rgb(255, 255, 255);"></rect><rect x="27.518" y="7.87" width="2.072" height="2.284" style="fill: rgb(255, 255, 255);"></rect><rect x="28.482" y="7.013" width="2.149" height="2.188" style="fill: rgb(255, 255, 255);"></rect><rect x="29.407" y="7.003" width="2.169" height="1.079" style="fill: rgb(255, 255, 255);"></rect></svg>';
 

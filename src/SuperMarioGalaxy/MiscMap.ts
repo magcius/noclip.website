@@ -1,7 +1,7 @@
 
 import { NameObj, MovementType, DrawType } from "./NameObj";
 import { OceanBowl } from "./Actors/OceanBowl";
-import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames, SceneObj } from "./Main";
+import { SceneObjHolder, SpecialTextureType, SceneObj } from "./Main";
 import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST, isValidSwitchA } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
@@ -16,7 +16,7 @@ import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
@@ -25,7 +25,7 @@ import { GX_Program } from "../gx/gx_material";
 
 //#region Water
 export class WaterArea extends AreaObj {
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return "Water";
     }
 }
@@ -99,10 +99,10 @@ export class WaterAreaHolder extends NameObj {
         // TODO(jstpierre)
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        getCamPos(scratchVec3, viewerInput.camera);
+        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
 
         const inWater = getWaterAreaObj(this.cameraWaterInfo, sceneObjHolder, scratchVec3);
         if (inWater) {
@@ -133,7 +133,7 @@ export class WaterAreaHolder extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         WaterCameraFilter.requestArchives(sceneObjHolder);
     }
 }
@@ -227,7 +227,7 @@ function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: num
     dst[13] = y + -x * sin - y * cos;
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 const enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
 export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
@@ -281,18 +281,18 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (isCameraInWater(sceneObjHolder)) {
-            this.angle += 0.5 * getDeltaTimeFrames(viewerInput);
+            this.angle += 0.5 * sceneObjHolder.deltaTimeFrames;
 
             const cameraDepth = saturate(sceneObjHolder.waterAreaHolder!.cameraWaterInfo.depth / 3000.0);
             colorLerp(this.color, this.colorShallow, this.colorDeep, cameraDepth);
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterCameraFilterNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterCameraFilterNrv, deltaTimeFrames: number): void {
         if (currentNerve === WaterCameraFilterNrv.Air) {
             if (isCameraInWater(sceneObjHolder))
                 this.setNerve(WaterCameraFilterNrv.AirToWater);
@@ -326,7 +326,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         return this.getCurrentNerve() !== WaterCameraFilterNrv.Air;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!this.isOnWaterCameraFilter())
@@ -372,17 +372,17 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         renderInst.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.identity(drawParams.u_PosMtx[0]);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.filterTexture.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('WaterCameraFilter');
     }
 }
@@ -394,13 +394,13 @@ export class SwitchArea extends AreaObj {
     public turnOffSwitch: boolean;
     public needsPlayerOnGround: boolean;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.forwardSwitchB = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
         this.turnOffSwitch = getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), -1));
         this.needsPlayerOnGround = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         connectToSceneAreaObj(sceneObjHolder, this);
     }
 
@@ -417,7 +417,7 @@ export class SwitchArea extends AreaObj {
             return !this.switchCtrl.isOnSwitchA(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (!this.isUpdate(sceneObjHolder))
             return;
 
@@ -437,7 +437,7 @@ export class SwitchArea extends AreaObj {
         }
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return 'SwitchArea';
     }
 }
@@ -459,15 +459,15 @@ export function createSwitchCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder:
 export class HazeCube extends AreaObj {
     public depth: number;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.depth = fallback(getJMapInfoArg0(infoIter), 1000);
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.create(SceneObj.HeatHazeDirector);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         HeatHazeDirector.requestArchives(sceneObjHolder);
     }
 }
@@ -485,11 +485,11 @@ export function requestArchivesHazeCube(sceneObjHolder: SceneObjHolder, infoIter
 export class MercatorTransformCube extends AreaObj {
     public sphereRadius: number;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.sphereRadius = fallback(getJMapInfoArg0(infoIter), 3000.0);
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
     }
 }
 
@@ -500,16 +500,16 @@ export function createMercatorCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: S
 
 //#region DeathArea
 export class DeathArea extends AreaObj {
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         connectToSceneAreaObj(sceneObjHolder, this);
     }
 
-    public isInVolume(v: ReadonlyVec3) {
+    public override isInVolume(v: ReadonlyVec3) {
         // TODO(jstpierre): SwitchA
         return super.isInVolume(v);
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return 'DeathArea';
     }
 }

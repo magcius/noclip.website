@@ -1,16 +1,17 @@
 
 import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
+import { SMGSceneDescBase, ModelCache, SceneObjHolder, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
 import { NameObj, MovementType, GameBits } from './NameObj';
 import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
 import { vec3, mat4 } from 'gl-matrix';
 import { TicoRail } from './Actors/NPC';
+import { SceneContext } from '../SceneBase';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
-    public pathBase: string = `SuperMarioGalaxy`;
-    public gameBit = GameBits.SMG1;
+    public override pathBase: string = `SuperMarioGalaxy`;
+    public override gameBit = GameBits.SMG1;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
         const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
@@ -79,7 +80,7 @@ class DayInTheLifeOfALumaController extends NameObj {
         this.switchCounter = isShortRail ? 2000 : -1;
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
         this.ticos = sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail') as TicoRail[];
         this.pickNewTico();
@@ -129,13 +130,13 @@ class DayInTheLifeOfALumaController extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        this.tryPickNewTico(getDeltaTimeFrames(viewerInput));
+        this.tryPickNewTico(sceneObjHolder.deltaTimeFrames);
         this.camera();
 
-        const camera = viewerInput.camera;
+        const camera = sceneObjHolder.viewerInput.camera;
         mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
         mat4.invert(camera.worldMatrix, camera.viewMatrix);
         camera.worldMatrixUpdated();
@@ -145,12 +146,12 @@ class DayInTheLifeOfALumaController extends NameObj {
 class DayInTheLifeOfALuma extends SMG1SceneDesc {
     private controller: DayInTheLifeOfALumaController;
 
-    public placeExtra(sceneObjHolder: SceneObjHolder): void {
+    public override placeExtra(sceneObjHolder: SceneObjHolder): void {
         this.controller = new DayInTheLifeOfALumaController(sceneObjHolder);
     }
 
-    public patchRenderer(renderer: SMGRenderer): void {
-        renderer.isInteractive = false;
+    protected override setup(context: SceneContext, renderer: SMGRenderer): void {
+        context.inputManager.isInteractive = false;
     }
 }
 

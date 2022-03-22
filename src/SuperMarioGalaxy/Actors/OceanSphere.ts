@@ -4,7 +4,7 @@ import { LiveActor, ZoneAndLayer, isDead } from "../LiveActor";
 import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { assert } from "../../util";
 import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ, computeMatrixWithoutTranslation } from "../../MathHelpers";
-import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "../Main";
+import { SceneObjHolder, SceneObj } from "../Main";
 import { JMapInfoIter } from "../JMapInfo";
 import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "../ActorUtil";
 import { DrawType, MovementType } from "../NameObj";
@@ -14,7 +14,7 @@ import { isEqualStageName } from "./MiscActor";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from '../../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../../gx/gx_render';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../../Color';
 import { WaterAreaHolder, WaterInfo } from '../MiscMap';
@@ -151,7 +151,7 @@ class OceanSpherePlaneEdge {
 const enum OceanSphereNrv { Wait }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 export class OceanSphere extends LiveActor<OceanSphereNrv> {
     private pointCount: number;
@@ -352,7 +352,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.planeEdges.push(new OceanSpherePlaneEdge(count, pos, Vec3NegZ,  Vec3UnitX, vec2.set(v1, 0.0, 0.0), vec2.set(v2, 1.0, 0.0)));
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         this.isCameraInside = false;
 
         // TODO(jstpierre): getCameraWaterInfo
@@ -360,7 +360,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             this.isCameraInside = true;
         }
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.wave1Time += 0.1 * deltaTimeFrames;
         this.wave2Time += 0.1 * deltaTimeFrames;
@@ -456,7 +456,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         }
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -465,8 +465,8 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         const device = sceneObjHolder.modelCache.device;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelperEnvBack.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialHelperEnvBack.allocatedrawParamsDataOnInst(template, drawParams);
 
         if (this.isStartPosCamera && !this.isCameraInside) {
             // TODO(jstpierre)
@@ -658,14 +658,14 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         }
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.oceanSphereTex.destroy(device);
         this.oceanSphereEnvRefTex.destroy(device);
         this.ddrawXlu.destroy(device);
         this.ddrawEnv.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
         WaterAreaHolder.requestArchives(sceneObjHolder);
     }

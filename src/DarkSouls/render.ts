@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
@@ -22,7 +22,7 @@ import { interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { colorNewCopy, White } from "../Color";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { dfRange, dfShow } from "../DebugFloaters";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
@@ -178,7 +178,7 @@ export class FLVERData {
             const batch = flver.batches[i];
             for (let j = 0; j < batch.primitiveIndexes.length; j++) {
                 const primitive = flver.primitives[batch.primitiveIndexes[j]];
-                const triangleIndexData = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TRISTRIP, primitive.indexData.createTypedArray(Uint16Array)));
+                const triangleIndexData = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TriStrips, primitive.indexData.createTypedArray(Uint16Array)));
                 const triangleIndexCount = triangleIndexData.byteLength / 2;
                 indexBufferDatas.push(new ArrayBufferSlice(triangleIndexData.buffer));
                 triangleIndexCounts.push(triangleIndexCount);
@@ -302,7 +302,7 @@ uniform samplerCube u_TextureEnvDif;
 uniform samplerCube u_TextureEnvSpc;
 `;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 ${DKSProgram.BindingDefinitions}
@@ -317,7 +317,7 @@ varying vec3 v_TangentSpaceBasis1;
 varying vec3 v_TangentSpaceBasis2;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = ${DKSProgram.a_Position})  in vec3 a_Position;
 layout(location = ${DKSProgram.a_Color})     in vec4 a_Color;
 layout(location = ${DKSProgram.a_TexCoord0}) in vec4 a_TexCoord0;
@@ -338,11 +338,11 @@ void main() {
     v_PositionWorld = t_PositionWorld.xyz;
     gl_Position = Mul(u_ProjectionView, t_PositionWorld);
 
-    vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0));
-    vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0));
+    vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Normal.xyz));
+    vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Tangent.xyz));
 
 #ifdef HAS_BITANGENT
-    vec3 t_TangentTWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0));
+    vec3 t_TangentTWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Bitangent.xyz));
 #else
     vec3 t_TangentTWorld = normalize(cross(t_NormalWorld, t_TangentSWorld));
 #endif
@@ -1153,7 +1153,18 @@ function fillSceneParamsData(d: Float32Array, view: CameraView, offs: number = 0
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 10 },
+    { numUniformBuffers: 2, numSamplers: 10, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },
+    ] },
 ];
 
 function modelMatrixFromPart(m: mat4, part: Part): void {

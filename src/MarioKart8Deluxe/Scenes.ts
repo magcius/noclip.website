@@ -49,10 +49,10 @@ class MarioKart8SceneDesc implements SceneDesc {
 }
 
 const id = 'MarioKart8Deluxe';
-const name = 'Mario Kart 8: Deluxe';
+const name = 'Mario Kart 8 Deluxe';
 const sceneDescs = [
     "Mushroom Cup",
-    new MarioKart8SceneDesc('Gu_FirstCircuit', "Mario Circuit"),
+    new MarioKart8SceneDesc('Gu_FirstCircuit', "Mario Kart Stadium"),
     new MarioKart8SceneDesc('Gu_WaterPark', "Water Park"),
     new MarioKart8SceneDesc('Gu_Cake', "Sweet Sweet Canyon"),
     new MarioKart8SceneDesc('Gu_DossunIseki', "Thwomp Ruins"),
@@ -72,7 +72,7 @@ const sceneDescs = [
     new MarioKart8SceneDesc('Gu_BowserCastle', "Bowser's Castle"),
     new MarioKart8SceneDesc('Gu_RainbowRoad', "Rainbow Road"),
     "Shell Cup",
-    new MarioKart8SceneDesc('Gwii_MooMooMeadows', "WII Moo Moo Meadows"),
+    new MarioKart8SceneDesc('Gwii_MooMooMeadows', "Wii Moo Moo Meadows"),
     new MarioKart8SceneDesc('Gagb_MarioCircuit', "GBA Mario Circuit"),
     new MarioKart8SceneDesc('Gds_PukupukuBeach', "DS Cheep Cheep Beach"),
     new MarioKart8SceneDesc('G64_KinopioHighway', "N64 Toad's Turnpike"),
@@ -89,7 +89,7 @@ const sceneDescs = [
     "Lightning Cup",
     new MarioKart8SceneDesc('Gds_TickTockClock', "DS Tick-Tock Clock"),
     new MarioKart8SceneDesc('G3ds_PackunSlider', "3DS Piranha Plant Slide"),
-    new MarioKart8SceneDesc('Gwii_GrumbleVolcano', "WII GrumbleVolcano"),
+    new MarioKart8SceneDesc('Gwii_GrumbleVolcano', "Wii Grumble Volcano"),
     new MarioKart8SceneDesc('G64_RainbowRoad', "N64 Rainbow Road"),
     "Egg Cup",
     new MarioKart8SceneDesc('Dgc_YoshiCircuit', "GCN Yoshi Circuit"),
@@ -97,7 +97,7 @@ const sceneDescs = [
     new MarioKart8SceneDesc('Du_DragonRoad', "Dragon Driftway"),
     new MarioKart8SceneDesc('Du_MuteCity', "Mute City"),
     "Triforce Cup",
-    new MarioKart8SceneDesc('Dwii_WariosMine', "WII Wario's Gold Mine"),
+    new MarioKart8SceneDesc('Dwii_WariosMine', "Wii Wario's Gold Mine"),
     new MarioKart8SceneDesc('Dsfc_RainbowRoad', "SNES Rainbow Road"),
     new MarioKart8SceneDesc('Du_IcePark', "Ice Ice Outpost"),
     new MarioKart8SceneDesc('Du_Hyrule', "Hyrule Circuit"),

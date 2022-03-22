@@ -1,13 +1,13 @@
 
 // Misc NPC actors.
 
-import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
+import { quat, vec3, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj } from '../ActorUtil';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
-import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
+import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
 import { getObjectName, SceneObjHolder } from '../Main';
 import { DrawBufferType } from '../NameObj';
@@ -21,6 +21,7 @@ import { tryRegisterDemoCast } from '../Demo';
 import { createPartsModelMapObj, PartsModel } from './PartsModel';
 import { ViewerRenderInput } from '../../viewer';
 import { initFur } from '../Fur';
+import { createTalkCtrl, createTalkCtrlDirect, TalkMessageCtrl, tryTalkNearPlayer } from '../Talk';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -113,7 +114,11 @@ class NPCActorCaps<TNerve extends number> {
     public writeDeadSwitch = true;
     // public initStarPointerTarget = true;
     public initModelManager = true;
-    // public initTalkCtrl = true;
+    public initMessage = true;
+    public talkDirect = false;
+    public talkOffset = vec3.fromValues(0.0, 150.0, 0.0);
+    public talkJointName: string | null = null;
+    public talkMtx: ReadonlyMat4 | null = null;
 
     public initHitSensor = true;
     public hitSensorJointName: string | null = null;
@@ -150,30 +155,30 @@ function addHitSensorAtJointNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor
 
 class ActorTalkParam {
     public turnOnWait: boolean = true;
-    // public turnOnTalk: boolean = false;
+    public turnOnTalk: boolean = false;
     public turnDistance: number = 2000.0;
     public turnSpeed: number = 4.0;
     public turnVerticalSpeed: number = 0.0;
     public turnVerticalMaxAngle: number = 0.0;
     public waitActionName: string | null = null;
     public waitTurnActionName: string | null = null;
-    // public talkActionName: string | null = null;
-    // public talkTurnActionName: string | null = null;
+    public talkActionName: string | null = null;
+    public talkTurnActionName: string | null = null;
 
     public setNoTurnAction(actionName: string): void {
         this.waitActionName = actionName;
-        // this.talkActionName = actionName;
+        this.talkActionName = actionName;
         this.waitTurnActionName = null;
-        // this.talkTurnActionName = null;
+        this.talkTurnActionName = null;
         this.turnOnWait = false;
-        // this.turnOnTalk = false;
+        this.turnOnTalk = false;
     }
 
     public setSingleAction(actionName: string): void {
         this.waitActionName = actionName;
         this.waitTurnActionName = actionName;
-        // this.talkActionName = actionName;
-        // this.talkTurnActionName = actionName;
+        this.talkActionName = actionName;
+        this.talkTurnActionName = actionName;
     }
 }
 
@@ -197,6 +202,8 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public railTurnSpeed: number = 0.08;
     public turnBckRate = 1.0;
     public railGrounded: boolean = false;
+
+    public talkCtrl: TalkMessageCtrl | null = null;
 
     public initialize(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, caps: NPCActorCaps<TNerve>) {
         if (caps.initDefaultPos)
@@ -250,6 +257,14 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
                 onCalcShadow(this, null);
         }
 
+        if (caps.initMessage) {
+            const talkMtx = caps.talkJointName !== null ? getJointMtxByName(this, caps.talkJointName) : caps.talkMtx;
+            if (caps.talkDirect)
+                this.initTalkCtrlDirect(sceneObjHolder, caps.name, caps.talkOffset, caps.talkMtx);
+            else
+                this.initTalkCtrl(sceneObjHolder, infoIter, caps.name, caps.talkOffset, caps.talkMtx);
+        }
+
         useStageSwitchWriteA(sceneObjHolder, this, infoIter);
         useStageSwitchWriteB(sceneObjHolder, this, infoIter);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
@@ -258,7 +273,19 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
             useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public initTalkCtrl(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, name: string, offset: ReadonlyVec3 = Vec3Zero, talkMtx: ReadonlyMat4 | null = null): void {
+        this.talkCtrl = createTalkCtrl(sceneObjHolder, this, infoIter, name, offset, talkMtx);
+        if (this.talkCtrl !== null)
+            this.talkCtrl.rootNodeAutomatic = true;
+    }
+
+    public initTalkCtrlDirect(sceneObjHolder: SceneObjHolder, messageId: string, offset: ReadonlyVec3 = Vec3Zero, talkMtx: ReadonlyMat4 | null = null): void {
+        this.talkCtrl = createTalkCtrlDirect(sceneObjHolder, this, messageId, offset, talkMtx);
+        if (this.talkCtrl !== null)
+            this.talkCtrl.rootNodeAutomatic = true;
+    }
+
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         calcGravity(sceneObjHolder, this);
         if (this.talkParam.waitActionName !== null) {
             startAction(this, this.talkParam.waitActionName);
@@ -274,7 +301,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         vec3.copy(this.initPoseTrans, this.translation);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (!vec3.equals(this.rotation, this.lastRotation)) {
             quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
             vec3.copy(this.lastRotation, this.rotation);
@@ -299,7 +326,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         }
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         if (this.goods0 !== null)
             this.goods0.makeActorAppeared(sceneObjHolder);
@@ -307,7 +334,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.goods1.makeActorAppeared(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
         if (this.goods0 !== null)
             this.goods0.makeActorDead(sceneObjHolder);
@@ -316,10 +343,13 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     }
 
     protected exeWaitDefault(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
-        // if (tryStartReactionAndPushNerve(this, this.reactionNerve)
+        // if (tryStartReactionAndPushNerve(this, this.reactionNerve))
         //     return;
 
-        tryStartTurnAction(sceneObjHolder, this);
+        if (this.talkCtrl !== null)
+            tryTalkNearPlayerAndStartTalkAction(sceneObjHolder, this);
+        else
+            tryStartTurnAction(sceneObjHolder, this);
     }
 
     public turnToPlayerSpeed(sceneObjHolder: SceneObjHolder, speedDeg: number): boolean {
@@ -385,7 +415,7 @@ export class Butler extends NPCActor<ButlerNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ButlerNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ButlerNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ButlerNrv.Wait) {
@@ -404,7 +434,7 @@ export class Rosetta extends NPCActor {
         caps.initShadowType = InitShadowType.CSV;
         caps.initHitSensor = false;
         caps.initBinder = false;
-        // caps.talkJointName = 'Chin';
+        caps.talkJointName = 'Chin';
         caps.waitNerve = RosettaNrv.Wait;
         // caps.reactionNerve = RosettaNrv.Reaction;
         this.initialize(sceneObjHolder, infoIter, caps);
@@ -418,7 +448,7 @@ export class Rosetta extends NPCActor {
         this.talkParam.waitActionName = 'WaitA';
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RosettaNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RosettaNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === RosettaNrv.Wait) {
@@ -445,12 +475,13 @@ export class Tico extends NPCActor<TicoNrv> {
 
         // Tico::initBase()
         const caps = new NPCActorCaps('Tico');
-        // caps.initTalkCtrl = false;
+        caps.initMessage = false;
         caps.initShadowType = InitShadowType.CSV;
         caps.waitNerve = TicoNrv.Wait;
         // caps.hitSensorJointName = 'Body';
         caps.hitSensorRadius = 60.0;
         this.initialize(sceneObjHolder, infoIter, caps);
+        this.initMessage(sceneObjHolder, infoIter, 'Tico');
 
         this.walkActionName = 'Fly';
         this.desiredRailSpeed = 8.0;
@@ -466,7 +497,12 @@ export class Tico extends NPCActor<TicoNrv> {
         setBckFrameAtRandom(this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoNrv, deltaTimeFrames: number): void {
+    private initMessage(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, name: string): void {
+        vec3.set(scratchVec3a, 0.0, 120.0, 0.0);
+        this.initTalkCtrl(sceneObjHolder, infoIter, name, scratchVec3a);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TicoNrv.Wait) {
@@ -474,7 +510,7 @@ export class Tico extends NPCActor<TicoNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Tico');
     }
 }
@@ -583,7 +619,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (this.mapObjConnector !== null) {
             this.mapObjConnector.connect();
             // TODO(jstpierre): faceQuat
@@ -593,7 +629,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === KinopioNrv.Wait) {
@@ -621,7 +657,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         // TODO(jstpierre): Rail point arg0.
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Kinopio');
         const itemGoodsIdx = fallback(getJMapInfoArg7(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
@@ -646,7 +682,7 @@ export class Peach extends NPCActor<PeachNrv> {
     }
 
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PeachNrv.Wait) {
@@ -707,26 +743,44 @@ function tryStartTurnAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): bo
 
     if (isNearPlayer(sceneObjHolder, actor, actor.talkParam.turnDistance)) {
         if (actor.talkParam.turnOnWait) {
-            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed, actor.talkParam.turnVerticalSpeed, actor.talkParam.turnVerticalMaxAngle);
+            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalMaxAngle);
             shouldUseTurnAction = !doneTurning;
         }
     } else {
         if (actor.talkParam.turnOnWait) {
-            const doneTurning = actor.turnToDefault(actor.talkParam.turnSpeed);
+            const doneTurning = actor.turnToDefault(actor.talkParam.turnSpeed * sceneObjHolder.deltaTimeFrames);
             shouldUseTurnAction = !doneTurning;
         }
     }
 
     const actionName = shouldUseTurnAction ? actor.talkParam.waitTurnActionName : actor.talkParam.waitActionName;
-    if (actionName !== null) {
+    if (actionName !== null)
         return tryStartAction(actor, actionName);
-    } else {
+    else
         return false;
-    }
 }
 
-function tryStartTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): void {
-    tryStartTurnAction(sceneObjHolder, actor);
+function tryTalkNearPlayerAndStartTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): void {
+    tryStartTalkAction(sceneObjHolder, actor);
+    tryTalkNearPlayer(sceneObjHolder, actor.talkCtrl);
+}
+
+function tryStartTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): boolean {
+    if (actor.talkCtrl !== null && actor.talkCtrl.isTalking()) {
+        let shouldUseTurnAction = false;
+        if (actor.talkParam.turnOnTalk) {
+            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalSpeed * sceneObjHolder.deltaTimeFrames, actor.talkParam.turnVerticalMaxAngle);
+            shouldUseTurnAction = !doneTurning;
+        }
+
+        const actionName = shouldUseTurnAction ? actor.talkParam.talkTurnActionName : actor.talkParam.talkActionName;
+        if (actionName !== null)
+            return tryStartAction(actor, actionName);
+        else
+            return false;
+    } else {
+        return tryStartTurnAction(sceneObjHolder, actor);
+    }
 }
 
 function tryStartMoveTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor, deltaTimeFrames: number): void {
@@ -750,7 +804,7 @@ function tryStartMoveTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor,
 
 function tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor, deltaTimeFrames: number): void {
     tryStartMoveTalkAction(sceneObjHolder, actor, deltaTimeFrames);
-    // tryTalkNearPlayer(actor);
+    tryTalkNearPlayer(sceneObjHolder, actor.talkCtrl);
 }
 
 class RemovableTurtle {
@@ -863,7 +917,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         if (this.mode === 2 || this.mode === 3) {
@@ -880,7 +934,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PenguinNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PenguinNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         // drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.translation, this.gravityVector, 100);
@@ -909,7 +963,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
 
         const arg0 = getJMapInfoArg0(infoIter);
@@ -940,7 +994,7 @@ export class PenguinRacer extends NPCActor {
         startAction(this, 'RacerWait');
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Penguin');
         requestArchivesForNPCGoods(sceneObjHolder, getObjectName(infoIter), 0);
     }
@@ -978,7 +1032,7 @@ export class TicoComet extends NPCActor<TicoCometNrv> {
         startAction(this, 'Wait');
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoCometNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoCometNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TicoCometNrv.Wait) {
@@ -986,7 +1040,7 @@ export class TicoComet extends NPCActor<TicoCometNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         const itemGoodsIdx = 0;
         requestArchivesForNPCGoods(sceneObjHolder, 'TicoComet', itemGoodsIdx);
@@ -1041,7 +1095,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             this.initNerve(TicoRailNrv.Move);
     }
 
-    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+    public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
         if (isSensorPlayer(otherSensor)) {
             // sendMsgPush
         } else if (isSensorNpc(otherSensor)) {
@@ -1068,7 +1122,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return vec3.equals(getRailPointPosStart(this), getRailPointPosStart(other)) && vec3.equals(getRailPointPosEnd(this), getRailPointPosEnd(other));
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.TicoRail_StartTalk) {
             const currentNerve = this.getCurrentNerve();
 
@@ -1094,7 +1148,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         // Gravity vector
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.direction);
     }
@@ -1111,7 +1165,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return false;
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         // this.railRider!.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
@@ -1244,7 +1298,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return this.getCurrentNerve() === TicoRailNrv.Wait && isGreaterStep(this, step);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Tico');
     }
 }
@@ -1299,18 +1353,18 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    public override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         vec3.negate(scratchVec3a, this.gravityVector);
         blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.2, 0.2);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StrayTicoNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StrayTicoNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === StrayTicoNrv.Wait) {
@@ -1324,7 +1378,7 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('StrayTico');
         sceneObjHolder.modelCache.requestObjectData('ItemBubble');
     }
@@ -1355,7 +1409,7 @@ export class CollectTico extends LiveActor<CollectTicoNrv> {
         this.makeActorDead(sceneObjHolder);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         StrayTico.requestArchives(sceneObjHolder);
     }
 }
@@ -1415,7 +1469,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         initFur(sceneObjHolder, this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HoneyBeeNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HoneyBeeNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === HoneyBeeNrv.Wait) {
@@ -1446,7 +1500,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
                 startBck(this, 'Wait');
 
             if (isBckPlaying(this, 'Wait')) {
-                if (/* this.talkMessageCtrl !== null && !tryTalkNearPlayer(this.talkMessageCtrl) */ false) {
+                if (this.talkCtrl !== null && !tryTalkNearPlayer(sceneObjHolder, this.talkCtrl) ) {
                     // turnToPlayer
                 }
 
@@ -1465,7 +1519,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('HoneyBee');
         const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'HoneyBee', itemGoodsIdx);
@@ -1482,5 +1536,120 @@ export class RosettaChair extends LiveActor {
         startBck(this, 'RosettaChair');
 
         this.makeActorAppeared(sceneObjHolder);
+    }
+}
+
+const enum CaretakerNrv { Talk }
+export class Caretaker extends NPCActor<CaretakerNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'Caretaker');
+
+        const caps = new NPCActorCaps<CaretakerNrv>('Caretaker');
+        caps.initRailRider = true;
+        caps.initShadowType = InitShadowType.CSV;
+        caps.waitNerve = CaretakerNrv.Talk;
+        caps.hitSensorRadius = 100.0;
+        this.initialize(sceneObjHolder, infoIter, caps);
+
+        const arg3 = fallback(getJMapInfoArg3(infoIter), 0);
+        const type = fallback(getJMapInfoArg4(infoIter), 0);
+        startBrk(this, 'BodyColor');
+        setBrkFrameAndStop(this, type);
+        startBtk(this, 'Dirt');
+        setBtkFrameAndStop(this, 0);
+
+        this.talkParam.turnOnWait = false;
+        this.talkParam.turnOnTalk = true;
+        this.talkParam.turnSpeed = 3.0;
+        this.talkParam.waitActionName = 'BWaitStand';
+        this.talkParam.waitTurnActionName = 'BWaitStand';
+        this.walkActionName = 'BWaitRun';
+        this.walkTurnActionName = 'BRunTalk';
+        this.desiredRailSpeed = 2.0;
+        this.maxChangeRailSpeed = 0.1;
+        this.railTurnSpeed = 0.05;
+        this.railGrounded = true;
+
+        if (type === 0) {
+            this.talkParam.talkActionName = 'BTalkNormal';
+            this.talkParam.talkTurnActionName = 'BTalkNormal';
+        } else if (type === 1) {
+            this.talkParam.talkActionName = 'BTalkCry';
+            this.talkParam.talkTurnActionName = 'BTalkCry';
+        } else if (type === 2) {
+            this.talkParam.talkActionName = 'BTalkSpin';
+            this.talkParam.talkTurnActionName = 'BTalkSpin';
+        } else if (type === 3) {
+            this.talkParam.talkActionName = 'BTalkSurprise';
+            this.talkParam.talkTurnActionName = 'BTalkSurprise';
+        } else if (type === 4) {
+            this.talkParam.talkActionName = 'BTalkSpring';
+            this.talkParam.talkTurnActionName = 'BTalkSpring';
+        } else if (type === 5) {
+            this.talkParam.waitActionName = 'BTalkHelp';
+            this.talkParam.waitTurnActionName = 'BTalkHelp';
+            this.talkParam.talkActionName = 'BTalkHelp';
+            this.talkParam.talkTurnActionName = 'BTalkHelp';
+        } else if (type === 6) {
+            setBtkFrameAndStop(this, 2.0);
+            this.talkParam.waitActionName = 'BTalkSurvive';
+            this.talkParam.talkActionName = 'BTalkSurvive';
+            this.talkParam.waitTurnActionName = null;
+            this.talkParam.talkTurnActionName = null;
+            this.talkParam.turnOnWait = false;
+            this.talkParam.turnOnTalk = false;
+        }
+
+        const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+        startBckNoInterpole(this, 'Wait');
+        this.calcAnim(sceneObjHolder);
+        // Talk registerEventFunc
+        if (arg0 !== -1 && arg0 !== 1) {
+            // this.spinName = 'SpinHit';
+            // this.reactionName = 'SpinHit';
+            // this.trampledName = 'Trampled';
+            // this.pointingName = 'TalkAngry';
+            this.talkParam.waitActionName = 'Wait';
+            this.talkParam.waitTurnActionName = 'Wait';
+            this.talkParam.talkActionName = 'TalkNormal';
+            this.talkParam.talkTurnActionName = 'TalkNormal';
+            this.walkActionName = 'WaitRun';
+            this.walkTurnActionName = 'WaitRun';
+
+            const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Caretaker', 0);
+            this.equipment(sceneObjHolder, itemGoods);
+
+            if (isExistRail(this)) {
+                moveCoordAndFollowTrans(this);
+                vec3.copy(this.initPoseTrans, this.translation);
+            }
+
+            useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+            useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+            // declarePowerStar
+            // TakeOutStar
+
+            // BombTimerLayout
+        }
+    }
+
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (isExistRail(this))
+            followRailPoseOnGround(sceneObjHolder, this, this, 1.0);
+    }
+
+    public override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CaretakerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === CaretakerNrv.Talk) {
+            tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder, this, deltaTimeFrames);
+            // tryStartReactionAndPushNerve(sceneObjHolder, this, CaretakerNrv.Reaction);
+        }
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('Caretaker');
+        const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
+        requestArchivesForNPCGoods(sceneObjHolder, 'Caretaker', itemGoodsIdx);
     }
 }

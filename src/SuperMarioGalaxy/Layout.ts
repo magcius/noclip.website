@@ -1,6 +1,6 @@
 
-import { getDeltaTimeFrames, ModelCache, SceneObj, SceneObjHolder } from "./Main";
-import { NameObj } from "./NameObj";
+import { ModelCache, SceneObjHolder } from "./Main";
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { Spine } from "./Spine";
 import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane, LayoutTextbox } from "../Common/NW4R/lyt/Layout";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
@@ -16,8 +16,14 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";
-import { parseBRFNT, ResFont } from "../Common/NW4R/lyt/Font";
-import { vec4 } from "gl-matrix";
+import { CharWriter, parseBRFNT, ResFont, TagProcessor } from "../Common/NW4R/lyt/Font";
+import { vec3, vec4 } from "gl-matrix";
+import { connectToScene } from "./ActorUtil";
+import { getLayoutMessageDirect } from "./MessageData";
+import { ViewerRenderInput } from "../viewer";
+import { GX_Program } from "../gx/gx_material";
+import { ub_SceneParamsBufferSize } from "../gx/gx_render";
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, OpaqueBlack, TransparentBlack, White } from "../Color";
 
 export class LayoutHolder {
     public rlytTable = new Map<string, RLYT>();
@@ -62,7 +68,7 @@ class LayoutAnmPlayer {
     public movement(sceneObjHolder: SceneObjHolder): void {
         if (this.curAnim === null)
             return;
-        let deltaTimeFrames = getDeltaTimeFrames(sceneObjHolder.viewerInput);
+        let deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         // Layout animations expect 30fps, we're timed for 60fps.
         deltaTimeFrames /= 2;
         this.frameCtrl.update(deltaTimeFrames);
@@ -159,13 +165,137 @@ const LanguagePrefixes = [
     'EuDu', // EuDutch
     'CnSi', // CnSimplifiedChinese
     'KrKo', // KrKorean
-]
+];
+
+const ColorTable = [
+    colorNewFromRGBA8(0xFFFFFFFF),
+    colorNewFromRGBA8(0xDC8282FF),
+    colorNewFromRGBA8(0x50AA50FF),
+    colorNewFromRGBA8(0x508CD2FF),
+    colorNewFromRGBA8(0xEBC800FF),
+    colorNewFromRGBA8(0xB46EC8FF),
+    colorNewFromRGBA8(0xFFBEBEFF),
+    colorNewFromRGBA8(0x6EF346FF),
+    colorNewFromRGBA8(0x78FFFFFF),
+    colorNewFromRGBA8(0xFFFF50FF),
+    colorNewFromRGBA8(0xFBBCFAFF),
+    colorNewFromRGBA8(0xBEBEC8FF),
+];
+
+class CustomTagProcessor implements TagProcessor {
+    private isSha = false;
+    private isInf = false;
+    private isTxt = false;
+    private colorType: number = 0;
+    private matColor0 = colorNewCopy(White);
+    private matColor1 = colorNewCopy(White);
+    private layout: Layout;
+
+    private linefeed(writer: CharWriter, rect: vec4 | null): void {
+        writer.cursor[0] = writer.origin[0];
+        writer.cursor[1] -= writer.getScaledLineHeight();
+
+        if (rect !== null)
+            writer.calcRectFromCursor(rect);
+    }
+
+    private setColor(writer: CharWriter, colorType: number): void {
+        this.colorType = colorType;
+        if (colorType !== 0) {
+            writer.setColorMapping(ColorTable[colorType]);
+            writer.color0.a = this.matColor0.a;
+        } else {
+            writer.setColorMapping(this.matColor0, this.matColor1);
+        }
+    }
+
+    private exSystemColor(writer: CharWriter, rect: vec4 | null, colorType: number): void {
+        if (rect !== null) {
+            // No need to do anything in calcRect mode...
+            return;
+        }
+
+        if (this.isSha)
+            return;
+
+        if (this.isInf && colorType > 0 && colorType < 6)
+            colorType += 5;
+
+        this.setColor(writer, colorType);
+    }
+
+    private exPicture(writer: CharWriter, dst: vec4 | null, picture: number): void {
+        const oldFont = writer.font;
+        writer.setFont(this.layout.resourceCollection.getFontByName('PictureFont.brfnt')!);
+
+        if (this.colorType === 0 && !this.isSha)
+            writer.setColorMapping(TransparentBlack, White);
+
+        const pictureChar = 0x30 + picture;
+        if (dst !== null)
+            writer.advanceCharacter(dst, pictureChar, true);
+        else
+            writer.writeCharacter(pictureChar, true);
+        writer.setFont(oldFont);
+
+        if (this.colorType === 0 && !this.isSha)
+            this.setColor(writer, this.colorType);
+    }
+
+    private exCmd(writer: CharWriter, dst: vec4 | null, str: string, i: number): number {
+        const size = str.charCodeAt(i + 1) >>> 9;
+        const cmd = str.charCodeAt(i + 1) & 0xFF;
+        if (cmd === 0xFF) {
+            // System.
+            const subcmd = str.charCodeAt(i + 2) >>> 8;
+            if (subcmd === 0) {
+                // Color.
+                const colorType = str.charCodeAt(i + 3) >>> 8;
+                this.exSystemColor(writer, dst, colorType);
+            }
+        } else if (cmd === 0x03) {
+            // Picture.
+            const picture = str.charCodeAt(i + 2);
+            this.exPicture(writer, dst, picture);
+        }
+        return i + size;
+    }
+
+    public reset(writer: CharWriter, rect: vec4 | null): void {
+        this.colorType = 0;
+
+        if (rect === null) {
+            colorCopy(this.matColor0, writer.color0);
+            colorCopy(this.matColor1, writer.color1);
+        }
+    }
+
+    public processTag(writer: CharWriter, rect: vec4 | null, str: string, i: number): number {
+        const code = str.charCodeAt(i);
+        if (code === 0x0A) {
+            this.linefeed(writer, rect);
+            return i + 1;
+        } else if (code === 0x1A) {
+            return this.exCmd(writer, rect, str, i);
+        } else {
+            throw "whoops";
+        }
+    }
+
+    public configure(box: LayoutTextbox, layout: Layout): void {
+        this.isSha = box.name.includes('Sha');
+        this.isInf = box.name.includes('Inf');
+        this.isTxt = box.name.includes('Txt');
+        this.layout = layout;
+    }
+}
 
 class LayoutManager {
     private layoutHolder: LayoutHolder;
     private animations = new Map<string, LayoutAnimation>();
     private paneInfo: LayoutPaneInfo[] = [];
     private groupCtrl: LayoutGroupCtrl[] = [];
+    public tagProcessor = new CustomTagProcessor();
 
     public layout: Layout;
     public isHidden = false;
@@ -199,8 +329,10 @@ class LayoutManager {
         if (pane instanceof LayoutTextbox) {
             if (userData !== null) {
                 const messageID = `Layout_${layoutName}${userData}`;
-                pane.str = sceneObjHolder.messageDataHolder!.getStringById(messageID)!;
+                pane.str = getLayoutMessageDirect(sceneObjHolder, messageID)!;
             }
+
+            pane.tagProcessor = this.tagProcessor;
         }
 
         for (let i = 0; i < pane.children.length; i++)
@@ -306,6 +438,8 @@ class LayoutManager {
     }
 }
 
+const scratchDrawInfo = new LayoutDrawInfo();
+
 export class LayoutActor<TNerve extends number = number> extends NameObj {
     public visibleAlive = true;
     public spine: Spine<TNerve> | null = null;
@@ -313,6 +447,7 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
 
     public isStopDraw = false;
     public isStopCalcAnim = false;
+    public isScreenHidden = false;
 
     constructor(sceneObjHolder: SceneObjHolder, name: string) {
         super(sceneObjHolder, name);
@@ -347,11 +482,11 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    public movement(sceneObjHolder: SceneObjHolder): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (!this.visibleAlive)
             return;
 
-        const deltaTimeFrames = getDeltaTimeFrames(sceneObjHolder.viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         if (this.spine !== null) {
             this.spine.changeNerve();
@@ -366,7 +501,7 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
             this.layoutManager.movement(sceneObjHolder);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.isStopCalcAnim || !this.visibleAlive || this.layoutManager === null)
             return;
 
@@ -380,14 +515,36 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.layoutManager.draw(sceneObjHolder, renderInstManager, drawInfo);
     }
 
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.isScreenHidden)
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
+        this.drawLayout(sceneObjHolder, renderInstManager, scratchDrawInfo);
+        renderInstManager.popTemplateRenderInst();
+    }
+
     public startAnim(animName: string, index: number = 0): void {
         const layoutManager = this.layoutManager!;
         const paneCtrl = layoutManager.getPaneCtrl(null);
         paneCtrl.start(layoutManager, animName, index);
     }
 
+    public startPaneAnim(paneName: string, animName: string, index: number = 0): void {
+        const layoutManager = this.layoutManager!;
+        const paneCtrl = layoutManager.getPaneCtrl(paneName);
+        paneCtrl.start(layoutManager, animName, index);
+    }
+
     public isAnimStopped(index: number = 0): boolean {
         return this.layoutManager!.getPaneCtrl().isAnimStopped(index);
+    }
+
+    public setPaneAnimFrameAndStop(frame: number, paneName: string, index: number = 0): void {
+        const frameCtrl = this.layoutManager!.getPaneCtrl(paneName).getFrameCtrl(index);
+        frameCtrl.currentTimeInFrames = frame;
+        frameCtrl.speedInFrames = 0;
     }
 
     public setAnimFrameAndStop(frame: number, index: number = 0): void {
@@ -401,12 +558,12 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.setAnimFrameAndStop(frameCtrl.endFrame, index);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         if (this.layoutManager !== null)
             this.layoutManager.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         GameSystemFontHolder.requestArchives(sceneObjHolder);
     }
 }
@@ -493,4 +650,25 @@ export function setAnimFrameAndStopAdjustTextWidth(actor: LayoutActor, paneName:
     getTextDrawRectRecursive(scratchVec4b, layoutManager.layout, layoutManager.getPane(paneName));
     const width = scratchVec4b[2] - scratchVec4b[0];
     actor.setAnimFrameAndStop(width, anmIndex);
+}
+
+export function createAndAddPaneCtrl(actor: LayoutActor, paneName: string, numAnm: number): void {
+    const layoutManager = actor.layoutManager!;
+    layoutManager.createAndAddPaneCtrl(paneName, numAnm);
+}
+
+export function connectToSceneLayout(sceneObjHolder: SceneObjHolder, actor: LayoutActor): void {
+    connectToScene(sceneObjHolder, actor, MovementType.Layout, CalcAnimType.Layout, DrawBufferType.None, DrawType.Layout);
+}
+
+export function hideScreen(actor: LayoutActor): void {
+    actor.isScreenHidden = true;
+}
+
+export function showScreen(actor: LayoutActor): void {
+    actor.isScreenHidden = false;
+}
+
+export function getPaneAnimFrameMax(actor: LayoutActor, paneName: string, index: number): number {
+    return actor.layoutManager!.getPaneCtrl(paneName).getFrameCtrl(index).endFrame;
 }

@@ -9,7 +9,7 @@ import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
+import { MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, range, setMatrixTranslation } from "../MathHelpers";
@@ -130,12 +130,12 @@ class StudioModelMeshData {
 
         // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: MaterialProgramBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: MaterialProgramBase.a_Normal,      bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_TangentS,    bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_TexCoord,    bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RG, },
-            { location: MaterialProgramBase.a_BoneWeights, bufferIndex: 0, bufferByteOffset: 13*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_BoneIDs,     bufferIndex: 0, bufferByteOffset: 17*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_Normal,      bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TangentS,    bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TexCoord,    bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_BoneWeights, bufferIndex: 0, bufferByteOffset: 13*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_BoneIDs,     bufferIndex: 0, bufferByteOffset: 17*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+4+4+2+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -145,7 +145,7 @@ class StudioModelMeshData {
 
         // Tack on the color mesh.
         vertexAttributeDescriptors.push(
-            { location: MaterialProgramBase.a_StaticVertexLighting, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+            { location: MaterialShaderTemplateBase.a_StaticVertexLighting, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
         );
         vertexBufferDescriptors.push(
             { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -1294,10 +1294,22 @@ export class StudioModelData {
                         const vtxStripGroupHeaderOffset = vtxView.getUint32(vtxMeshIdx + 0x04, true);
                         const vtxMeshFlags = vtxView.getUint8(vtxMeshIdx + 0x08);
 
+                        // It seems that Valve extended the .vtx format at some point without
+                        // changing the major version for that version, but it can be detected
+                        // through the mdl version... this is for subd.
+                        const hasTopologyData = mdlVersion >= 49;
+
+                        let vtxStripGroupStride = 0x19;
+                        let vtxStripStride = 0x1B;
+                        if (hasTopologyData) {
+                            vtxStripGroupStride += 0x08;
+                            vtxStripStride += 0x08;
+                        }
+
                         let meshNumVertices = 0;
                         let meshNumIndices = 0;
                         let vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
-                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += 0x19) {
+                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += vtxStripGroupStride) {
                             const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
                             const numIndices = vtxView.getUint32(vtxStripGroupIdx + 0x08, true);
                             meshNumVertices += numVerts;
@@ -1317,7 +1329,7 @@ export class StudioModelData {
                         const stripGroupDatas: StudioModelStripGroupData[] = [];
 
                         vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
-                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += 0x19) {
+                        for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += vtxStripGroupStride) {
                             const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
                             const vertOffset = vtxView.getUint32(vtxStripGroupIdx + 0x04, true);
 
@@ -1330,11 +1342,7 @@ export class StudioModelData {
                             const stripGroupFlags: OptimizeStripGroupFlags = vtxView.getUint8(vtxStripGroupIdx + 0x18);
                             const isHWSkin = !!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED);
 
-                            const hasTopologyData = mdlVersion >= 49;
                             if (hasTopologyData) {
-                                // It seems that Valve extended the .vtx format at some point without
-                                // changing the major version for that version, but it can be detected
-                                // through the mdl version... this is for subd.
                                 const numTopologyIndices = vtxView.getUint32(vtxStripGroupIdx + 0x18, true);
                                 const topologyOffset = vtxView.getUint32(vtxStripGroupIdx + 0x1C, true);
                             }
@@ -1392,7 +1400,7 @@ export class StudioModelData {
                                         assert(vtxBoneID[i] === vvdBoneIdx[i]);
 
                                         // TODO(jstpierre): Re-pack a new hardware bone table.
-                                        assert(vtxBoneID[i] < MaterialProgramBase.MaxSkinningParamsBoneMatrix);
+                                        assert(vtxBoneID[i] < MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix);
                                     }
                                 }
 
@@ -1477,12 +1485,12 @@ export class StudioModelData {
                                 // If this is a software skinned system, then the bone IDs stored in the vertices should be
                                 // the same as the overall bone table, not the hardware bone table. As such, set the table
                                 // to be identity.
-                                for (let i = 0; i < MaterialProgramBase.MaxSkinningParamsBoneMatrix; i++)
+                                for (let i = 0; i < MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix; i++)
                                     hardwareBoneTable[i] = i;
                             }
 
                             let vtxStripIdx = vtxStripGroupIdx + stripOffset;
-                            for (let s = 0; s < numStrips; s++) {
+                            for (let s = 0; s < numStrips; s++, vtxStripIdx += vtxStripStride) {
                                 const stripNumIndices = vtxView.getUint32(vtxStripIdx + 0x00, true);
                                 const stripIndexOffset = vtxView.getUint32(vtxStripIdx + 0x04, true);
                                 // assert(stripNumIndices === numIndices);
@@ -1506,7 +1514,6 @@ export class StudioModelData {
                                 if (hasTopologyData) {
                                     const numTopologyIndices = vtxView.getUint32(vtxStripIdx + 0x1B, true);
                                     const topologyOffset = vtxView.getUint32(vtxStripIdx + 0x1F, true);
-                                    vtxStripIdx += 0x08;
                                 }
 
                                 for (let i = 0; i < numBoneStateChanges; i++) {
@@ -1520,8 +1527,6 @@ export class StudioModelData {
                                     assert(numBoneStateChanges === 0);
 
                                 stripGroupData.stripData.push(new StudioModelStripData(meshFirstIdx + stripIndexOffset, stripNumIndices, hardwareBoneTable.slice()));
-
-                                vtxStripIdx += 0x1B;
                             }
 
                             meshFirstIdx += numIndices;
@@ -1891,7 +1896,7 @@ function findAnimationSection(anim: AnimDesc, frame: number): AnimSection | null
 }
 
 const scratchVec3 = vec3.create(), scratchQuatb = quat.create();
-export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, frame: number, modelData: StudioModelData): void {
+function calcPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, frame: number, modelData: StudioModelData): void {
     // First, find the relevant section / anim.
     const section = findAnimationSection(anim, frame);
     if (section === null || section.animdata === null)
@@ -1921,7 +1926,7 @@ export function setupPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, fr
     }
 }
 
-function setupPoseFromBones(dstBoneMatrix: mat4[], modelData: StudioModelData): void {
+function calcBoneMatrix(dstBoneMatrix: mat4[], modelData: StudioModelData): void {
     for (let i = 0; i < modelData.bone.length; i++) {
         const dst = dstBoneMatrix[i];
         const bone = modelData.bone[i];
@@ -1929,19 +1934,22 @@ function setupPoseFromBones(dstBoneMatrix: mat4[], modelData: StudioModelData): 
     }
 }
 
-function setupPoseFinalize(worldFromPoseMatrix: mat4[], boneMatrix: ReadonlyMat4[], modelMatrix: ReadonlyMat4, modelData: StudioModelData): void {
-    for (let i = 0; i < worldFromPoseMatrix.length; i++) {
+function calcWorldFromBone(worldFromBoneMatrix: mat4[], boneMatrix: ReadonlyMat4[], modelMatrix: ReadonlyMat4, modelData: StudioModelData): void {
+    for (let i = 0; i < worldFromBoneMatrix.length; i++) {
         const bone = modelData.bone[i];
-
-        // World-from-bone
         const parentBoneMatrix = bone.parent >= 0 ? boneMatrix[bone.parent] : modelMatrix;
-        mat4.mul(worldFromPoseMatrix[i], parentBoneMatrix, worldFromPoseMatrix[i]);
+        mat4.mul(worldFromBoneMatrix[i], parentBoneMatrix, worldFromBoneMatrix[i]);
     }
+}
 
-    for (let i = 0; i < worldFromPoseMatrix.length; i++) {
-        // After we've built our world-from-bone array, compute world-from-pose.
-        mat4.mul(worldFromPoseMatrix[i], worldFromPoseMatrix[i], modelData.bone[i].poseToBone);
-    }
+function calcAttachmentMatrix(attachmentMatrix: mat4[], worldFromBoneMatrix: ReadonlyMat4[], modelData: StudioModelData): void {
+    for (let i = 0; i < modelData.attachment.length; i++)
+        mat4.mul(attachmentMatrix[i], worldFromBoneMatrix[modelData.attachment[i].bone], modelData.attachment[i].local);
+}
+
+function calcWorldFromPose(worldFromPoseMatrix: mat4[], worldFromBoneMatrix: ReadonlyMat4[], modelData: StudioModelData): void {
+    for (let i = 0; i < worldFromPoseMatrix.length; i++)
+        mat4.mul(worldFromPoseMatrix[i], worldFromBoneMatrix[i], modelData.bone[i].poseToBone);
 }
 
 const scratchAABB = new AABB();
@@ -1950,6 +1958,7 @@ export class StudioModelInstance {
     // Pose data
     public modelMatrix = mat4.create();
     public worldFromPoseMatrix: mat4[];
+    public attachmentMatrix: mat4[];
 
     private lodInstance: StudioModelLODInstance[] = [];
     private viewBB: AABB;
@@ -1967,8 +1976,11 @@ export class StudioModelInstance {
         }
 
         this.worldFromPoseMatrix = nArray(this.modelData.bone.length, () => mat4.create());
-        setupPoseFromBones(this.worldFromPoseMatrix, this.modelData);
-        setupPoseFinalize(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        this.attachmentMatrix = nArray(this.modelData.attachment.length, () => mat4.create());
+        calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromBone(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelData);
         this.viewBB = this.modelData.viewBB;
     }
 
@@ -2029,30 +2041,33 @@ export class StudioModelInstance {
         const anim = this.modelData.anim[seq.anim[0]];
         let frame = time * anim.fps;
         this.viewBB = seq.viewBB;
-        setupPoseFromBones(this.worldFromPoseMatrix, this.modelData);
+        calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
         if (anim !== undefined) {
             if (seq.isLooping())
                 frame = frame % anim.numframes;
             else
                 frame = Math.min(frame, anim.numframes - 1);
 
-            setupPoseFromAnimation(this.worldFromPoseMatrix, anim, frame, this.modelData);
+            calcPoseFromAnimation(this.worldFromPoseMatrix, anim, frame, this.modelData);
         }
-        setupPoseFinalize(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        calcWorldFromBone(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
+        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelData);
     }
 
-    public getAttachmentMatrix(dst: mat4, attachmentidx: number): void {
-        const attachment = this.modelData.attachment[attachmentidx];
-        const boneidx = attachment.bone;
-        mat4.mul(dst, this.worldFromPoseMatrix[boneidx], attachment.local);
-    }
-
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
+    public checkFrustum(renderContext: SourceRenderContext): boolean {
         if (!this.visible)
-            return;
+            return false;
 
         scratchAABB.transform(this.viewBB, this.modelMatrix);
         if (!renderContext.currentView.frustum.contains(scratchAABB))
+            return false;
+
+        return true;
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
+        if (!this.checkFrustum(renderContext))
             return;
 
         scratchAABB.centerPoint(scratchVec3);

@@ -16,13 +16,13 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
     if (cmd === GX.Command.DRAW_QUADS)
-        return GfxTopology.QUADS;
+        return GfxTopology.Quads;
     else if (cmd === GX.Command.DRAW_TRIANGLE_STRIP)
-        return GfxTopology.TRISTRIP;
+        return GfxTopology.TriStrips;
     else if (cmd === GX.Command.DRAW_TRIANGLES)
-        return GfxTopology.TRIANGLES;
+        return GfxTopology.Triangles;
     else if (cmd === GX.Command.DRAW_TRIANGLE_FAN)
-        return GfxTopology.TRIFAN;
+        return GfxTopology.TriFans;
     else
         throw "whoops";
 }

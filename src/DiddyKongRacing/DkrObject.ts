@@ -676,7 +676,6 @@ export class DkrObject {
             case 70: // hittester
                 break;
             case 71: // midifade
-                //console.log(buf2hex(inputData.slice(8).buffer));
                 this.modelScale *= view.getUint8(0x08) / 8.0;
                 this.rotation[1] = (view.getInt8(0x09) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
@@ -804,8 +803,6 @@ export class DkrObject {
                 this.modelIndex = view.getUint8(0xE);
                 break;
             case 112: // midifadepoint
-                //console.log(this.name, this.modelIds[this.modelIndex], buf2hex(inputData.slice(8).buffer));
-
                 const updateScale = () => {
                     let model = this.models[this.modelIndex];
                     if(!!model) {

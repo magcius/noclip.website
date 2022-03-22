@@ -62,7 +62,7 @@ export class MaterialParams {
     }
 }
 
-export class PacketParams {
+export class DrawParams {
     public u_PosMtx: mat4[] = nArray(10, () => mat4.create());
 
     public clear(): void {
@@ -140,14 +140,14 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
     assert(d.length >= offs);
 }
 
-function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, packetParams: PacketParams): void {
+function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, drawParams: DrawParams): void {
     let offs = bOffs;
 
     if (GX_Material.materialUsePnMtxIdx(material))
         for (let i = 0; i < 10; i++)
-            offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
+            offs += fillMatrix4x3(d, offs, drawParams.u_PosMtx[i]);
     else
-        offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[0]);
+        offs += fillMatrix4x3(d, offs, drawParams.u_PosMtx[0]);
 
     assert(d.length >= offs);
 }
@@ -272,21 +272,6 @@ export function fillIndTexMtx(dst: mat4, src: Float32Array): void {
         scale, 0,  0, 0
     );
 }
-
-export function fillIndTexMtxData(d_: Float32Array, offs: number, src: Float32Array): number {
-    const a = src[0], c = src[1], tx = src[2], scale = src[3];
-    const b = src[4], d = src[5], ty = src[6];
-    d_[offs + 0] = a;
-    d_[offs + 1] = c;
-    d_[offs + 2] = tx;
-    d_[offs + 3] = scale;
-    d_[offs + 4] = b;
-    d_[offs + 5] = d;
-    d_[offs + 6] = ty;
-    d_[offs + 7] = 0;
-    return 4*2;
-}
-
 
 function autoOptimizeMaterialHasPostTexMtxBlock(material: GX_Material.GXMaterial): boolean {
     for (let i = 0; i < material.texGens.length; i++)
@@ -511,7 +496,7 @@ export class GXMaterialHelperGfx {
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
-    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, drawParams: PacketParams): void {
+    public allocatedrawParamsDataOnInst(renderInst: GfxRenderInst, drawParams: DrawParams): void {
         const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_DrawParams, this.drawParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_DrawParams);
         fillDrawParamsDataWithOptimizations(this.material, d, offs, drawParams);
@@ -624,7 +609,7 @@ export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerI
 }
 
 export class GXRenderHelperGfx extends GfxRenderHelper {
-    public pushTemplateRenderInst(): GfxRenderInst {
+    public override pushTemplateRenderInst(): GfxRenderInst {
         const template = super.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
         template.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);

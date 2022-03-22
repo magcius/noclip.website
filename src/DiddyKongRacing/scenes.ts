@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 
-import { GfxDevice, GfxBindingLayoutDescriptor, GfxRenderPassDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { colorNewFromRGBA } from "../Color";
 import { CameraController } from '../Camera';
@@ -29,7 +29,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 class DKRRenderer implements Viewer.SceneGfx {
     public program: F3DDKR_Program;
     public renderHelper: GfxRenderHelper;
-    public isInteractive = true;
     private hasStarted = false;
 
     public renderPassDescriptor: GfxrAttachmentClearDescriptor;

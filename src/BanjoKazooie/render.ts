@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
 import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
-import { getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dex";
+import { getImageFormatString, Vertex, DrawCall, RSP_Geometry, RSPSharedOutput, translateCullMode } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -30,7 +30,7 @@ export class F3DEX_Program extends DeviceProgram {
     public static ub_DrawParams = 1;
     public static ub_CombineParams = 2;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {
@@ -38,6 +38,11 @@ layout(std140) uniform ub_SceneParams {
 #ifdef LIGHTING
     #ifdef TEXTURE_GEN
         vec4 u_LookAtVectors[2];
+    #endif
+    #ifdef PARAMETERIZED_LIGHTING
+        vec4 u_DiffuseColor[${this.G_MW_NUMLIGHT}];
+        vec4 u_DiffuseDirection[${this.G_MW_NUMLIGHT}];
+        vec4 u_AmbientColor;
     #endif
 #endif
 };
@@ -68,7 +73,7 @@ const vec4 t_Half = vec4(0.5);
 const vec4 t_One = vec4(1.0);
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = ${F3DEX_Program.a_Position}) in vec4 a_Position;
 layout(location = ${F3DEX_Program.a_Color}) in vec4 a_Color;
 layout(location = ${F3DEX_Program.a_TexCoord}) in vec2 a_TexCoord;
@@ -109,8 +114,12 @@ void main() {
     vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
 
-    // TODO: find and pass in lighting data
+#ifdef PARAMETERIZED_LIGHTING
+    v_Color = ${this.generateLightingExpression()};
+#else
+    // Define PARAMETERIZED_LIGHTING for full control over lighting parameters
     v_Color = vec4(vec3(.6 + .4*t_Normal.y), a_Color.a);
+#endif
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
@@ -130,11 +139,20 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = [], private G_MW_NUMLIGHT: number = 0) {
         super();
         if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
+    }
+
+    private generateLightingExpression(): string {
+        let out = "vec4(";
+        for (let i = 0; i < this.G_MW_NUMLIGHT; i++) {
+            out += `max(dot(t_Normal.xyz, u_DiffuseDirection[${i}].xyz), 0.0) * u_DiffuseColor[${i}].rgb + `;
+        }
+        out += "u_AmbientColor.rgb, a_Color.a)"
+        return out;
     }
 
     private generateClamp(): string {
@@ -512,19 +530,6 @@ export class RenderData {
     }
 }
 
-function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x1000);
-    const cullBack = !!(m & 0x2000);
-    if (cullFront && cullBack)
-        return GfxCullMode.FrontAndBack;
-    else if (cullFront)
-        return GfxCullMode.Front;
-    else if (cullBack)
-        return GfxCullMode.Back;
-    else
-        return GfxCullMode.None;
-}
-
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -551,7 +556,7 @@ class DrawCallInstance {
             }
         }
 
-        this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
+        this.megaStateFlags = RDP.translateRenderMode(this.drawCall.DP_OtherModeL);
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }

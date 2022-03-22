@@ -30,7 +30,7 @@ export class NITRO_Program extends DeviceProgram {
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_PacketParams = 2;
+    public static ub_drawParams = 2;
 
     public static both = `
 precision mediump float;
@@ -47,16 +47,16 @@ layout(std140) uniform ub_MaterialParams {
 };
 #define u_TexCoordMode (u_Misc0.x)
 
-layout(std140) uniform ub_PacketParams {
+layout(std140) uniform ub_drawParams {
     Mat4x3 u_PosMtx[32];
 };
 
 uniform sampler2D u_Texture;
 `;
 
-    public both = NITRO_Program.both;
+    public override both = NITRO_Program.both;
 
-    public vert = `
+    public override vert = `
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
@@ -78,7 +78,7 @@ void main() {
     }
 }
 `;
-    public frag = `
+    public override frag = `
 precision mediump float;
 in vec4 v_Color;
 in vec2 v_TexCoord;
@@ -364,8 +364,8 @@ class ShapeInstance {
         template.setInputLayoutAndState(vertexData.inputLayout, vertexData.inputState);
         this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
-        const d = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_drawParams, 12*32);
+        const d = template.mapUniformBufferF32(NITRO_Program.ub_drawParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
             const matrixId = this.batchData.batch.matrixTable[i];

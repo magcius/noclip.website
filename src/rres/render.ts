@@ -3,7 +3,7 @@ import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, DrawParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, texProjCameraSceneTex, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
@@ -63,7 +63,7 @@ export class MDL0Model {
 }
 
 const bboxScratch = new AABB();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
@@ -89,7 +89,7 @@ class ShapeInstance {
         if (!usesSkinning)
             materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.mtxIdx, null, camera, viewport);
 
-        packetParams.clear();
+        drawParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
             const draw = this.shape.loadedVertexData.draws[p];
 
@@ -102,14 +102,14 @@ class ShapeInstance {
                     if (posNrmMatrixIdx === 0xFFFF)
                         continue;
 
-                    mat4.copy(packetParams.u_PosMtx[j], instanceStateData.drawViewMatrixArray[posNrmMatrixIdx]);
+                    mat4.copy(drawParams.u_PosMtx[j], instanceStateData.drawViewMatrixArray[posNrmMatrixIdx]);
 
                     if (instanceStateData.jointToWorldMatrixVisibility[j] !== IntersectionState.FULLY_OUTSIDE)
                         instVisible = true;
                 }
             } else {
                 instVisible = true;
-                mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[this.shape.mtxIdx]);
+                mat4.copy(drawParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[this.shape.mtxIdx]);
             }
 
             if (!instVisible)
@@ -117,7 +117,7 @@ class ShapeInstance {
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, draw);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
             if (usesSkinning)
                 materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, draw, camera, viewport);

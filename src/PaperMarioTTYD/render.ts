@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, DrawParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -38,7 +38,7 @@ export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
@@ -46,7 +46,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -59,7 +59,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -77,8 +77,8 @@ class BackgroundBillboardRenderer {
     private textureMappings = nArray(1, () => new TextureMapping());
     public scroll: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
-        this.gfxProgram = device.createProgram(this.program);
+    constructor(cache: GfxRenderCache, public textureHolder: TPLTextureHolder, public textureName: string) {
+        this.gfxProgram = cache.createProgram(this.program);
         // Fill texture mapping.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
@@ -112,7 +112,6 @@ class BackgroundBillboardRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -224,7 +223,7 @@ class MaterialInstance {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
 
@@ -237,8 +236,8 @@ class BatchInstance {
         this.shapeHelper.setOnRenderInst(renderInst);
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
-        materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
+        materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -541,7 +540,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         // this.playAllAnimations();
 
         if (backgroundTextureName !== null)
-            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
+            this.backgroundRenderer = new BackgroundBillboardRenderer(this.getCache(), textureHolder, backgroundTextureName);
     }
 
     public spawnMOBJ(mobjName: string, animPoseName: string): MOBJ {
@@ -655,7 +654,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         return [renderHacksPanel];
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
 
         this.bufferCoalescer.destroy(device);

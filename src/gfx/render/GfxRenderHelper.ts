@@ -8,11 +8,12 @@ import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpe
 
 class GfxRenderHelperBase {
     public renderCache: GfxRenderCache;
-    public renderCacheOwn: GfxRenderCache | null = null;
     public renderGraph: GfxrRenderGraph;
     public renderInstManager: GfxRenderInstManager;
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public debugThumbnails: DebugThumbnailDrawer;
+
+    private renderCacheOwn: GfxRenderCache | null = null;
 
     constructor(public device: GfxDevice, renderCache: GfxRenderCache | null = null) {
         if (renderCache === null) {
@@ -56,7 +57,6 @@ class GfxRenderHelperBase {
 }
 
 // Debug Thumbnails
-// TODO(jstpierre): Find a way to re-add these (maybe by rewriting the DebugTextDrawer system...)
 import { SceneContext } from "../../SceneBase";
 import type { DebugTextDrawer } from "../helpers/DebugTextDrawer";
 
@@ -96,11 +96,11 @@ export class GfxRenderHelper extends GfxRenderHelperBase {
         });
     }
 
-    public getDebugTextDrawer(): TextDrawer | null {
+    public override getDebugTextDrawer(): TextDrawer | null {
         return this.debugTextDrawer.getValueOrStart();
     }
 
-    public destroy(): void {
+    public override destroy(): void {
         super.destroy();
         this.debugThumbnails.destroy();
     }

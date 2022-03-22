@@ -369,8 +369,8 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.characterGroup;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.clearGroup(this.playerGroup);
         this.clearGroup(this.rideGroup);
@@ -496,6 +496,10 @@ export function sendMsgEnemyAttackStrong(sceneObjHolder: SceneObjHolder, recvSen
 
 export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackExplosion, sendSensor);
+}
+
+export function sendMsgEnemyAttackElectric(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackElectric, sendSensor);
 }
 
 export function sendMsgPush(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {

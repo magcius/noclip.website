@@ -229,7 +229,7 @@ export function transformVec3Mat4w0(dst: vec3, m: ReadonlyMat4, v: ReadonlyVec3)
 
 const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c = vec3.create();
 
-function compareEpsilon(a: number, b: number) {
+export function compareEpsilon(a: number, b: number) {
     return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
 }
 

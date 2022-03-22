@@ -14,6 +14,7 @@ import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
 import { GlobalSaveManager } from './SaveManager';
+import { mat4 } from 'gl-matrix';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -54,7 +55,7 @@ export interface SceneGfx {
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;
-    isInteractive?: boolean;
+    getDefaultWorldMatrix?(dst: mat4): void;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
@@ -77,7 +78,8 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     if (canvas.width === nw && canvas.height === nh)
         return;
 
-    canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
     canvas.width = nw;
     canvas.height = nh;
 }
@@ -370,7 +372,7 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.NO_WEBGL2_GENERIC;
     }
 
-    // SwiftShader is trash and I don't trust it.
+    // SwiftShader is slow, and gives a poor experience.
     const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
     if (WEBGL_debug_renderer_info && gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
         return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;

@@ -53,14 +53,21 @@ function readEModelTriggerOBB(stream: DataStream): EModelTriggerOBB {
     return { name, v1, v2, v3, v4, bbox };
 }
 
-function readELight(stream: DataStream): void {
+interface ELight {
+    type: number;
+    flags: number;
+    name: string;
+    position: vec3;
+};
+
+function readELight(stream: DataStream): ELight {
     const type = stream.readUint32();
     const flags = stream.readUint32();
     const name = stream.readStringStream_4b();
     // Light parameters
     const p1 = readEVec3(stream);
     const p2 = readEVec3(stream);
-    const p3 = readEVec3(stream);
+    const position = readEVec3(stream);
 
     if (type === 0x03) {
         const g = readEVec3(stream);
@@ -106,6 +113,8 @@ function readELight(stream: DataStream): void {
                 stream.offs += 0x06 * v41[i]; // EPlanePacked3
         }
     }
+
+    return { type, flags, name, position };
 }
 
 export interface EJoint {
@@ -137,23 +146,33 @@ function readESkeleton(stream: DataStream): ESkeleton {
 }
 
 export const enum MaterialFlags {
-    Alpha           = 0x00000001,
-    Skinned         = 0x00000004,
-    Bumpmap         = 0x00000008,
-    DoubleSided     = 0x00000010,
-    Lightmap        = 0x00000020,
-    AdditiveBlended = 0x00000200,
-    BinaryAlpha     = 0x00000400,
-    Decal           = 0x00000800,
-    Distortion      = 0x00010000,
-    Tristrip        = 0x01000000,
-    DetailTexture   = 0x40000000,
+    Alpha             = 0x00000001,
+    Incandescent      = 0x00000002,
+    Skinned           = 0x00000004,
+    Bumpmap           = 0x00000008,
+    DoubleSided       = 0x00000010,
+    Lightmap          = 0x00000020,
+    Billboard         = 0x00000080,
+    AdditiveBlended   = 0x00000200,
+    BinaryAlpha       = 0x00000400,
+    Decal             = 0x00000800,
+    EdgeAlpha         = 0x00002000,
+    InvEdgeAlpha      = 0x00004000,
+    Distortion        = 0x00010000,
+    FresnelReflection = 0x00200000,
+    GlareOnly         = 0x00400000,
+    PerPixelLighting  = 0x00800000,
+    Tristrip          = 0x01000000,
+    DetailTexture     = 0x40000000,
 }
 
 export interface EMeshFrag {
     materialFlags: MaterialFlags;
     bbox: AABB;
+    materialColor: vec4;
     textureIds: number[];
+    textureLightmap: number | null;
+    textureDetail: number | null;
     texCoordTransVel: ReadonlyVec2;
     streamPosNrm: ArrayBufferSlice;
     streamColor: ArrayBufferSlice | null;
@@ -180,12 +199,15 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
 
     const distantLOD = stream.readUint8();
     const blendFlags = stream.readUint8();
-    const color = readEVec4(stream);
+    const materialColor = readEVec4(stream);
 
     const textureCount = stream.readUint32();
     const textureIds: number[] = [];
     for (let i = 0; i < textureCount; i++)
         textureIds.push(stream.readUint32());
+
+    let textureLightmap: number | null = null;
+    let textureDetail: number | null = null;
 
     if (!!(materialFlags & MaterialFlags.Lightmap)) {
         const lightmap0TextureID = stream.readUint32();
@@ -193,12 +215,16 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
         if (lightmap1TextureID != 0xFFFFFFFF) {
             const switchLightName = stream.readStringStream_4b();
         }
+
+        textureLightmap = lightmap0TextureID;
     }
 
     if (!!(materialFlags & MaterialFlags.Bumpmap)) {
         const bumpmapTextureID = stream.readUint32();
     }
+
     const glossmapTextureID = stream.readUint32();
+
     if (materialFlags & 0x20000) {
         const blinn_info_18 = stream.readFloat32();
         const blinn_info_1C = readEVec3(stream);
@@ -245,10 +271,10 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
     let streamIdx: ArrayBufferSlice;
     let topology: GfxTopology;
     if (!!(materialFlags & MaterialFlags.Tristrip)) {
-        topology = GfxTopology.TRISTRIP;
+        topology = GfxTopology.TriStrips;
         streamIdx = stream.readSlice(0x02 * (iPolyCount + 2));
     } else {
-        topology = GfxTopology.TRIANGLES;
+        topology = GfxTopology.Triangles;
         streamIdx = stream.readSlice(0x02 * (iPolyCount * 3));
     }
 
@@ -258,8 +284,8 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
     }
 
     return {
-        materialFlags, bbox,
-        textureIds, texCoordTransVel,
+        materialFlags, bbox, materialColor,
+        textureIds, textureLightmap, textureDetail, texCoordTransVel,
         streamPosNrm, streamColor, streamUVCount, uvCoordScale, streamUV, streamIdx,
         iVertCount, iPolyCount, topology,
      };
@@ -326,10 +352,17 @@ function readEMesh(stream: DataStream, version: number): EMesh {
         modelTriggerOBB.push(readEModelTriggerOBB(stream));
 
     const entityFlags = stream.readUint32();
+    if (!!(entityFlags & 0x02)) {
+        // LOD.
+        const lodCount = stream.readUint8();
+        stream.offs += 0x04 * (lodCount - 1);
+    }
 
     const lightCount = stream.readUint32();
-    for (let i = 0; i < lightCount; i++)
-        readELight(stream);
+    const lights: ELight[] = [];
+    for (let i = 0; i < lightCount; i++) {
+        lights.push(readELight(stream));
+    }
 
     const skeletonCount = stream.readUint32();
     const skeleton: ESkeleton[] = [];
@@ -360,10 +393,23 @@ function readEMesh(stream: DataStream, version: number): EMesh {
     return { name, translation, rotation, scale, bbox, modelTriggerOBB, skeleton, meshFrag, submesh };
 }
 
+interface DomainEntityInfo {
+    name: string;
+    scriptClass: string;
+    editVars: string | null;
+    position: vec3;
+    rotation: vec3;
+    scale: vec3;
+    flags: number;
+    initialMesh: number;
+    initialData: number;
+}
+
 export interface EDomain {
     name: string;
     bbox: AABB;
     meshes: EMesh[];
+    scripts: DomainEntityInfo[];
     subdomains: EDomain[];
 }
 
@@ -377,6 +423,7 @@ function readEDomain(stream: DataStream, version: number): EDomain {
     for (let i = 0; i < meshCount; i++)
         meshes.push(readEMesh(stream, version));
 
+    // Entity Data
     assert(stream.readString(0x04) === 'TADE');
     const edatCount = stream.readUint32();
     for (let i = 0; i < edatCount; i++) {
@@ -385,27 +432,30 @@ function readEDomain(stream: DataStream, version: number): EDomain {
         stream.offs += size;
     }
 
+    // Script
     assert(stream.readString(0x04) === 'PRCS');
     const scrpCount = stream.readUint32();
+    const scripts: DomainEntityInfo[] = [];
     for (let i = 0; i < scrpCount; i++) {
-        const field_00 = stream.readStringStream_4b();
-        const field_04 = stream.readStringStream_4b();
-        const a2a = stream.readUint32();
-        if (a2a) {
-            const field_08 = stream.readStringStream_4b();
-        }
-        stream.offs += 0x04 * 3; // field_0C
-        stream.offs += 0x04 * 3; // field_18
-        stream.offs += 0x04 * 3; // field_24
-        stream.offs += 0x04; // field_38
-        stream.offs += 0x04; // field_30
-        stream.offs += 0x04; // field_34
+        // _DomainEntityInfo
+        const name = stream.readStringStream_4b();
+        const scriptClass = stream.readStringStream_4b();
+        const hasEditVars = stream.readUint32();
+        const editVars = hasEditVars ? stream.readStringStream_4b() : null;
+        const position = readEVec3(stream);
+        const rotation = readEVec3(stream);
+        const scale = readEVec3(stream);
+        const flags = stream.readUint32();
+        const initialMesh = stream.readUint32();
+        const initialData = stream.readUint32();
+        scripts.push({ name, scriptClass, editVars, position, rotation, scale, flags, initialMesh, initialData, });
     }
 
+    // Runtime Reference
     assert(stream.readString(0x04) === 'FRTR');
     const rtrfCount = stream.readUint32();
     for (let i = 0; i < rtrfCount; i++) {
-        stream.readStringStream_4b();
+        console.log(stream.readStringStream_4b());
     }
 
     const subdomainCount = stream.readUint32();
@@ -414,7 +464,7 @@ function readEDomain(stream: DataStream, version: number): EDomain {
         subdomains.push(readEDomain(stream, version));
     }
 
-    return { name, bbox, meshes, subdomains };
+    return { name, bbox, meshes, scripts, subdomains, };
 }
 
 export interface TextureReference {

@@ -79,7 +79,7 @@ class BannerBinRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
         this.layout.destroy(device);
         this.resourceCollection.destroy(device);

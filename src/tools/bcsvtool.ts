@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'fs';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BCSV from '../luigis_mansion/bcsv';
+import { guessDebugName } from '../SuperMarioGalaxy/JMapInfo';
 import { assert } from 'console';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
@@ -42,7 +43,7 @@ class CSVWriter {
 }
 
 function csv(bcsv: BCSV.Bcsv): string {
-    const writer = new CSVWriter(bcsv.fields.map((field) => field.debugName));
+    const writer = new CSVWriter(bcsv.fields.map((field) => guessDebugName(field.nameHash)));
     for (let i = 0; i < bcsv.records.length; i++)
         writer.writeRow(bcsv.records[i].map((value) => '' + value));
     return writer.finalize();

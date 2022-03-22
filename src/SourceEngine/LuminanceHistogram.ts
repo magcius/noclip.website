@@ -1,10 +1,10 @@
 
 import { vec4 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
-import { colorLerp, colorNewCopy, colorToCSS, Green, Red, White } from "../Color";
+import { Color, colorLerp, colorNewCopy, colorToCSS, Cyan, Green, Red, White } from "../Color";
 import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform";
 import { GfxProgram, GfxQueryPool } from "../gfx/platform/GfxPlatformImpl";
@@ -15,6 +15,7 @@ import { clamp, invlerp, lerp, saturate } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
+import { SourceRenderContext } from "./Main";
 import { ToneMapParams } from "./Materials";
 
 const scratchVec4 = vec4.create();
@@ -34,7 +35,7 @@ const scratchVec4 = vec4.create();
 //     layout is decided in updateLayout().
 
 class LuminanceThreshProgram extends DeviceProgram {
-    public both = `
+    public override both = `
 layout(std140) uniform ub_Params {
     vec4 u_Misc[2];
 };
@@ -45,8 +46,8 @@ layout(std140) uniform ub_Params {
 #define u_ThreshPass (u_Misc[1].z)
 `;
 
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
@@ -229,7 +230,7 @@ export class LuminanceHistogram {
         dst.entryStart = (dst.locationStart / queriesPerFrame) | 0;
     }
 
-    private debugDraw(toneMapParams: ToneMapParams): void {
+    public debugDraw(renderContext: SourceRenderContext, toneMapParams: ToneMapParams): void {
         const ctx = getDebugOverlayCanvas2D();
 
         if (this.debugDrawHistogram) {
@@ -302,25 +303,27 @@ export class LuminanceHistogram {
                 return x + width * invlerp(toneMapParams.autoExposureMin, toneMapParams.autoExposureMax, scale);
             };
 
-            if (this.toneMapScaleHistory.length === this.toneMapScaleHistoryCount) {
-                const center = this.toneMapScaleHistoryCount / 2;
-                for (let i = 0; i < this.toneMapScaleHistory.length; i++) {
-                    ctx.beginPath();
-                    ctx.rect(calcMarkerX(this.toneMapScaleHistory[i]), tickBarY - 10 + 2, 4, 20);
-                    const weight = Math.abs(center - i) / (center**2);
-                    ctx.globalAlpha = weight;
-                    ctx.fill();
-                }
-                ctx.globalAlpha = 1.0;
-            }
+            const drawMarker = (scale: number, color: Color) => {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(calcMarkerX(scale), tickBarY - 10 + 2, 4, 20);
+                ctx.fillStyle = colorToCSS(color);
+                ctx.fill();
+                ctx.restore();
+                drawScreenSpaceText(ctx, calcMarkerX(scale), tickBarY + 30, scale.toFixed(2), color, { outline: 4, align: 'center' });
+            };
 
             ctx.beginPath();
-            ctx.rect(calcMarkerX(toneMapParams.toneMapScale), tickBarY - 10 + 2, 4, 20);
-            ctx.fill();
-            drawScreenSpaceText(ctx, x, tickBarY + 30, '' + toneMapParams.autoExposureMin, White, { outline: 2, align: 'left' });
-            drawScreenSpaceText(ctx, x + width, tickBarY + 30, '' + toneMapParams.autoExposureMax, White, { outline: 2, align: 'right' });
+            drawScreenSpaceText(ctx, x, tickBarY + 30, '' + toneMapParams.autoExposureMin, White, { outline: 2, align: 'center' });
+            drawScreenSpaceText(ctx, x + width, tickBarY + 30, '' + toneMapParams.autoExposureMax, White, { outline: 2, align: 'center' });
+
+            if (this.toneMapScaleHistory.length >= 1)
+                drawMarker(this.toneMapScaleHistory[0], colorNewCopy(Red, 0.8));
+            drawMarker(this.calcGoalScale(), colorNewCopy(Cyan, 0.8));
+            drawMarker(toneMapParams.toneMapScale, White);
+
             drawScreenSpaceText(ctx, x, tickBarY + 60, `Bloom Scale: ${toneMapParams.bloomScale}`, White, { outline: 2, align: 'left' });
-            if (!(window.main.scene as any).renderContext.materialCache.isUsingHDR())
+            if (!renderContext.isUsingHDR())
                 drawScreenSpaceText(ctx, x, tickBarY + 90, `Map does not have HDR samples!`, Red, { outline: 2 });
             ctx.restore();
         }
@@ -405,7 +408,18 @@ export class LuminanceHistogram {
             target = Math.max(target, toneMapParams.minAvgLum / locationOfAverage);
 
         this.updateToneMapScale(toneMapParams, target, deltaTime);
-        this.debugDraw(toneMapParams);
+    }
+
+    private calcGoalScale(): number {
+        let sum = 0.0;
+        for (let i = 0; i < this.toneMapScaleHistoryCount; i++) {
+            // I think this is backwards -- it generates the weights 1.0, 0.8, 0.6, 0.4, 0.2, 0.0, 0.2, 0.4, 0.6, 0.8...
+            // const weight = Math.abs(i - center) / center;
+            // I think we should just roll off the weights from 0...1
+            const weight = (this.toneMapScaleHistoryCount - i) / 55;
+            sum += (weight * this.toneMapScaleHistory[i]);
+        }
+        return sum;
     }
 
     private updateToneMapScale(toneMapParams: ToneMapParams, targetScale: number, deltaTime: number): void{
@@ -418,17 +432,7 @@ export class LuminanceHistogram {
         if (this.toneMapScaleHistory.length < this.toneMapScaleHistoryCount)
             return;
 
-        let sum = 0.0;
-        for (let i = 0; i < this.toneMapScaleHistoryCount; i++) {
-            // I think this is backwards -- it generates the weights 1.0, 0.8, 0.6, 0.4, 0.2, 0.0, 0.2, 0.4, 0.6, 0.8...
-            // const weight = Math.abs(i - center) / center;
-            // I think we should just roll off the weights from 0...1
-            const weight = (this.toneMapScaleHistoryCount - i) / 55;
-            sum += (weight * this.toneMapScaleHistory[i]);
-        }
-
-        let goalScale = sum;
-        goalScale = clamp(goalScale, toneMapParams.autoExposureMin, toneMapParams.autoExposureMax);
+        const goalScale = this.calcGoalScale();
 
         // Accelerate towards target.
         let rate = toneMapParams.adjustRate * 2.0;

@@ -26,7 +26,7 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
             renderer.textureHolder.addTextures(device, commonPPF.textures);
             renderer.textureHolder.addTextures(device, scenePPF.textures);
 
-            const sceneRenderer = new SceneRenderer(device, renderer.textureHolder, assertExists(scenePPF.mainScene));
+            const sceneRenderer = new SceneRenderer(renderer.cache, renderer.textureHolder, assertExists(scenePPF.mainScene));
             renderer.sceneRenderers.push(sceneRenderer);
             return renderer;
         });

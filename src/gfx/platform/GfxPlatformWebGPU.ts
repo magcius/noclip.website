@@ -208,9 +208,9 @@ function translateTextureUsage(usage: GfxTextureUsage): GPUTextureUsageFlags {
     let gpuUsage: GPUTextureUsageFlags = 0;
 
     if (!!(usage & GfxTextureUsage.Sampled))
-        gpuUsage |= GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST;
+        gpuUsage |= GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
     if (!!(usage & GfxTextureUsage.RenderTarget))
-        gpuUsage |= GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
+        gpuUsage |= GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
 
     return gpuUsage;
 }
@@ -447,7 +447,7 @@ function translateBindGroupTextureBinding(sampler: GfxBindingLayoutSamplerDescri
 
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public commandEncoder: GPUCommandEncoder | null = null;
-    public descriptor: GfxRenderPassDescriptor;
+    public descriptor!: GfxRenderPassDescriptor;
     private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
     private gpuRenderPassDescriptor: GPURenderPassDescriptor;
     private gpuColorAttachments: GPURenderPassColorAttachment[];
@@ -501,7 +501,13 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
                 const dstAttachment = this.gpuColorAttachments[i];
                 dstAttachment.view = colorAttachment.gpuTextureView;
-                dstAttachment.loadValue = descriptor.colorClearColor[i];
+                const clearColor = descriptor.colorClearColor[i];
+                if (clearColor === 'load') {
+                    dstAttachment.loadOp = 'load';
+                } else {
+                    dstAttachment.loadOp = 'clear';
+                    dstAttachment.clearValue = clearColor;
+                }
                 dstAttachment.storeOp = descriptor.colorStore[i] ? 'store' : 'discard';
                 dstAttachment.resolveTarget = undefined;
                 if (colorResolveTo !== null) {
@@ -761,8 +767,7 @@ fn fs() -> FragmentOutput {
 }
 `;
 
-    constructor(device: GPUDevice) {
-        const format: GPUTextureFormat = 'bgra8unorm';
+    constructor(device: GPUDevice, format: GPUTextureFormat) {
         this.shaderModule = device.createShaderModule({ code: this.shaderText });
         this.pipeline = device.createRenderPipeline({
             vertex: { module: this.shaderModule, entryPoint: 'vs', },
@@ -773,7 +778,7 @@ fn fs() -> FragmentOutput {
     public render(device: GPUDevice, onscreenTexture: GPUTextureView): void {
         const encoder = device.createCommandEncoder();
         const renderPass = encoder.beginRenderPass({
-            colorAttachments: [{ view: onscreenTexture, loadValue: 'load', storeOp: 'store', }],
+            colorAttachments: [{ view: onscreenTexture, loadOp: 'load', storeOp: 'store', }],
         });
         renderPass.setPipeline(this.pipeline);
         renderPass.draw(3);
@@ -788,6 +793,7 @@ fn fs() -> FragmentOutput {
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
+    private _swapChainFormat: GPUTextureFormat;
     private readonly _swapChainTextureUsage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST;
     private _resourceUniqueId: number = 0;
 
@@ -844,7 +850,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             debugger;
         };
 
-        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device);
+        this._swapChainFormat = this.canvasContext.getPreferredFormat(this.adapter);
+        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device, this._swapChainFormat);
     }
 
     private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): GfxTextureP_WebGPU {
@@ -863,7 +870,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._swapChainWidth = width;
         this._swapChainHeight = height;
         const size = { width, height };
-        this.canvasContext.configure({ device: this.device, format: 'bgra8unorm', usage: this._swapChainTextureUsage, size });
+        this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, size });
     }
 
     public getOnscreenTexture(): GfxTexture {
@@ -1409,6 +1416,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             uniformBufferMaxPageWordSize: 0x1000,
             uniformBufferWordAlignment: 0x40,
             supportedSampleCounts: [1],
+            occlusionQueriesRecommended: false,
         };
     }
 

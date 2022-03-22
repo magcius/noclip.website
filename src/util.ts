@@ -50,8 +50,8 @@ function copyBufferToString(buffer: ArrayBufferSlice, offs: number, byteLength: 
 
 export function decodeString(buffer: ArrayBufferSlice, offs: number | undefined = undefined, byteLength: number | undefined = undefined, encoding = 'utf8'): string {
     // ts-ignore here is required for node / tool builds, which doesn't specify TextDecoder.
-    // TODO(jstpierre): Support both node and browser through a different method, since
-    // I think this might pull in iconv-lite to the web build...
+    // TODO(jstpierre): Support both node and browser through a different method, this is
+    // a bit ugly here...
 
     // @ts-ignore
     if (typeof TextDecoder !== 'undefined') {
@@ -93,7 +93,7 @@ export function leftPad(S: string, spaces: number, ch: string = '0'): string {
 }
 
 export function hexzero(n: number, spaces: number): string {
-    let S = n.toString(16);
+    let S = (n >>> 0).toString(16);
     return leftPad(S, spaces);
 }
 

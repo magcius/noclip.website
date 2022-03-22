@@ -1,5 +1,5 @@
 
-import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
+import { SceneObjHolder, SceneObj } from "./Main";
 import { NameObj, CalcAnimType, MovementType } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
 import { vec3 } from "gl-matrix";
@@ -12,13 +12,13 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 import { GXShaderLibrary } from "../gx/gx_material";
 
@@ -67,8 +67,8 @@ abstract class ImageEffectBase extends NameObj {
         return this.visibleScenario && (this.visible || this.active);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
-        const strengthAdj = getDeltaTimeFrames(sceneObjHolder.viewerInput) / 30.0;
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
+        const strengthAdj = sceneObjHolder.deltaTimeFrames / 30.0;
 
         if (this.active) {
             this.visible = true;
@@ -114,7 +114,12 @@ function connectToSceneImageEffect(sceneObjHolder: SceneObjHolder, nameObj: Name
     connectToScene(sceneObjHolder, nameObj, MovementType.ImageEffect, CalcAnimType.Environment, -1, -1);
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 2 }];
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },
+    ] },
+];
 
 // Should I try to do this with GX? lol.
 
@@ -131,16 +136,16 @@ layout(std140) uniform ub_Params {
 #define u_Intensity2     (u_Misc[0].w)
 `;
 
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 }
 
 class FullscreenBlitProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
 }
 
 class BloomPassThresholdProgram extends BloomPassBaseProgram {
-    public frag: string = `
+    public override frag: string = `
 ${BloomPassBaseProgram.BindingsDefinition}
 ${ImageEffectShaderLib}
 
@@ -415,8 +420,8 @@ layout(std140) uniform ub_Params {
 `;
 
 class BloomSimpleThresholdProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = `
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = `
 ${BloomSimplePSCommon}
 
 float ApplyMaskFilter(vec3 t_TexSample) {
@@ -444,7 +449,7 @@ void main() {
 }
 
 class BloomSimpleBlurProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 
     constructor(tapCount: number, radius: number, intensity: number) {
         super();
@@ -515,7 +520,7 @@ export class BloomEffectSimple extends ImageEffectBase {
         offs += fillVec4(d, offs, maskFilter, threshold, intensity);
     }
 
-    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
+    public override pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
         if (!this.isOn())
             return;
 
@@ -582,12 +587,12 @@ layout(std140) uniform ub_Params {
 #define u_IsDepthReversed   (u_Misc[0].w)
 `;
 
-    public vert = `
+    public override vert = `
 ${DepthOfFieldProgram.Common}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 
-    public frag = `
+    public override frag = `
 ${DepthOfFieldProgram.Common}
 ${ImageEffectShaderLib}
 ${GfxShaderLibrary.invlerp}
@@ -682,7 +687,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IS_DEPTH_REVERSED ? 1.0 : 0.0);
     }
 
-    public pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
+    public override pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {
         if (!this.isOn())
             return;
 
@@ -804,15 +809,15 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
     private intensity1Target = 0;
     private intensity2Target = 0;
 
-    public onChange(sceneObjHolder: SceneObjHolder): void {
+    public override onChange(sceneObjHolder: SceneObjHolder): void {
         this.reset = true;
     }
 
-    public getEffect(sceneObjHolder: SceneObjHolder): BloomEffect | null {
+    public override getEffect(sceneObjHolder: SceneObjHolder): BloomEffect | null {
         return sceneObjHolder.bloomEffect;
     }
 
-    public update(sceneObjHolder: SceneObjHolder): void {
+    public override update(sceneObjHolder: SceneObjHolder): void {
         if (this.reset) {
             this.bloomIntensity = this.bloomIntensityTarget;
             this.threshold = this.thresholdTarget;
@@ -861,7 +866,7 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
 }
 
 class ImageEffectStateBloomSimple extends ImageEffectState {
-    public getEffect(sceneObjHolder: SceneObjHolder): BloomEffectSimple | null {
+    public override getEffect(sceneObjHolder: SceneObjHolder): BloomEffectSimple | null {
         return sceneObjHolder.bloomEffectSimple;
     }
 
@@ -879,7 +884,7 @@ class ImageEffectStateBloomSimple extends ImageEffectState {
 }
 
 class ImageEffectStateDepthOfField extends ImageEffectState {
-    public getEffect(sceneObjHolder: SceneObjHolder): DepthOfFieldBlur | null {
+    public override getEffect(sceneObjHolder: SceneObjHolder): DepthOfFieldBlur | null {
         return sceneObjHolder.depthOfFieldBlur;
     }
 
@@ -1010,8 +1015,8 @@ class ImageEffectDirector extends NameObj {
         // ...
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.auto)
             this.updateAuto(sceneObjHolder);
@@ -1047,7 +1052,7 @@ class ImageEffectArea extends AreaObj {
         this.priority = fallback(getJMapInfoArg7(infoIter), -1);
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return "ImageEffectArea";
     }
 }
@@ -1107,7 +1112,7 @@ export class ImageEffectAreaMgr extends AreaObjMgr<ImageEffectArea> {
         super(sceneObjHolder, "ImageEffectArea");
     }
 
-    public initAfterPlacement(): void {
+    public override initAfterPlacement(): void {
         this.sort();
     }
 

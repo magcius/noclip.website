@@ -8,10 +8,11 @@ import { ColorKind, GXMaterialHelperGfx, loadTextureFromMipChain, MaterialParams
 import { Texture } from "../../../viewer";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
-import { colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color";
+import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color";
 import { vec3, vec4 } from "gl-matrix";
-import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
+import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../../../TextureHolder";
+import { LayoutTextbox } from "./Layout";
 
 const enum RFNTGlyphType {
     Glyph, Texture,
@@ -211,7 +212,6 @@ export class ResFont {
     public viewerTextures: Texture[] = [];
 
     public materialHelper: GXMaterialHelperGfx;
-    public glyphInfo: GlyphInfo[] = [];
 
     constructor(device: GfxDevice, public rfnt: RFNT) {
         for (let i = 0; i < this.rfnt.textures.length; i++) {
@@ -222,7 +222,7 @@ export class ResFont {
         }
 
         const mb = new GXMaterialBuilder(this.rfnt.name);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
@@ -237,6 +237,7 @@ export class ResFont {
         mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
+        mb.setZMode(false, GX.CompareType.ALWAYS, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setUsePnMtxIdx(false);
 
@@ -256,10 +257,16 @@ function glyphIndexFromChar(rfnt: RFNT, char: number): number {
     return glyphIndex;
 }
 
+export interface TagProcessor {
+    reset(writer: CharWriter, rect: vec4 | null): void;
+    processTag(writer: CharWriter, rect: vec4 | null, str: string, i: number): number;
+}
+
 const materialParams = new MaterialParams();
 export class CharWriter {
     public font: ResFont;
     public cursor = vec3.create();
+    public origin = vec3.create();
     public scale = vec3.create();
 
     public charSpacing: number = 0;
@@ -272,52 +279,76 @@ export class CharWriter {
     public color0 = colorNewCopy(TransparentBlack);
     public color1 = colorNewCopy(White);
 
+    public materialChanged = false;
+
     private textureMapping = nArray(1, () => new TextureMapping());
 
-    public setFont(font: ResFont, charSpacing: number, lineHeight: number, fontWidth: number | null = null, fontHeight: number | null = null): void {
+    public setFont(font: ResFont, charSpacing: number | null = null, lineHeight: number | null = null, fontWidth: number | null = null, fontHeight: number | null = null): void {
         this.font = font;
         const rfnt = this.font.rfnt;
-        this.charSpacing = charSpacing;
         this.scale[0] = fontWidth !== null ? (fontWidth / rfnt.width) : 1;
         this.scale[1] = fontHeight !== null ? (fontHeight / rfnt.height) : 1;
-        this.lineHeight = lineHeight;
+        if (charSpacing !== null)
+            this.charSpacing = charSpacing;
+        if (lineHeight !== null)
+            this.lineHeight = lineHeight;
+    }
+
+    public setColorMapping(color0: Color, color1: Color = color0): void {
+        colorCopy(this.color0, color0);
+        colorCopy(this.color1, color1);
+        this.materialChanged = true;
     }
 
     public getScaledLineHeight(): number {
         return this.lineHeight + (this.font.rfnt.advanceHeight * this.scale[1]);
     }
 
-    public calcRect(dst: vec4, str: string): void {
-        const rfnt = this.font.rfnt;
+    public calcRectFromCursor(dst: vec4): void {
+        dst[0] = Math.min(dst[0], this.cursor[0]);
+        dst[1] = Math.min(dst[1], this.cursor[1]);
+        dst[2] = Math.max(dst[2], this.cursor[0]);
+        dst[3] = Math.max(dst[3], this.cursor[1]);
+    }
 
+    public advanceCharacter(dst: vec4, char: number, addSpacing: boolean): void {
+        if (addSpacing)
+            this.cursor[0] += this.charSpacing;
+
+        const glyphIndex = glyphIndexFromChar(this.font.rfnt, char);
+        const glyphInfo = this.font.rfnt.glyphInfo[glyphIndex];
+
+        this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
+        this.calcRectFromCursor(dst);
+    }
+
+    public calcRect(dst: vec4, str: string, tagProcessor: TagProcessor | null = null): void {
         let needsSpacing = false;
-    
-        let x = 0;
+
+        dst[0] = this.cursor[0];
+        dst[1] = this.cursor[1];
+        dst[2] = this.cursor[0];
+        dst[3] = this.cursor[1];
+
+        if (tagProcessor !== null)
+            tagProcessor.reset(this, dst);
+
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
-    
+
             if (char < 0x20) {
                 // Control code.
+                if (tagProcessor !== null)
+                    i = tagProcessor.processTag(this, dst, str, i) - 1;
                 continue;
             }
-    
-            if (needsSpacing)
-                x += this.charSpacing;
+
+            this.advanceCharacter(dst, char, needsSpacing);
             needsSpacing = true;
-    
-            const glyphIndex = glyphIndexFromChar(rfnt, char);
-            const glyphInfo = rfnt.glyphInfo[glyphIndex];
-    
-            const glyphWidth = glyphInfo.cwdh.advanceWidth * this.scale[0];
-    
-            x += glyphWidth;
         }
-    
-        const y = this.getScaledLineHeight();
-    
-        const x0 = Math.min(x, 0), x1 = Math.max(x, 0);
-        const y0 = Math.min(y, 0), y1 = Math.max(y, 0);
-        vec4.set(dst, x0, y0, x1, y1);
+
+        this.cursor[1] -= this.getScaledLineHeight();
+        this.calcRectFromCursor(dst);
     }
 
     private drawStringGlyph(ddraw: TDDraw, glyf: GlyphInfo): void {
@@ -362,7 +393,42 @@ export class CharWriter {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public drawString(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string): void {
+    private makeMaterialUBO(template: GfxRenderInst): void {
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.color0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.color1);
+        this.font.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+    }
+
+    private renderInstManager: GfxRenderInstManager;
+    private ddraw: TDDraw;
+
+    public writeCharacter(char: number, addSpacing: boolean): void {
+        if (addSpacing)
+            this.cursor[0] += this.charSpacing;
+
+        const glyphIndex = glyphIndexFromChar(this.font.rfnt, char);
+        const glyphInfo = this.font.rfnt.glyphInfo[glyphIndex];
+
+        // If we need to, flush the previous batch.
+        const gfxTexture = this.font.gfxTextures[glyphInfo.textureIndex];
+        const textureChanged = gfxTexture !== this.textureMapping[0].gfxTexture;
+        if (textureChanged || this.materialChanged) {
+            this.drawStringFlush(this.renderInstManager, this.ddraw);
+
+            if (textureChanged)
+                this.textureMapping[0].gfxTexture = gfxTexture;
+            if (this.materialChanged) {
+                this.makeMaterialUBO(this.renderInstManager.getTemplateRenderInst());
+                this.materialChanged = false;
+            }
+        }
+
+        // Draw and advance cursor.
+        this.drawStringGlyph(this.ddraw, glyphInfo);
+        this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
+    }
+
+    public drawString(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, str: string, tagProcessor: TagProcessor | null = null): void {
         const cache = renderInstManager.gfxRenderCache;
 
         this.textureMapping[0].gfxSampler = cache.createSampler({
@@ -375,44 +441,36 @@ export class CharWriter {
             maxLOD: 100,
         });
 
+        this.renderInstManager = renderInstManager;
+        this.ddraw = ddraw;
+
         const template = renderInstManager.pushTemplateRenderInst();
         this.font.materialHelper.setOnRenderInst(cache.device, cache, template);
-        colorCopy(materialParams.u_Color[ColorKind.C0], this.color0);
-        colorCopy(materialParams.u_Color[ColorKind.C1], this.color1);
-        this.font.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-
+        this.makeMaterialUBO(template);
         this.textureMapping[0].gfxTexture = null;
 
-        const rfnt = this.font.rfnt;
+        if (tagProcessor !== null)
+            tagProcessor.reset(this, null);
+
         let needsSpacing = false;
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
 
             if (char < 0x20) {
                 // Control code.
+                if (tagProcessor !== null)
+                    i = tagProcessor.processTag(this, null, str, i) - 1;
                 continue;
             }
 
-            if (needsSpacing)
-                this.cursor[0] += this.charSpacing;
+            this.writeCharacter(char, needsSpacing);
             needsSpacing = true;
-
-            const glyphIndex = glyphIndexFromChar(rfnt, char);
-            const glyphInfo = rfnt.glyphInfo[glyphIndex];
-
-            // If we're going to switch textures, flush the previous batch.
-            const gfxTexture = this.font.gfxTextures[glyphInfo.textureIndex];
-            if (gfxTexture !== this.textureMapping[0].gfxTexture) {
-                this.drawStringFlush(renderInstManager, ddraw);
-                this.textureMapping[0].gfxTexture = gfxTexture;
-            }
-
-            // Draw and advance cursor.
-            this.drawStringGlyph(ddraw, glyphInfo);
-            this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
         }
 
         this.drawStringFlush(renderInstManager, ddraw);
         renderInstManager.popTemplateRenderInst();
+
+        this.renderInstManager = null!;
+        this.ddraw = null!;
     }
 }

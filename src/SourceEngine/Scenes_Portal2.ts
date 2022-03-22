@@ -1,17 +1,131 @@
 
+import { vec3 } from "gl-matrix";
+import { DataFetcher } from "../DataFetcher";
+import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
-import { BSPRenderer, SourceFileSystem, SourceRenderContext } from "./Main";
+import { EmptyScene } from "../Scenes_Test";
+import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
+import { decodeString } from "../util";
+import { SceneGfx } from "../viewer";
+import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
+import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
 import { BSPEntity } from "./VMT";
+
+class trigger_portal_button extends trigger_multiple {
+    public static override classname = `trigger_portal_button`;
+    public button: BaseFloorButton | null = null;
+
+    protected override onStartTouch(entitySystem: EntitySystem): void {
+        super.onStartTouch(entitySystem);
+        this.button!.press(entitySystem);
+    }
+
+    protected override onEndTouch(entitySystem: EntitySystem): void {
+        super.onEndTouch(entitySystem);
+        this.button!.unpress(entitySystem);
+    }
+}
 
 class prop_button extends BaseEntity {
     public static classname = 'prop_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/switch001.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/switch001.mdl');
+    }
+}
+
+const enum BaseFloorButtonSkin {
+    Up = 0, Down = 1,
+}
+
+class BaseFloorButton extends BaseEntity {
+    private output_onPressed = new EntityOutput();
+    private output_onUnPressed = new EntityOutput();
+
+    public pressed = false;
+    protected trigger: trigger_portal_button;
+
+    protected upSequence = 'up';
+    protected downSequence = 'down';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onPressed.parse(this.entity.onpressed);
+        this.output_onUnPressed.parse(this.entity.onunpressed);
+        this.registerInput('pressin', this.input_pressin.bind(this));
+        this.registerInput('pressout', this.input_pressout.bind(this));
+
+        this.createTriggers(entitySystem);
+    }
+
+    private createTriggers(entitySystem: EntitySystem): void {
+        const origin = vec3.create();
+        const size = vec3.create();
+        this.getAbsOriginAndAngles(origin, size);
+
+        this.trigger = entitySystem.createEntity({ classname: `trigger_portal_button` }) as trigger_portal_button;
+        this.trigger.setAbsOriginAndAngles(origin, size);
+        this.trigger.button = this;
+    }
+
+    public press(entitySystem: EntitySystem): void {
+        this.resetSequence(this.downSequence);
+        this.pressed = true;
+        this.modelStudio!.setSkin(entitySystem.renderContext, BaseFloorButtonSkin.Down);
+        this.output_onPressed.fire(entitySystem, this);
+    }
+
+    public unpress(entitySystem: EntitySystem): void {
+        this.resetSequence(this.upSequence);
+        this.pressed = false;
+        this.modelStudio!.setSkin(entitySystem.renderContext, BaseFloorButtonSkin.Up);
+        this.output_onUnPressed.fire(entitySystem, this);
+    }
+
+    private input_pressin(entitySystem: EntitySystem): void {
+        this.press(entitySystem);
+    }
+
+    private input_pressout(entitySystem: EntitySystem): void {
+        this.unpress(entitySystem);
+    }
+}
+
+class prop_floor_button extends BaseFloorButton {
+    public static classname = 'prop_floor_button';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/portal_button.mdl';
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.trigger.setSize(new AABB(-20, -20, 0, 20, 20, 14));
+    }
+}
+
+class prop_floor_cube_button extends BaseFloorButton {
+    public static classname = 'prop_floor_cube_button';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/box_socket.mdl';
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.trigger.setSize(new AABB(-20, -20, 0, 20, 20, 14));
+    }
+}
+
+class prop_floor_ball_button extends BaseFloorButton {
+    public static classname = 'prop_floor_ball_button';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/ball_button.mdl';
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.trigger.setSize(new AABB(-5, -5, 0, 5, 5, 14));
     }
 }
 
@@ -19,17 +133,22 @@ class prop_under_button extends BaseEntity {
     public static classname = 'prop_under_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props_underground/underground_testchamber_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props_underground/underground_testchamber_button.mdl');
     }
 }
 
-class prop_under_floor_button extends BaseEntity {
+class prop_under_floor_button extends BaseFloorButton {
     public static classname = 'prop_under_floor_button';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props_underground/underground_floor_button.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props_underground/underground_floor_button.mdl');
+        this.upSequence = 'release';
+        this.downSequence = 'press';
+        this.trigger.setSize(new AABB(-30, -30, 0, 30, 30, 17));
     }
 }
 
@@ -37,35 +156,192 @@ class prop_testchamber_door extends BaseEntity {
     public static classname = 'prop_testchamber_door';
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        if (entity.model === undefined)
+            entity.model = 'models/props/portal_door_combined.mdl';
         super(entitySystem, renderContext, bspRenderer, entity);
-        this.setModelName(renderContext, 'models/props/portal_door_combined.mdl');
     }
+}
+
+async function createPortal2SourceLoadContext(context: SceneContext): Promise<SourceLoadContext> {
+    function registerEntityFactories(registry: EntityFactoryRegistry): void {
+        registry.registerFactory(trigger_portal_button);
+        registry.registerFactory(prop_button);
+        registry.registerFactory(prop_floor_button);
+        registry.registerFactory(prop_floor_cube_button);
+        registry.registerFactory(prop_floor_ball_button);
+        registry.registerFactory(prop_under_button);
+        registry.registerFactory(prop_under_floor_button);
+        registry.registerFactory(prop_testchamber_door);
+    }
+
+    const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
+        const filesystem = new SourceFileSystem(context.dataFetcher);
+        await Promise.all([
+            filesystem.createZipMount(`${pathBase}/platform.zip`),
+            filesystem.createVPKMount(`${pathBase}/portal2/pak01`),
+            filesystem.createVPKMount(`${pathBase}/portal2_dlc1/pak01`),
+            filesystem.createVPKMount(`${pathBase}/portal2_dlc2/pak01`),
+        ]);
+        return filesystem;
+    });
+
+    const loadContext = new SourceLoadContext(filesystem);
+    registerEntityFactories(loadContext.entityFactoryRegistry);
+    return loadContext;
 }
 
 class Portal2SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    private registerEntityFactories(registry: EntityFactoryRegistry): void {
-        registry.registerFactory(prop_button);
-        registry.registerFactory(prop_under_button);
-        registry.registerFactory(prop_under_floor_button);
-        registry.registerFactory(prop_testchamber_door);
+    public async createScene(device: GfxDevice, context: SceneContext) {
+        const loadContext = await createPortal2SourceLoadContext(context);
+        return createScene(context, loadContext, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, false);
+    }
+}
+
+interface SteamAPIResult_QueryFilesFile {
+    publishedfileid: string;
+    file_url: string;
+    preview_url: string;
+    filename: string;
+    title: string;
+    tags: { tag: string, display_name: string }[];
+}
+
+interface SteamAPIResult_QueryFiles {
+    next_cursor: string;
+    total: number;
+    publishedfiledetails: SteamAPIResult_QueryFilesFile[];
+}
+
+class WorkshopAPI {
+    private STEAM_API_KEY = `DC399146B3FEF89B7373F367EDA99309`;
+
+    constructor(private dataFetcher: DataFetcher) {
+    }
+
+    private getCORSBridgeURL(url: string): string {
+        return `https://api.allorigins.win/raw?url=` + encodeURIComponent(url);
+    }
+
+    public async queryFiles(searchText: string = '', cursor = '*'): Promise<SteamAPIResult_QueryFiles> {
+        const input_json = JSON.stringify({
+            appid: 620, // Portal 2
+            return_metadata: true,
+            numperpage: 50,
+            cursor,
+            search_text: searchText,
+        });
+
+        const data = await this.dataFetcher.fetchURL(this.getCORSBridgeURL(`https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?key=${this.STEAM_API_KEY}&input_json=${input_json}`), { });
+        return JSON.parse(decodeString(data)).response as SteamAPIResult_QueryFiles;
+    }
+
+    public getFileURL(file: SteamAPIResult_QueryFilesFile): string {
+        return this.getCORSBridgeURL(`${file.file_url}`);
+    }
+}
+
+class Portal2WorkshopSceneDesc implements SceneDesc {
+    constructor(public id: string, public name: string, public url: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
-            const filesystem = new SourceFileSystem(context.dataFetcher);
-            await Promise.all([
-                filesystem.createZipMount(`${pathBase}/platform.zip`),
-                filesystem.createVPKMount(`${pathBase}/portal2/pak01`),
-            ]);
-            return filesystem;
+        const loadContext = await createPortal2SourceLoadContext(context);
+        return createScene(context, loadContext, this.id, this.url, false);
+    }
+}
+
+class Portal2WorkshopBrowseSceneDesc implements SceneDesc {
+    public id = `Workshop`;
+    public name = `Workshop`;
+
+    public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
+        const workshopAPI = new WorkshopAPI(sceneContext.dataFetcher);
+        
+        const panel = window.main.ui.debugFloaterHolder.makeFloatingPanel('Portal 2 Workshop');
+        panel.setWidth('80vw');
+        panel.contents.style.maxHeight = '';
+        panel.closeButton.style.display = 'none';
+
+        const searchBox = new TextEntry();
+        searchBox.setIcon(SEARCH_ICON);
+        panel.contents.appendChild(searchBox.elem);
+
+        let currentSearchResponse: SteamAPIResult_QueryFiles | null = null;
+
+        const doSearch = async () => {
+            const r = await workshopAPI.queryFiles(searchBox.textfield.getValue());
+            currentSearchResponse = r;
+            levelList.setItems(r.publishedfiledetails.map((file) => {
+                const h = document.createElement('div');
+                h.style.display = 'flex';
+                h.style.gap = '8px';
+                h.style.padding = '8px 0';
+
+                const img = document.createElement('img');
+                img.src = file.preview_url;
+                img.style.width = '120px';
+                img.style.objectFit = 'contain';
+                h.appendChild(img);
+
+                const header = document.createElement('div');
+
+                const title = document.createElement('div');
+                title.textContent = file.title;
+                title.style.fontSize = 'larger';
+                title.style.fontWeight = 'bold';
+                header.appendChild(title);
+
+                const tags = document.createElement('div');
+                if (file.tags) {
+                    file.tags.forEach((v) => {
+                        const tag = document.createElement('span');
+                        tag.style.margin = '0px 8px';
+                        tag.style.padding = '4px';
+                        tag.style.fontSize = 'smaller';
+                        tag.style.color = 'white';
+                        tag.style.textShadow = `0 0 8px black`;
+                        tag.style.backgroundColor = HIGHLIGHT_COLOR;
+                        tag.textContent = v.display_name;
+                        tags.appendChild(tag);
+                    });
+                }
+                header.appendChild(tags);
+
+                h.appendChild(header);
+
+                const item: ScrollSelectItem = {
+                    type: ScrollSelectItemType.Selectable,
+                    visible: true,
+                    html: h,
+                };
+                return item;
+            }));
+        };
+
+        searchBox.textfield.elem.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter')
+                doSearch();
         });
 
-        const renderContext = new SourceRenderContext(context.device, filesystem);
-        this.registerEntityFactories(renderContext.entityFactoryRegistry);
-        return createScene(context, filesystem, this.id, `${pathBase}/portal2/maps/${this.id}.bsp`, renderContext);
+        const levelList = new SingleSelect();
+        levelList.setHeight('70vh');
+        levelList.onselectionchange = (index: number) => {
+            if (currentSearchResponse === null)
+                return;
+
+            const file = currentSearchResponse.publishedfiledetails[index];
+
+            // Load the new scene.
+            const file_url = workshopAPI.getFileURL(file);
+            const sceneDesc = new Portal2WorkshopSceneDesc(file.publishedfileid, file.title, file_url);
+            (window.main as any)._loadSceneDesc(sceneGroup, sceneDesc);
+        };
+        panel.contents.appendChild(levelList.elem);
+
+        return new EmptyScene();
     }
 }
 
@@ -183,6 +459,8 @@ const sceneDescs = [
     new Portal2SceneDesc("mp_coop_wall_intro"),
     "Super 8 Teaser",
     new Portal2SceneDesc("e1912"),
+    "Workshop",
+    new Portal2WorkshopBrowseSceneDesc(),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

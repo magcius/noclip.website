@@ -2,7 +2,6 @@ const GitRevisionPlugin = require('git-revision-webpack-plugin');
 const gitRevision = new GitRevisionPlugin();
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
-const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 const CopyPlugin = require('copy-webpack-plugin');
 const path = require('path');
 const webpack = require('webpack');
@@ -68,10 +67,6 @@ module.exports = {
         { from: 'src/**/*.wasm', to: '[name].[ext]' },
         { from: 'node_modules/librw/lib/librw.wasm', to: '[name].[ext]' },
       ],
-    }),
-    new WasmPackPlugin({
-      crateDirectory: path.join(__dirname, 'rust'),
-      forceMode: "production",
     }),
     new NormalModuleReplacementPlugin(/iconv-lite/, './dummy-iconv-lite.js'),
   ],

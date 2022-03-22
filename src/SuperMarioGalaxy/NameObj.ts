@@ -21,15 +21,27 @@ export const enum GameBits {
 export const enum MovementType {
     None                           = -1,
 
+    StopSceneDelayRequest          = 0x01,
+    Camera                         = 0x02,
     ScreenEffect                   = 0x03,
+    ClippingDirector               = 0x04,
     SensorHitChecker               = 0x05,
     MsgSharedGroup                 = 0x06,
+    AudCameraWatcher               = 0x09,
+    TalkDirector                   = 0x0A,
     DemoDirector                   = 0x0B,
     AreaObj                        = 0x0D,
     Layout                         = 0x0E,
     LayoutDecoration               = 0x0F,
+    Movie                          = 0x01,
+    WipeLayout                     = 0x11,
     LayoutOnPause                  = 0x12,
+    MovieSubtitles                 = 0x13,
+    MirrorCamera                   = 0x16,
     ImageEffect                    = 0x17,
+    AudEffectDirector              = 0x18,
+    AudBgmConductor                = 0x19,
+    CameraCover                    = 0x1A,
     SwitchWatcherHolder            = 0x1B,
     ClippedMapParts                = 0x1C,
     Planet                         = 0x1D,
@@ -40,10 +52,13 @@ export const enum MovementType {
     MapObj                         = 0x22,
     MapObjDecoration               = 0x23,
     Sky                            = 0x24,
+    Player                         = 0x25,
+    PlayerDecoration               = 0x26,
+    PlayerMessenger                = 0x27,
     Npc                            = 0x28,
     Ride                           = 0x29,
     Enemy                          = 0x2A,
-    Parts                          = 0x2B,
+    EnemyDecoration                = 0x2B,
     Item                           = 0x2C,
     ShadowControllerHolder         = 0x2D,
 }
@@ -57,11 +72,18 @@ export const enum CalcAnimType {
     Environment                    = 0x04,
     MapObj                         = 0x05,
     Npc                            = 0x06,
+    Ride                           = 0x07,
     Enemy                          = 0x08,
+    Player                         = 0x09,
+    PlayerDecoration               = 0x0A,
     MapObjDecoration               = 0x0B,
+    MirrorMapObj                   = 0x0C,
     Layout                         = 0x0D,
     LayoutDecoration               = 0x0E,
+    MovieSubtitles                 = 0x0F,
     Item                           = 0x10,
+    AnimParticle                   = 0x13,
+    AnimParticleIgnorePause        = 0x14,
 }
 
 export const enum DrawBufferType {
@@ -72,6 +94,7 @@ export const enum DrawBufferType {
     Air                                 = 0x02,
     Sun                                 = 0x03,
     Planet                              = 0x04,
+    PlanetLow                           = 0x05,
     Environment                         = 0x06,
     EnvironmentStrongLight              = 0x07,
     MapObj                              = 0x08,
@@ -86,15 +109,18 @@ export const enum DrawBufferType {
     Ride                                = 0x11,
     Enemy                               = 0x12,
     EnemyDecoration                     = 0x13,
-    MarioActor                          = 0x14,
-    TornadoMario                        = 0x15,
+    Player                              = 0x14,
+    PlayerDecoration                    = 0x15,
+    CrystalBox                          = 0x16,
     IndirectMapObj                      = 0x19,
     IndirectMapObjStrongLight           = 0x1A,
     IndirectNpc                         = 0x1B,
     IndirectEnemy                       = 0x1C,
     IndirectPlanet                      = 0x1D,
     BloomModel                          = 0x1E,
+    TripodBoss                          = 0x1F,
     Crystal                             = 0x20,
+    CrystalItem                         = 0x21,
     GlaringLight                        = 0x22,
     AstroDomeSky                        = 0x23,
     Model3DFor2D                        = 0x24,
@@ -108,32 +134,63 @@ export const enum DrawType {
     None                           = -1,
 
     SwingRope                      = 0x00,
-    Creeper                        = 0x01,
+    Creeper                        = 0x02,
+    PlantStalk                     = 0x04,
+    Plant                          = 0x05,
     Trapeze                        = 0x06,
     OceanBowl                      = 0x07,
     OceanRing                      = 0x08,
-    OceanRingOutside               = 0x0A,
+    OceanRingPipeInside            = 0x09,
+    OceanRingPipeOutside           = 0x0A,
     OceanSphere                    = 0x0B,
+    WaterRoad                      = 0x0C,
     WhirlPoolAccelerator           = 0x0D,
     ElectricRailHolder             = 0x0E,
+    BigBubble                      = 0x0F,
+    BigBubbleGoal                  = 0x10,
     SpinDriverPathDrawer           = 0x12,
+    GCapture                       = 0x13,
     ClipAreaDropLaser              = 0x14,
+    SpiderThread                   = 0x15,
+    SpaceCocoon                    = 0x16,
     WarpPodPath                    = 0x18,
+    FlexibleSphere                 = 0x19,
+    KirairaChain                   = 0x1A,
     WaterPlant                     = 0x1B,
     VolumeModel                    = 0x1C,
     Flag                           = 0x1D,
     AstroDomeSkyClear              = 0x1E,
     AstroDomeOrbit                 = 0x1F,
     OceanBowlBloomDrawer           = 0x21,
+    Player                         = 0x22,
+    MiiFacePartsHolder             = 0x25,
     ShadowSurface                  = 0x26,
     ShadowVolume                   = 0x27,
     AlphaShadow                    = 0x29,
     ClipArea                       = 0x2A,
+    FallOutFieldDraw               = 0x2B,
+    ClipFieldFillDraw              = 0x2C,
+    CaptureScreenIndirect          = 0x2D,
+    CaptureScreenCamera            = 0x2E,
+    CenterScreenBlur               = 0x2F,
     Fur                            = 0x31,
+    BloomEffectPreDraw             = 0x34,
+    BloomEffectPostDraw            = 0x35,
     BloomModel                     = 0x36,
+    ImageEffect                    = 0x37,
+    DashRing                       = 0x38,
     BrightSun                      = 0x39,
     WaterCameraFilter              = 0x3A,
-
+    Layout                         = 0x3C,
+    LayoutDecoration               = 0x3D,
+    LayoutOnPause                  = 0x3E,
+    Movie                          = 0x3F,
+    MovieSubtitles                 = 0x40,
+    CometScreenFilter              = 0x41,
+    WipeLayout                     = 0x42,
+    TalkLayout                     = 0x43,
+    CinemaFrame                    = 0x45,
+    GalaxyNamePlate                = 0x46,
     EffectDraw3D                   = 0x47,
     EffectDrawIndirect             = 0x48,
     EffectDrawAfterIndirect        = 0x49,
@@ -141,6 +198,10 @@ export const enum DrawType {
     EffectDrawFor2DModel           = 0x4B,
     EffectDrawForBloomEffect       = 0x4C,
     EffectDrawAfterImageEffect     = 0x4D,
+    MessageBoardCapture            = 0x4E,
+    MiiFaceIcon                    = 0x4F,
+    MiiFaceNew                     = 0x50,
+    CameraCovrer                   = 0x51,
 
     GravityExplainer               = 0x200,
 };
@@ -156,7 +217,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public movement(sceneObjHolder: SceneObjHolder): void {
         // Default implementation; nothing.
     }
 
@@ -280,7 +341,7 @@ export class SceneNameObjListExecutor {
     public executeMovement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
             if (this.nameObjExecuteInfos[i].movementType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder, viewerInput);
+                this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder);
     }
 
     public executeCalcAnim(sceneObjHolder: SceneObjHolder): void {
@@ -369,25 +430,25 @@ export class SceneNameObjListExecutor {
 export class NameObjAdaptor extends NameObj {
     public calcAnimCallback: ((sceneObjHolder: SceneObjHolder) => void) | null = null;
     public calcViewAndEntryCallback: ((sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null) => void) | null = null;
-    public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public movementCallback: ((sceneObjHolder: SceneObjHolder) => void) | null = null;
     public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.calcAnimCallback !== null)
             this.calcAnimCallback(sceneObjHolder);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
         if (this.calcViewAndEntryCallback !== null)
             this.calcViewAndEntryCallback(sceneObjHolder, camera, viewMatrix);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (this.movementCallback !== null)
-            this.movementCallback(sceneObjHolder, viewerInput);
+            this.movementCallback(sceneObjHolder);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.drawCallback !== null)
             this.drawCallback(sceneObjHolder, renderInstManager, viewerInput);
     }

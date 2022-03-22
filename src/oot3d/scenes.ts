@@ -18,7 +18,7 @@ import { OrbitCameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
-    public findTextureEntryIndex(name: string): number {
+    public override findTextureEntryIndex(name: string): number {
         let i: number = -1;
 
         i = this.searchTextureEntryIndex(name);
@@ -260,7 +260,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
             if (this.isFileSupported(file))
                 return { type: UI.ScrollSelectItemType.Selectable, name: file.name };
             else
-                return { type: UI.ScrollSelectItemType.Header, html: file.name };
+                return { type: UI.ScrollSelectItemType.Header, name: file.name };
         });
 
         select.setItems(files);

@@ -135,25 +135,49 @@ export enum RSP_Geometry {
     G_CLIPPING           = 1 << 23,
 }
 
-export function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
-    const out = RDP.translateRenderMode(renderMode);
-
-    if (geoMode & RSP_Geometry.G_CULL_BACK) {
-        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            out.cullMode = GfxCullMode.FrontAndBack;
-        } else {
-            out.cullMode = GfxCullMode.Back;
-        }
-    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        out.cullMode = GfxCullMode.Front;
-    } else {
-        out.cullMode = GfxCullMode.None;
-    }
-
-    return out;
+export enum MODIFYVTX_Locations {
+    G_MWO_POINT_RGBA     = 0x10,
+    G_MWO_POINT_ST       = 0x14,
+    G_MWO_POINT_XYSCREEN = 0x18,
+    G_MWO_POINT_ZSCREEN  = 0x1C
 }
 
-export class RSPState {
+export function translateCullMode(m: number): GfxCullMode {
+    const cullFront = !!(m & RSP_Geometry.G_CULL_FRONT);
+    const cullBack = !!(m & RSP_Geometry.G_CULL_BACK);
+    if (cullFront && cullBack)
+        return GfxCullMode.FrontAndBack;
+    else if (cullFront)
+        return GfxCullMode.Front;
+    else if (cullBack)
+        return GfxCullMode.Back;
+    else
+        return GfxCullMode.None;
+}
+
+export interface RSPStateInterface {
+    segmentBuffers: ArrayBufferSlice[];
+
+    finish(): any;
+    gSPSetGeometryMode(mask: number): void;
+    gSPClearGeometryMode(mask: number): void;
+    gSPResetMatrixStackDepth(value: number): void;
+    gSPTexture(on: boolean, tile: number, level: number, s: number, t: number): void;
+    gSPVertex(dramAddr: number, n: number, v0: number): void;
+    gSPModifyVertex(vtx: number, where: number, val: number): void;
+    gSPTri(i0: number, i1: number, i2: number): void;
+    gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void;
+    gDPSetTile(fmt: number, siz: number, line: number, tmem: number, tile: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void;
+    gDPLoadTLUT(tile: number, count: number): void;
+    gDPLoadBlock(tileIndex: number, uls: number, ult: number, lrs: number, dxt: number): void;
+    gDPSetTileSize(tile: number, uls: number, ult: number, lrs: number, lrt: number): void;
+    gDPSetOtherModeL(sft: number, len: number, w1: number): void;
+    gDPSetOtherModeH(sft: number, len: number, w1: number): void;
+    gDPSetCombine(w0: number, w1: number): void;
+}
+
+
+export class RSPState implements RSPStateInterface {
     private output = new RSPOutput();
 
     private stateChanged: boolean = false;
@@ -219,6 +243,10 @@ export class RSPState {
             // Copy in our matrix indices at time of G_VTX.
             this.sharedOutput.vertices[vertexIndex].matrixIndex = this.SP_MatrixStackDepth;
         }
+    }
+
+    public gSPModifyVertex(vtx: number, where: number, val: number): void {
+        console.error("gSPModifyVertex() is not supported by this RSPStateInteface implementation");
     }
 
     private _translateTileTexture(tileIndex: number): number {
@@ -407,7 +435,7 @@ export enum F3DEX_GBI {
     G_TEXRECT           = 0xE4,
 }
 
-export function runDL_F3DEX(state: RSPState, addr: number): void {
+export function runDL_F3DEX(state: RSPStateInterface, addr: number): void {
     const segmentBuffer = state.segmentBuffers[(addr >>> 24) & 0xFF];
     const view = segmentBuffer.createDataView();
 
@@ -539,6 +567,14 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
             // state.gSPPopMatrix();
         } break;
 
+        case F3DEX_GBI.G_MODIFYVTX: {
+            const where =  (w0 >>> 16) & 0x00FF;
+            const vtx =   ((w0 >>>  0) & 0xFFFF) / 2;
+            const val =    (w1 >>>  0) & 0xFFFFFFFF;
+            state.gSPModifyVertex(vtx, where, val);
+        } break;
+
+        case F3DEX_GBI.G_CULLDL:
         case F3DEX_GBI.G_RDPFULLSYNC:
         case F3DEX_GBI.G_RDPTILESYNC:
         case F3DEX_GBI.G_RDPPIPESYNC:

@@ -7,7 +7,7 @@ import { Camera } from "../Camera";
 import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, colorScale, OpaqueBlack } from "../Color";
 import { copyMegaState, fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
 import { fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -65,8 +65,8 @@ export function parseBBLM(buffer: ArrayBufferSlice): BBLM {
 }
 
 class FullscreenBlitProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
 }
 
 class EggBloomBaseProgram extends DeviceProgram {
@@ -81,14 +81,14 @@ layout(std140) uniform ub_Params {
 };
 `;
 
-    public vert = `
+    public override vert = `
 ${EggBloomBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 }
 
 class EggBloomThresholdProgram extends EggBloomBaseProgram {
-    public frag: string = `
+    public override frag: string = `
 ${EggBloomBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.MonochromeNTSC}
@@ -432,7 +432,7 @@ layout(std140) uniform ub_Params {
 #define u_IndTexIndScale  (u_Misc0.yz)
 `;
 
-    public vert = `
+    public override vert = `
 ${EggDOFBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.fullscreenVS}
 `;

@@ -6,7 +6,7 @@ import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers';
-import { SceneObjHolder, getDeltaTimeFrames } from './Main';
+import { SceneObjHolder } from './Main';
 import { ViewerRenderInput } from '../viewer';
 import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection, getRailPointNum } from './ActorUtil';
 import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow';
@@ -94,8 +94,8 @@ class MapPartsFunction<TNerve extends number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         this.spine.changeNerve();
         this.updateSpine(sceneObjHolder, this.spine.getCurrentNerve(), deltaTimeFrames);
@@ -247,7 +247,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
         }
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRotatorNrv, deltaTimeFrames: number): void {
+    public override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRotatorNrv, deltaTimeFrames: number): void {
         if (currentNerve === MapPartsRotatorNrv.Rotate) {
             this.updateVelocity(deltaTimeFrames);
             this.updateAngle(deltaTimeFrames);
@@ -294,7 +294,7 @@ export class MapPartsRailPosture extends MapPartsFunction<MapPartsRailPostureNrv
             this.spine.setNerve(MapPartsRailPostureNrv.DoNothing);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailPostureNrv, deltaTimeFrames: number): void {
+    public override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailPostureNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === MapPartsRailPostureNrv.Move) {
@@ -547,7 +547,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailMoverNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailMoverNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
         if (currentNerve === MapPartsRailMoverNrv.Move) {
             if (isFirstStep(this)) {
@@ -611,7 +611,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         const currentNerve = this.spine.getCurrentNerve();
 
         if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart) {
@@ -621,7 +621,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         }
 
         this.passChecker.movement();
-        super.movement(sceneObjHolder, viewerInput);
+        super.movement(sceneObjHolder);
     }
 
     public tryResetPositionRepeat(sceneObjHolder: SceneObjHolder): void {
@@ -763,7 +763,7 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailGuideDrawerNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailGuideDrawerNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === MapPartsRailGuideDrawerNrv.DrawForward) {

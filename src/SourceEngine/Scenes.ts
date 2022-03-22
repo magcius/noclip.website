@@ -1,19 +1,20 @@
 
-import { SourceFileSystem, SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext } from "./Main";
+import { SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext, SourceLoadContext } from "./Main";
 import { SceneContext } from "../SceneBase";
 import { BSPFile } from "./BSPFile";
-import { assert } from "../util";
+import { assertExists } from "../util";
 
-export async function createScene(context: SceneContext, filesystem: SourceFileSystem, mapId: string, mapPath: string, renderContext: SourceRenderContext | null = null): Promise<SourceRenderer> {
+export async function createScene(context: SceneContext, loadContext: SourceLoadContext, mapId: string, mapPath: string, loadMapFromVpk: boolean = false): Promise<SourceRenderer> {
+    const filesystem = loadContext.filesystem;
+
     // Clear out old filesystem pakfile.
     filesystem.pakfiles.length = 0;
 
-    if (renderContext === null)
-        renderContext = new SourceRenderContext(context.device, filesystem);
+    const renderContext = new SourceRenderContext(context.device, loadContext);
     const renderer = new SourceRenderer(context, renderContext);
 
     const bspFile = await context.dataShare.ensureObject(`SourceEngine/${mapPath}`, async () => {
-        const bsp = await context.dataFetcher.fetchData(mapPath);
+        const bsp = loadMapFromVpk ? assertExists(await filesystem.fetchFileData(mapPath)) : await context.dataFetcher.fetchData(mapPath);
         return new BSPFile(bsp, mapId);
     });
 
@@ -23,14 +24,11 @@ export async function createScene(context: SceneContext, filesystem: SourceFileS
     if (bspFile.cubemaps[0] !== undefined)
         await renderContext.materialCache.bindLocalCubemap(bspFile.cubemaps[0]);
 
+    const bspRenderer = new BSPRenderer(renderContext, bspFile);
     // Build skybox from worldname.
-    const worldspawn = bspFile.entities[0];
-    assert(worldspawn.classname === 'worldspawn');
+    const worldspawn = bspRenderer.getWorldSpawn();
     if (worldspawn.skyname)
         renderer.skyboxRenderer = new SkyboxRenderer(renderContext, worldspawn.skyname);
-
-    const bspRenderer = new BSPRenderer(renderContext, bspFile);
     renderer.bspRenderers.push(bspRenderer);
-
     return renderer;
 }

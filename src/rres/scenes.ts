@@ -86,7 +86,7 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
         for (let i = 0; i < this.models.length; i++)

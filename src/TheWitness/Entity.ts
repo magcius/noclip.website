@@ -145,7 +145,7 @@ export class Entity_Inanimate extends Entity {
     public mesh_name: string = '';
     public color_override: number = 0;
 
-    public transport_create_hook(globals: TheWitnessGlobals): void {
+    public override transport_create_hook(globals: TheWitnessGlobals): void {
         super.transport_create_hook(globals);
 
         if (!(this.color_override))
@@ -164,14 +164,14 @@ export class Entity_Cluster extends Entity {
     public elements_static: number[];
     public elements_detail: number[];
     public elements_combined_meshes: number[];
-    public bounding_radius: number;
-    public bounding_center: vec3;
+    public override bounding_radius: number;
+    public override bounding_center: vec3;
     public cluster_flags: number;
 
     public cluster_mesh_data: Mesh_Asset | null = null;
     public cluster_mesh_instance: Mesh_Instance | null = null;
 
-    public transport_create_hook(globals: TheWitnessGlobals): void {
+    public override transport_create_hook(globals: TheWitnessGlobals): void {
         super.transport_create_hook(globals);
 
         const mesh_name = `${globals.entity_manager.universe_name}_${this.portable_id}`;

@@ -282,8 +282,7 @@ export function drawViewportSpacePoint(ctx: CanvasRenderingContext2D, x: number,
 }
 
 function shouldCull(p: ReadonlyVec4, clipSpaceNearZ = window.main.viewer.gfxDevice.queryVendorInfo().clipSpaceNearZ): boolean {
-    const nearZ = clipSpaceNearZ === GfxClipSpaceNearZ.Zero ? 0 : -1;
-    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < nearZ || p[2] > 1;
+    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < clipSpaceNearZ || p[2] > 1;
 }
 
 export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: ReadonlyVec3, color: Color = Magenta, size: number = 4): void {

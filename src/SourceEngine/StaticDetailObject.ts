@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { Color, colorClampLDR, colorCopy, colorNewFromRGBA } from "../Color";
-import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
+import { unpackColorRGBExp32, BaseMaterial, MaterialShaderTemplateBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView, BSPRenderer } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
@@ -190,11 +190,11 @@ export class DetailPropLeafRenderer {
         const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
-            { location: MaterialProgramBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
-            { location: MaterialProgramBase.a_TangentS, bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TangentS, bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -339,7 +339,7 @@ export class DetailPropLeafRenderer {
             vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
         }
 
-        convertToTrianglesRange(this.indexData, 0, GfxTopology.QUADS, 0, sortList.length * 4);
+        convertToTrianglesRange(this.indexData, 0, GfxTopology.Quads, 0, sortList.length * 4);
 
         const device = renderContext.device;
         device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
@@ -493,7 +493,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         // TF2's 7-10 seem to use this below, which is 8 bytes.
         // The version 10 that CS:GO and Portal 2 use (bspfile version 21) is very different.
 
-        if (bspVersion === 21) {
+        if (bspVersion === 21 || bspVersion === 22) {
             // CS:GO, Portal 2
 
             if (version >= 7) {
@@ -574,8 +574,7 @@ export class StaticPropRenderer {
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
-            // TODO(HDR)
-            const spPrefix = (false && this.bspRenderer.bsp.usingHDR) ? `sp_hdr` : `sp`;
+            const spPrefix = (this.bspRenderer.bsp.usingHDR) ? `sp_hdr` : `sp`;
             const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
             if (staticLightingData !== null) {
                 this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);

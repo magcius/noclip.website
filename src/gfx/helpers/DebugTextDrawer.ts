@@ -50,7 +50,7 @@ export class DebugTextDrawer {
         fillSceneParamsData(d, offs, sceneParams);
     }
 
-    private setPacketParams(renderInst: GfxRenderInst): void {
+    private setDrawParams(renderInst: GfxRenderInst): void {
         let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 16);
         const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
         mat4.identity(scratchMatrix);
@@ -75,6 +75,8 @@ export class DebugTextDrawer {
     }
 
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
+        vec3.zero(this.charWriter.origin);
+        vec3.copy(this.charWriter.cursor, this.charWriter.origin);
         this.charWriter.calcRect(scratchVec4, str);
 
         // Center align
@@ -86,7 +88,7 @@ export class DebugTextDrawer {
         template.setBindingLayouts(gxBindingLayouts);
         const clipSpaceNearZ = renderInstManager.gfxRenderCache.device.queryVendorInfo().clipSpaceNearZ;
         this.setSceneParams(template, vw, vh, clipSpaceNearZ);
-        this.setPacketParams(template);
+        this.setDrawParams(template);
 
         // Stroke
         colorCopy(this.charWriter.color1, this.strokeColor);

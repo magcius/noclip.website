@@ -53,22 +53,18 @@ import { GalaxyMapController } from './Actors/GalaxyMap';
 import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+import { TakoHeiInkHolder } from './Actors/Enemy';
+import { BaseMatrixFollowTargetHolder } from './Follow';
+import { MessageArea, TalkDirector } from './Talk';
+import { getLayoutMessageDirect, MessageHolder } from './MessageData';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
 const FPS_RATE = FPS/1000;
 
-export function getDeltaTimeFramesRaw(viewerInput: Viewer.ViewerRenderInput): number {
-    return viewerInput.deltaTime * FPS_RATE;
-}
-
-export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
+function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     // Clamp to reasonable values.
-    return clamp(getDeltaTimeFramesRaw(viewerInput), 0.0, 1.5);
-}
-
-export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
-    return viewerInput.time * FPS_RATE;
+    return clamp(viewerInput.deltaTime * FPS_RATE, 0.0, 1.5);
 }
 
 function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
@@ -144,15 +140,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
     public onstatechanged!: () => void;
     public textureHolder: TextureListHolder;
 
-    public isInteractive = true;
-
     private mainColorTemporalTexture = new GfxrTemporalTexture();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private maskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
 
-    constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
+    constructor(private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
 
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
@@ -208,8 +202,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
             scenarioData.setRecord(scenarioIndex);
 
             let name: string | null = null;
-            if (name === null && this.sceneObjHolder.messageDataHolder !== null)
-                name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i}`);
+            if (name === null && this.sceneObjHolder.messageHolder !== null)
+                name = getLayoutMessageDirect(this.sceneObjHolder, `ScenarioName_${galaxyName}${i}`);
 
             if (name === null || name === '')
                 name = assertExists(scenarioData.getValueString(`ScenarioName`));
@@ -311,6 +305,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         sceneObjHolder.drawSyncManager.beginFrame(device);
 
+        sceneObjHolder.deltaTimeFrames = getDeltaTimeFrames(viewerInput);
         executor.executeMovement(sceneObjHolder, viewerInput);
         executor.executeCalcAnim(sceneObjHolder);
 
@@ -332,7 +327,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const effectSystem = sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
-            const deltaTime = getDeltaTimeFrames(viewerInput);
+            const deltaTime = sceneObjHolder.deltaTimeFrames;
             effectSystem.calc(deltaTime);
 
             const indDummy = effectSystem.particleResourceHolder.getTextureMappingReference('IndDummy');
@@ -506,7 +501,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 }
 
                 // executeDrawListOpa();
-                this.execute(passRenderer, DrawType.OceanRingOutside);
+                this.execute(passRenderer, DrawType.OceanRingPipeOutside);
                 this.execute(passRenderer, DrawType.SwingRope);
                 this.execute(passRenderer, DrawType.Creeper);
                 this.execute(passRenderer, DrawType.Trapeze);
@@ -538,7 +533,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Ride);
                 this.drawXlu(passRenderer, DrawBufferType.Enemy);
                 this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
-                this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
+                this.drawXlu(passRenderer, DrawBufferType.PlayerDecoration);
                 // executeDrawListXlu()
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.execute(passRenderer, DrawType.ClipAreaDropLaser);
@@ -666,6 +661,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 // exceuteDrawList2DNormal()
                 this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
+                this.execute(passRenderer, DrawType.Layout);
             });
         });
 
@@ -919,6 +915,7 @@ class AreaObjContainer extends NameObj {
         this.managers.push(new AreaObjMgr<HazeCube>(sceneObjHolder, 'HazeCube'));
         this.managers.push(new AreaObjMgr<MercatorTransformCube>(sceneObjHolder, 'MercatorCube'));
         this.managers.push(new AreaObjMgr<DeathArea>(sceneObjHolder, 'DeathArea'));
+        this.managers.push(new AreaObjMgr<MessageArea>(sceneObjHolder, 'MessageArea'));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {
@@ -1063,6 +1060,12 @@ export const enum SceneObj {
     GalaxyNameSortTable            = 0xA0,
 }
 
+class DebugUtils {
+    public createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
+        return createCsvParser(buffer);
+    }
+}
+
 export class SceneObjHolder {
     public sceneDesc: SMGSceneDescBase;
     public modelCache: ModelCache;
@@ -1074,7 +1077,7 @@ export class SceneObjHolder {
     public lightDirector: LightDirector;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
-    public messageDataHolder: MessageDataHolder | null = null;
+    public messageHolder: MessageHolder;
 
     public sensorHitChecker: SensorHitChecker | null = null;
     public collisionDirector: CollisionDirector | null = null;
@@ -1085,6 +1088,7 @@ export class SceneObjHolder {
     public sleepControllerHolder: SleepControllerHolder | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
     public liveActorGroupArray: LiveActorGroupArray | null = null;
+    public talkDirector: TalkDirector | null = null;
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
     public bloomEffectSimple: BloomEffectSimple | null = null;
@@ -1093,10 +1097,12 @@ export class SceneObjHolder {
     public furDrawManager: FurDrawManager | null = null;
     public namePosHolder: NamePosHolder | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
+    public baseMatrixFollowTargetHolder: BaseMatrixFollowTargetHolder | null = null;
     public coinHolder: CoinHolder | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public starPieceDirector: StarPieceDirector | null = null;
+    public takoHeiInkHolder: TakoHeiInkHolder | null = null;
     public shadowControllerHolder: ShadowControllerHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
@@ -1126,11 +1132,13 @@ export class SceneObjHolder {
     public objNameTable: JMapInfoIter;
 
     // Noclip-specific stuff.
+    public deltaTimeFrames: number;
     public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
     public graphBuilder: GfxrGraphBuilder;
     public viewerInput: Viewer.ViewerRenderInput;
     public uiContainer: HTMLElement;
+    public debugUtils = new DebugUtils();
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1156,6 +1164,8 @@ export class SceneObjHolder {
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.LiveActorGroupArray)
             return this.liveActorGroupArray;
+        else if (sceneObj === SceneObj.TalkDirector)
+            return this.talkDirector;
         else if (sceneObj === SceneObj.ImageEffectSystemHolder)
             return this.imageEffectSystemHolder;
         else if (sceneObj === SceneObj.BloomEffect)
@@ -1172,6 +1182,8 @@ export class SceneObjHolder {
             return this.namePosHolder;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
+        else if (sceneObj === SceneObj.BaseMatrixFollowTargetHolder)
+            return this.baseMatrixFollowTargetHolder;
         else if (sceneObj === SceneObj.CoinHolder)
             return this.coinHolder;
         else if (sceneObj === SceneObj.CoinRotater)
@@ -1180,6 +1192,8 @@ export class SceneObjHolder {
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.StarPieceDirector)
             return this.starPieceDirector;
+        else if (sceneObj === SceneObj.TakoHeiInkHolder)
+            return this.takoHeiInkHolder;
         else if (sceneObj === SceneObj.ShadowControllerHolder)
             return this.shadowControllerHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -1236,6 +1250,8 @@ export class SceneObjHolder {
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.LiveActorGroupArray)
             this.liveActorGroupArray = new LiveActorGroupArray(this);
+        else if (sceneObj === SceneObj.TalkDirector)
+            this.talkDirector = new TalkDirector(this);
         else if (sceneObj === SceneObj.ImageEffectSystemHolder)
             this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
         else if (sceneObj === SceneObj.BloomEffect)
@@ -1252,6 +1268,8 @@ export class SceneObjHolder {
             this.namePosHolder = new NamePosHolder(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
+        else if (sceneObj === SceneObj.BaseMatrixFollowTargetHolder)
+            this.baseMatrixFollowTargetHolder = new BaseMatrixFollowTargetHolder(this);
         else if (sceneObj === SceneObj.CoinHolder)
             this.coinHolder = new CoinHolder(this);
         else if (sceneObj === SceneObj.CoinRotater)
@@ -1260,6 +1278,8 @@ export class SceneObjHolder {
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.StarPieceDirector)
             this.starPieceDirector = new StarPieceDirector(this);
+        else if (sceneObj === SceneObj.TakoHeiInkHolder)
+            this.takoHeiInkHolder = new TakoHeiInkHolder(this);
         else if (sceneObj === SceneObj.ShadowControllerHolder)
             this.shadowControllerHolder = new ShadowControllerHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -1300,6 +1320,7 @@ export class SceneObjHolder {
         ShadowControllerHolder.requestArchives(this);
         StarPieceDirector.requestArchives(this);
         CoinHolder.requestArchives(this);
+        TalkDirector.requestArchives(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1674,79 +1695,6 @@ class StageDataHolder {
     }
 }
 
-class BMG {
-    private inf1: ArrayBufferSlice;
-    private dat1: ArrayBufferSlice;
-    private numStrings: number;
-    private inf1ItemSize: number;
-
-    constructor(private mesgData: ArrayBufferSlice) {
-        const readerHelper = new JSystemFileReaderHelper(this.mesgData);
-        assert(readerHelper.magic === 'MESGbmg1');
-
-        this.inf1 = readerHelper.nextChunk('INF1');
-        this.dat1 = readerHelper.nextChunk('DAT1');
-
-        const view = this.inf1.createDataView();
-        this.numStrings = view.getUint16(0x08);
-        this.inf1ItemSize = view.getUint16(0x0A);
-    }
-
-    public getStringByIndex(i: number): string {
-        const inf1View = this.inf1.createDataView();
-        const dat1Offs = 0x08 + inf1View.getUint32(0x10 + (i * this.inf1ItemSize) + 0x00);
-
-        const view = this.dat1.createDataView();
-        let idx = dat1Offs;
-        let S = '';
-        while (true) {
-            const c = view.getUint16(idx + 0x00);
-            if (c === 0)
-                break;
-            if (c === 0x001A) {
-                // Escape sequence.
-                const size = view.getUint8(idx + 0x02);
-                const escapeKind = view.getUint8(idx + 0x03);
-
-                if (escapeKind === 0x05) {
-                    // Current character name -- 'Mario' or 'Luigi'. We use 'Mario'
-                    S += "Mario";
-                } else {
-                    console.warn(`Unknown escape kind ${escapeKind}`);
-                }
-
-                idx += size;
-            } else {
-                S += String.fromCharCode(c);
-                idx += 0x02;
-            }
-        }
-
-        return S;
-    }
-}
-
-class MessageDataHolder {
-    private mesg: BMG;
-    private messageIds: string[];
-
-    constructor(messageArc: RARC.JKRArchive) {
-        const messageIds = createCsvParser(messageArc.findFileData(`MessageId.tbl`)!);
-        this.messageIds = messageIds.mapRecords((iter) => {
-            return assertExists(iter.getValueString('MessageId'));
-        });
-
-        this.mesg = new BMG(messageArc.findFileData(`Message.bmg`)!);
-    }
-
-    public getStringById(id: string): string | null {
-        const index = this.messageIds.indexOf(id);
-        if (index < 0)
-            return null;
-        return this.mesg.getStringByIndex(index);
-    }
-}
-
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public id: string;
     public pathBase: string;
@@ -1773,7 +1721,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
     }
 
-    public patchRenderer(renderer: SMGRenderer): void {
+    protected setup(context: SceneContext, renderer: SMGRenderer): void {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -1801,6 +1749,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.uiContainer = context.uiContainer;
         // TODO(jstpierre): This is ugly.
         sceneObjHolder.viewerInput = window.main.viewer.viewerRenderInput;
+        sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);
@@ -1822,12 +1771,10 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.lightDirector = new LightDirector(sceneObjHolder, lightDataHolder);
         sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
         sceneObjHolder.objNameTable = this.getObjNameTable(modelCache);
+        sceneObjHolder.messageHolder = new MessageHolder(sceneObjHolder);
 
         sceneObjHolder.create(SceneObj.EffectSystem);
         sceneObjHolder.create(SceneObj.StarPieceDirector);
-
-        if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
-            sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`)!);
 
         const spawner = new SMGSpawner(sceneObjHolder);
         sceneObjHolder.spawner = spawner;
@@ -1843,8 +1790,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.starPieceDirector!.createStarPiece(sceneObjHolder);
         initSyncSleepController(sceneObjHolder);
 
-        const renderer = new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
-        this.patchRenderer(renderer);
+        const renderer = new SMGRenderer(renderHelper, spawner, sceneObjHolder);
+        this.setup(context, renderer);
         return renderer;
     }
 }

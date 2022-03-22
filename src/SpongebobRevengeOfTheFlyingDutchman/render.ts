@@ -2,7 +2,7 @@
 import program_glsl from './program.glsl';
 import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import { colorCopy, colorLerp, colorNewCopy } from "../Color";
+import { colorCopy, colorLerp, colorNewCopy, White } from "../Color";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import {
@@ -54,6 +54,7 @@ import { colorCopyKeepAlpha, colorLerpKeepAlpha, DataStream, SIZE_VEC2, SIZE_VEC
 import * as CRC32 from "crc-32";
 import { DeviceProgram } from '../Program';
 import * as UI from '../ui';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
 
 class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -63,7 +64,7 @@ class RotfdProgram extends DeviceProgram {
     public static MATERIALPARAM_SIZE = 4*3 + 4*3 + 4 + 4 + 4*2;
     public static INSTANCEPARAM_SIZE = 4 + 4 + 4 + 4*4 + 4 + 4 * (4 + 4 + 4);
 
-    public both = program_glsl;
+    public override both = program_glsl;
 
     constructor() {
         super();
@@ -547,12 +548,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.program = preprocessProgramObj_GLSL(device, new RotfdProgram());
         this.gfxProgram = this.renderHelper.renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         this.renderHackState = new RenderHackState();
-        this.defaultTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
-        let newData = new Uint8Array(4);
-        for (let i = 0; i < 4; i++) {
-            newData[i] = 255;
-        }
-        device.uploadTextureData(this.defaultTexture, 0, [newData]);
+        this.defaultTexture = makeSolidColorTexture2D(device, White);
         this.sampler = device.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,

@@ -4,18 +4,47 @@ import * as GX_Texture from '../gx/gx_texture';
 import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
 import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import { DataFetcher } from '../DataFetcher';
+import * as UI from '../ui';
 
 import { GameInfo } from './scenes';
 import { loadRes } from './resource';
 import { readUint32 } from './util';
+import * as Viewer from '../viewer';
+import { TextureMapping } from '../TextureHolder';
 
 export class SFATexture {
+    public viewerTexture?: Viewer.Texture;
+
     constructor(public gfxTexture: GfxTexture, public gfxSampler: GfxSampler, public width: number, public height: number) {
+    }
+
+    public static create(device: GfxDevice, width: number, height: number) {
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = device.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        return new SFATexture(gfxTexture, gfxSampler, width, height);
     }
 
     public destroy(device: GfxDevice) {
         device.destroySampler(this.gfxSampler);
         device.destroyTexture(this.gfxTexture);
+    }
+
+    public setOnTextureMapping(mapping: TextureMapping) {
+        mapping.reset();
+        mapping.gfxTexture = this.gfxTexture;
+        mapping.gfxSampler = this.gfxSampler;
+        mapping.width = this.width;
+        mapping.height = this.height;
+        mapping.lodBias = 0.0;
     }
 }
 
@@ -62,7 +91,7 @@ function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boole
     };
     
     const mipChain = GX_Texture.calcMipChain(textureInput, textureInput.mipCount);
-    const gfxTexture = loadTextureFromMipChain(device, mipChain).gfxTexture;
+    const loadedTexture = loadTextureFromMipChain(device, mipChain);
     
     // GL texture is bound by loadTextureFromMipChain.
     const [minFilter, mipFilter] = translateTexFilterGfx(fields.minFilt);
@@ -76,12 +105,15 @@ function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boole
         maxLOD: 100,
     });
 
-    return new SFATexture(
-        gfxTexture,
+    const texture = new SFATexture(
+        loadedTexture.gfxTexture,
         gfxSampler,
         textureInput.width,
         textureInput.height,
     );
+    texture.viewerTexture = loadedTexture.viewerTexture;
+
+    return texture;
 }
 
 function isValidTextureTabValue(tabValue: number) {
@@ -192,7 +224,7 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
 class TextureFile {
     private textures: (SFATextureArray | null)[] = [];
 
-    constructor(private tab: DataView, private bin: ArrayBufferSlice, private name: string, private isBeta: boolean) {
+    constructor(private tab: DataView, private bin: ArrayBufferSlice, public name: string, private isBeta: boolean) {
     }
 
     public hasTexture(num: number): boolean {
@@ -204,10 +236,24 @@ class TextureFile {
         return isValidTextureTabValue(tabValue);
     }
 
+    public isTextureLoaded(num: number): boolean {
+        return this.textures[num] !== undefined;
+    }
+
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
         if (this.textures[num] === undefined) {
             try {
-                this.textures[num] = loadTextureArrayFromTable(device, this.tab, this.bin, num, this.isBeta);
+                const texture = loadTextureArrayFromTable(device, this.tab, this.bin, num, this.isBeta);
+                if (texture !== null) {
+                    for (let arrayIdx = 0; arrayIdx < texture.textures.length; arrayIdx++) {
+                        const viewerTexture = texture.textures[arrayIdx].viewerTexture;
+                        if (viewerTexture !== undefined)
+                            viewerTexture.name = `${this.name} #${num}`;
+                            if (texture.textures.length > 1)
+                                viewerTexture!.name += `.${arrayIdx}`;
+                    }
+                }
+                this.textures[num] = texture;
             } catch (e) {
                 console.warn(`Failed to load texture 0x${num.toString(16)} from ${this.name} due to exception:`);
                 console.error(e);
@@ -254,7 +300,7 @@ export class FakeTextureFetcher extends TextureFetcher {
 
     public destroy(device: GfxDevice) {
         for (let texture of this.textures) {
-            texture.destroy(device);
+            texture?.destroy(device);
         }
         this.textures = [];
     }
@@ -277,6 +323,10 @@ export class SFATextureFetcher extends TextureFetcher {
     private texpre: TextureFile | null;
     private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
     private fakes: FakeTextureFetcher = new FakeTextureFetcher();
+    public textureHolder: UI.TextureListHolder = {
+        viewerTextures: [],
+        onnewtextures: null,
+    };
 
     private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();
@@ -348,7 +398,20 @@ export class SFATextureFetcher extends TextureFetcher {
             return this.fakes.getTextureArray(device, file.texNum);
         }
 
-        return file.file.getTextureArray(device, file.texNum);
+        const isNewlyLoaded = !file.file.isTextureLoaded(file.texNum);
+        const textureArray = file.file.getTextureArray(device, file.texNum);
+        if (isNewlyLoaded && textureArray !== null) {
+            for (let arrayIdx = 0; arrayIdx < textureArray.textures.length; arrayIdx++) {
+                const viewerTexture = textureArray.textures[arrayIdx].viewerTexture;
+                if (viewerTexture !== undefined) {
+                    this.textureHolder.viewerTextures.push(viewerTexture);
+                    if (this.textureHolder.onnewtextures !== null)
+                        this.textureHolder.onnewtextures();
+                }
+            }
+        }
+
+        return textureArray;
     }
 
     private getTextureFile(texId: number, useTex1: boolean): {texNum: number, file: TextureFile | null} {

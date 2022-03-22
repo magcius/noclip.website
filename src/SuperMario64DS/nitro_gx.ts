@@ -219,13 +219,13 @@ export interface DrawCall {
 function translatePolyType(polyType: PolyType): GfxTopology {
     switch (polyType) {
     case PolyType.TRIANGLES:
-        return GfxTopology.TRIANGLES;
+        return GfxTopology.Triangles;
     case PolyType.TRIANGLE_STRIP:
-        return GfxTopology.TRISTRIP;
+        return GfxTopology.TriStrips;
     case PolyType.QUADS:
-        return GfxTopology.QUADS;
+        return GfxTopology.Quads;
     case PolyType.QUAD_STRIP:
-        return GfxTopology.QUADSTRIP;
+        return GfxTopology.QuadStrips;
     }
 }
 

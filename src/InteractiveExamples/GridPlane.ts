@@ -9,13 +9,13 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helper
 import { White, colorNewCopy } from "../Color";
 import { mat4 } from "gl-matrix";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;
     public static ub_SceneParams = 0;
 
-    public both = `
+    public override both = `
 layout(std140) uniform ub_Params {
     Mat4x4 u_Projection;
     Mat4x3 u_ModelView;
@@ -27,7 +27,7 @@ layout(std140) uniform ub_Params {
 #define u_LineWidth (u_Misc[0].y)
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = ${GridPlaneProgram.a_Position}) in vec3 a_Position;
 
 out vec2 v_SurfCoord;
@@ -39,7 +39,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public override frag = `
 in vec2 v_SurfCoord;
 
 ${GfxShaderLibrary.saturate}
@@ -100,7 +100,7 @@ export class GridPlane {
         vtx[11] = 1;
         this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
 
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
