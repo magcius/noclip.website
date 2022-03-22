@@ -10,7 +10,6 @@ import * as Viewer from "../viewer";
 import { PMP, PMPObject } from "./PMP";
 import { ResourceSystem } from "./ResouceSystem";
 import { assertExists } from "../util";
-import { colorNewFromRGBA } from "../Color";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
@@ -62,14 +61,10 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
         this.resourceSystem.destroy(device);
-
-        for (let i = 0; i < this.modelInstances.length; i++) {
-            this.modelInstances[i].destroy(device);
-        }
     }
 }
 
@@ -89,7 +84,7 @@ class TennisSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const renderer = new WiiSportsRenderer(device, resourceSystem);
-        
+
         // Load main model
         const fieldBRRES = renderer.mountRRES(device, `G3D/${tennisName}.brres`);
         const fieldMDL0 = renderer.spawnModel(device, fieldBRRES, tennisName);
@@ -119,11 +114,11 @@ class BaseballSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const renderer = new WiiSportsRenderer(device, resourceSystem);
-        
+
         // Load main model
         const fieldBRRES = renderer.mountRRES(device, `G3D/bbl_Field_a.brres`);
         const fieldMDL0 = renderer.spawnModel(device, fieldBRRES, "bbl_Field_a");
-        
+
         renderer.bindAnimations(fieldMDL0, fieldBRRES, "bbl_Field_cloud01");
         renderer.bindAnimations(fieldMDL0, fieldBRRES, "bbl_Field_cloud02");
 
@@ -148,7 +143,7 @@ class BowlingSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const renderer = new WiiSportsRenderer(device, resourceSystem);
-        
+
         // Load main model
         const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
         const scn0BRRES = renderer.mountRRES(device, `G3D/${this.id}_rsca.brres`);
@@ -191,7 +186,7 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         mat4.copy(instance.modelMatrix, object.modelMatrix);
         //mat4.copy(instanceShadow.modelMatrix, object.modelMatrix);
     }
-    
+
     private spawnTreeReflection(variant: number, object: PMPObject, device: GfxDevice, renderer: WiiSportsRenderer) {
         const name = `glf_tree${variant}`;
         const brres = renderer.mountRRES(device, `G3D/${name}.brres`);
@@ -297,15 +292,15 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const renderer = new WiiSportsRenderer(device, resourceSystem);
-        
+
         // Load main model
         const courseBRRES = renderer.mountRRES(device, `G3D/${golfName}.brres`);
-        const courseMDL0 = renderer.spawnModel(device, courseBRRES, golfName);   
+        const courseMDL0 = renderer.spawnModel(device, courseBRRES, golfName);
 
         renderer.bindSCN0(assertExists(courseBRRES.scn0.find(x => x.name == sceneName)));
         courseMDL0.bindLightSetting(renderer.lightSetting);
-         
-        renderer.bindAnimations(courseMDL0, courseBRRES, golfName); 
+
+        renderer.bindAnimations(courseMDL0, courseBRRES, golfName);
 
         // Load PMP
         const pmp = PMP.parse(assertExists(resourceSystem.findFileData(`${golfName}.pmp`)));
@@ -321,7 +316,7 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         //if (greenMaterial) {
         //    greenMaterial.materialData.material.colorConstants[2] = colorNewFromRGBA(1, 1, 1, 1);
         //}
-        
+
         // TODO: we need to create a new camera for the projection of the green texture
         // Right now it uses the main camera, but should presumably use camera1Green_siba
 
@@ -350,7 +345,7 @@ class BoxingSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const renderer = new WiiSportsRenderer(device, resourceSystem);
-        
+
         // Load main model
         const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
         renderer.bindSCN0(assertExists(stageBRRES.scn0.find(x => x.name == this.id)));
@@ -362,7 +357,7 @@ class BoxingSceneDesc implements Viewer.SceneDesc {
 
             // TODO: ring rope is not spawned correctly. Multiple instances
             // also needs to be spawned
-    
+
             for (let mdl0 of stageBRRES.mdl0) {
                 const instance = renderer.spawnModel(device, stageBRRES, mdl0.name);
                 instance.bindLightSetting(renderer.lightSetting);
@@ -371,12 +366,12 @@ class BoxingSceneDesc implements Viewer.SceneDesc {
                 renderer.bindAnimations(instance, stageBRRES, "box_light");
             }
         }
-        else {    
+        else {
             for (let mdl0 of stageBRRES.mdl0) {
                 renderer.spawnModel(device, stageBRRES, mdl0.name);
             }
         }
-        
+
         return renderer;
     }
 }

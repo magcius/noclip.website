@@ -2,6 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as DDS from "./dds";
 import { readString, assert } from "../util";
+import { downloadBufferSlice } from "../DownloadUtils";
 
 export interface TPF {
     textures: DDS.DDS[];
@@ -30,7 +31,8 @@ export function parse(buffer: ArrayBufferSlice): TPF {
         const name = readString(buffer, nameOffs, -1, true);
         const data = buffer.slice(dataOffs, dataOffs + size);
 
-        const dds = DDS.parse(data, name);
+        const isSRGB = false;
+        const dds = DDS.parse(data, name, isSRGB);
         textures.push(dds);
     }
 

@@ -1,5 +1,5 @@
 
-import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assertExists, assert, nArray, hexzero } from '../util';
@@ -14,41 +14,41 @@ import * as GX from '../gx/gx_enum';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, texProjCameraSceneTex } from '../Camera';
-import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, DrawParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxChannelWriteMask, GfxProgram, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxChannelWriteMask, GfxProgram, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
-import { range, getMatrixAxisZ, computeProjectionMatrixFromCuboid } from '../MathHelpers';
+import { range, getMatrixAxisZ, projectionMatrixForCuboid } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { parseMaterial, GX_Program } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType } from './d_resorce';
-import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_actorCreate } from './d_stage';
+import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
-import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
+import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
 import { dBgS } from './d_bg';
-import { dfRange, dfShow } from '../DebugFloaters';
+import { dfRange } from '../DebugFloaters';
 import { colorNewCopy, White, colorCopy, TransparentBlack } from '../Color';
 import { GX_Array, GX_VtxAttrFmt, compileVtxLoader, GX_VtxDesc } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TSDraw } from '../SuperMarioGalaxy/DDraw';
 import { d_a_sea } from './d_a_sea';
 import { dPa_control_c } from './d_particle';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
-import { GfxShaderLibrary } from '../gfx/helpers/ShaderHelpers';
-import { fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -141,7 +141,7 @@ class dDlst_alphaModelData_c {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const materialParams = new MaterialParams();
 class dDlst_alphaModel_c {
     public color = colorNewCopy(White);
@@ -203,7 +203,9 @@ class dDlst_alphaModel_c {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
 
-        computeProjectionMatrixFromCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
+        projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
@@ -239,8 +241,8 @@ class dDlst_alphaModel_c {
 
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
-                mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
-                this.materialHelperBackRevZ.allocatePacketParamsDataOnInst(template, packetParams);
+                mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
+                this.materialHelperBackRevZ.allocatedrawParamsDataOnInst(template, drawParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
 
@@ -267,8 +269,8 @@ class dDlst_alphaModel_c {
         colorCopy(materialParams.u_Color[ColorKind.MAT0], this.color);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.orthoQuad.setOnRenderInst(renderInst);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.identity(drawParams.u_PosMtx[0]);
+        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
 
         this.reset();
@@ -465,7 +467,7 @@ export class ZWWExtraTextures {
         this.textureMapping[0].gfxTexture = this.dynToonTex.gfxTexture;
         this.textureMapping[1].gfxTexture = this.dynToonTex.gfxTexture;
 
-        window.main.ui.debugFloaterHolder.bindSliders(this);
+        window.main.ui.debugFloaterHolder.bindPanel(this);
     }
 
     public prepareToRender(device: GfxDevice): void {
@@ -709,7 +711,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
-        this.renderHelper.renderInstManager.drawListOnPassRenderer(list, passRenderer);
+        list.drawOnPassRenderer(this.renderCache, passRenderer);
     }
 
     private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set): void {
@@ -765,7 +767,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             });
         });
 
-        dlst.peekZ.pushPasses(device, renderInstManager, builder, mainDepthTargetID);
+        dlst.peekZ.pushPasses(renderInstManager, builder, mainDepthTargetID);
         dlst.peekZ.peekData(device);
 
         builder.pushPass((pass) => {
@@ -943,7 +945,7 @@ class d_s_play extends fopScn {
 
     public vrboxLoaded: boolean = false;
 
-    public load(globals: dGlobals, userData: any): cPhs__Status {
+    public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
         this.treePacket = new TreePacket(globals);
@@ -955,7 +957,7 @@ class d_s_play extends fopScn {
         return cPhs__Status.Complete;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
         // Grass/Flowers/Trees
@@ -976,7 +978,7 @@ class d_s_play extends fopScn {
         this.grassPacket.draw(globals, renderInstManager, viewerInput);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         const device = globals.modelCache.device;
@@ -1050,8 +1052,8 @@ class SceneDesc {
             fpcCt_Handler(globals.frameworkGlobals, globals);
         };
 
-        const ret = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
-        assert(ret);
+        const pcId = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
+        assert(pcId !== null);
 
         fpcCt_Handler(globals.frameworkGlobals, globals);
         assert(globals.scnPlay !== undefined);

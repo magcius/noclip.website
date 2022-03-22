@@ -1,6 +1,9 @@
+
 const webpack = require('webpack');
+const path = require('path');
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
+const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
 module.exports = merge(common, {
@@ -8,6 +11,14 @@ module.exports = merge(common, {
   devtool: 'eval-cheap-module-source-map',
   cache: {
     type: 'filesystem',
+  },
+  devServer: {
+    static: {
+      directory: path.join(__dirname, `data`),
+      publicPath: `/data/`,
+      watch: false,
+    },
+    compress: true,
   },
   module: {
     rules: [
@@ -38,5 +49,10 @@ module.exports = merge(common, {
       'process.env.NODE_ENV': JSON.stringify('development'),
     }),
     new ForkTsCheckerWebpackPlugin(),
+    new WasmPackPlugin({
+      crateDirectory: path.join(__dirname, 'rust'),
+      forceMode: "production",
+      extraArgs: "--profiling",
+    }),
   ],
 });

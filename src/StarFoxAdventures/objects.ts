@@ -10,7 +10,8 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { computeViewMatrix } from '../Camera';
 import { ViewerRenderInput } from '../viewer';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
-import { Plane } from '../Geometry';
+import { SFA_CLASSES } from './Objects/Classes';
+import { SFAClass } from './Objects/SFAClass';
 
 import { StandardMaterial } from './materials';
 import { ModelInstance, ModelRenderContext } from './models';
@@ -18,7 +19,8 @@ import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUin
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
-import { getMatrixTranslation } from '../MathHelpers';
+import { computeMatrixWithoutScale, getMatrixTranslation } from '../MathHelpers';
+import { LightType } from './WorldLights';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchVec0 = vec3.create();
@@ -33,58 +35,7 @@ export interface ObjectUpdateContext {
     viewerInput: ViewerRenderInput;
 }
 
-interface SFAClass {
-    // Called when loading objects
-    setup: (obj: ObjectInstance, data: DataView) => void;
-    // Called when adding objects to world, after all objects have been loaded
-    mount?: (obj: ObjectInstance, world: World) => void;
-    // Called when removing objects from wprld
-    unmount?: (obj: ObjectInstance, world: World) => void;
-    // Called on each frame
-    update?: (obj: ObjectInstance, updateCtx: ObjectUpdateContext) => void;
-}
-
-function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number) {
-    if (yawOffs !== undefined)
-        obj.yaw = angle16ToRads(data.getInt8(yawOffs) << 8);
-    if (pitchOffs !== undefined)
-        obj.pitch = angle16ToRads(data.getInt8(pitchOffs) << 8);
-    if (rollOffs !== undefined)
-        obj.roll = angle16ToRads(data.getInt8(rollOffs) << 8);
-    if (animSpeed !== undefined)
-        obj.animSpeed = animSpeed;
-}
-
-function commonClass(yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number): SFAClass {
-    return {
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, yawOffs, pitchOffs, rollOffs, animSpeed);
-        },
-    };
-}
-
-function decorClass(animSpeed: number = 1.0): SFAClass {
-    return {
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1a, 0x19, 0x18);
-            obj.animSpeed = animSpeed;
-            const scaleParam = data.getUint8(0x1b);
-            if (scaleParam !== 0)
-                obj.scale *= scaleParam / 255;
-        },
-    };
-}
-
-function templeClass(): SFAClass {
-    return {
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.setModelNum(data.getInt8(0x19));
-        },
-    };
-}
-
-const CommonObjectParams_SIZE = 0x14;
+export const CommonObjectParams_SIZE = 0x14;
 interface CommonObjectParams {
     objType: number;
     ambienceValue: number;
@@ -105,838 +56,6 @@ function parseCommonObjectParams(objParams: DataView): CommonObjectParams {
         id: objParams.getUint32(0x14),
     };
 }
-
-namespace TriggerClass {
-    const OBJTYPE_TrigPln = 0x4c;
-
-    const Action_SIZE = 0x4;
-    interface Action {
-        flags: number;
-        type: number;
-        param: number;
-    }
-
-    function parseAction(data: DataView): Action {
-        return {
-            flags: data.getUint8(0),
-            type: data.getUint8(1),
-            param: data.getUint16(2),
-        };
-    }
-
-    const ACTION_TYPES: {[key: number]: string} = {
-        0x0: 'NoOp',
-        0x4: 'Sound',
-        0x8: 'HeatShimmer',
-        0xa: 'EnvFx',
-        0x27: 'LoadAssets',
-        0x28: 'UnloadAssets',
-    };
-
-    interface UserData {
-        actions: Action[];
-        prevPoint?: vec3;
-        triggerData?: TrigPlnData;
-    }
-
-    interface TrigPlnData {
-        plane: Plane;
-        worldToPlaneSpaceMatrix: mat4;
-        radius: number; // Note: Actually, the trigger is square-shaped.
-    }
-
-    function performActions(obj: ObjectInstance, leaving: boolean) {
-        const userData = obj.userData as UserData;
-        
-        for (let action of userData.actions) {
-            if (!!(action.flags & 0x2) === leaving) {
-                // console.log(`Action: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
-            }
-        }
-    }
-
-    function setup(obj: ObjectInstance, data: DataView) {
-        commonSetup(obj, data, 0x3d, 0x3e);
-
-        let actions = [];
-        for (let i = 0; i < 8; i++) {
-            const action = parseAction(dataSubarray(data, CommonObjectParams_SIZE, Action_SIZE, i));
-            actions.push(action);
-            // console.log(`Action #${i}: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
-        }
-
-        if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {
-            mat4FromSRT(scratchMtx0, 1, 1, 1, obj.yaw, obj.pitch, obj.roll, obj.position[0], obj.position[1], obj.position[2]);
-            vec3.set(scratchVec0, 1, 0, 0);
-            vec3.transformMat4(scratchVec0, scratchVec0, scratchMtx0);
-            vec3.set(scratchVec1, 0, 1, 0);
-            vec3.transformMat4(scratchVec1, scratchVec1, scratchMtx0);
-            mat4.invert(scratchMtx1, scratchMtx0);
-
-            const plane = new Plane();
-            plane.set(obj.position, scratchVec0, scratchVec1);
-            const worldToPlaneSpaceMatrix = mat4.clone(scratchMtx1);
-            const radius = 100 * obj.scale;
-
-            const triggerData: TrigPlnData = { plane, worldToPlaneSpaceMatrix, radius, };
-            const userData: UserData = { actions, triggerData, };
-            obj.userData = userData;
-        }
-    };
-
-    function update(obj: ObjectInstance, updateCtx: ObjectUpdateContext) {
-        if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {
-            const userData = obj.userData as UserData;
-            const triggerData = userData.triggerData as TrigPlnData;
-
-            const currPoint = scratchVec0;
-            // FIXME: The current point is not always the camera. It can also be the player character.
-            getCamPos(currPoint, updateCtx.viewerInput.camera);
-
-            if (userData.prevPoint === undefined) {
-                userData.prevPoint = vec3.clone(currPoint);
-            } else {
-                const prevPointInPlane = triggerData.plane.distance(userData.prevPoint[0], userData.prevPoint[1], userData.prevPoint[2]) >= 0;
-                const currPointInPlane = triggerData.plane.distance(currPoint[0], currPoint[1], currPoint[2]) >= 0;
-
-                if (currPointInPlane !== prevPointInPlane) {
-                    const intersection = scratchVec1;
-                    triggerData.plane.intersectLineSegment(intersection, userData.prevPoint, currPoint);
-                    vec3.transformMat4(intersection, intersection, triggerData.worldToPlaneSpaceMatrix);
-                    if (-triggerData.radius <= intersection[0] && intersection[0] <= triggerData.radius &&
-                        -triggerData.radius <= intersection[1] && intersection[1] <= triggerData.radius)
-                    {
-                        // if (currPointInPlane)
-                        //     console.log(`Entered plane 0x${obj.commonObjectParams.id.toString(16)}`);
-                        // else
-                        //     console.log(`Exited plane 0x${obj.commonObjectParams.id.toString(16)}`);
-
-                        performActions(obj, !currPointInPlane);
-                    }
-                }
-
-                vec3.copy(userData.prevPoint, currPoint);
-            }
-        }
-    }
-
-    export const CLASS: SFAClass = {
-        setup,
-        update,
-    };
-}
-
-const SFA_CLASSES: {[num: number]: SFAClass} = {
-    [77]: commonClass(0x3d, 0x3e),
-    [198]: commonClass(),
-    [201]: commonClass(0x2a),
-    [204]: commonClass(0x2a),
-    [207]: commonClass(0x28), // CannonClawO
-    [209]: { // TumbleWeedB
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1a);
-            obj.roll = angle16ToRads((data.getUint8(0x18) - 127) * 128);
-            obj.pitch = angle16ToRads((data.getUint8(0x19) - 127) * 128);
-            obj.scale = data.getFloat32(0x1c);
-        },
-    },
-    [213]: { // Kaldachom
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.scale = 0.5 + data.getInt8(0x28) / 15;
-        },
-    },
-    [214]: commonClass(0x1a, 0x19, 0x18),
-    [222]: commonClass(),
-    [227]: commonClass(),
-    [231]: { // BurnableVin
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.scale = 5 * data.getInt16(0x1a) / 32767;
-            if (obj.scale < 0.05)
-                obj.scale = 0.05;
-        },
-    },
-    [232]: { // checkpoint4
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x29);
-            obj.scale = Math.max(data.getUint8(0x2a), 5) / 128;
-        },
-    },
-    [233]: commonClass(),
-    [234]: commonClass(),
-    [235]: commonClass(),
-    [237]: commonClass(0x1b, 0x22, 0x23), // SH_LargeSca
-    [238]: commonClass(),
-    [239]: { // CCboulder
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x22);
-            obj.position[1] += 0.5;
-        },
-    },
-    [240]: commonClass(0x18),
-    [244]: commonClass(0x18), // VFP_RoundDo
-    [248]: commonClass(),
-    [249]: { // ProjectileS
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1f, 0x1c);
-            const objScale = data.getUint8(0x1d);
-            if (objScale !== 0)
-                obj.scale *= objScale / 64;
-        },
-    },
-    [250]: { // InvisibleHi
-        setup: (obj: ObjectInstance, data: DataView) => {
-            const scaleParam = data.getUint8(0x1d);
-            if (scaleParam !== 0)
-                obj.scale *= scaleParam / 64;
-        },
-    },
-    [251]: commonClass(0x18),
-    [254]: commonClass(0x1d, undefined, undefined, 0.03), // MagicPlant
-    [255]: { // MagicDustMi
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.setModelNum(data.getInt8(0x26));
-        },
-    },
-    [256]: commonClass(0x1a),
-    [258]: commonClass(), // StayPoint
-    [259]: { // CurveFish
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.scale *= data.getUint8(0x18) / 100;
-        },
-    },
-    [260]: commonClass(0x18),
-    [261]: commonClass(0x18),
-    [266]: { // Fall_Ladder
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.position[1] += data.getInt16(0x1a);
-            obj.setModelNum(data.getInt8(0x19));
-        },
-    },
-    [269]: { // PortalSpell
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.pitch = angle16ToRads(data.getInt16(0x1c) << 8); // Yes, getInt16 is correct.
-            obj.scale = 3.15;
-        },
-    },
-    [272]: { // SH_Portcull
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1f);
-            const objScale = data.getUint8(0x21) / 64;
-            if (objScale === 0)
-                obj.scale = 1.0;
-            else
-                obj.scale *= objScale;
-        },
-    },
-    [273]: commonClass(0x1a, 0x19, 0x18),
-    [274]: commonClass(0x1c),
-    [275]: commonClass(0x1c),
-    [280]: commonClass(),
-    [282]: decorClass(),
-    [283]: commonClass(),
-    [284]: commonClass(0x18),
-    [285]: commonClass(0x18),
-    [287]: commonClass(0x23), // MagicCaveTo
-    [289]: commonClass(0x18),
-    [288]: commonClass(0x19), // TrickyGuard
-    [291]: commonClass(),
-    [293]: { // curve
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x2c, 0x2d);
-            // FIXME: some curve modes have a roll parameter at 0x38
-        },
-    },
-    [294]: TriggerClass.CLASS,
-    [296]: {
-        setup: (obj: ObjectInstance, data: DataView) => {
-            let objScale = data.getUint8(0x1c);
-            if (objScale < 10)
-                objScale = 10;
-            objScale /= 64;
-            obj.scale *= objScale;
-            obj.yaw = angle16ToRads((data.getUint8(0x1d) & 0x3f) << 10)
-            // TODO: set model # and animation
-        },
-    },
-    [297]: { // CampFire
-        setup: (obj: ObjectInstance, data: DataView) => {
-            const scaleParam = data.getUint8(0x1a);
-            if (scaleParam !== 0)
-                obj.scale = 0.01 * scaleParam;
-        },
-    },
-    [298]: { // WM_krazoast
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum === 482) {
-            } else if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
-                commonSetup(obj, data, 0x18);
-            }
-        },
-    },
-    [299]: { // FXEmit
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x24, 0x23, 0x22);
-            obj.scale = 0.1;
-        },
-    },
-    [300]: commonClass(0x18),
-    [302]: decorClass(),
-    [303]: decorClass(),
-    [304]: commonClass(),
-    [306]: commonClass(0x1c, 0x1b, 0x1a), // WaterFallSp
-    [307]: commonClass(),
-    [308]: { // texscroll2
-        ...commonClass(),
-        mount: (obj: ObjectInstance, world: World) => {
-            if (world.mapInstance === null)
-                throw Error(`No map available when spawning texscroll`);
-
-            const block = world.mapInstance.getBlockAtPosition(obj.posInMap[0], obj.posInMap[2]);
-            if (block === null) {
-                console.warn(`Couldn't find block for texscroll object`);
-            } else {
-                const scrollableIndex = obj.objParams.getInt16(0x18);
-                const speedX = obj.objParams.getInt8(0x1e);
-                const speedY = obj.objParams.getInt8(0x1f);
-
-                const tabValue = readUint32(obj.world.resColl.tablesTab, 0, 0xe);
-                const targetTexId = readUint32(obj.world.resColl.tablesBin, 0, tabValue + scrollableIndex) & 0x7fff;
-                // Note: & 0x7fff above is an artifact of how the game stores tex id's.
-                // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
-
-                let fail = true;
-                const materials = block.getMaterials();
-                for (let i = 0; i < materials.length; i++) {
-                    if (materials[i] !== undefined) {
-                        const mat = materials[i]! as StandardMaterial;
-                        for (let j = 0; j < mat.shader.layers.length; j++) {
-                            const layer = mat.shader.layers[j];
-                            if (layer.texId === targetTexId) {
-                                fail = false;
-                                // Found the texture! Make it scroll now.
-                                // console.log(`Making texId ${targetTexId} scroll!`);
-                                const theTexture = obj.world.resColl.texFetcher.getTexture(obj.world.device, targetTexId, true)!;
-                                const dxPerFrame = (speedX << 16) / theTexture.width;
-                                const dyPerFrame = (speedY << 16) / theTexture.height;
-                                layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
-                                mat.rebuild();
-                            }
-                        }
-                    }
-                }
-
-                if (fail)
-                    console.warn(`Couldn't find material texture for scrolling`);
-            }
-        },
-    },
-    [309]: commonClass(),
-    [312]: commonClass(),
-    [313]: commonClass(),
-    [316]: commonClass(),
-    [317]: commonClass(),
-    [318]: { // DIM2Explode
-        setup: (obj: ObjectInstance, data: DataView) => {
-            const modelNum = data.getInt8(0x18);
-            obj.setModelNum(modelNum);
-        },
-    },
-    [319]: commonClass(),
-    [320]: commonClass(),
-    [321]: commonClass(),
-    [329]: { // CFTreasWind
-        setup: (obj: ObjectInstance, data: DataView) => {
-            const scaleParam = data.getInt8(0x19);
-            let objScale;
-            if (scaleParam === 0)
-                objScale = 90;
-            else
-                objScale = 4 * scaleParam;
-            obj.scale *= objScale / 90;
-        },
-    },
-    [330]: { // CFPowerBase
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            const modelParam = data.getInt16(0x1e);
-            if (modelParam === 0x55)
-                obj.setModelNum(2);
-            else if (modelParam === 0x56)
-                obj.setModelNum(1);
-        },
-    },
-    [332]: commonClass(),
-    [343]: commonClass(),
-    [344]: commonClass(),
-    [346]: { // SH_BombWall
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.yaw = angle16ToRads(data.getInt16(0x1a));
-            obj.pitch = angle16ToRads(data.getInt16(0x1c));
-            obj.roll = angle16ToRads(data.getInt16(0x1e));
-            let objScale = data.getInt8(0x3d);
-            if (objScale === 0)
-                objScale = 20;
-            obj.scale *= objScale / 20;
-        },
-    },
-    [347]: commonClass(0x18),
-    [356]: { // CFLevelCont
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0x56);
-            obj.world.envfxMan.loadEnvfx(0xd);
-            obj.world.envfxMan.loadEnvfx(0x11);
-            obj.world.envfxMan.loadEnvfx(0xe);
-        },
-    },
-    [359]: { // SpiritDoorL
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            let objScale = data.getInt8(0x19) / 64;
-            if (objScale === 0)
-                objScale = 1;
-            obj.scale *= objScale;
-        },
-    },
-    [363]: commonClass(0x18),
-    [372]: { // CCriverflow
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.scale += data.getUint8(0x19) / 512;
-        },
-    },
-    [373]: commonClass(),
-    [382]: { // MMP_levelco
-        setup: (obj: ObjectInstance, data: DataView) => {
-            // FIXME: other envfx are used in certain scenarios
-            obj.world.envfxMan.loadEnvfx(0x13a);
-            obj.world.envfxMan.loadEnvfx(0x138);
-            obj.world.envfxMan.loadEnvfx(0x139);
-        },
-    },
-    [383]: { // MSVine
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1f);
-            const scaleParam = data.getUint8(0x21);
-            if (scaleParam !== 0)
-                obj.scale *= scaleParam / 64;
-        },
-    },
-    [385]: { // MMP_trenchF
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1b, 0x1a, 0x19);
-            obj.scale = 0.1;
-        },
-    },
-    [387]: commonClass(),
-    [389]: commonClass(),
-    [390]: commonClass(0x1a), // CCgasvent
-    [391]: commonClass(0x1a),
-    [392]: commonClass(0x1a),
-    [393]: commonClass(0x18),
-    [394]: commonClass(0x1a),
-    [395]: { // CClevcontro
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0x23f);
-            obj.world.envfxMan.loadEnvfx(0x240);
-            obj.world.envfxMan.loadEnvfx(0x241);
-        },
-    },
-    [415]: { // NW_treebrid
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.pitch = angle16ToRads(data.getInt16(0x1a));
-            obj.roll = angle16ToRads(data.getInt16(0x1c));
-        },
-    },
-    [416]: commonClass(),
-    [417]: commonClass(0x1c),
-    [418]: commonClass(),
-    [419]: commonClass(),
-    [420]: commonClass(),
-    [421]: { // NW_levcontr
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0xb4);
-            obj.world.envfxMan.loadEnvfx(0xb5);
-            obj.world.envfxMan.loadEnvfx(0xb6);
-            obj.world.envfxMan.loadEnvfx(0xb7);
-        },
-    },
-    [423]: commonClass(),
-    [424]: commonClass(undefined, undefined, undefined, 0.008), // SH_killermu (Note: This enemy has different anim speeds depending on current state)
-    [425]: commonClass(0x1f),
-    [427]: commonClass(0x18),
-    [429]: { // SH_thorntai
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x19, undefined, undefined, 0.006);
-            obj.scale *= data.getUint16(0x1c) / 1000;
-        },
-    },
-    [430]: { // SH_LevelCon
-        setup: (obj: ObjectInstance, data: DataView) => {
-            // TODO: Load additional env fx
-            // The game has entire tables of effects based on time of day, game progress, etc.
-            obj.world.envfxMan.loadEnvfx(0x1b2);
-            obj.world.envfxMan.loadEnvfx(0x1b3);
-            obj.world.envfxMan.loadEnvfx(0x1b4);
-        },
-    },
-    [437]: commonClass(),
-    [438]: { // SC_LevelCon
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0x4f);
-            obj.world.envfxMan.loadEnvfx(0x50);
-            obj.world.envfxMan.loadEnvfx(0x245);
-        },
-    },
-    [439]: { // SC_MusicTre
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1a);
-            obj.roll = angle16ToRads((data.getUint8(0x18) - 127) * 128);
-            obj.pitch = angle16ToRads((data.getUint8(0x19) - 127) * 128);
-            obj.scale = 3.6 * data.getFloat32(0x1c);
-        },
-    },
-    [440]: commonClass(0x1a), // SC_totempol
-    [442]: commonClass(),
-    [445]: commonClass(0x18),
-    [447]: commonClass(0x1c),
-    [448]: commonClass(),
-    [451]: commonClass(0x18),
-    [452]: commonClass(0x18),
-    [453]: commonClass(0x18),
-    [454]: { // DIMCannon
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum !== 0x1d6)
-                commonSetup(obj, data, 0x28);
-        },
-    },
-    [455]: commonClass(0x18),
-    [456]: commonClass(0x1c),
-    [457]: commonClass(0x18),
-    [459]: commonClass(0x18),
-    [461]: { // DIM_LevelCo
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0x160);
-            obj.world.envfxMan.loadEnvfx(0x15a);
-            obj.world.envfxMan.loadEnvfx(0x15c);
-            obj.world.envfxMan.loadEnvfx(0x15f);
-        },
-    },
-    [465]: commonClass(),
-    [469]: commonClass(0x18),
-    [472]: commonClass(0x1c),
-    [473]: commonClass(0x18),
-    [477]: commonClass(0x18),
-    [487]: commonClass(),
-    [488]: commonClass(),
-    [489]: { // SB_Propelle
-        setup: (obj: ObjectInstance, data: DataView) => {
-            const modelNum = data.getInt8(0x1a);
-            obj.setModelNum(modelNum);
-        },
-    },
-    [490]: commonClass(),
-    [491]: commonClass(),
-    [492]: commonClass(),
-    [496]: commonClass(0x18),
-    [497]: { // SB_DeckDoor
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            const modelNum = data.getInt8(0x19) != 0 ? 1 : 0;
-            obj.setModelNum(modelNum);
-        },
-    },
-    [500]: { // SB_Lamp
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum === 0x3e4)
-                commonSetup(obj, data, 0x1a);
-            else
-                commonSetup(obj, data, 0x18);
-            obj.pitch = 0;
-            obj.roll = 0;
-        },
-    },
-    [502]: {
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum !== 0x803)
-                commonSetup(obj, data, 0x18);
-        },
-    },
-    [509]: commonClass(),
-    [510]: commonClass(0x18),
-    [513]: commonClass(0x18),
-    [518]: { // PoleFlame
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.yaw = angle16ToRads((data.getUint8(0x18) & 0x3f) << 10);
-            const objScale = data.getInt16(0x1a);
-            if (objScale < 1)
-                obj.scale = 0.1;
-            else
-                obj.scale = objScale / 8192;
-        },
-    },
-    [521]: { // WM_LevelCon
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0x3c);
-        },
-    },
-    [523]: commonClass(),
-    [524]: { // WM_spiritpl
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.pitch = angle16ToRads(data.getInt16(0x1a) << 8); // Yes, getInt16 is correct.
-        },
-    },
-    [525]: commonClass(0x18),
-    [533]: commonClass(),
-    [535]: commonClass(0x1e),
-    [538]: { // VFP_statueb
-        setup: (obj: ObjectInstance, data: DataView) => {
-            const scaleParam = data.getInt16(0x1c);
-            if (scaleParam > 1) {
-                obj.scale *= scaleParam;
-            }
-        },
-    },
-    [541]: commonClass(0x18), // VFPLift2
-    [542]: commonClass(0x18), // VFP_Block1
-    [543]: commonClass(0x18), // VFPLavaBloc
-    [544]: { // VFP_DoorSwi
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18, 0x19);
-            // Roll is 16 bits
-            obj.roll = angle16ToRads(data.getInt16(0x1c));
-        },
-    },
-    [549]: commonClass(),
-    [550]: { // VFP_lavapoo
-        setup: (obj: ObjectInstance, data: DataView) => {
-            let scaleParam = data.getInt16(0x1a);
-            if (scaleParam === 0)
-                scaleParam = 500;
-            obj.scale = 1 / (scaleParam / getRandomInt(600, 1000));
-        },
-    },
-    [551]: { // VFP_lavasta
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.position[1] += data.getInt16(0x1a);
-        },
-    },
-    [552]: commonClass(0x18), // VFPSpPl
-    [576]: commonClass(),
-    [579]: commonClass(0x18),
-    [597]: commonClass(0x18),
-    [598]: commonClass(0x18),
-    [599]: commonClass(0x18),
-    [602]: { // StaticCamer
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.yaw = angle16ToRads(-data.getInt16(0x1c));
-            obj.pitch = angle16ToRads(-data.getInt16(0x1e));
-            obj.roll = angle16ToRads(-data.getInt16(0x20));
-        },
-    },
-    [603]: commonClass(0x1f),
-    [609]: commonClass(0x18),
-    [613]: commonClass(0x1e),
-    [614]: commonClass(0x18),
-    [616]: commonClass(),
-    [617]: commonClass(0x18),
-    [619]: commonClass(0x18),
-    [620]: {
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum !== 0x86a && obj.objType.typeNum !== 0x86b)
-                commonSetup(obj, data, 0x18);
-        },
-    },
-    [622]: commonClass(),
-    [623]: commonClass(0x18),
-    [627]: { // FlameMuzzle
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18, 0x19);
-            obj.roll = 0;
-            const scaleParam = data.getInt16(0x1c);
-            if (scaleParam != 0)
-                obj.scale *= 0.1 * scaleParam;
-        },
-    },
-    [641]: commonClass(0x18),
-    [642]: commonClass(),
-    [643]: commonClass(0x18),
-    [644]: { // SPMapDR
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x1a, 0x1b);
-            obj.setModelNum(data.getInt8(0x18));
-        },
-    },
-    [645]: commonClass(),
-    [646]: commonClass(),
-    [648]: { // SPDrape
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            const scaleParam = data.getInt16(0x1a);
-            if (scaleParam !== 0)
-                obj.scale = 10 * scaleParam / 32767.0;
-        },
-    },
-    [650]: commonClass(0x18),
-    [653]: { // WCLevelCont
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.world.envfxMan.loadEnvfx(0x1fb);
-            obj.world.envfxMan.loadEnvfx(0x1ff);
-            obj.world.envfxMan.loadEnvfx(0x1fc);
-            obj.world.envfxMan.loadEnvfx(0x1fd);
-        },
-    },
-    [654]: templeClass(),
-    [656]: { // WCPushBlock
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.setModelNum(data.getInt8(0x19));
-        },
-    },
-    [657]: { // WCTile
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.position[1] += 25.0;
-            obj.setModelNum(data.getInt8(0x19));
-        },
-    },
-    [658]: templeClass(),
-    [659]: { // CFSunTemple
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18, 0x19, 0x1a);
-            obj.setModelNum(data.getInt8(0x21));
-        },
-    },
-    [660]: commonClass(0x18),
-    [661]: templeClass(),
-    [662]: templeClass(),
-    [663]: { // WCTempleBri
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18);
-            obj.setModelNum(data.getInt8(0x19));
-            // Caution: This will modify the materials for all instances of the model.
-            // TODO: find a cleaner way to do this
-            const mats = obj.modelInst!.getMaterials();
-            for (let i = 0; i < mats.length; i++) {
-                const mat = mats[i];
-                if (mat !== undefined && mat instanceof StandardMaterial) {
-                    mat.setBlendOverride({
-                        setup: (mb: GXMaterialBuilder) => {
-                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
-                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
-                        },
-                    });
-                    mat.rebuild();
-                }
-            }
-        },
-    },
-    [664]: { // WCFloorTile
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.yaw = angle16ToRads(-0x4000);
-        },
-    },
-    [666]: commonClass(),
-    [671]: commonClass(0x18),
-    [672]: { // ARWGoldRing
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.yaw = angle16ToRads(-0x8000);
-        },
-    },
-    [674]: commonClass(),
-    [678]: commonClass(0x18, 0x19, 0x1a), // ARWBigAster
-    [679]: { // ARWProximit
-        setup: (obj: ObjectInstance, data: DataView) => {
-            obj.yaw = angle16ToRads(getRandomInt(0, 0xffff));
-            obj.pitch = angle16ToRads(getRandomInt(0, 0xffff));
-            obj.roll = angle16ToRads(getRandomInt(0, 0xffff));
-        },
-    },
-    [681]: { // LGTPointLig
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x18, 0x19);
-
-            const spotFunc = data.getUint8(0x21); // TODO: this value is passed to GXInitSpotLight
-            if (spotFunc === 0)
-                obj.setModelNum(0);
-            else
-                obj.setModelNum(1);
-
-            // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
-            // TODO: Some types of light use other formulae
-            const refDistance = data.getUint16(0x22);
-            const refBrightness = 0.75;
-            const kfactor = 0.5 * (1.0 - refBrightness);
-            const distAtten = vec3.fromValues(
-                1.0,
-                kfactor / (refBrightness * refDistance),
-                kfactor / (refBrightness * refDistance * refDistance)
-                );
-
-            obj.userData = {
-                color: colorNewFromRGBA(
-                    data.getUint8(0x1a) / 0xff,
-                    data.getUint8(0x1b) / 0xff,
-                    data.getUint8(0x1c) / 0xff,
-                    1.0
-                ),
-                distAtten,
-            };
-        },
-        mount: (obj: ObjectInstance, world: World) => {
-            world.lights.add({
-                position: obj.getPosition(),
-                color: obj.userData.color,
-                distAtten: obj.userData.distAtten,
-            })
-        },
-    },
-    [682]: commonClass(0x18, 0x19),
-    [683]: { // LGTProjecte
-        ...commonClass(0x18, 0x19, 0x34),
-        mount: (obj: ObjectInstance, world: World) => {
-            // TODO: support this type of light. Used in Krazoa Palace glowing platforms.
-            // world.lights.add({
-            //     position: obj.getPosition(),
-            // })
-        },
-    },
-    [685]: decorClass(0.001),
-    [686]: decorClass(),
-    [687]: decorClass(0.0025),
-    [688]: decorClass(),
-    [689]: commonClass(0x1a, 0x19, 0x18),
-    [690]: commonClass(0x1a, 0x19, 0x18),
-    [691]: { // SkyVortS
-        setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data);
-            // Caution: This will modify the materials for all instances of the model.
-            // TODO: find a cleaner way to do this
-            const mats = obj.modelInst!.getMaterials();
-            for (let i = 0; i < mats.length; i++) {
-                const mat = mats[i];
-                if (mat !== undefined && mat instanceof StandardMaterial) {
-                    mat.setBlendOverride({
-                        setup: (mb: GXMaterialBuilder) => {
-                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
-                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
-                        },
-                    });
-                    mat.rebuild();
-                }
-            }
-        },
-    },
-    [693]: commonClass(),
-    [694]: { // CNThitObjec
-        setup: (obj: ObjectInstance, data: DataView) => {
-            if (data.getInt8(0x19) === 2)
-                obj.yaw = angle16ToRads(data.getInt16(0x1c));
-        },
-    },
-};
 
 export class ObjectType {
     public name: string;
@@ -985,7 +104,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
 }
 
 export interface Light {
@@ -1006,20 +125,21 @@ export class ObjectInstance {
     public roll: number = 0;
     public scale: number = 1.0;
     private srtMatrix: mat4 = mat4.create();
+    private srtMatrixChild: mat4 = mat4.create();
     private srtDirty: boolean = true;
-    private cullRadius: number = 10;
+    public cullRadius: number = 10;
 
     private modelAnimNum: number | null = null;
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    private ambienceNum: number = 0;
+    private ambienceIdx: number = 0;
 
     public animSpeed: number = 0.1; // Default to a sensible value.
     // In the game, each object class is responsible for driving its own animations
     // at the appropriate speed.
 
-    public userData: any;
+    public internalClass?: SFAClass;
 
     constructor(public world: World, public objType: ObjectType, public objParams: DataView, public posInMap: vec3) {
         this.scale = objType.scale;
@@ -1027,9 +147,9 @@ export class ObjectInstance {
         this.commonObjectParams = parseCommonObjectParams(objParams);
 
         if (this.commonObjectParams.ambienceValue !== 0)
-            this.ambienceNum = this.commonObjectParams.ambienceValue - 1;
+            this.ambienceIdx = this.commonObjectParams.ambienceValue - 1;
         else
-            this.ambienceNum = objType.ambienceNum;
+            this.ambienceIdx = objType.ambienceNum;
 
         vec3.copy(this.position, this.commonObjectParams.position);
         
@@ -1040,7 +160,7 @@ export class ObjectInstance {
 
         if (objClass in SFA_CLASSES) {
             try {
-                SFA_CLASSES[objClass].setup(this, objParams);
+                this.internalClass = new SFA_CLASSES[objClass](this, objParams);
             } catch (e) {
                 console.warn(`Failed to setup object class ${objClass} type ${typeNum} due to exception:`);
                 console.error(e);
@@ -1051,15 +171,13 @@ export class ObjectInstance {
     }
 
     public mount() {
-        const objClass = SFA_CLASSES[this.objType.objClass];
-        if (objClass !== undefined && objClass.mount !== undefined)
-            objClass.mount(this, this.world);
+        if (this.internalClass !== undefined)
+            this.internalClass.mount(this, this.world);
     }
 
     public unmount() {
-        const objClass = SFA_CLASSES[this.objType.objClass];
-        if (objClass !== undefined && objClass.unmount !== undefined)
-            objClass.unmount(this, this.world);
+        if (this.internalClass !== undefined)
+            this.internalClass.unmount(this, this.world);
     }
 
     public setParent(parent: ObjectInstance | null) {
@@ -1068,9 +186,12 @@ export class ObjectInstance {
             console.log(`attaching this object (${this.objType.name}) to parent ${parent?.objType.name}`);
     }
 
-    public getLocalSRT(): mat4 {
+    private updateSRT(): mat4 {
         if (this.srtDirty) {
             mat4FromSRT(this.srtMatrix, this.scale, this.scale, this.scale,
+                this.yaw, this.pitch, this.roll,
+                this.position[0], this.position[1], this.position[2]);
+            mat4FromSRT(this.srtMatrixChild, 1, 1, 1,
                 this.yaw, this.pitch, this.roll,
                 this.position[0], this.position[1], this.position[2]);
             this.srtDirty = false;
@@ -1079,23 +200,22 @@ export class ObjectInstance {
         return this.srtMatrix;
     }
 
+    public getLocalSRT(): mat4 {
+        this.updateSRT();
+        return this.srtMatrix;
+    }
+
     public getSRTForChildren(): mat4 {
-        const result = mat4.create();
-        mat4.fromTranslation(result, this.position);
-        // mat4.scale(result, result, [this.scale, this.scale, this.scale]);
-        mat4.rotateY(result, result, this.yaw);
-        mat4.rotateX(result, result, this.pitch);
-        mat4.rotateZ(result, result, this.roll);
-        return result;
+        this.updateSRT();
+        return this.srtMatrixChild;
     }
 
     public getWorldSRT(out: mat4) {
         const localSrt = this.getLocalSRT();
-        if (this.parent !== null) {
+        if (this.parent !== null)
             mat4.mul(out, this.parent.getSRTForChildren(), localSrt);
-        } else {
+        else
             mat4.copy(out, localSrt);
-        }
     }
 
     public getType(): ObjectType {
@@ -1110,8 +230,13 @@ export class ObjectInstance {
         return this.objType.name;
     }
 
-    public getPosition(): vec3 {
-        return this.position;
+    public getPosition(dst: vec3) {
+        if (this.parent !== null) {
+            this.parent.getPosition(dst);
+            vec3.add(dst, dst, this.position);
+        } else {
+            vec3.copy(dst, this.position);
+        }
     }
 
     public setPosition(pos: vec3) {
@@ -1166,9 +291,8 @@ export class ObjectInstance {
     private curKeyframe: Keyframe | undefined = undefined;
 
     public update(updateCtx: ObjectUpdateContext) {
-        const objClass = SFA_CLASSES[this.objType.objClass];
-        if (objClass !== undefined && objClass.update !== undefined)
-            objClass.update(this, updateCtx);
+        if (this.internalClass !== undefined)
+            this.internalClass.update(this, updateCtx);
     }
 
     private isFrustumCulled(viewerInput: ViewerRenderInput): boolean {
@@ -1207,15 +331,22 @@ export class ObjectInstance {
             getMatrixTranslation(worldPos, worldMtx);
             const viewPos = scratchVec1;
             vec3.transformMat4(viewPos, worldPos, viewMtx);
-            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
+            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceIdx);
             // const debugCtx = getDebugOverlayCanvas2D();
             // drawWorldSpacePoint(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos);
             // drawWorldSpaceText(debugCtx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, worldPos, this.objType.name + " (" + -viewPos[2] + ")");
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
+                ambienceIdx: this.ambienceIdx,
                 outdoorAmbientColor: scratchColor0,
+                object: this,
             }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
+    }
+
+    public destroy(device: GfxDevice) {
+        this.modelInst?.destroy(device);
+        this.modelInst = null;
     }
 }
 

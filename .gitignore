@@ -67,3 +67,4 @@ deploy_rsa.pub
 
 rust/target/
 data/
+.pnpm-debug.log

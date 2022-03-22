@@ -1,12 +1,12 @@
 
 import { SceneContext } from "../../SceneBase";
-import { GfxDevice } from "../platform/GfxPlatform";
+import { GfxClipSpaceNearZ, GfxDevice } from "../platform/GfxPlatform";
 
 import * as GX from '../../gx/gx_enum';
 import { GfxRenderInst, GfxRenderInstManager } from "../render/GfxRenderInstManager";
 import { fillMatrix4x3 } from "./UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { computeProjectionMatrixFromCuboid, MathConstants } from "../../MathHelpers";
+import { projectionMatrixForCuboid, MathConstants } from "../../MathHelpers";
 import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color";
 
 // TODO(jstpierre): Don't use the Super Mario Galaxy system for this... use our own font data,
@@ -17,6 +17,7 @@ import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
 import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
 import { GX_Program } from "../../gx/gx_material";
 import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
+import { projectionMatrixConvertClipSpaceNearZ } from "./ProjectionHelpers";
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();
@@ -41,14 +42,15 @@ export class DebugTextDrawer {
         ddraw.setVtxDesc(GX.Attr.TEX0, true);
     }
 
-    private setSceneParams(renderInst: GfxRenderInst, w: number, h: number): void {
+    private setSceneParams(renderInst: GfxRenderInst, w: number, h: number, clipSpaceNearZ: GfxClipSpaceNearZ): void {
         let offs = renderInst.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams);
-        computeProjectionMatrixFromCuboid(sceneParams.u_Projection, 0, w, 0, h, -10000.0, 10000.0);
+        projectionMatrixForCuboid(sceneParams.u_Projection, 0, w, 0, h, -10000.0, 10000.0);
+        projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         fillSceneParamsData(d, offs, sceneParams);
     }
 
-    private setPacketParams(renderInst: GfxRenderInst): void {
+    private setDrawParams(renderInst: GfxRenderInst): void {
         let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 16);
         const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
         mat4.identity(scratchMatrix);
@@ -73,6 +75,8 @@ export class DebugTextDrawer {
     }
 
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
+        vec3.zero(this.charWriter.origin);
+        vec3.copy(this.charWriter.cursor, this.charWriter.origin);
         this.charWriter.calcRect(scratchVec4, str);
 
         // Center align
@@ -82,8 +86,9 @@ export class DebugTextDrawer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
-        this.setSceneParams(template, vw, vh);
-        this.setPacketParams(template);
+        const clipSpaceNearZ = renderInstManager.gfxRenderCache.device.queryVendorInfo().clipSpaceNearZ;
+        this.setSceneParams(template, vw, vh, clipSpaceNearZ);
+        this.setDrawParams(template);
 
         // Stroke
         colorCopy(this.charWriter.color1, this.strokeColor);

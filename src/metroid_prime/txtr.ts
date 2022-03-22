@@ -1,4 +1,3 @@
-
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
 
 import { ResourceSystem } from './resource';
@@ -46,7 +45,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
 
     switch (format) {
     case GX.TexFormat.C4:
-    case GX.TexFormat.C8:
+    case GX.TexFormat.C8: {
         paletteFormat = stream.readUint32();
         const palWidth: number = stream.readUint16();
         const palHeight: number = stream.readUint16();
@@ -54,9 +53,10 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         paletteData = stream.getBuffer().slice(stream.tell(), stream.tell() + palSize);
         stream.skip(palSize);
         break;
+    }
 
     case GX.TexFormat.C14X2:
-        throw "whoops";
+        throw 'whoops';
     }
 
     const data = stream.getBuffer().slice(stream.tell());

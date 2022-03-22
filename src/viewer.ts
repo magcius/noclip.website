@@ -4,7 +4,7 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor, makeTextureDescriptor2D, GfxFormat, GfxProgram } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
@@ -14,6 +14,7 @@ import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
 import { GlobalSaveManager } from './SaveManager';
+import { mat4 } from 'gl-matrix';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -32,6 +33,10 @@ interface MouseLocation {
     mouseY: number;
 }
 
+export interface DebugConsole {
+    addInfoLine(line: string): void;
+}
+
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
@@ -42,6 +47,7 @@ export interface ViewerRenderInput {
     onscreenTexture: GfxTexture;
     antialiasingMode: AntialiasingMode;
     mouseLocation: MouseLocation;
+    debugConsole: DebugConsole;
 }
 
 export interface SceneGfx {
@@ -49,7 +55,7 @@ export interface SceneGfx {
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;
-    isInteractive?: boolean;
+    getDefaultWorldMatrix?(dst: mat4): void;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
@@ -67,9 +73,15 @@ function resetGfxDebugGroup(group: GfxDebugGroup): void {
 }
 
 export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, devicePixelRatio: number): void {
-    canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
-    canvas.width = width * devicePixelRatio;
-    canvas.height = height * devicePixelRatio;
+    const nw = width * devicePixelRatio;
+    const nh = height * devicePixelRatio;
+    if (canvas.width === nw && canvas.height === nh)
+        return;
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.width = nw;
+    canvas.height = nh;
 }
 
 export class Viewer {
@@ -116,6 +128,7 @@ export class Viewer {
             onscreenTexture: null!,
             antialiasingMode: AntialiasingMode.None,
             mouseLocation: this.inputManager,
+            debugConsole: this.renderStatisticsTracker,
         };
 
         GlobalSaveManager.addSettingListener('AntialiasingMode', (saveManager, key) => {
@@ -164,10 +177,26 @@ export class Viewer {
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
-        this.renderStatisticsTracker.endFrame();
+        const renderStatistics = this.renderStatisticsTracker.endFrame();
+        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.onstatistics(renderStatistics);
+    }
 
-        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
-        this.onstatistics(this.renderStatisticsTracker);
+    private xrTempRT: GfxTexture | null = null;
+    private xrTempWidth: number = -1;
+    private xrTempHeight: number = -1;
+
+    private getXRTempRT(width: number, height: number): GfxTexture {
+        if (this.xrTempWidth !== width || this.xrTempHeight !== height) {
+            if (this.xrTempRT !== null)
+                this.gfxDevice.destroyTexture(this.xrTempRT);
+
+            this.xrTempRT = this.gfxDevice.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_RT, width, height, 1));
+            this.xrTempWidth = width;
+            this.xrTempHeight = height;
+        }
+
+        return this.xrTempRT!;
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
@@ -178,51 +207,65 @@ export class Viewer {
         if (baseLayer === undefined)
             return;
 
-        const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
-        const fbw: number = baseLayer.framebufferWidth;
-        const fbh: number = baseLayer.framebufferHeight;
-
-        this.viewerRenderInput.camera = this.camera;
         this.viewerRenderInput.time = this.sceneTime;
-        this.viewerRenderInput.backbufferWidth = fbw;
-        this.viewerRenderInput.backbufferHeight = fbh;
-        this.gfxSwapChain.configureSwapChain(fbw, fbh, framebuffer);
+        this.gfxSwapChain.configureSwapChain(baseLayer.framebufferWidth, baseLayer.framebufferHeight, baseLayer.framebuffer);
+        const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
 
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
-        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
             const xrView: XRView = webXRContext.views[i];
-            const xrViewPort: XRViewport = baseLayer.getViewport(xrView);
-
-            if (!xrViewPort) {
+            const viewport: XRViewport = baseLayer.getViewport(xrView);
+            if (!viewport)
                 continue;
-            }
 
-            const widthRatio: number = xrViewPort.width / fbw;
-            const heightRatio: number = xrViewPort.height / fbh;
-            this.viewerRenderInput.viewport = {
-                x: xrViewPort.x / xrViewPort.width * widthRatio,
-                y: xrViewPort.y / xrViewPort.height * heightRatio,
-                w: widthRatio,
-                h: heightRatio
-            };
-
+            // Render the viewport to our temp RT.
+            this.viewerRenderInput.backbufferWidth = viewport.width;
+            this.viewerRenderInput.backbufferHeight = viewport.height;
+            const tempRT = this.getXRTempRT(viewport.width, viewport.height);
+            this.viewerRenderInput.onscreenTexture = tempRT;
             this.renderViewport();
 
-            this.gfxSwapChain.present();
+            // Now composite into the backbuffer.
+            this.gfxDevice.copySubTexture2D(swapChainTex, viewport.x, viewport.y, tempRT, 0, 0);
+
+            // Reset the delta time so we don't advance time next render.
+            this.viewerRenderInput.deltaTime = 0;
         }
 
+        this.gfxSwapChain.present();
         this.gfxDevice.popDebugGroup();
-        this.renderStatisticsTracker.endFrame();
+        const renderStatistics = this.renderStatisticsTracker.endFrame();
+        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.onstatistics(renderStatistics);
+    }
 
-        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
-        this.onstatistics(this.renderStatisticsTracker);
+    private finishRenderStatistics(statistics: RenderStatistics, debugGroup: GfxDebugGroup): void {
+        if (debugGroup.drawCallCount)
+            statistics.lines.push(`Draw Calls: ${debugGroup.drawCallCount}`);
+        if (debugGroup.triangleCount)
+            statistics.lines.push(`Drawn Triangles: ${debugGroup.triangleCount}`);
+        if (debugGroup.textureBindCount)
+            statistics.lines.push(`Texture Binds: ${debugGroup.textureBindCount}`);
+        if (debugGroup.bufferUploadCount)
+            statistics.lines.push(`Buffer Uploads: ${debugGroup.bufferUploadCount}`);
+
+        const worldMatrix = this.camera.worldMatrix;
+        const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
+        statistics.lines.push(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
+
+        const vendorInfo = this.gfxDevice.queryVendorInfo();
+        statistics.lines.push(`Platform: ${vendorInfo.platformString}`);
+
+        if (vendorInfo.platformString === 'WebGL2') {
+            const impl = gfxDeviceGetImpl_GL(this.gfxDevice);
+            const w = impl.gl.drawingBufferWidth, h = impl.gl.drawingBufferHeight;
+            statistics.lines.push(`Drawing Buffer Size: ${w}x${h}`);
+        }
     }
 
     public setCameraController(cameraController: CameraController) {
@@ -329,7 +372,7 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.NO_WEBGL2_GENERIC;
     }
 
-    // SwiftShader is trash and I don't trust it.
+    // SwiftShader is slow, and gives a poor experience.
     const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
     if (WEBGL_debug_renderer_info && gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
         return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;

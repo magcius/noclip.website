@@ -27,16 +27,16 @@ export class FFXProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_LightDirection;
 };
 
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix;
     Mat4x2 u_TextureMatrix;
     vec4   u_Params;
@@ -48,7 +48,7 @@ varying vec4 v_Color;
 varying vec2 v_TexCoord;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec2 a_TexCoord;

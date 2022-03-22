@@ -7,29 +7,29 @@
 //  * JPAC2_10, as seen in Super Mario Galaxy 1 & 2
 //
 // Known gaps in JPA2 support:
-//  * Line and Point shape types
+//  * Point shape types
 //
 // Known gaps in JPA1 support:
-//  * Line and Point shape types
+//  * Point shape types
 //  * ETX1 SubTexture
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import * as GX from "../../gx/gx_enum";
 
 import { assert, readString, assertExists, nArray } from "../../util";
-import { vec3, mat4, vec2, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, vec2, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
-import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
+import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../../Camera";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../TextureHolder";
@@ -333,6 +333,7 @@ const enum FieldAddType {
 
 const enum FieldStatusFlag {
     NoInheritRotate = 0x02,
+    AirDrag         = 0x04,
 
     FadeUseEnTime  = 0x08,
     FadeUseDisTime = 0x10,
@@ -363,8 +364,8 @@ interface JPAFieldBlock {
     mag: number;
     // Used by Drag
     magRndm: number;
-    // Used by Newton and Convection
-    refDistanceSq: number;
+    // Used by Newton, Air and Convection
+    refDistance: number;
     // Used by Vortex and Spin
     innerSpeed: number;
     // Used by Vortex
@@ -422,7 +423,6 @@ const st_aa: GX.CA[] = [
 function shapeTypeSupported(shapeType: ShapeType): boolean {
     switch (shapeType) {
     case ShapeType.Point:
-    case ShapeType.Line:
         return false;
     default:
         return true;
@@ -918,14 +918,14 @@ export class JPAEmitterWorkData {
     public forceTexMtxIdentity: boolean = false;
 
     public materialParams = new MaterialParams();
-    public packetParams = new PacketParams();
+    public drawParams = new DrawParams();
 
     public fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
         const materialHelper = this.baseEmitter.resData.materialHelper;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         const materialParams = this.materialParams;
-        const packetParams = this.packetParams;
+        const drawParams = this.drawParams;
 
         // These should be one allocation.
         let materialOffs = renderInst.allocateUniformBuffer(GX_Program.ub_MaterialParams, materialHelper.materialParamsBufferSize);
@@ -965,7 +965,7 @@ export class JPAEmitterWorkData {
 
         materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
 
-        packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
+        packetOffs += fillMatrix4x3(d, packetOffs, drawParams.u_PosMtx[0]);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
@@ -1000,7 +1000,7 @@ class StripeBufferManager {
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
-        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, MAX_STRIPE_VERTEX_COUNT);
+        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, tristripIndexData.buffer);
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
@@ -1197,7 +1197,7 @@ function JPAGetDirMtx(m: mat4, v: ReadonlyVec3, scratch: vec3 = scratchVec3a): v
     m[14] = 0.0;
 }
 
-export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec3, m: mat4): void {
+export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec3, m: ReadonlyMat4): void {
     // Extract our three column vectors.
     mat4.identity(rot);
 
@@ -1562,13 +1562,13 @@ export class JPABaseEmitter {
             }
         } else {
             angle = workData.volumeSweep * get_r_zh(this.random) * MathConstants.TAU;
-            x = (Math.PI * 0.5) + (get_r_zh(this.random) * Math.PI);
+            x = (get_rndm_f(this.random) * Math.PI);
         }
 
         let distance = get_rndm_f(this.random);
         if (!!(bem1.emitFlags & EmitFlags.FixedDensity)) {
             // Fixed density
-            distance = 1.0 - (distance * distance * distance);
+            distance = 1.0 - (distance ** 3.0);
         }
 
         const size = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
@@ -1815,7 +1815,7 @@ export class JPABaseEmitter {
 
         if (!SORT_PARTICLES) {
             this.calcEmitterGlobalPosition(scratchVec3a);
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, scratchVec3a);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(workData.posCamMtx, scratchVec3a);
             workData.particleSortKey = setSortKeyDepth(workData.particleSortKey, depth);
         }
     }
@@ -2012,7 +2012,7 @@ export class JPABaseEmitter {
 
         workData.fillParticleRenderInst(device, renderInstManager, template);
 
-        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
+        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, oneStripVertexCount);
 
         const renderInst1 = renderInstManager.newRenderInst();
         renderInst1.drawIndexes(oneStripIndexCount);
@@ -2048,7 +2048,7 @@ export class JPABaseEmitter {
         // mpDrawEmitterFuncList
 
         const materialParams = workData.materialParams;
-        const packetParams = workData.packetParams;
+        const drawParams = workData.drawParams;
 
         if (bsp1.texIdxAnimData === null)
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], bsp1.texIdx);
@@ -2079,7 +2079,7 @@ export class JPABaseEmitter {
             colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
             colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-            mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
+            mat4.copy(drawParams.u_PosMtx[0], workData.posCamMtx);
     
             if (!calcTexCrdMtxPrj(materialParams.u_TexMtx[0], workData, workData.posCamMtx, materialParams.m_TextureMapping[0].flipY)) {
                 if (bsp1.isEnableTexScrollAnm)
@@ -2569,12 +2569,9 @@ export class JPABaseParticle {
 
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
-        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate)) {
-            vec3.scale(scratchVec3a, field.dir, field.mag);
-        } else {
-            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, field.dir);
-            vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-        }
+        vec3.scale(scratchVec3a, field.dir, field.mag);
+        if (!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
+            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
         this.calcFieldAffect(scratchVec3a, field, workData);
@@ -2583,15 +2580,16 @@ export class JPABaseParticle {
     private calcFieldAir(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
         vec3.normalize(scratchVec3a, field.dir);
-        if (!!(field.sttFlag & FieldStatusFlag.NoInheritRotate)) {
-            vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-        } else {
+        vec3.scale(scratchVec3a, field.dir, field.mag);
+        if (!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
-            vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-        }
 
         // Calc
         this.calcFieldAffect(scratchVec3a, field, workData);
+        if (!!(field.sttFlag & FieldStatusFlag.AirDrag)) {
+            if (vec3.squaredLength(this.baseVel) > field.refDistance ** 2.0)
+                normToLength(this.baseVel, field.refDistance);
+        }
     }
 
     private calcFieldMagnet(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2615,7 +2613,7 @@ export class JPABaseParticle {
         transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         const power = 10 * field.mag;
-        const refDistanceSq = field.refDistanceSq;
+        const refDistanceSq = field.refDistance;
 
         // Calc
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
@@ -2639,7 +2637,7 @@ export class JPABaseParticle {
         vec3.normalize(forceDir, forceDir);
 
         const distance = field.pos[2];
-        const sqVortexDist = distance * distance;
+        const sqVortexDist = distance ** 2.0;
         const innerSpeed = field.innerSpeed;
         const outerSpeed = field.outerSpeed;
 
@@ -2726,7 +2724,7 @@ export class JPABaseParticle {
         if (dist === 0) {
             vec3.zero(scratchVec3a);
         } else {
-            const scale = field.refDistanceSq / dist;
+            const scale = field.refDistance / dist;
             vec3.scale(scratchVec3a, scratchVec3a, scale);
         }
 
@@ -3179,7 +3177,7 @@ export class JPABaseParticle {
             return;
 
         // We model all particles below as spheres with radius 25, which should cover all bases.
-        // Stripes (and lines) are an exception, but they are handled separately.
+        // Stripes are an exception, but they are handled separately.
         if (workData.frustum !== null) {
             const scaleX = Math.abs(this.particleScale[0] * workData.globalScale2D[0]);
             const scaleY = Math.abs(this.particleScale[1] * workData.globalScale2D[1]);
@@ -3195,7 +3193,7 @@ export class JPABaseParticle {
         renderInst.sortKey = workData.particleSortKey;
 
         if (SORT_PARTICLES) {
-            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(workData.posCamMtx, this.position);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
@@ -3203,20 +3201,63 @@ export class JPABaseParticle {
         const shapeType = sp1.shapeType;
 
         const materialParams = workData.materialParams;
-        const packetParams = workData.packetParams;
+        const drawParams = workData.drawParams;
 
-        if (shapeType === ShapeType.Billboard) {
+        const scaleX = workData.globalScale2D[0] * this.particleScale[0];
+        const scaleY = workData.globalScale2D[1] * this.particleScale[1];
+
+        if (shapeType === ShapeType.Line) {
+            // Draw a line from (this.position) to (this.position - this.velocity.norm() * scaleY).
+
+            // Our quad is set up in the middle, so the center point is the midpoint of those two,
+            // aka (this.position - this.velocity.norm * scaleY * 0.5).
+            vec3.normalize(scratchVec3c, this.velocity);
+            vec3.scaleAndAdd(scratchVec3b, this.position, scratchVec3c, -scaleY * 0.5);
+            transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, scratchVec3b);
+
+            // To go from the center to reach either edge is just the half-extents of the velocity direction.
+            transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3c);
+            vec3.scale(scratchVec3a, scratchVec3a, -0.5);
+
+            const dst = drawParams.u_PosMtx[0];
+
+            dst[0] = -scratchVec3a[1] * scaleX;
+            dst[1] = scratchVec3a[0] * scaleX;
+            dst[2] = 0;
+
+            dst[4] = scratchVec3a[0] * scaleY;
+            dst[5] = scratchVec3a[1] * scaleY;
+            dst[6] = 0;
+
+            // The Z+ axis should face the camera.
+            dst[8] = 0;
+            dst[9] = 0;
+            dst[10] = 1;
+
+            dst[12] = scratchVec3b[0];
+            dst[13] = scratchVec3b[1];
+            dst[14] = scratchVec3b[2];
+
+            // No pivot on lines.
+            this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
+
+            // The UV on the line should stretch from (0.0, 0.0) to (0.0, 1.0), so zero out the scale of the
+            // texture matrix while keeping the rest the same.
+            // TODO(jstpierre): This breaks on Line10 / Line20? Have to check how the original game works...
+            // materialParams.u_TexMtx[0][0] = 0.0;
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.drawIndexes(6, 0);
+        } else if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
 
             transformVec3Mat4w1(scratchVec3a, workData.posCamMtx, this.position);
-            computeModelMatrixSRT(packetParams.u_PosMtx[0],
-                this.particleScale[0] * workData.globalScale2D[0],
-                this.particleScale[1] * workData.globalScale2D[1],
-                1,
+            computeModelMatrixSRT(drawParams.u_PosMtx[0],
+                scaleX, scaleY, 1,
                 0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
-            this.applyPivot(packetParams.u_PosMtx[0], workData);
-            this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, packetParams.u_PosMtx[0]);
+            this.applyPivot(drawParams.u_PosMtx[0], workData);
+            this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, drawParams.u_PosMtx[0]);
 
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             renderInst.drawIndexes(6, 0);
@@ -3230,7 +3271,7 @@ export class JPABaseParticle {
             vec3.cross(this.axis, scratchVec3a, scratchVec3b);
             vec3.normalize(this.axis, this.axis);
 
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
             dst[0] = this.axis[0];
             dst[1] = this.axis[1];
             dst[2] = this.axis[2];
@@ -3248,8 +3289,6 @@ export class JPABaseParticle {
             // We want:
             //   View x Particle x Rot x Scale x PlaneSwizzle x Pivot
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
             if (isRot) {
                 this.applyRot(scratchMatrix, this.rotateAngle, sp1.rotType);
                 this.applyPlane(scratchMatrix, sp1.planeType, scaleX, scaleY);
@@ -3268,11 +3307,9 @@ export class JPABaseParticle {
             else
                 renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross) {
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
             this.applyRot(dst, this.rotateAngle, sp1.rotType);
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
             this.applyPlane(dst, sp1.planeType, scaleX, scaleY);
             dst[12] = this.position[0];
             dst[13] = this.position[1];
@@ -3296,23 +3333,21 @@ export class JPABaseParticle {
             transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3a);
             transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
-
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
             dst[0] = scratchVec3a[0] * scaleX;
-            dst[4] = -scratchVec3a[1] * scaleY;
-            dst[8] = 0;
-            dst[12] = scratchVec3b[0];
-
             dst[1] = scratchVec3a[1] * scaleX;
-            dst[5] = scratchVec3a[0] * scaleY;
-            dst[9] = 0;
-            dst[13] = scratchVec3b[1];
-
             dst[2] = 0;
+
+            dst[4] = -scratchVec3a[1] * scaleY;
+            dst[5] = scratchVec3a[0] * scaleY;
             dst[6] = 0;
+
+            dst[8] = 0;
+            dst[9] = 0;
             dst[10] = 1;
+
+            dst[12] = scratchVec3b[0];
+            dst[13] = scratchVec3b[1];
             dst[14] = scratchVec3b[2];
             this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
@@ -3324,10 +3359,8 @@ export class JPABaseParticle {
             vec3.normalize(scratchVec3a, scratchVec3a);
 
             transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
-            const dst = packetParams.u_PosMtx[0];
+            const dst = drawParams.u_PosMtx[0];
 
-            const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-            const scaleY = workData.globalScale2D[1] * this.particleScale[1];
             if (isRot) {
                 const sin = Math.sin(this.rotateAngle), cos = Math.cos(this.rotateAngle);
                 dst[0] = cos * scaleX;
@@ -3866,7 +3899,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const mag = view.getFloat32(tableIdx + 0x14);
             const magRndm = view.getFloat32(tableIdx + 0x18);
             const maxDist = view.getFloat32(tableIdx + 0x1C);
-            const maxDistSq = maxDist * maxDist;
+            const maxDistSq = maxDist ** 2.0;
 
             const posX = view.getFloat32(tableIdx + 0x20);
             const posY = view.getFloat32(tableIdx + 0x24);
@@ -3895,12 +3928,12 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
-            let refDistanceSq = -1;
+            let refDistance = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
             if (type === FieldType.Newton) {
-                refDistanceSq = param1 * param1;
+                refDistance = param1 ** 2.0;
             }
 
             if (type === FieldType.Vortex) {
@@ -3909,14 +3942,14 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             }
     
             if (type === FieldType.Convection) {
-                refDistanceSq = param2;
+                refDistance = param2;
             }
 
             if (type === FieldType.Spin) {
                 innerSpeed = mag;
             }
     
-            fld1.push({ sttFlag, type, addType: velType, pos, dir, maxDistSq, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ sttFlag, type, addType: velType, pos, dir, maxDistSq, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TEX1') {
             // Textures were parsed beforehand; skip.
         } else {
@@ -4308,7 +4341,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const mag = view.getFloat32(dataBegin + 0x04);
             const magRndm = view.getFloat32(dataBegin + 0x08);
             const maxDist = view.getFloat32(dataBegin + 0x0C);
-            const maxDistSq = maxDist * maxDist;
+            const maxDistSq = maxDist ** 2.0;
 
             const posX = view.getFloat32(dataBegin + 0x10);
             const posY = view.getFloat32(dataBegin + 0x14);
@@ -4337,12 +4370,12 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
-            let refDistanceSq = -1;
+            let refDistance = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
             if (type === FieldType.Newton) {
-                refDistanceSq = param1 * param1;
+                refDistance = param1 ** 2.0;
             }
 
             if (type === FieldType.Vortex) {
@@ -4350,15 +4383,19 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 outerSpeed = magRndm;
             }
     
+            if (type === FieldType.Air) {
+                refDistance = magRndm;
+            }
+
             if (type === FieldType.Convection) {
-                refDistanceSq = param2;
+                refDistance = param2;
             }
 
             if (type === FieldType.Spin) {
                 innerSpeed = mag;
             }
 
-            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".
@@ -4764,7 +4801,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             // maxDist does not exist in JPA2
             const maxDist = 0;
-            const maxDistSq = maxDist * maxDist;
+            const maxDistSq = maxDist ** 2.0;
 
             const posX = view.getFloat32(tableIdx + 0x0C);
             const posY = view.getFloat32(tableIdx + 0x10);
@@ -4796,7 +4833,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // All of our parameters.
             let mag = 0;
             let magRndm = 0;
-            let refDistanceSq = -1;
+            let refDistance = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
@@ -4808,7 +4845,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             magRndm = 0;
 
             if (type === FieldType.Newton) {
-                refDistanceSq = param3 * param3;
+                refDistance = param3 ** 2.0;
             }
 
             if (type === FieldType.Vortex) {
@@ -4816,15 +4853,19 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 outerSpeed = param2;
             }
 
+            if (type === FieldType.Air) {
+                refDistance = param2;
+            }
+
             if (type === FieldType.Convection) {
-                refDistanceSq = param3;
+                refDistance = param3;
             }
 
             if (type === FieldType.Spin) {
                 innerSpeed = param1;
             }
 
-            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".

@@ -76,7 +76,7 @@ class ElebitsRenderer extends BasicGXRendererHelper {
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
 
         this.textureHolder.destroy(device);
@@ -84,8 +84,6 @@ class ElebitsRenderer extends BasicGXRendererHelper {
 
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
     }
 }
 

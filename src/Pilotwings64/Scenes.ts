@@ -20,7 +20,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers";
 import { CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
-import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
+import { TextureState, RSP_Geometry, translateCullMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -1827,7 +1827,8 @@ class MaterialInstance {
             const chosenCombine = RDP.decodeCombineParams(0, 0);
             this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode, chosenCombine);
         }
-        this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
+        this.stateFlags = RDP.translateRenderMode(this.decodedMaterial.renderMode);
+        this.stateFlags.cullMode = translateCullMode(this.decodedMaterial.geoMode);
         this.program.defines.set('BONE_MATRIX_COUNT', '1');
         this.program.defines.set("USE_VERTEX_COLOR", "1");
         if (this.hasTexture)
@@ -1980,7 +1981,7 @@ class TextureData {
 // we assume all instances of a given model are animated
 
 class Carousel extends ObjectRenderer {
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
             const speed = 10;
@@ -1990,7 +1991,7 @@ class Carousel extends ObjectRenderer {
 }
 
 class FerrisWheel extends ObjectRenderer {
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
             const speed = 17;
@@ -2003,7 +2004,7 @@ class FerrisWheel extends ObjectRenderer {
 }
 
 class WaterWheel extends ObjectRenderer {
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 0) {
             const speed = 40;
@@ -2017,7 +2018,7 @@ function getOscillation(xScale: number, yScale: number, theta: number): number {
 }
 
 class OilDerrick extends ObjectRenderer {
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
             // offset: 4.71239
@@ -2045,7 +2046,7 @@ class DynamicObjectRenderer extends ObjectRenderer {
 }
 
 class BirdmanStar extends ObjectRenderer {
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         mat4.rotateZ(dst, dst, MathConstants.TAU * timeInSeconds);
     }
@@ -2054,7 +2055,7 @@ class BirdmanStar extends ObjectRenderer {
 class LandingPad extends ObjectRenderer {
     public alternates: ObjectRenderer[] = [];
 
-    public syncTaskVisibility(task: number): boolean {
+    public override syncTaskVisibility(task: number): boolean {
         this.visible = true;
         for (let i = 0; i < this.alternates.length; i++) {
             if (this.alternates[i].syncTaskVisibility(task))
@@ -2091,7 +2092,7 @@ class Looper extends DynamicObjectRenderer {
         mat4.translate(this.modelMatrix, this.modelMatrix, this.params.center);
     }
 
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 0) {
             mat4.fromZRotation(dst, this.params.angularVelocity * timeInSeconds * MathConstants.DEG_TO_RAD);
@@ -2180,7 +2181,7 @@ class Airplane extends DynamicObjectRenderer {
         this.yawSpeed = (yPt.acc * xPt.vel - xPt.acc * yPt.vel) / (tNorm * tNorm);
     }
 
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         const maxTurn = Math.abs(viewerInput.deltaTime / 1000 / 10);
 
@@ -2220,7 +2221,7 @@ class ChairliftChair extends DynamicObjectRenderer {
         assert(tracksMatch(spline.xTrack, spline.zTrack));
     }
 
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
 
         const cyclePhase = (timeInSeconds + this.offset) % 100;
@@ -2276,7 +2277,7 @@ class Ring extends ObjectRenderer {
         super(model, texturePalette);
     }
 
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+    protected override calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         if (partIndex !== 0)
             return;
         const radians = viewerInput.time / 1000;
@@ -2291,14 +2292,14 @@ class Ring extends ObjectRenderer {
 }
 
 class SnowProgram extends DeviceProgram {
-    public name = "PW64_Snow";
+    public override name = "PW64_Snow";
     public static a_Position = 0;
     public static a_Corner = 1;
 
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    public both = `
+    public override both = `
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
@@ -2307,7 +2308,7 @@ layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix;
     vec4 u_Shift;
 };`
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 
 void main() {
@@ -2326,7 +2327,7 @@ void main() {
     // this effectively leads to a slightly larger FOV, so apply the same multiplier here
     gl_Position = gl_Position * vec4(0.81778, 0.81778, 1.0, 1.0);
 }`;
-    public frag = `
+    public override frag = `
 void main() {
     gl_FragColor = vec4(1.0); // flakes are just white
 }`;

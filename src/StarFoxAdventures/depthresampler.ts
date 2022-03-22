@@ -1,9 +1,9 @@
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
@@ -17,7 +17,7 @@ import { TextureMapping } from "../TextureHolder";
  * - Outputs to a color texture to allow for bilinear filtering
  */
 class DepthResamplerProgram extends DeviceProgram {
-    public frag: string = `
+    public override frag: string = `
 uniform sampler2D u_DepthTexture;
 
 in vec2 v_TexCoord;
@@ -29,7 +29,7 @@ void main() {
     gl_FragColor = vec4(d);
 }
 `;
-    public vert = GfxShaderLibrary.fullscreenVS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 0, numSamplers: 1 }];
@@ -52,7 +52,7 @@ export class DepthResampler {
         })
     }
 
-    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, depthInputTargetID: number): number {
+    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, depthInputTargetID: GfxrRenderTargetID): GfxrRenderTargetID {
         const inputTargetDesc = builder.getRenderTargetDescription(depthInputTargetID);
 
         this.targetDesc.setDimensions(inputTargetDesc.width, inputTargetDesc.height, 1);

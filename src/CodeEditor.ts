@@ -149,12 +149,9 @@ class NumberDragger {
         this._anchorMouseX = 0;
         this._anchorValue = undefined;
         this._value = undefined;
-
-        this._onMouseMove = this._onMouseMove.bind(this);
-        this._onMouseUp = this._onMouseUp.bind(this);
     }
 
-    private _onMouseMove(e: MouseEvent) {
+    private _onMouseMove = (e: MouseEvent) => {
         e.stopPropagation();
         const accel = 15;
         const dx = Math.round((e.clientX - this._anchorMouseX) / accel);
@@ -178,9 +175,9 @@ class NumberDragger {
                 break;
             }
         }
-    }
+    };
 
-    private _onMouseUp(e: MouseEvent) {
+    private _onMouseUp = (e: MouseEvent) => {
         this._cursorOverride.setCursor(this, '');
         this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
         this.onend!();
@@ -254,7 +251,7 @@ class NumberDragger {
 // XXX: Differing browsers have inconsistent ways of drawing text... specifically,
 // they don't always agree on what 'top' baseline alignment is. This tries to
 // accurately measure the top margin by drawing a character and scanning where the top is...
-function expensiveMeasureTextMargin(document: HTMLDocument, width: number, height: number, font: string): number {
+function expensiveMeasureTextMargin(document: Document, width: number, height: number, font: string): number {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -359,20 +356,17 @@ export default class CodeEditor {
         // We need to append this to the body to measure / get metrics... :(
         // Setup is particularly wacky... maybe clean it up at some point?
         this._document.body.appendChild(this._toplevel);
+        this._document.addEventListener('scroll', this._onScroll);
 
         this._canvas = this._document.createElement('canvas');
         this._toplevel.appendChild(this._canvas);
 
         this._textarea = this._document.createElement('textarea');
         this._textarea.style.fontFamily = MONOSPACE;
-        this._textarea.oninput = this._onInput.bind(this);
-        this._textarea.onkeydown = this._onKeyDown.bind(this);
+        this._textarea.oninput = this._onInput;
+        this._textarea.onkeydown = this._onKeyDown;
         this._toplevel.appendChild(this._textarea);
 
-        this._onMouseDown = this._onMouseDown.bind(this);
-        this._onMouseMove = this._onMouseMove.bind(this);
-        this._onMouseUp = this._onMouseUp.bind(this);
-        this._onMouseLeave = this._onMouseLeave.bind(this);
         this._canvas.onmousedown = this._onMouseDown;
         this._canvas.onmouseleave = this._onMouseLeave;
         this._canvas.onmousemove = this._onMouseMove;
@@ -381,16 +375,17 @@ export default class CodeEditor {
         // Hide the textarea the canvas now that we've sized it...
         this._textarea.style.position = 'absolute';
         this._textarea.style.left = '-99999px';
+        this._textarea.style.overflow = 'hidden';
         this._canvas.style.position = 'absolute';
 
         this._cursorOverride = new CursorOverride(this._document);
         this._numberDragger = new NumberDragger(this._document, this._cursorOverride);
-        this._numberDragger.onvalue = this._onNumberDraggerValue.bind(this);
-        this._numberDragger.onend = this._onNumberDraggerEnd.bind(this);
+        this._numberDragger.onvalue = this._onNumberDraggerValue;
+        this._numberDragger.onend = this._onNumberDraggerEnd;
 
         this.elem = this._toplevel;
 
-        visibleRAF(this._canvas, this._redraw.bind(this));
+        visibleRAF(this._canvas, this._redraw);
     }
 
     private _setNeedsRecalculate() {
@@ -534,7 +529,7 @@ export default class CodeEditor {
         // XXX: This seems to be a Chrome default for the line-height? Not sure how else I can
         // calculate this guy... grr...
         if (rowHeight === 'normal')
-            rowHeightN = 1.3 * parseFloat(textareaStyle.fontSize!);
+            rowHeightN = 1.15 * parseFloat(textareaStyle.fontSize!);
         else
             rowHeightN = parseFloat(rowHeight);
         this._rowHeight = Math.ceil(rowHeightN);
@@ -593,11 +588,11 @@ export default class CodeEditor {
         return idx;
     }
 
-    private _onInput() {
+    private _onInput = () => {
         this._setValueChanged();
-    }
+    };
 
-    private _onKeyDown(e: KeyboardEvent) {
+    private _onKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Tab' && !e.shiftKey) {
             // XXX: If we have a selection, then indent the selection.
             if (!this._hasSelection()) {
@@ -622,9 +617,9 @@ export default class CodeEditor {
                 e.preventDefault();
             }
         }
-    }
+    };
 
-    private _onMouseDown(e: MouseEvent) {
+    private _onMouseDown = (e: MouseEvent) => {
         e.preventDefault();
         const { row, col } = this._xyToRowCol(e.offsetX, e.offsetY);
         const { line } = this._rowColToLineIdx(row, 0, true);
@@ -667,16 +662,16 @@ export default class CodeEditor {
                 this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
             }
         }
-    }
+    };
 
-    private _onMouseUp(e: MouseEvent) {
+    private _onMouseUp = (e: MouseEvent) => {
         this._dragging = undefined;
 
         this._document.documentElement.removeEventListener('mousemove', this._onMouseMove, { capture: true });
         this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
-    }
+    };
 
-    private _onMouseMove(e: MouseEvent) {
+    private _onMouseMove = (e: MouseEvent) => {
         e.stopPropagation();
 
         this._mouseX = e.offsetX;
@@ -711,15 +706,19 @@ export default class CodeEditor {
             this._cursorOverride.setCursor(this, cursor);
         else
             this._cursorOverride.setCursor(this, '');
-    }
+    };
 
-    private _onMouseLeave(e: MouseEvent) {
+    private _onMouseLeave = (e: MouseEvent) => {
         this._mouseX = undefined;
         this._mouseY = undefined;
         this._mouseIdx = undefined;
-    }
+    };
 
-    private _onNumberDraggerValue(newValue: number) {
+    private _onScroll = () => {
+        this._setNeedsRecalculate();
+    };
+
+    private _onNumberDraggerValue = (newValue: number) => {
         // This seems to break scrolling after refocusing from number dragging. Not sure exactly why, and I can't
         // remember why I added it in the first place.
         // this._textarea.blur();
@@ -728,11 +727,11 @@ export default class CodeEditor {
         this.setValue(this._spliceValue(start, end, newValueString));
         this._draggingNumber!.end = start + newValueString.length;
         this._syncNumberDraggerPosition();
-    }
+    };
 
-    private _onNumberDraggerEnd() {
+    private _onNumberDraggerEnd = () => {
         this._draggingNumber = null;
-    }
+    };
 
     private _syncNumberDraggerPosition() {
         const { end } = this._draggingNumber!;
@@ -895,7 +894,7 @@ export default class CodeEditor {
         this._setValueChanged();
     }
 
-    private _redraw(t: number) {
+    private _redraw = (t: number) => {
         const hasFocus = this._document.hasFocus();
 
         // Skip redrawing if we're up to date to cut down on costs...
@@ -930,6 +929,16 @@ export default class CodeEditor {
         const clipRectW = scissorX2 - scissorX1;
         const clipRectH = scissorY2 - scissorY1;
 
+        // Determine the first and last visible row...
+        const vizRow0 = Math.floor(clipRectY / this._rowHeight - this._paddingTop);
+        const vizRow1 = Math.ceil((clipRectY + clipRectH) / this._rowHeight - this._paddingTop);
+        const isRowVisible = (row: number) => {
+            return row >= vizRow0 && row <= vizRow1;
+        };
+        const getRowY = (row: number) => {
+            return (this._paddingTop + row) * this._rowHeight;
+        };
+
         const ctx = this._canvas.getContext('2d')!;
         ctx.save();
         if (!sizeChanged) {
@@ -959,10 +968,10 @@ export default class CodeEditor {
         ctx.font = `${textareaStyleFontSize} ${textareaStyleFontFamily}`;
 
         const drawFlair = (line: Line, flair: LineFlair) => {
-            const y = (this._paddingTop + line.startRow) * this._rowHeight;
-            const height = line.rows * this._rowHeight;
+            const y = getRowY(line.startRow);
+            const height = this._rowHeight * line.rows;
             ctx.fillStyle = flair.color;
-            ctx.fillRect(0, y, this._canvas.width, this._rowHeight);
+            ctx.fillRect(0, y, this._canvas.width, height);
         };
         if (this._redraw_cursorPosition) {
             const { line } = this._getCharPos(this._textareaToIdx(this._redraw_cursorPosition));
@@ -987,8 +996,11 @@ export default class CodeEditor {
         // Gutter text.
         for (let i = 0; i < this._lineModel.length; i++) {
             const line = this._lineModel[i];
+            if (!isRowVisible(line.startRow))
+                continue;
+
             const no = line.lineno + 1;
-            const y = (this._paddingTop + line.startRow) * this._rowHeight;
+            const y = getRowY(line.startRow);
             ctx.fillStyle = this._isLineLocked(line) ? '#888' : '#ccc';
             ctx.textBaseline = 'top';
             ctx.textAlign = 'right';
@@ -1004,7 +1016,6 @@ export default class CodeEditor {
 
         if (this._hasSelection()) {
             // Draw selection bounds.
-            let inSelection = false;
             const startPos = this._getCharPos(this._textareaToIdx(this._textarea.selectionStart));
             const endPos = this._getCharPos(this._textareaToIdx(this._textarea.selectionEnd));
 
@@ -1015,7 +1026,7 @@ export default class CodeEditor {
                 const selectionColor = hasFocus ? '#336' : '#333';
                 const startX = colStart * this._charWidth;
                 const endX = colEnd * this._charWidth;
-                const y = (this._paddingTop + row) * this._rowHeight;
+                const y = getRowY(row);
                 ctx.fillStyle = selectionColor;
                 ctx.fillRect(startX, y, endX - startX, this._rowHeight);
             }
@@ -1047,9 +1058,12 @@ export default class CodeEditor {
                     col = 0;
                 }
 
+                if (!isRowVisible(row))
+                    continue;
+
                 // XXX: Use something else other than charAt for Unicode compliance.
                 const char = chars.charAt(i);
-                const x = col * this._charWidth, y = (this._paddingTop + row) * this._rowHeight;
+                const x = col * this._charWidth, y = getRowY(row);
 
                 if (i === this._textareaToIdx(this._redraw_cursorPosition!)) {
                     // Draw cursor.
@@ -1112,5 +1126,5 @@ export default class CodeEditor {
 
         ctx.restore();
         ctx.restore();
-    }
+    };
 }

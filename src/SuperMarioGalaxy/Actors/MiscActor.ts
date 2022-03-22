@@ -1,13 +1,14 @@
 
 // Misc actors that aren't big enough to have their own file.
 
-import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
+import { mat4, quat, ReadonlyMat3, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
 import { Camera } from '../../Camera';
 import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
-import { drawWorldSpaceBasis, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { dfRange, dfShow } from '../../DebugFloaters';
+import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -16,27 +17,28 @@ import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegX, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, FixedPosition, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
-import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
+import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
-import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
-import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
+import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
+import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
+import { addBaseMatrixFollowTarget } from '../Follow';
 import { initFurPlanet } from '../Fur';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
-import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
+import { getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail, RailRider } from '../RailRider';
-import { addShadowVolumeCylinder, addShadowVolumeLine, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
+import { addShadowVolumeCylinder, addShadowVolumeLine, getShadowProjectionLength, getShadowProjectionNormal, getShadowProjectionPos, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, isShadowProjected, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, onShadowVolumeCutDropLength, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr, setShadowVolumeBoxSize, setShadowVolumeEndDropOffset } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
@@ -45,7 +47,7 @@ import { createModelObjBloomModel, createModelObjMapObj, createModelObjMapObjStr
 import { createPartsModelMapObj, PartsModel } from './PartsModel';
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -92,10 +94,11 @@ function isHalfProbability(): boolean {
 }
 
 function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
-    return `${parentActor.name}${suffix}`;
+    const name = parentActor.modelManager!.objName;
+    return `${name}${suffix}`;
 }
 
-function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, transformMatrix: mat4 | null = null, drawBufferType: DrawBufferType): PartsModel | null {
+function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, transformMatrix: ReadonlyMat4 | null = null, drawBufferType: DrawBufferType): PartsModel | null {
     const subModelObjName = createSubModelObjName(parentActor, suffix);
     if (!sceneObjHolder.modelCache.isObjectDataExist(subModelObjName))
         return null;
@@ -113,7 +116,7 @@ export function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parent
     return createSubModel(sceneObjHolder, parentActor, 'Indirect', null, DrawBufferType.IndirectPlanet);
 }
 
-export function createBloomModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, transformMatrix: mat4) {
+export function createBloomModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, transformMatrix: ReadonlyMat4) {
     return createSubModel(sceneObjHolder, parentActor, 'Bloom', transformMatrix, DrawBufferType.BloomModel);
 }
 
@@ -123,7 +126,7 @@ function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, par
     return model;
 }
 
-function createPartsModelNoSilhouettedMapObjMtx(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, mtx: mat4 | null) {
+function createPartsModelNoSilhouettedMapObjMtx(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, mtx: ReadonlyMat4 | null) {
     return new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NoSilhouettedMapObj, mtx);
 }
 
@@ -254,7 +257,7 @@ export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: EarthenPipeNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: EarthenPipeNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (isValidSwitchA(this)) {
@@ -283,7 +286,7 @@ export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
         vec3.add(this.translation, this.translation, this.origTranslation);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData("EarthenPipe");
 
         if (getObjectName(infoIter) === "EarthenPipeInWater")
@@ -291,7 +294,8 @@ export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
     }
 }
 
-export class BlackHole extends LiveActor {
+const enum BlackHoleNrv { Wait }
+export class BlackHole extends LiveActor<BlackHoleNrv> {
     private blackHoleModel: ModelObj;
     private effectHostMtx = mat4.create();
 
@@ -299,32 +303,63 @@ export class BlackHole extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
-        connectToSceneCollisionMapObj(sceneObjHolder, this);
-        this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
-        this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
-        setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
 
-        startBck(this, `BlackHoleRange`);
-        startBtk(this, `BlackHoleRange`);
-        startBtk(this.blackHoleModel, `BlackHole`);
+        let sensorRadius: number;
+        if (this.name === 'BlackHoleCube') {
+            // TODO(jstpierre): CubeBox
+            sensorRadius = vec3.length(this.scale) * 500.0;
+        } else {
+            sensorRadius = this.scale[0] * 500.0;
+        }
 
         let rangeScale: number;
         const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
         if (arg0 < 0) {
             // If this is a cube, we behave slightly differently wrt. scaling.
-            if (this.name !== 'BlackHoleCube')
-                rangeScale = this.scale[0];
-            else
+            if (this.name === 'BlackHoleCube')
                 rangeScale = 1.0;
+            else
+                rangeScale = this.scale[0];
         } else {
             rangeScale = arg0 / 1000.0;
         }
 
+        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
+        this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
+        connectToSceneMapObj(sceneObjHolder, this);
         this.updateModelScale(rangeScale, rangeScale);
+
+        this.initHitSensor();
+        addHitSensorEye(sceneObjHolder, this, 'body', 0x10, sensorRadius, Vec3Zero);
+
+        this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
+        setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
+
+        this.initNerve(BlackHoleNrv.Wait);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
+
+        if (this.isNerve(BlackHoleNrv.Wait)) {
+            // TODO(jstpierre): Extra cube box check
+            sendArbitraryMsg(sceneObjHolder, MessageType.InhaleBlackHole, otherSensor, thisSensor);
+        }
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: BlackHoleNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === BlackHoleNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, `BlackHoleRange`);
+                startBtk(this, `BlackHoleRange`);
+                startBtk(this.blackHoleModel, `BlackHole`);
+            }
+        }
+    }
+
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         super.calcAndSetBaseMtx(sceneObjHolder);
 
         if (this.effectKeeper !== null) {
@@ -344,7 +379,7 @@ export class BlackHole extends LiveActor {
         vec3SetAll(this.blackHoleModel.scale, 0.5 * holeScale);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData(`BlackHole`);
         sceneObjHolder.modelCache.requestObjectData(`BlackHoleRange`);
     }
@@ -363,12 +398,12 @@ export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
         this.initNerve(HatchWaterPlanetNrv.Wait);
 
         if (tryRegisterDemoCast(sceneObjHolder, this, infoIter))
-            registerDemoActionNerveFunction(sceneObjHolder, this, HatchWaterPlanetNrv.Open);
+            registerDemoActionNerve(sceneObjHolder, this, HatchWaterPlanetNrv.Open);
 
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HatchWaterPlanetNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HatchWaterPlanetNrv, deltaTimeFrames: number): void {
         if (currentNerve === HatchWaterPlanetNrv.Open) {
             if (isFirstStep(this)) {
                 startBck(this, 'HatchWaterPlanet');
@@ -393,12 +428,12 @@ export class CoinRotater extends NameObj {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        this.coinRotateY += getDeltaTimeFrames(viewerInput) * 8.0 * MathConstants.DEG_TO_RAD;
-        this.coinInWaterRotateY += getDeltaTimeFrames(viewerInput) * 4.0 * MathConstants.DEG_TO_RAD;
-        this.coinHiSpeedRotateY += getDeltaTimeFrames(viewerInput) * 16.0 * MathConstants.DEG_TO_RAD;
+        this.coinRotateY += sceneObjHolder.deltaTimeFrames * 8.0 * MathConstants.DEG_TO_RAD;
+        this.coinInWaterRotateY += sceneObjHolder.deltaTimeFrames * 4.0 * MathConstants.DEG_TO_RAD;
+        this.coinHiSpeedRotateY += sceneObjHolder.deltaTimeFrames * 16.0 * MathConstants.DEG_TO_RAD;
 
         computeModelMatrixR(this.coinRotateMtx, 0, this.coinRotateY, 0);
         computeModelMatrixR(this.coinInWaterRotateMtx, 0, this.coinInWaterRotateY, 0);
@@ -415,6 +450,12 @@ export function appearCoinPop(sceneObjHolder: SceneObjHolder, host: NameObj, pos
     if (sceneObjHolder.coinHolder === null)
         return;
     sceneObjHolder.coinHolder!.appearCoinPop(sceneObjHolder, host, position, count);
+}
+
+export function appearCoinPopToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, direction: ReadonlyVec3, count: number): void {
+    if (sceneObjHolder.coinHolder === null)
+        return;
+    sceneObjHolder.coinHolder!.appearCoinPopToDirection(sceneObjHolder, host, position, direction, count);
 }
 
 class CoinHostInfo {
@@ -494,7 +535,14 @@ export class CoinHolder extends LiveActorGroup<Coin> {
         this.appearCoin(sceneObjHolder, host, position, scratchVec3a, count, -1, -1, speed);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public appearCoinPopToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, direction: ReadonlyVec3, count: number): void {
+        vec3.normalize(scratchVec3a, direction);
+        vec3.scale(scratchVec3a, scratchVec3a, -25.0)
+        const speed = count === 1 ? 0.0 : 4.0;
+        this.appearCoin(sceneObjHolder, host, position, scratchVec3a, count, -1, -1, speed);
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('Coin');
     }
 }
@@ -552,11 +600,11 @@ class FlashingCtrl extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         if (this.isStopped)
             return;
 
-        this.timer -= getDeltaTimeFrames(viewerInput);
+        this.timer -= sceneObjHolder.deltaTimeFrames;
         if (this.timer < 0.0 || isDead(this.actor)) {
             this.end()
             return;
@@ -703,7 +751,7 @@ class Coin extends LiveActor<CoinNrv> {
         // offBind
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         this.calcGravityFlag = false;
         if (!this.useLocalGravity)
             calcGravity(sceneObjHolder, this);
@@ -728,7 +776,7 @@ class Coin extends LiveActor<CoinNrv> {
         this.isInWater = isInWater(sceneObjHolder, this.translation);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
         if (this.airBubble !== null)
             this.airBubble.makeActorDead(sceneObjHolder);
@@ -744,7 +792,7 @@ class Coin extends LiveActor<CoinNrv> {
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         vec3.scaleAndAdd(this.shadowDropPos, this.translation, this.gravityVector, -70.0);
 
         if (this.useLocalGravity) {
@@ -767,7 +815,7 @@ class Coin extends LiveActor<CoinNrv> {
         if (isBindedWall(this))
             calcReboundVelocity(this.velocity, this.binder!.wallHitInfo.faceNormal, 0.6, 0.5);
         if (isBindedGround(this)) {
-            const groundNormal = this.binder!.floorHitInfo.faceNormal;
+            const groundNormal = getGroundNormal(this);
             vec3.negate(scratchVec3a, groundNormal);
             let bounce = 0.0;
             if (vec3.dot(scratchVec3a, this.velocity) >= 2.0)
@@ -789,7 +837,7 @@ class Coin extends LiveActor<CoinNrv> {
         attenuateVelocity(this, drag);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CoinNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CoinNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === CoinNrv.Fix) {
@@ -856,11 +904,15 @@ class Coin extends LiveActor<CoinNrv> {
         return false;
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
-        if (messageType === MessageType.Item_Hide)
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.Item_Hide) {
             return this.requestHide(sceneObjHolder);
-        else if (messageType === MessageType.Item_Show)
+        } else if (messageType === MessageType.Item_Show) {
             return this.requestShow(sceneObjHolder);
+        } else if (messageType === MessageType.InhaleBlackHole) {
+            this.makeActorDead(sceneObjHolder);
+            return true;
+        }
 
         return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
@@ -1026,7 +1078,7 @@ class RailCoin extends CoinGroup {
 
     // Rail debugging code...
     /*
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public movement(sceneObjHolder: SceneObjHolder): void {
         this.railRider!.debugDrawRail(viewerInput.camera);
     }
     */
@@ -1111,7 +1163,7 @@ export class QuestionCoin extends LiveActor {
         }
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         if (isInWater(sceneObjHolder, this.translation)) {
             const binderSensor = this.getSensor('binder')!;
             binderSensor.radius *= 2.0;
@@ -1120,13 +1172,13 @@ export class QuestionCoin extends LiveActor {
         // TODO(jstpierre): Shadow setup
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.create(SceneObj.CoinRotater);
         const rotateMtx = sceneObjHolder.coinRotater!.coinInWaterRotateMtx;
         mat4.mul(this.modelInstance!.modelMatrix, this.mtx, rotateMtx);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         showModel(this);
         emitEffect(sceneObjHolder, this, 'Appear');
@@ -1135,7 +1187,7 @@ export class QuestionCoin extends LiveActor {
             this.stageSwitchCtrl!.offSwitchDead(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         if (isValidSwitchDead(this))
             this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
         super.makeActorDead(sceneObjHolder);
@@ -1194,10 +1246,10 @@ export class MiniRouteGalaxy extends LiveActor {
         emitEffect(sceneObjHolder, this, miniatureName);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         super.calcAndSetBaseMtx(sceneObjHolder);
 
-        const rotateY = getTimeFrames(sceneObjHolder.viewerInput) * this.rotateSpeed;
+        const rotateY = sceneObjHolder.deltaTimeFrames * this.rotateSpeed;
         mat4.rotateY(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, rotateY);
     }
 }
@@ -1270,8 +1322,8 @@ export class SimpleEffectObj extends LiveActor {
         return false;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.getClippingCenterOffset(scratchVec3);
         vec3.add(scratchVec3, this.translation, scratchVec3);
@@ -1279,7 +1331,7 @@ export class SimpleEffectObj extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        const camera = viewerInput.camera;
+        const camera = sceneObjHolder.viewerInput.camera;
         const visibleCull = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
 
         if (this.visibleCull === visibleCull)
@@ -1297,71 +1349,71 @@ export class SimpleEffectObj extends LiveActor {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // Don't need anything, effectSystem is already built-in.
     }
 }
 
 export class EffectObjR500F50 extends SimpleEffectObj {
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 500;
     }
 }
 
 export class EffectObjR1000F50 extends SimpleEffectObj {
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 1000;
     }
 }
 
 export class EffectObjR100F50SyncClipping extends SimpleEffectObj {
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 1000;
     }
 
-    protected isSyncClipping(): boolean {
+    protected override isSyncClipping(): boolean {
         return true;
     }
 }
 
 export class EffectObj10x10x10SyncClipping extends SimpleEffectObj {
-    protected getClippingCenterOffset(v: vec3): void {
+    protected override getClippingCenterOffset(v: vec3): void {
         vec3.set(v, 0, 580, 0);
     }
 
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 1000;
     }
 
-    protected isSyncClipping(): boolean {
+    protected override isSyncClipping(): boolean {
         return true;
     }
 }
 
 export class EffectObj20x20x10SyncClipping extends SimpleEffectObj {
-    protected getClippingCenterOffset(v: vec3): void {
+    protected override getClippingCenterOffset(v: vec3): void {
         vec3.set(v, 0, 200, 0);
     }
 
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 1000;
     }
 
-    protected isSyncClipping(): boolean {
+    protected override isSyncClipping(): boolean {
         return true;
     }
 }
 
 export class EffectObj50x50x10SyncClipping extends SimpleEffectObj {
-    protected getClippingCenterOffset(v: vec3): void {
+    protected override getClippingCenterOffset(v: vec3): void {
         vec3.set(v, 0, 200, 0);
     }
 
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 2500;
     }
 
-    protected isSyncClipping(): boolean {
+    protected override isSyncClipping(): boolean {
         return true;
     }
 }
@@ -1380,8 +1432,8 @@ export class RandomEffectObj extends SimpleEffectObj {
         this.initNerve(0);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.counter === -1)
             this.counter = this.randBase + (Math.random() * this.randRange * 2 - this.randRange);
@@ -1393,7 +1445,7 @@ export class RandomEffectObj extends SimpleEffectObj {
         }
     }
 
-    protected getClippingRadius(): number {
+    protected override getClippingRadius(): number {
         return 400;
     }
 }
@@ -1437,7 +1489,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
         this.initNerve(FountainBigNrv.Wait);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FountainBigNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FountainBigNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === FountainBigNrv.Wait) {
@@ -1499,7 +1551,7 @@ export class Fountain extends LiveActor {
         emitEffect(sceneObjHolder, this, getObjectName(infoIter));
     }
 
-    public static requestArchives(): void {
+    public static override requestArchives(): void {
         // Do nothing; no archive for this object.
     }
 }
@@ -1513,7 +1565,7 @@ export class PhantomTorch extends LiveActor {
         emitEffect(sceneObjHolder, this, getObjectName(infoIter));
     }
 
-    public static requestArchives(): void {
+    public static override requestArchives(): void {
         // Do nothing; no archive for this object.
     }
 }
@@ -1570,7 +1622,7 @@ export class Sky extends LiveActor {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.isSkybox)
             getCamPos(this.translation, sceneObjHolder.viewerInput.camera);
         super.calcAnim(sceneObjHolder);
@@ -1606,7 +1658,7 @@ export class Air extends LiveActor<AirNrv> {
         return !isDead(this) && !isHiddenModel(this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         const distanceToPlayer = calcSqDistanceToPlayer(sceneObjHolder, this);
@@ -1682,6 +1734,16 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         setBindTriangleFilter(this, isWallCodeNoAction);
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'message', 1, 0.0, Vec3Zero);
+        initShadowVolumeSphere(sceneObjHolder, this, 30.0);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            listenStageSwitchOnOffAppear(sceneObjHolder, this, this.appearPreShooting.bind(this), null);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
 
         this.calcAndSetBaseMtxBase();
 
@@ -1690,7 +1752,12 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         startBpk(this, 'ShootingStar');
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
+    private appearPreShooting(sceneObjHolder: SceneObjHolder): void {
+        this.makeActorAppeared(sceneObjHolder);
+        this.setNerve(ShootingStarNrv.PreShooting);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         const SPEED = 10 * MathConstants.DEG_TO_RAD;
@@ -1820,16 +1887,16 @@ class ChipBase extends LiveActor<ChipBaseNrv> {
         }
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         if (this.railMover !== null) {
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover.translation);
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ChipBaseNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ChipBaseNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ChipBaseNrv.Wait) {
@@ -1889,7 +1956,7 @@ class ChipBase extends LiveActor<ChipBaseNrv> {
         return false;
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.Item_Hide)
             return this.requestHide(sceneObjHolder);
         else if (messageType === MessageType.Item_Show)
@@ -1902,7 +1969,7 @@ class ChipBase extends LiveActor<ChipBaseNrv> {
         return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
         if (isNeedBubble)
@@ -2012,7 +2079,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
         }
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         if (!this.breakImmediately || this.hasBinder) {
             calcUpVec(scratchVec3a, this);
             const height = this.size === CrystalCageSize.L ? 1000.0 : 300.0;
@@ -2030,7 +2097,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CrystalCageNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CrystalCageNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === CrystalCageNrv.Wait) {
@@ -2096,7 +2163,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
         }
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (isMsgTypeEnemyAttack(messageType)) {
             if (this.size === CrystalCageSize.L || !this.isNerve(CrystalCageNrv.Wait))
                 return false;
@@ -2122,7 +2189,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
             throw "whoops";
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         const size = CrystalCage.getSize(infoIter);
         if (size === CrystalCageSize.L)
@@ -2151,7 +2218,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaSteamNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaSteamNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === LavaSteamNrv.Wait) {
@@ -2229,7 +2296,7 @@ export class WoodBox extends LiveActor<WoodBoxNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         if (this.useKilledNrv) {
             this.setNerve(WoodBoxNrv.Killed);
             invalidateHitSensors(this);
@@ -2242,7 +2309,7 @@ export class WoodBox extends LiveActor<WoodBoxNrv> {
         // requestAppearPowerStar
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WoodBoxNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WoodBoxNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === WoodBoxNrv.Hit) {
@@ -2293,7 +2360,7 @@ export class WoodBox extends LiveActor<WoodBoxNrv> {
         this.setNerve(WoodBoxNrv.Hit);
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (isMsgTypeEnemyAttack(messageType)) {
             if (this.hitPoints > 0) {
                 this.doHit(sceneObjHolder, otherSensor, thisSensor);
@@ -2304,7 +2371,7 @@ export class WoodBox extends LiveActor<WoodBoxNrv> {
         return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('WoodBoxBreak');
     }
@@ -2320,7 +2387,7 @@ export class SurprisedGalaxy extends LiveActor {
         startAction(this, 'MiniSurprisedGalaxy');
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData("MiniSurprisedGalaxy");
     }
 }
@@ -2355,44 +2422,72 @@ export class SpinDriverPathDrawInit extends NameObj {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.normalColorTex.destroy(device);
         this.greenTex.destroy(device);
         this.pinkTex.destroy(device);
         this.maskTex.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData("SpinDriverPath");
     }
 }
 
-function calcParabolicFunctionParam(dst: { coef2: number, coef1: number }, a: number, b: number): void {
-    const v0 = a * (a - b);
-    if (v0 > 0.0) {
+function calcParabolicFunctionParam(dst: { coef2: number, coef1: number }, height: number, b: number): void {
+    const v0 = height * (height - b);
+    if (v0 > 0.0 && !isNearZero(b, 0.001)) {
         const v1 = Math.sqrt(v0);
-        const v2 = (a + v1) / b;
-        const v3 = -a / v2**2;
+        let v2 = (height + v1) / b;
+        if (v2 < 0.0 || v2 > 1.0) {
+            v2 = (height - v1) / b;
+            if (v2 < 0.0 || v2 > 1.0)
+                v2 = 1.0;
+        }
+        const v3 = -height / v2**2;
         dst.coef2 = v3;
         dst.coef1 = v2 * v3 * -2.0;
+    } else if (v0 > 0.0) {
+        dst.coef2 = height * -4.0;
+        dst.coef1 = height * 4.0;
     } else {
-        dst.coef2 = -a;
-        dst.coef1 = a - b;
+        dst.coef2 = -height;
+        dst.coef1 = height + b;
     }
 }
 
-class ParabolicPath {
+export class ParabolicPath {
     private startPos = vec3.create();
     private axisY = vec3.create();
-    private axisZ = vec3.create();
-    private axisZLength: number;
+    private axisX = vec3.create();
+    private distanceX: number;
 
     public coef2: number = 0;
     public coef1: number = 0;
 
     public calcPosition(dst: vec3, t: number): void {
-        vec3.scaleAndAdd(dst, this.startPos, this.axisZ, t * this.axisZLength);
+        vec3.scaleAndAdd(dst, this.startPos, this.axisX, t * this.distanceX);
         vec3.scaleAndAdd(dst, dst, this.axisY, (this.coef2 * t**2) + this.coef1*t);
+    }
+
+    public calcDirection(dst: vec3, t: number, eps: number = 0.01): void {
+        let t0: number, t1: number;
+
+        if (t < eps) {
+            t0 = 0;
+            t1 = eps;
+        } else if (t > 1.0 - eps) {
+            t0 = 1.0 - eps;
+            t1 = 1.0;
+        } else {
+            t0 = t;
+            t1 = t + eps;
+        }
+
+        this.calcPosition(scratchVec3a, t0);
+        this.calcPosition(scratchVec3b, t1);
+        vec3.sub(dst, scratchVec3b, scratchVec3a);
+        vec3.normalize(dst, dst);
     }
 
     public initFromMaxHeight(startPos: ReadonlyVec3, railEndPos: ReadonlyVec3, railStartPos: ReadonlyVec3): void {
@@ -2404,14 +2499,60 @@ class ParabolicPath {
         this.initFromUpVector(startPos, railEndPos, scratchVec3a, dot);
     }
 
-    private initFromUpVector(startPos: ReadonlyVec3, railEndPos: ReadonlyVec3, up: ReadonlyVec3, dot: number): void {
+    private initFromUpVector(p0: ReadonlyVec3, p1: ReadonlyVec3, up: ReadonlyVec3, height: number): void {
         vec3.copy(this.axisY, up);
-        vec3.sub(scratchVec3a, railEndPos, startPos);
-        const dot2 = vecKillElement(this.axisZ, scratchVec3a, this.axisY);
-        this.axisZLength = vec3.length(this.axisZ);
-        vec3.normalize(this.axisZ, this.axisZ);
-        // calcParabolicFunctionParam(this, dot, dot2);
-        vec3.copy(this.startPos, startPos);
+        vec3.sub(scratchVec3a, p1, p0);
+        const dot2 = vecKillElement(this.axisX, scratchVec3a, this.axisY);
+        this.distanceX = vec3.length(this.axisX);
+        vec3.normalize(this.axisX, this.axisX);
+        calcParabolicFunctionParam(this, height, dot2);
+        vec3.copy(this.startPos, p0);
+    }
+
+    public initFromUpVectorAddHeight(p0: ReadonlyVec3, p1: ReadonlyVec3, up: ReadonlyVec3, height: number): void {
+        vec3.sub(scratchVec3a, p1, p0);
+        height += Math.max(0, vec3.dot(scratchVec3a, up));
+        this.initFromUpVector(p0, p1, up, height);
+    }
+
+    private eval(v: number): number {
+        return v * (this.coef1 + v * this.coef2);
+    }
+
+    private getLength(start: number, end: number, segs: number): number {
+        const segLen = (end - start) / segs;
+        const len = this.distanceX * segLen;
+        let res = 0.0;
+
+        segs = Math.max(1, segs);
+        let lastEval = this.eval(start);
+        for (let i = 0; i < segs; i++) {
+            const segT = start + segLen * (i + 1);
+            const segEval = this.eval(segT);
+
+            let segAmt = len**2 + (segEval - lastEval)**2;
+            if (segAmt > 0.0) {
+                const rcp = 1.0 / Math.sqrt(segAmt);
+                segAmt = -(rcp * rcp * segAmt - 3.0) * rcp * segAmt * 0.5;
+            }
+            res += segAmt;
+
+            lastEval = segEval;
+        }
+
+        return res;
+    }
+
+    public calcPathSpeedFromAverageSpeed(averageSpeed: number): number {
+        return averageSpeed / this.getLength(0.0, 1.0, 10);
+    }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder, nPoints = 50): void {
+        for (let i = 1/nPoints; i < 1.0; i += 1/nPoints) {
+            this.calcPosition(scratchVec3b, i - 1/nPoints);
+            this.calcPosition(scratchVec3c, i);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, scratchVec3b, scratchVec3c);
+        }
     }
 }
 
@@ -2469,11 +2610,11 @@ class SpinDriverShootPath {
     }
 
     public debugDraw(sceneObjHolder: SceneObjHolder): void {
-        // this.railRider.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
         /*
+        this.railRider.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
         if (this.parabolicPath !== null) {
             drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisY, 100, Green);
-            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisZ, 100, Blue);
+            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisX, 100, Blue);
         }
         */
     }
@@ -2538,8 +2679,12 @@ class SpinDriverPathDrawer extends LiveActor {
         this.ddraw.texCoord2f32(GX.Attr.TEX0, s, t);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        /*const p = new ParabolicPath();
+        p.initFromUpVectorAddHeight(vec3.fromValues(100, 25, 0), vec3.fromValues(180, 50, 500), Vec3UnitX, 100);
+        p.debugDraw(sceneObjHolder);*/
 
         if (!isValidDraw(this) || !this.shootPath.shouldDraw())
             return;
@@ -2589,6 +2734,7 @@ class SpinDriverPathDrawer extends LiveActor {
         const spinDriverPathDrawInit = sceneObjHolder.spinDriverPathDrawInit!;
         const materialHelper = spinDriverPathDrawInit.materialHelper;
 
+        materialParams.clear();
         if (this.color === SpinDriverColor.Normal)
             spinDriverPathDrawInit.normalColorTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         else if (this.color === SpinDriverColor.Green)
@@ -2603,13 +2749,13 @@ class SpinDriverPathDrawer extends LiveActor {
         materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache.device, renderInstManager.gfxRenderCache, renderInst);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        packetParams.clear();
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        drawParams.clear();
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -2653,7 +2799,7 @@ class SuperSpinDriver extends LiveActor {
         emitEffect(sceneObjHolder, this, 'EndGlow');
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriver");
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriverShadow");
         SpinDriverPathDrawInit.requestArchives(sceneObjHolder);
@@ -2717,7 +2863,7 @@ class Fish extends LiveActor<FishNrv> {
         connectToSceneEnvironment(sceneObjHolder, this);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FishNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FishNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === FishNrv.Approach) {
@@ -2761,8 +2907,8 @@ class Fish extends LiveActor<FishNrv> {
         }
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         vec3.scale(this.velocity, this.velocity, 0.95);
 
@@ -2781,7 +2927,7 @@ class Fish extends LiveActor<FishNrv> {
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.followPointPos);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         makeMtxFrontUpPos(this.modelInstance!.modelMatrix, this.direction, this.fishGroup.upVec, this.translation);
     }
 
@@ -2813,13 +2959,13 @@ export class FishGroup extends LiveActor {
         connectToSceneEnemyMovement(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         // Update up vector from gravity vector
         vec3.negate(this.upVec, this.gravityVector);
 
-        moveCoordAndFollowTrans(this, this.railSpeed * getDeltaTimeFrames(viewerInput));
+        moveCoordAndFollowTrans(this, this.railSpeed * sceneObjHolder.deltaTimeFrames);
 
         // this.railRider!.debugDrawRailLine(viewerInput.camera, 200);
     }
@@ -2843,7 +2989,7 @@ export class FishGroup extends LiveActor {
         throw "whoops";
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData(FishGroup.getArchiveName(infoIter));
     }
 }
@@ -2958,7 +3104,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, Red, 10);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === SeaGullNrv.HoverFront) {
@@ -3020,22 +3166,22 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     }
 
     private debug = false;
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         if (this.dryBirdCam) {
             this.camera();
 
-            const camera = viewerInput.camera;
+            const camera = sceneObjHolder.viewerInput.camera;
             mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
             mat4.invert(camera.worldMatrix, camera.viewMatrix);
             camera.worldMatrixUpdated();
         }
 
         if (this.debug)
-            this.debugDraw(viewerInput);
+            this.debugDraw(sceneObjHolder.viewerInput);
 
-        super.control(sceneObjHolder, viewerInput);
+        super.control(sceneObjHolder);
 
-        this.updateHover(getDeltaTimeFrames(viewerInput));
+        this.updateHover(sceneObjHolder.deltaTimeFrames);
 
         vec3.scale(this.velocity, this.velocity, 0.99);
 
@@ -3071,7 +3217,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         */
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         setMtxAxisXYZ(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
         setMatrixTranslation(this.modelInstance!.modelMatrix, this.translation);
     }
@@ -3107,7 +3253,7 @@ export class SeaGullGroup extends LiveActor {
         return mod(index + step, this.points.length);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('SeaGull');
     }
 }
@@ -3141,7 +3287,7 @@ class CoconutTreeLeaf extends LiveActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public getBaseMtx(): mat4 {
+    public override getBaseMtx(): mat4 {
         return this.jointMtx;
     }
 
@@ -3213,8 +3359,8 @@ export class CoconutTreeLeafGroup extends LiveActor {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         const dist = calcDistanceToPlayer(sceneObjHolder, this);
         let a = 0, b = 0;
@@ -3230,7 +3376,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
             b = 0.005;
         }
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         for (let i = 0; i < this.leaves.length; i++)
             this.leaves[i].update(a, b, deltaTimeFrames);
     }
@@ -3256,7 +3402,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         startBck(this, 'Move');
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         vec3.copy(this.spawnLocation, this.translation);
@@ -3274,7 +3420,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         this.lifetime = lifetime;
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === AirBubbleNrv.Wait) {
@@ -3328,7 +3474,7 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
             bubble.appearMove(sceneObjHolder, pos, lifetime);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('AirBubble');
     }
 }
@@ -3353,7 +3499,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
         this.lifetime = fallback(getJMapInfoArg1(infoIter), -1);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleGeneratorNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleGeneratorNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === AirBubbleGeneratorNrv.Wait) {
@@ -3373,7 +3519,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         AirBubbleHolder.requestArchives(sceneObjHolder, infoIter);
     }
@@ -3410,7 +3556,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TreasureBoxNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TreasureBoxNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TreasureBoxNrv.Wait) {
@@ -3440,7 +3586,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
             return TreasureBoxType.Normal;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const objectName = getObjectName(infoIter);
 
         if (objectName.includes('TreasureBoxCracked'))
@@ -3463,7 +3609,7 @@ export class SubmarineSteam extends LiveActor {
         emitEffect(sceneObjHolder, this, 'Steam');
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }
 
@@ -3488,7 +3634,7 @@ export class PalmIsland extends LiveActor<PalmIslandNrv> {
         vec3.negate(this.gravityVector, this.gravityVector);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PalmIslandNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PalmIslandNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PalmIslandNrv.Wait) {
@@ -3544,7 +3690,6 @@ class WarpPodPathDrawer {
 
         // Material.
         const mb = new GXMaterialBuilder('WarpPodPathDrawer');
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ONE, GX.CC.TEXA, GX.CC.ZERO);
@@ -3596,6 +3741,7 @@ class WarpPodPathDrawer {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        materialParams.clear();
         this.testColor.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
@@ -3604,8 +3750,8 @@ class WarpPodPathDrawer {
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
@@ -3777,7 +3923,7 @@ export class WarpPod extends LiveActor {
         return null;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -3794,7 +3940,7 @@ export class WarpPod extends LiveActor {
         }
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
 
         if (this.pathDrawer !== null)
@@ -3843,12 +3989,12 @@ export class WaterPlantDrawInit extends NameObj {
         this.updateSwingPos();
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         this.updateSwingPos();
-        this.angle += this.swingSpeed * getDeltaTimeFrames(viewerInput);
+        this.angle += this.swingSpeed * sceneObjHolder.deltaTimeFrames;
 
-        const viewMtxInv = viewerInput.camera.worldMatrix;
+        const viewMtxInv = sceneObjHolder.viewerInput.camera.worldMatrix;
         vec3.set(this.drawVec, viewMtxInv[0], viewMtxInv[1], viewMtxInv[2]);
     }
 
@@ -3873,7 +4019,7 @@ export class WaterPlantDrawInit extends NameObj {
             throw "whoops";
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.waterPlantA.destroy(device);
         this.waterPlantB.destroy(device);
@@ -3918,7 +4064,7 @@ export class WaterPlant extends LiveActor {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.POS_XYZ);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         computeModelMatrixR(scratchMatrix, 0, 15.0 * MathConstants.DEG_TO_RAD, 0);
@@ -3959,7 +4105,7 @@ export class WaterPlant extends LiveActor {
         ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, tx);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -3996,18 +4142,19 @@ export class WaterPlant extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
         const materialHelper = waterPlantDrawInit.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.ddraw.destroy(device);
     }
@@ -4099,7 +4246,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         this.itemBound = false;
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShellfishNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShellfishNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ShellfishNrv.Wait) {
@@ -4150,7 +4297,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Shellfish');
     }
 }
@@ -4215,9 +4362,9 @@ export class ChooChooTrain extends LiveActor {
         startBck(this, 'Run');
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         moveCoordAndFollowTrans(this, this.speed * deltaTimeFrames);
 
@@ -4242,7 +4389,7 @@ export class ChooChooTrain extends LiveActor {
         setRailCoord(this, coord);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('ChooChooTrainBody');
     }
@@ -4327,7 +4474,7 @@ export class SwingRopeGroup extends NameObj {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.swingRope.destroy(device);
     }
@@ -4358,6 +4505,13 @@ export class SwingRope extends LiveActor {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        initShadowSurfaceCircle(sceneObjHolder, this, 50.0);
+        onCalcShadow(this);
+        // TODO(jstpierre): Manual drop position / setShadowDropPosPositionPtr
+        setShadowDropLength(this, null, 2000);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     private initPoints(): void {
@@ -4415,19 +4569,20 @@ export class SwingRope extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
         swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = swingRopeGroup.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -4436,7 +4591,7 @@ export class SwingRope extends LiveActor {
         this.drawStop(sceneObjHolder, renderInstManager, viewerInput);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.ddraw.destroy(device);
     }
@@ -4469,7 +4624,7 @@ export class TrapezeRopeDrawInit extends NameObj {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.trapezeRope.destroy(device);
     }
@@ -4631,7 +4786,7 @@ export class Trapeze extends LiveActor {
         this.ddraw.end();
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -4652,13 +4807,14 @@ export class Trapeze extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
         trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = trapezeRopeDrawInit.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -4670,7 +4826,7 @@ export class Trapeze extends LiveActor {
         setMatrixTranslation(this.stickMtx, point.position);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.ddraw.destroy(device);
     }
@@ -4785,8 +4941,8 @@ export class Creeper extends LiveActor {
         return this.creeperPoints[this.creeperPoints.length - 1];
     }
 
-    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    public override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         const headPoint = this.getHeadPoint();
         setMtxAxisXYZ(this.creeperFlowerMtx, headPoint.axisX, headPoint.axisY, headPoint.axisZ);
@@ -4803,7 +4959,7 @@ export class Creeper extends LiveActor {
         this.ddraw.texCoord2f32(GX.Attr.TEX0, tx, ty);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -4841,24 +4997,25 @@ export class Creeper extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.stalk.destroy(device);
         this.ddraw.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('Creeper');
         sceneObjHolder.modelCache.requestObjectData('CreeperLeaf');
         sceneObjHolder.modelCache.requestObjectData('CreeperFlower');
@@ -5039,6 +5196,7 @@ class OceanRingDrawer {
         setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
         loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera, viewerInput.viewport);
 
+        materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
         sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
@@ -5048,8 +5206,8 @@ class OceanRingDrawer {
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -5071,7 +5229,7 @@ class OceanRingPipeOutside extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private pipe: OceanRingPipe) {
         super(zoneAndLayer, sceneObjHolder, 'OceanRingPipeOutside');
 
-        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanRingOutside);
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanRingPipeOutside);
 
         const arc = sceneObjHolder.modelCache.getObjectData('OceanRing');
         this.waterPipeIndirect = loadBTIData(sceneObjHolder, arc, 'WaterPipeIndirect.bti');
@@ -5103,12 +5261,12 @@ class OceanRingPipeOutside extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-        this.tex0Trans[0] += -0.004 * getDeltaTimeFrames(viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+        this.tex0Trans[0] += -0.004 * sceneObjHolder.deltaTimeFrames;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -5120,6 +5278,7 @@ class OceanRingPipeOutside extends LiveActor {
         renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
         renderInst.drawIndexes(this.pipe.indexCount);
 
+        materialParams.clear();
         this.waterPipeIndirect.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.waterPipeHighLight.fillTextureMapping(materialParams.m_TextureMapping[1]);
 
@@ -5144,14 +5303,14 @@ class OceanRingPipeOutside extends LiveActor {
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.waterPipeIndirect.destroy(device);
         this.waterPipeHighLight.destroy(device);
@@ -5219,7 +5378,7 @@ class OceanRingPipe extends LiveActor {
 
         assert(pointCount < 0xFFFF);
         const tristripsPerSegment = this.pointsPerSegment * 2;
-        const indexCountPerSegment = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, tristripsPerSegment);
+        const indexCountPerSegment = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, tristripsPerSegment);
         this.indexCount = (this.segmentCount + 1) * indexCountPerSegment;
         const indexData = new Uint16Array(this.indexCount);
         let io = 0;
@@ -5322,12 +5481,12 @@ class OceanRingPipe extends LiveActor {
         return points;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-        this.outside.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+        this.outside.movement(sceneObjHolder);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
@@ -5420,7 +5579,7 @@ export class OceanRing extends LiveActor {
             this.points[i].updatePos(this.waveTheta1, this.waveTheta2, this.waveHeight1, this.waveHeight2, 1.0);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         for (let i = 0; i < this.points.length; i++)
@@ -5493,10 +5652,10 @@ export class OceanRing extends LiveActor {
         dst.depth = -vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.waveTheta2 += -0.06 * deltaTimeFrames;
         this.waveTheta1 += -0.04 * deltaTimeFrames;
         this.updatePoints();
@@ -5505,7 +5664,7 @@ export class OceanRing extends LiveActor {
             this.oceanRingDrawer.update(deltaTimeFrames);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -5546,7 +5705,7 @@ export class OceanRing extends LiveActor {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
 
         const arg0 = fallback(getJMapInfoArg0(infoIter), 0);
@@ -5560,7 +5719,7 @@ export class OceanRing extends LiveActor {
         WaterAreaHolder.requestArchives(sceneObjHolder);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.oceanRingDrawer.destroy(device);
     }
@@ -5759,7 +5918,7 @@ export class Flag extends LiveActor {
         return y * (this.swingPointCount + 1) + x;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -5817,14 +5976,15 @@ export class Flag extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
 
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -5920,15 +6080,15 @@ export class Flag extends LiveActor {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
-        this.animCounter += getDeltaTimeFrames(viewerInput) * 5.0;
+        this.animCounter += sceneObjHolder.deltaTimeFrames * 5.0;
 
-        this.updateFlag(viewerInput.camera);
+        this.updateFlag(sceneObjHolder.viewerInput.camera);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.ddraw.destroy(device);
         this.texture.destroy(device);
@@ -5967,7 +6127,7 @@ export class ElectricRailHolder extends NameObj {
         createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, 'ElectricRailHolder Bloom', this.draw.bind(this));
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         super.calcAnim(sceneObjHolder);
 
         for (let i = 0; i < this.models.length; i++) {
@@ -5979,19 +6139,19 @@ export class ElectricRailHolder extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         for (let i = 0; i < this.models.length; i++) {
             const modelObj = this.models[i];
             if (modelObj === null)
                 continue;
 
-            modelObj.movement(sceneObjHolder, viewerInput);
+            modelObj.movement(sceneObjHolder);
         }
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         const device = sceneObjHolder.modelCache.device, cache = renderInstManager.gfxRenderCache;
@@ -6003,11 +6163,11 @@ export class ElectricRailHolder extends NameObj {
             const template = renderInstManager.pushTemplateRenderInst();
 
             const modelInstance = modelObj.modelInstance!;
-            mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
 
             const materialInstance = modelInstance.materialInstances[0];
             materialInstance.setOnRenderInst(device, cache, template);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+            materialInstance.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
             for (let j = 0; j < this.rails.length; j++) {
                 const rail = this.rails[j]!;
@@ -6017,9 +6177,7 @@ export class ElectricRailHolder extends NameObj {
                 if (!rail.visibleScenario || !rail.visibleAlive)
                     continue;
 
-                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport, packetParams);
-
-                // TODO(jstpierre): Do this in one TDDraw?
+                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport, drawParams);
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
@@ -6139,7 +6297,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
         this.drawAndUploadRail(sceneObjHolder);
     }
@@ -6279,11 +6437,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
 
         sceneObjHolder.modelCache.requestObjectData('ElectricRailPoint');
@@ -6311,11 +6469,14 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     private segmentCount: number;
     private speed: number;
     private height: number;
+    @dfShow()
+    @dfRange(0, 2000, 1)
     private visibleSegmentLength: number;
     private separators: vec3[] = [];
     private points: ElectricRailMovingPoint[] = [];
     private size = 30.0;
     private ddraw = new TSDraw();
+    @dfShow()
     private coordPhaseAnim: number = 0.0;
     private alpha: number = 1.0;
 
@@ -6356,7 +6517,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
         this.drawAndUploadRail(sceneObjHolder);
     }
@@ -6395,9 +6556,9 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.updatePointPos(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-        this.move(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+        this.move(sceneObjHolder);
     }
 
     private getRepeatedCoord(coord: number): number {
@@ -6462,13 +6623,13 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         }
     }
 
-    private move(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.coordPhaseAnim = this.getRepeatedCoord(this.coordPhaseAnim + this.speed * getDeltaTimeFrames(viewerInput));
+    private move(sceneObjHolder: SceneObjHolder): void {
+        this.coordPhaseAnim = this.getRepeatedCoord(this.coordPhaseAnim + this.speed * sceneObjHolder.deltaTimeFrames);
 
         const segmentLength = getRailTotalLength(this) / this.segmentCount;
 
         const visibleSegmentRatio = this.visibleSegmentLength / segmentLength;
-        this.alpha = saturate(visibleSegmentRatio + 15.0/255.0 * Math.sin(MathConstants.TAU * visibleSegmentRatio));
+        this.alpha = saturate(visibleSegmentRatio + 15.0/255.0 * Math.sin(MathConstants.TAU * visibleSegmentRatio - Math.PI));
 
         this.updatePointPosAndModel(sceneObjHolder);
     }
@@ -6536,11 +6697,11 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
 
         sceneObjHolder.modelCache.requestObjectData('ElectricRailPoint');
@@ -6567,7 +6728,7 @@ class FluffWindEffect extends LiveActor<FluffWindEffectNrv> {
         this.initNerve(FluffWindEffectNrv.Init);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FluffWindEffectNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FluffWindEffectNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === FluffWindEffectNrv.Init) {
@@ -6611,7 +6772,7 @@ export class FluffWind extends LiveActor {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }
 
@@ -6649,7 +6810,7 @@ export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
             calcRailEndPos(this.endPos, this);
             this.initNerve(OceanFloaterLandPartsNrv.Wait);
             if (tryRegisterDemoCast(sceneObjHolder, this, infoIter)) {
-                registerDemoActionNerveFunction(sceneObjHolder, this, OceanFloaterLandPartsNrv.Move);
+                registerDemoActionNerve(sceneObjHolder, this, OceanFloaterLandPartsNrv.Move);
                 this.hasDemo = true;
             }
 
@@ -6667,7 +6828,7 @@ export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OceanFloaterLandPartsNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OceanFloaterLandPartsNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === OceanFloaterLandPartsNrv.Move) {
@@ -6675,7 +6836,7 @@ export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
                 emitEffect(sceneObjHolder, this, 'RiseBubble');
             }
 
-            this.railMover!.movement(sceneObjHolder, sceneObjHolder.viewerInput);
+            this.railMover!.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover!.translation);
 
             if (!this.railMover!.isWorking()) {
@@ -6717,7 +6878,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         this.initNerve(PlantMemberNrv.Wait);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PlantMemberNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PlantMemberNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PlantMemberNrv.Hint) {
@@ -6728,7 +6889,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         }
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         if (this.actorLightCtrl !== null) {
             this.actorLightCtrl.update(sceneObjHolder, sceneObjHolder.viewerInput.camera, true, 0.0);
         }
@@ -6802,16 +6963,16 @@ export class PlantGroup extends LiveActor {
         this.hintTimer = getRandomInt(3, 10) * 10;
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         for (let i = 0; i < this.members.length; i++) {
             const member = this.members[i];
             member.animControl(sceneObjHolder);
-            member.movement(sceneObjHolder, viewerInput);
+            member.movement(sceneObjHolder);
         }
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.emitHintEffect(sceneObjHolder, deltaTimeFrames);
     }
 
@@ -6839,7 +7000,7 @@ export class PlantGroup extends LiveActor {
         }
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         calcGravityVector(sceneObjHolder, this, this.translation, scratchVec3);
@@ -6847,13 +7008,13 @@ export class PlantGroup extends LiveActor {
         // calcBoundingSphereRadius
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         for (let i = 0; i < this.members.length; i++)
             this.members[i].makeActorAppeared(sceneObjHolder);
     }
 
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
         for (let i = 0; i < this.members.length; i++)
             this.members[i].makeActorDead(sceneObjHolder);
@@ -6924,7 +7085,7 @@ export class PlantGroup extends LiveActor {
         vec3.scale(center, center, 1 / this.members.length);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
     }
 }
 
@@ -6952,7 +7113,7 @@ export class MovieStarter extends LiveActor {
         this.stageSwitchCtrl!.offSwitchDead(sceneObjHolder);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
     }
 }
 
@@ -6981,7 +7142,7 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
     }
 
     private initPipeHeight(): void {
@@ -6991,7 +7152,7 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
         this.calcAndSetBaseMtxBase();
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterLeakPipeNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterLeakPipeNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === WaterLeakPipeNrv.Wait) {
@@ -7012,8 +7173,10 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneCollisionMapObj(sceneObjHolder, this);
-        // this.initSensorType()
-        // initCollisionParts(sceneObjHolder, this, this.name, sensor);
+        this.initHitSensor();
+        this.initSensorType(sceneObjHolder);
+        initCollisionParts(sceneObjHolder, this, this.name, this.getSensor(null)!);
+        tryCreateCollisionMoveLimit(sceneObjHolder, this, this.getSensor(null)!);
         this.initEffectKeeper(sceneObjHolder, null);
 
         if (isConnectedWithRail(infoIter)) {
@@ -7027,7 +7190,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
 
-        // addBaseMatrixFollowTarget
+        addBaseMatrixFollowTarget(sceneObjHolder, this, infoIter);
         this.initSubModel();
 
         calcFrontVec(this.front, this);
@@ -7039,6 +7202,12 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         } else {
             this.initNerve(UFOBaseNrv.WaitForPlayerOn);
         }
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected initSensorType(sceneObjHolder: SceneObjHolder): void {
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
     }
 
     private initSubModel(): void {
@@ -7046,7 +7215,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         // Bloom
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UFOBaseNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UFOBaseNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === UFOBaseNrv.Wait) {
@@ -7062,8 +7231,8 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         }
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         // this.moveLimitParts.setMtx();
         // this.lodCtrl.update();
@@ -7071,12 +7240,12 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         // startLevelSound
 
         if (this.railMover !== null) {
-            this.railMover.movement(sceneObjHolder, viewerInput);
+            this.railMover.movement(sceneObjHolder);
             vec3.copy(this.translation, this.railMover.translation);
         }
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         calcUpVec(scratchVec3, this);
         makeMtxUpFrontPos(this.modelInstance!.modelMatrix, scratchVec3, this.front, this.translation);
     }
@@ -7170,11 +7339,11 @@ export class Pole extends LiveActor {
         setMatrixTranslation(this.topMtx!, this.topPos);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         // updateMaterial
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const name = getObjectName(infoIter);
         if (name === 'Pole' || name === 'PoleNoModel')
             sceneObjHolder.modelCache.requestObjectData('Pole');
@@ -7194,7 +7363,7 @@ class Sun extends LiveActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Sun');
     }
 }
@@ -7222,33 +7391,33 @@ export class BrightSun extends LiveActor {
         addBrightObj(sceneObjHolder, this.brightObj);
     }
 
-    protected offScenario(sceneObjHolder: SceneObjHolder): void {
+    protected override offScenario(sceneObjHolder: SceneObjHolder): void {
         // Force the bright object to turn off.
         super.offScenario(sceneObjHolder);
         this.brightObj.isFullyHidden = true;
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        getCamPos(scratchVec3, viewerInput.camera);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
 
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, this.rotation[0], this.rotation[1], this.rotation[2], scratchVec3[0], scratchVec3[1], scratchVec3[2]);
         vec3.set(scratchVec3, 0.0, 0.0, 100000.0);
         mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
         getMatrixTranslation(this.translation, scratchMatrix);
 
-        this.controlSunModel(sceneObjHolder, viewerInput);
+        this.controlSunModel(sceneObjHolder);
 
         if (sceneObjHolder.lensFlareDirector === null)
             return;
 
-        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, 3000.0, viewerInput);
+        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, 3000.0);
     }
 
-    private controlSunModel(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    private controlSunModel(sceneObjHolder: SceneObjHolder): void {
         vec3.copy(this.sun.translation, this.translation);
         vec3SetAll(this.sun.scale, 100.0);
 
-        getCamPos(scratchVec3, viewerInput.camera);
+        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
         vec3.sub(scratchVec3, scratchVec3, this.translation);
         vec3.normalize(scratchVec3, scratchVec3);
 
@@ -7258,7 +7427,7 @@ export class BrightSun extends LiveActor {
         computeEulerAngleRotationFromSRTMatrix(this.sun.rotation, scratchMatrix);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         Sun.requestArchives(sceneObjHolder, infoIter);
     }
 }
@@ -7277,11 +7446,11 @@ export class BrightObj extends LiveActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, this.radius, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, this.radius);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }
 
@@ -7337,7 +7506,7 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
             this.makeActorAppeared(sceneObjHolder);
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.Pressure_StartSyncWait) {
             this.setNerve(FirePressureRadiateNrv.Wait);
             return true;
@@ -7349,7 +7518,7 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
         return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         if (this.group !== null) {
             let leader: FirePressureRadiate | null = this.group.objArray[0];
 
@@ -7366,7 +7535,7 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
         mat4.copy(this.effectHostMtx, mtx);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FirePressureRadiateNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FirePressureRadiateNrv, deltaTimeFrames: number): void {
         if (currentNerve === FirePressureRadiateNrv.Wait) {
             if (isGreaterEqualStep(this, this.waitStep))
                 this.setNerve(FirePressureRadiateNrv.PrepareToRadiate);
@@ -7425,7 +7594,7 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
             this.setNerve(FirePressureRadiateNrv.Relax);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('FirePressure');
     }
 }
@@ -7444,12 +7613,12 @@ export class TimerSwitch extends LiveActor {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected override control(sceneObjHolder: SceneObjHolder): void {
         if (this.timer < 0 && isOnSwitchB(sceneObjHolder, this))
             this.timer = this.timerArg;
 
         if (this.timer > 0) {
-            this.timer -= getDeltaTimeFrames(viewerInput);
+            this.timer -= sceneObjHolder.deltaTimeFrames;
             if (this.timer < 1.0) {
                 this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
                 this.makeActorDead(sceneObjHolder);
@@ -7457,7 +7626,7 @@ export class TimerSwitch extends LiveActor {
         }
     }
 
-    public static requestArchives(): void {
+    public static override requestArchives(): void {
     }
 }
 
@@ -7473,372 +7642,6 @@ export class CoconutTree extends LiveActor {
         // initCollisionParts
         // setClippingTypeSphere(this, 2000.0);
         this.makeActorAppeared(sceneObjHolder);
-    }
-}
-
-const enum MogucchiNrv { Stroll, Scatter, Die }
-export class Mogucchi extends LiveActor<MogucchiNrv> {
-    private maxStrollSpeed: number;
-    private strollSpeed: number;
-    private gravityStrikeVec = vec3.create();
-    private isOnGround: boolean = false;
-    private referenceMtx = mat4.create();
-
-    private hole: ModelObj;
-    private hill: MogucchiHill;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, sceneObjHolder, 'Mogucchi');
-
-        initDefaultPos(sceneObjHolder, this, infoIter);
-        this.maxStrollSpeed = fallback(getJMapInfoArg0(infoIter), 5.0);
-        this.initModelManagerWithAnm(sceneObjHolder, 'Mogucchi');
-        connectToSceneEnemy(sceneObjHolder, this);
-        // this.initSensor();
-        this.initEffectKeeper(sceneObjHolder, null);
-
-        // addEffect(this, 'PointerTouchManual'); and related jazz
-        // initSound();
-        this.initRailRider(sceneObjHolder, infoIter);
-        // declareCoin(this, 1);
-        this.initNerve(MogucchiNrv.Stroll);
-
-        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
-        // initStarPointerTargetAtJoint
-
-        this.createMogucchiHill(zoneAndLayer, sceneObjHolder);
-        this.createHole(zoneAndLayer, sceneObjHolder);
-
-        startBck(this, 'Walk');
-        startBtp(this, 'EyeOpen');
-        // this.calcAnim(sceneObjHolder, viewerInput);
-        this.makeActorAppeared(sceneObjHolder);
-    }
-
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
-
-        if (this.getCurrentNerve() !== MogucchiNrv.Scatter && this.getCurrentNerve() !== MogucchiNrv.Die)
-            this.updateReferenceMtx();
-    }
-
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MogucchiNrv, deltaTimeFrames: number): void {
-        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
-
-        if (currentNerve === MogucchiNrv.Stroll) {
-            if (isFirstStep(this)) {
-                startBck(this, 'Walk');
-                startBtp(this, 'EyeOpen');
-                startBck(this.hole, 'Walk');
-                this.hill.start(sceneObjHolder);
-
-                this.strollSpeed = this.maxStrollSpeed;
-            }
-
-            this.strollSpeed = Math.min(this.strollSpeed + 0.1, this.maxStrollSpeed);
-            moveCoord(this, this.strollSpeed * deltaTimeFrames);
-
-            getRailPos(scratchVec3, this);
-            calcGravityVector(sceneObjHolder, this, scratchVec3, this.gravityStrikeVec, null);
-            this.updatePosition(sceneObjHolder);
-            this.makeEulerRotation();
-
-            // if (checkHipDrop()) ...
-        }
-    }
-
-    private makeEulerRotation(): void {
-        getRailDirection(scratchVec3a, this);
-        vec3.negate(scratchVec3b, this.gravityStrikeVec);
-        makeMtxUpFront(scratchMatrix, scratchVec3b, scratchVec3a);
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
-    }
-
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
-        super.makeActorAppeared(sceneObjHolder);
-        showModel(this);
-        this.setNerve(MogucchiNrv.Stroll);
-        this.hole.makeActorAppeared(sceneObjHolder);
-        showModel(this.hole);
-        // validateClipping(this);
-    }
-
-    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
-        super.makeActorDead(sceneObjHolder);
-
-        if (isValidSwitchDead(this))
-            this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
-
-        this.setNerve(MogucchiNrv.Die);
-
-        if (!isDead(this.hole))
-           this.hole.makeActorDead(sceneObjHolder);
-    }
-
-    private createMogucchiHill(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
-        const pieceCount = Math.min(getRailTotalLength(this), 20);
-        this.hill = new MogucchiHill(zoneAndLayer, sceneObjHolder, this, pieceCount);
-
-        if (pieceCount > 5)
-            this.hill.appearNum = pieceCount - 5;
-
-        this.hill.reserveAppearDist = 80.0;
-        this.hill.reserveSaveDist = 100.0;
-    }
-
-    private createHole(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
-        this.hole = new ModelObj(zoneAndLayer, sceneObjHolder, 'MogucchiHole', 'MogucchiHole', this.referenceMtx, DrawBufferType.MapObjStrongLight, -2, -2);
-    }
-
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
-        moveCoordToNearestPos(this);
-        getRailPos(scratchVec3, this);
-        calcGravityVector(sceneObjHolder, this, scratchVec3, this.gravityStrikeVec);
-        this.updatePosition(sceneObjHolder);
-        this.updateReferenceMtx();
-    }
-
-    private updatePosition(sceneObjHolder: SceneObjHolder): void {
-        getRailPos(scratchVec3a, this);
-        vec3.scale(scratchVec3b, this.gravityStrikeVec, 1000.0);
-
-        this.isOnGround = getFirstPolyOnLineToMap(sceneObjHolder, this.translation, null, scratchVec3a, scratchVec3b);
-
-        if (!this.isOnGround)
-            vec3.copy(this.translation, scratchVec3a);
-    }
-
-    private updateReferenceMtx(): void {
-        makeMtxTRFromActor(this.referenceMtx, this);
-    }
-
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
-        sceneObjHolder.modelCache.requestObjectData('MogucchiHole');
-        MogucchiHill.requestArchives(sceneObjHolder);
-    }
-}
-
-const enum MogucchiHillNrv { Wait, Move }
-class MogucchiHill extends LiveActor<MogucchiHillNrv> {
-    private static pieceModelNames: string[] = [
-        'MogucchiHillA',
-        'MogucchiHillB',
-        'MogucchiHillC',
-    ];
-    private pieceJointName: string = 'MogucchiHill';
-    private pieceEffectName: string = 'MogucchiHill';
-    private pieceUseLightCtrl: boolean = false;
-
-    private pieces: MogucchiHillPiece[] = [];
-    private pieceCanAppear: boolean = false;
-    private nextAppearPiece: number = 0;
-    private mode: number = 0;
-    private pieceScaleTimer: number = 0;
-
-    private reserveMtx = mat4.create();
-    public appearNum: number = 0;
-    public reserveAppearDist: number = 100.0;
-    public reserveSaveDist: number = 150.0;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private parentActor: LiveActor, private pieceCount: number) {
-        super(zoneAndLayer, sceneObjHolder, 'MogucchiHill');
-
-        this.pieceCount = Math.min(this.pieceCount, 100);
-        this.appearNum = this.pieceCount;
-
-        connectToSceneEnemyMovement(sceneObjHolder, this);
-        this.initNerve(MogucchiHillNrv.Move);
-        this.createPieces(zoneAndLayer, sceneObjHolder);
-        this.makeActorDead(sceneObjHolder);
-    }
-
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MogucchiHillNrv, deltaTimeFrames: number): void {
-        if (currentNerve === MogucchiHillNrv.Move) {
-            if (isFirstStep(this))
-                this.reserveCurrentMtx();
-
-            const distance = this.getDistanceFromReserveMtx();
-            if (this.pieceCanAppear && distance >= this.reserveAppearDist)
-                this.appearPiece(sceneObjHolder);
-            if (distance >= this.reserveSaveDist)
-                this.reserveCurrentMtx();
-        }
-    }
-
-    private appearPiece(sceneObjHolder: SceneObjHolder): void {
-        this.killPieceOverAppear(sceneObjHolder);
-        this.killPieceIfAlive(sceneObjHolder);
-
-        if (this.mode === 1) {
-            this.pieceScaleTimer++;
-
-            if (this.pieceScaleTimer > 2) {
-                this.pieceScaleTimer = 3;
-                this.mode = 0;
-            }
-        } else if (this.mode === 2) {
-            this.pieceScaleTimer--;
-            if (this.pieceScaleTimer < 1) {
-                this.pieceScaleTimer = 0;
-                this.mode = 0;
-                return;
-            }
-        }
-
-        if (this.pieceScaleTimer !== 0) {
-            const piece = this.pieces[this.nextAppearPiece];
-            const scale = this.scale[0] * (0.6 + 0.4 * ((this.pieceScaleTimer - 1) * 0.5));
-            piece.setSize(scale);
-
-            mat4.copy(piece.baseMtx, this.reserveMtx);
-            getMatrixTranslation(piece.translation, piece.baseMtx);
-            piece.makeActorAppeared(sceneObjHolder);
-            this.pieceCanAppear = false;
-
-            this.nextAppearPiece = (this.nextAppearPiece + 1) % this.pieceCount;
-        }
-    }
-
-    public start(sceneObjHolder: SceneObjHolder): void {
-        if (isDead(this))
-            this.makeActorAppeared(sceneObjHolder);
-
-        this.setNerve(MogucchiHillNrv.Move);
-        this.pieceScaleTimer = 3;
-    }
-
-    public startNaturally(sceneObjHolder: SceneObjHolder): void {
-        this.mode = 1;
-        this.start(sceneObjHolder);
-    }
-
-    public end(sceneObjHolder: SceneObjHolder): void {
-        this.setNerve(MogucchiHillNrv.Wait);
-    }
-
-    public endNaturally(sceneObjHolder: SceneObjHolder): void {
-        this.mode = 2;
-        this.end(sceneObjHolder);
-    }
-
-    private killPieceOverAppear(sceneObjHolder: SceneObjHolder): void {
-        const idx = (this.nextAppearPiece + this.pieceCount - this.appearNum) % this.pieceCount;
-        this.pieces[idx].crumble(sceneObjHolder);
-    }
-
-    private killPieceIfAlive(sceneObjHolder: SceneObjHolder): void {
-        const nextPiece = this.pieces[this.nextAppearPiece];
-        if (!isDead(nextPiece))
-            nextPiece.makeActorDead(sceneObjHolder);
-    }
-
-    private getDistanceFromReserveMtx(): number {
-        getMatrixTranslation(scratchVec3, this.reserveMtx);
-        return vec3.distance(this.parentActor.translation, scratchVec3);
-    }
-
-    private reserveCurrentMtx(): void {
-        mat4.copy(this.reserveMtx, this.parentActor.getBaseMtx()!);
-        this.pieceCanAppear = true;
-    }
-
-    private createPieces(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
-        const pieceModelNames = MogucchiHill.pieceModelNames;
-
-        for (let i = 0; i < this.pieceCount; i++) {
-            const idx = getRandomInt(0, pieceModelNames.length - 1);
-            const pieceModelName = pieceModelNames[idx];
-
-            const piece = new MogucchiHillPiece(zoneAndLayer, sceneObjHolder, pieceModelName, this.pieceJointName, this.pieceEffectName, this.pieceUseLightCtrl);
-            this.pieces.push(piece);
-        }
-    }
-
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
-        for (let i = 0; i < this.pieceModelNames.length; i++)
-            sceneObjHolder.modelCache.requestObjectData(this.pieceModelNames[i]);
-    }
-}
-
-const enum MogucchiHillPieceNrv { Wait, Appear, Crumble }
-class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
-    public baseMtx = mat4.create();
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, modelName: string, jointName: string, effectName: string | null, useLightCtrl: boolean) {
-        super(zoneAndLayer, sceneObjHolder, 'MogucchiHillPiece');
-
-        this.initModelManagerWithAnm(sceneObjHolder, modelName);
-        connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
-        // this.initHitSensor();
-        // addHitSensorAtJointMapObj
-
-        if (effectName !== null)
-            this.initEffectKeeper(sceneObjHolder, effectName);
-
-        if (useLightCtrl)
-        initLightCtrl(sceneObjHolder, this);
-
-        // initSound
-        this.initNerve(MogucchiHillPieceNrv.Wait);
-        this.makeActorDead(sceneObjHolder);
-    }
-
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MogucchiHillPieceNrv, deltaTimeFrames: number): void {
-        if (currentNerve === MogucchiHillPieceNrv.Wait) {
-            // Nothing.
-        } else if (currentNerve === MogucchiHillPieceNrv.Appear) {
-            if (isFirstStep(this)) {
-                showModel(this);
-                startBck(this, 'Lead');
-                startBrk(this, 'Normal');
-                // startSound
-            }
-
-            if (isBckStopped(this))
-                this.setNerve(MogucchiHillPieceNrv.Wait);
-        } else if (currentNerve === MogucchiHillPieceNrv.Crumble) {
-            if (isFirstStep(this)) {
-                startBck(this, 'Fade');
-                startBrk(this, 'Fade');
-            }
-
-            if (isBckStopped(this))
-                this.makeActorDead(sceneObjHolder);
-        }
-    }
-
-    public crumble(sceneObjHolder: SceneObjHolder): void {
-        if (isDead(this))
-            return;
-
-        // TODO(jstpierre): If clipped, immediately destroy
-        // if (isClipped(this)) {
-        //    this.makeActorDead(sceneObjHolder);
-        //    return;
-        // }
-
-        if (this.getCurrentNerve() !== MogucchiHillPieceNrv.Crumble)
-            this.setNerve(MogucchiHillPieceNrv.Crumble);
-    }
-
-    public destroyHillPiece(sceneObjHolder: SceneObjHolder): void {
-        emitEffect(sceneObjHolder, this, 'Break');
-        this.makeActorDead(sceneObjHolder);
-    }
-
-    public setSize(size: number): void {
-        vec3SetAll(this.scale, size);
-    }
-
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
-        mat4.copy(this.modelInstance!.modelMatrix, this.baseMtx);
-    }
-
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
-        super.makeActorAppeared(sceneObjHolder);
-        this.setNerve(MogucchiHillPieceNrv.Appear);
-        hideModel(this);
     }
 }
 
@@ -7869,7 +7672,7 @@ export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         // calcHandledRotateMtx
 
         if (this.isSkybox) {
@@ -7879,7 +7682,7 @@ export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const whichSky = assertExists(getJMapInfoArg0(infoIter)) - 1;
         sceneObjHolder.modelCache.requestObjectData(AstroDomeSky.skyNames[whichSky]);
     }
@@ -7899,7 +7702,7 @@ export class GalaxyNameSortTable extends NameObj {
         return assertExists(this.infoIter.getValueNumber('PowerStarNum'));
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder) {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder) {
         // This is normally embedded in the binary itself.
         sceneObjHolder.modelCache.requestExtraData(`ExtraNoclipData/GalaxyNameSortTable.bcsv`);
     }
@@ -7965,7 +7768,7 @@ export class MiniatureGalaxyHolder extends NameObj {
         return index;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         GalaxyNameSortTable.requestArchives(sceneObjHolder);
     }
 }
@@ -8019,15 +7822,15 @@ class AstroDomeOrbit extends LiveActor {
 
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        computeModelMatrixR(packetParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        computeModelMatrixR(drawParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, drawParams.u_PosMtx[0]);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!isValidDraw(this))
             return;
 
@@ -8129,12 +7932,12 @@ class AstroDomeOrbit extends LiveActor {
         this.curCoord += (-0.05) * deltaTimeFrames;
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
         this.ddrawBloom.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         MiniatureGalaxyHolder.requestArchives(sceneObjHolder);
     }
 }
@@ -8184,14 +7987,14 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         vec3SetAll(this.scale, 0.65);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         const idx = sceneObjHolder.miniatureGalaxyHolder!.calcIndex(sceneObjHolder, this);
         this.orbit.setup(sceneObjHolder, this.zoneAndLayer.layerId, idx);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         tryStartAllAnim(this, this.name);
         this.shadowModel.makeActorAppeared(sceneObjHolder);
@@ -8202,21 +8005,21 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
             emitEffect(sceneObjHolder, this, 'EyeLight');
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         super.calcAndSetBaseMtx(sceneObjHolder);
 
         vec3.scaleAndAdd(scratchVec3, this.translation, Vec3UnitY, -7000.0);
         setMatrixTranslation(this.shadowMtx, scratchVec3);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
         this.orbit.calcGalaxyPos(this.translation);
-        this.rotation[1] += 0.4 * MathConstants.DEG_TO_RAD * getDeltaTimeFrames(viewerInput);
+        this.rotation[1] += 0.4 * MathConstants.DEG_TO_RAD * sceneObjHolder.deltaTimeFrames;
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MiniatureGalaxyNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MiniatureGalaxyNrv, deltaTimeFrames: number): void {
         if (currentNerve === MiniatureGalaxyNrv.Wait) {
             if (isFirstStep(this)) {
                 // Choose model to show (already done)
@@ -8243,7 +8046,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         return modelName;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData(MiniatureGalaxy.getModelName(infoIter));
         sceneObjHolder.modelCache.requestObjectData('MiniatureGalaxyShadow');
         AstroDomeOrbit.requestArchives(sceneObjHolder);
@@ -8276,16 +8079,16 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         this.mapObjConnector.attachToUnder(sceneObjHolder);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         super.calcAndSetBaseMtx(sceneObjHolder);
         this.mapObjConnector.connect();
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchNrv, deltaTimeFrames: number): void {
         if (currentNerve === ScrewSwitchNrv.Wait) {
             // Screw the switch in.
             this.setNerve(ScrewSwitchNrv.End);
@@ -8411,13 +8214,13 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         this.button = new Button(zoneAndLayer, sceneObjHolder, this, scratchVec3, 120.0, 5000.0);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.button.move(sceneObjHolder);
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.NoclipButton_Click) {
             this.setNerve(ScrewSwitchReverseNrv.Screw);
             return true;
@@ -8426,7 +8229,7 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
         if (currentNerve === ScrewSwitchReverseNrv.Screw) {
             if (isFirstStep(this)) {
                 startBck(this, 'ScrewSwitchReverseOn');
@@ -8474,7 +8277,7 @@ export class LavaGeyser extends LiveActor<LavaGeyserNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaGeyserNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaGeyserNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === LavaGeyserNrv.WaitSwitch) {
@@ -8536,20 +8339,20 @@ class HeatHazeEffect extends LiveActor {
         this.makeActorDead(sceneObjHolder);
     }
 
-    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    public override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
-        getCamZdir(scratchVec3, viewerInput.camera);
-        getMatrixTranslation(this.translation, viewerInput.camera.worldMatrix);
+        getCamZdir(scratchVec3, sceneObjHolder.viewerInput.camera);
+        getMatrixTranslation(this.translation, sceneObjHolder.viewerInput.camera.worldMatrix);
         vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, this.depth);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, viewerInput.camera.worldMatrix);
+        computeEulerAngleRotationFromSRTMatrix(this.rotation, sceneObjHolder.viewerInput.camera.worldMatrix);
 
         const scale = this.depth / 1000.0;
         vec3SetAll(this.scale, scale);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShimmerBoard');
     }
 }
@@ -8564,8 +8367,8 @@ export class HeatHazeDirector extends NameObj {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         getPlayerPos(scratchVec3, sceneObjHolder);
         const hazeCube = getAreaObj<HazeCube>(sceneObjHolder, 'HazeCube', scratchVec3);
@@ -8577,7 +8380,7 @@ export class HeatHazeDirector extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShimmerBoard');
     }
 }
@@ -8657,7 +8460,7 @@ export class LavaProminence extends LiveActor<LavaProminenceNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         calcUpVecFromGravity(scratchVec3, sceneObjHolder, this, this.railStartPos);
@@ -8667,12 +8470,12 @@ export class LavaProminence extends LiveActor<LavaProminenceNrv> {
         makeMtxUpNoSupportPos(this.endEffectMtx, scratchVec3, this.railEndPos);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         makeMtxFrontNoSupportPos(this.modelInstance!.modelMatrix, this.curRailDirection, this.translation);
         mat4.copy(this.bloomModelMtx, this.modelInstance!.modelMatrix);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaProminenceNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaProminenceNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === LavaProminenceNrv.Wait) {
@@ -8768,7 +8571,7 @@ export class LavaProminence extends LiveActor<LavaProminenceNrv> {
         // TODO(jstpierre): What is this mtx used for?
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('LavaProminence');
         sceneObjHolder.modelCache.requestObjectData('LavaProminenceBloom');
     }
@@ -8908,7 +8711,10 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.ddraw.end();
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!isValidDraw(this))
+            return;
+
         const device = sceneObjHolder.modelCache.device;
 
         this.ddraw.beginDraw();
@@ -8920,6 +8726,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
+        materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x7CA9BDFF);
@@ -8927,17 +8734,17 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerInput);
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.rotY -= 10.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
         this.texCoordS += 0.01 * deltaTimeFrames;
         this.texCoordT -= -0.025 * deltaTimeFrames;
@@ -8946,11 +8753,331 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.texCoordT = this.texCoordT % 1.0;
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.texture.destroy(device);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('Whirlpool');
+    }
+}
+
+const enum RainCloudNrv { Wait, Disappear, Appear, End, }
+export class RainCloud extends LiveActor<RainCloudNrv> {
+    private railMover: MapPartsRailMover | null = null;
+    private rainCylinder: ModelObj | null = null;
+    private rainCylinderHeight: number = -1;
+    private rainCylinderHeightFallback: number = -1;
+    private rainCylinderMtx = mat4.create();
+    private effectMtx = mat4.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'RainCloud');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'RainCloud');
+
+        const isFine = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
+
+        if (!isFine) {
+            mat4.copy(this.rainCylinderMtx, this.getBaseMtx()!);
+            this.rainCylinder = new ModelObj(zoneAndLayer, sceneObjHolder, 'RainCloudCylinder', 'RainCloudCylinder', this.rainCylinderMtx, -2, -2, -2);
+        }
+
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
+
+        this.initHitSensor();
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
+        if (!isFine) {
+            // addHitSensorCallbackMapObjSimple(sceneObjHolder, this, 'drop_water', 4, 150.0);
+        }
+
+        initCollisionParts(sceneObjHolder, this, 'RainCloud', this.getSensor('body')!);
+        this.initEffectKeeper(sceneObjHolder, null);
+        if (!isFine)
+            setEffectHostMtx(this, 'Splash', this.effectMtx);
+
+        // initSound
+
+        if (isConnectedWithRail(infoIter)) {
+            this.initRailRider(sceneObjHolder, infoIter);
+            this.railMover = new MapPartsRailMover(sceneObjHolder, this, infoIter);
+            this.railMover.start();
+        }
+
+        initShadowVolumeFlatModel(sceneObjHolder, this, 'RainCloudVolume', getJointMtxByName(this, 'Shadow')!);
+
+        const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+        if (arg0 >= 0.0) {
+            this.rainCylinderHeight = arg0;
+            this.rainCylinderHeightFallback = arg0;
+            setShadowDropLength(this, null, arg0);
+            setShadowVolumeEndDropOffset(this, null, 80.0);
+            excludeCalcShadowToMyCollision(this);
+            onShadowVolumeCutDropLength(this);
+            onCalcShadow(this);
+        } else {
+            this.rainCylinderHeight = 2000.0;
+            invalidateShadowAll(this);
+        }
+
+        joinToGroupArray(sceneObjHolder, this, infoIter, 'RainCloud', 0x10);
+
+        startBck(this, 'Wait');
+        if (isFine) {
+            startBpk(this, 'Fine');
+        } else {
+            startBpk(this, 'Rain');
+        }
+
+        this.initNerve(RainCloudNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
+
+        if (this.railMover !== null && !this.isNerve(RainCloudNrv.End)) {
+            this.railMover.movement(sceneObjHolder);
+            vec3.copy(this.translation, this.railMover.translation);
+
+            if (this.railMover.isPassedEndPointRepeat()) {
+                this.setNerve(RainCloudNrv.Disappear);
+                return;
+            }
+        }
+
+        // Update rain cylinder
+        if (this.rainCylinder !== null && !isDead(this.rainCylinder)) {
+            this.switchEffect(sceneObjHolder);
+
+            const rainCylinderHeight = (isShadowProjected(this) ? getShadowProjectionLength(this)! : this.rainCylinderHeight);
+            const scaleY = rainCylinderHeight / 1000.0;
+            mat4.copy(this.rainCylinderMtx, getJointMtxByName(this, 'Shadow')!);
+
+            let scaleXZ = 1.0;
+            if (isBckPlaying(this, 'Appear'))
+                scaleXZ = getBckFrame(this) / getBckFrameMax(this);
+            else if (isBckPlaying(this, 'Disappear'))
+                scaleXZ = 1.0 - (getBckFrame(this) / getBckFrameMax(this));
+            scaleXZ = saturate(scaleXZ);
+
+            scaleMatrix(this.rainCylinderMtx, this.rainCylinderMtx, scaleXZ, scaleY, scaleXZ);
+        }
+    }
+
+    private switchEffect(sceneObjHolder: SceneObjHolder): void {
+        if (this.isNerve(RainCloudNrv.Appear) || this.isNerve(RainCloudNrv.Disappear) || this.isNerve(RainCloudNrv.End)) {
+            deleteEffect(sceneObjHolder, this, 'Splash');
+            deleteEffect(sceneObjHolder, this, 'Line10');
+            deleteEffect(sceneObjHolder, this, 'Line20');
+        } else {
+            let doLine20 = false;
+            if (isShadowProjected(this)) {
+                doLine20 = this.rainCylinderHeight > 1500.0;
+                const projPos = getShadowProjectionPos(this);
+                const projNrm = getShadowProjectionNormal(this);
+                makeMtxUpNoSupportPos(this.effectMtx, projNrm, projPos);
+                emitEffect(sceneObjHolder, this, 'Splash');
+            } else {
+                deleteEffect(sceneObjHolder, this, 'Splash');
+                doLine20 = true;
+            }
+
+            if (doLine20) {
+                if (!isEffectValid(this, 'Line20')) {
+                    deleteEffect(sceneObjHolder, this, 'Line10');
+                    emitEffect(sceneObjHolder, this, 'Line20');
+                }
+            } else {
+                if (!isEffectValid(this, 'Line10')) {
+                    deleteEffect(sceneObjHolder, this, 'Line20');
+                    emitEffect(sceneObjHolder, this, 'Line10');
+                }
+            }
+        }
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RainCloudNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === RainCloudNrv.Wait) {
+            if (isFirstStep(this))
+                tryStartBck(this, 'Wait');
+
+            // isOnPlayer
+        } else if (currentNerve === RainCloudNrv.Disappear) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Disappear');
+                invalidateHitSensors(this);
+                invalidateCollisionPartsForActor(sceneObjHolder, this);
+                // startSound
+            }
+
+            if (isBckStopped(this)) {
+                if (this.rainCylinder !== null)
+                    this.rainCylinder.makeActorDead(sceneObjHolder);
+            }
+
+            if (this.railMover !== null && this.railMover.isPassedStartPointRepeat())
+                this.setNerve(RainCloudNrv.End);
+        } else if (currentNerve === RainCloudNrv.End) {
+            if (isBckStopped(this) && this.isNextStartOK(sceneObjHolder)) {
+                if (this.rainCylinder !== null)
+                    this.rainCylinder.makeActorDead(sceneObjHolder);
+                this.setNerve(RainCloudNrv.Appear);
+            }
+        } else if (currentNerve === RainCloudNrv.Appear) {
+            if (isFirstStep(this)) {
+                // TODO(jstpierre): This is a hack. It seems there's some sort of ordering issue going on with RailMover...
+                if (this.railMover !== null) {
+                    getRailPos(this.railMover.translation, this);
+                }
+
+                startBck(this, 'Appear');
+                startBpk(this, 'Appear');
+                validateCollisionPartsForActor(sceneObjHolder, this);
+                if (this.rainCylinder !== null)
+                    this.rainCylinder.makeActorAppeared(sceneObjHolder);
+
+                if (isBckStopped(this)) {
+                    validateHitSensors(this);
+                    this.setNerve(RainCloudNrv.Wait);
+                }
+            }
+        }
+    }
+
+    private isNextStartOK(sceneObjHolder: SceneObjHolder): boolean {
+        const groupArray = getGroupFromArray(sceneObjHolder, this) as LiveActorGroup<RainCloud>;
+
+        if (groupArray !== null) {
+            // If we're all part of a group, make sure all clouds are ending together.
+            for (let i = 0; i < groupArray.objArray.length; i++) {
+                const rainCloud = groupArray.objArray[i];
+                const canStart = rainCloud.isNerve(RainCloudNrv.End) || (rainCloud.isNerve(RainCloudNrv.Appear) && isFirstStep(rainCloud));
+                if (!canStart)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('RainCloud');
+        sceneObjHolder.modelCache.requestObjectData('RainCloudCylinder');
+        sceneObjHolder.modelCache.requestObjectData('RainCloudVolume');
+    }
+}
+
+const enum LavaProminenceType { LavaProminenceTriple, LavaProminenceEnvironment }
+export class LavaProminenceTriple extends LiveActor {
+    private bloomModel: PartsModel | null;
+    private bloomMtx = mat4.create();
+
+    private baseQuat = quat.create();
+    private rotateQuat = quat.create();
+    private axisX = vec3.create();
+    private axisZ = vec3.create();
+    private rotateSpeed: number;
+    private initTimerDef: number;
+    private initTimer: number;
+    private type: LavaProminenceType;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        quatFromEulerRadians(this.baseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
+        quatGetAxisX(this.axisX, this.baseQuat);
+        quatGetAxisZ(this.axisZ, this.baseQuat);
+        this.rotateSpeed = fallback(getJMapInfoArg0(infoIter), 100);
+        this.initTimerDef = fallback(getJMapInfoArg1(infoIter), 0);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter))
+            syncStageSwitchAppear(sceneObjHolder, this);
+
+        this.type = (this.name === 'LavaProminenceEnvironment') ? LavaProminenceType.LavaProminenceEnvironment : LavaProminenceType.LavaProminenceTriple;
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        startBtk(this, this.name);
+        this.bloomModel = createBloomModel(sceneObjHolder, this, this.bloomMtx);
+
+        connectToSceneMapObj(sceneObjHolder, this);
+        if (this.type === LavaProminenceType.LavaProminenceTriple) {
+            // this.initHitSensor();
+            // addHitSensorCallbackMapObj(sceneObjHolder, this, 'attack', 1, this.scale[1] * 80.0);
+        }
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        // setGroupClipping
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.initTimer = this.initTimerDef;
+        emitEffect(sceneObjHolder, this, 'Drop1');
+
+        if (this.type === LavaProminenceType.LavaProminenceTriple) {
+            emitEffect(sceneObjHolder, this, 'Drop2');
+            emitEffect(sceneObjHolder, this, 'Drop3');
+        }
+    }
+
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        quat.mul(scratchQuat, this.baseQuat, this.rotateQuat);
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, scratchQuat, this.translation);
+        mat4.copy(this.bloomMtx, this.modelInstance!.modelMatrix);
+    }
+
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        this.initTimer -= sceneObjHolder.deltaTimeFrames;
+
+        if (this.initTimer >= 0)
+            return;
+
+        this.rotation[1] += (this.rotateSpeed / 100.0) * MathConstants.DEG_TO_RAD;
+        quat.setAxisAngle(this.rotateQuat, Vec3UnitY, this.rotation[1]);
+        if (this.bloomModel !== null)
+            vec3.copy(this.bloomModel.translation, this.translation);
+
+        if (!isOnSwitchAppear(sceneObjHolder, this))
+            this.makeActorDead(sceneObjHolder);
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const objName = getObjectName(infoIter);
+        sceneObjHolder.modelCache.requestObjectData(objName);
+        sceneObjHolder.modelCache.requestObjectData(`${objName}Bloom`);
+    }
+}
+
+const enum FallingSmallRockNrv { Move }
+export class FallingSmallRock extends LiveActor<FallingSmallRockNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initBinder(10.0, 800.0, 0);
+        this.initEffectKeeper(sceneObjHolder, 'FallingSmallRock');
+        this.initNerve(FallingSmallRockNrv.Move);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FallingSmallRockNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === FallingSmallRockNrv.Move) {
+            if (isFirstStep(this))
+                emitEffect(sceneObjHolder, this, 'FallingSmallRock');
+
+            if (isBinded(this))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        // Nothing.
     }
 }

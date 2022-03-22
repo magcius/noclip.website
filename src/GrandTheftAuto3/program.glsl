@@ -1,5 +1,6 @@
 
-precision mediump float; precision lowp sampler2DArray;
+precision mediump float;
+precision lowp sampler2DArray;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -48,6 +49,9 @@ void main() {
 #ifdef FRAG
 #ifdef SKY
 void main() {
+    gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, v_Position.y);
+
+    // TODO: get this working again
     vec3 nearPlane = v_Position * u_Frustum.xyz;
     vec3 cameraRay = Mul(u_WorldMatrix, vec4(nearPlane, 0.0));
     vec3 cameraPos = Mul(u_WorldMatrix, vec4(vec3(0.0), 1.0));

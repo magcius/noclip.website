@@ -141,7 +141,6 @@ class MapPartInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        this.modelInstance.destroy(device);
     }
 }
 
@@ -621,7 +620,6 @@ class ObjectInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        this.modelInstance.destroy(device);
     }
 }
 

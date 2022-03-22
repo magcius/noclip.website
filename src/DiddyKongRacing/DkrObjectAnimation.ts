@@ -43,11 +43,6 @@ export class DkrObjectAnimation {
             }
 
             // Each keyframe has a header that is 12 bytes long. I'm not sure what the values are for yet.
-            /*
-            if(animationId === 456) {
-                console.log(buf2hex(animationData.slice(offset, offset + 12).buffer));
-            }
-            */
             offset += 12;
 
             for(let j = 0; j < numberOfVertices; j++) {

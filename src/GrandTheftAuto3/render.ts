@@ -5,13 +5,13 @@ import * as rw from "librw";
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, quat, vec3, vec2 } from "gl-matrix";
-import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
+import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { assert, mod } from "../util";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -188,7 +188,7 @@ class GTA3Program extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     private static program = program_glsl;
-    public both = GTA3Program.program;
+    public override both = GTA3Program.program;
 
     constructor(def: GTA3ProgramDef = {}) {
         super();
@@ -248,10 +248,10 @@ export class SkyRenderer extends BaseRenderer {
         super(skyProgram, atlas);
         // fullscreen quad
         const vbuf = new Float32Array([
-            -1, -1, 1,
-            -1,  1, 1,
-             1,  1, 1,
-             1, -1, 1,
+            -1, -1, -1,
+            -1,  1, -1,
+             1,  1, -1,
+             1, -1, -1,
         ]);
         const ibuf = new Uint32Array([0,1,2,0,2,3]);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
@@ -316,7 +316,7 @@ class RWMeshFragData implements MeshFragData {
         this.indexMap = Array.from(new Set(mesh.indices)).sort();
 
         this.indices = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(
-            tristrip ? GfxTopology.TRISTRIP : GfxTopology.TRIANGLES,
+            tristrip ? GfxTopology.TriStrips : GfxTopology.Triangles,
             mesh.indices!.map(index => this.indexMap.indexOf(index))));
     }
 
@@ -567,7 +567,7 @@ export class SceneRenderer extends BaseRenderer {
             if (timeOff < timeOn && (hour < timeOn && timeOff < hour)) return;
         }
 
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.bbox);
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
@@ -586,7 +586,7 @@ export class AreaRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         if (!viewerInput.camera.frustum.contains(this.bbox)) return;
 
-        const depth = (computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox) - this.bbox.boundingSphereRadius()) / DRAW_DISTANCE_FACTOR;
+        const depth = (computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.bbox) - this.bbox.boundingSphereRadius()) / DRAW_DISTANCE_FACTOR;
         for (let i = 0; i < this.renderers.length; i++) {
             const renderer = this.renderers[i];
             if (renderer.params.minDistance <= depth && depth < renderer.params.maxDistance)
@@ -601,7 +601,9 @@ export class AreaRenderer {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 1, numSamplers: 1 },
+    { numUniformBuffers: 1, numSamplers: 1, samplerEntries: [
+        { formatKind: GfxSamplerFormatKind.Float, dimension: GfxTextureDimension.n2DArray, },
+    ] },
 ];
 
 export class GTA3Renderer implements Viewer.SceneGfx {
@@ -629,8 +631,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         lerpColorSet(this.currentColors, cs1, cs2, t % 1);
 
         viewerInput.camera.setClipPlanes(1);
-        this.renderHelper.pushTemplateRenderInst();
-        const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+        const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16 + 2 * 12 + 6 * 4 + 4);
@@ -656,7 +657,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }

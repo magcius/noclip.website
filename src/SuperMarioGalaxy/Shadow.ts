@@ -1,6 +1,6 @@
 
 import * as GX from "../gx/gx_enum";
-import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
+import { DrawParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
 
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
@@ -9,7 +9,7 @@ import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, projectionMatrixForCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert, nArray } from "../util";
@@ -23,7 +23,8 @@ import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { colorFromRGBA } from "../Color";
 import { TextureMapping } from "../TextureHolder";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform";
+import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 
 export function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -297,7 +298,7 @@ abstract class ShadowDrawer extends NameObj {
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 abstract class ShadowSurfaceDrawer extends ShadowDrawer {
     protected material: GXMaterialHelperGfx;
@@ -318,10 +319,8 @@ abstract class ShadowSurfaceDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setUsePnMtxIdx(false);
-        mb.setColorUpdate(false);
-        mb.setAlphaUpdate(true);
 
-        this.material = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
+        this.material = new GXMaterialHelperGfx(mb.finish('ShadowSurfaceDrawer'));
     }
 }
 
@@ -336,10 +335,10 @@ function drawCircle(ddraw: TDDraw, pos: ReadonlyVec3, axis: ReadonlyVec3, radius
 
     ddraw.begin(GX.Command.DRAW_TRIANGLE_FAN);
     ddraw.position3vec3(pos);
-    for (let i = 0; i < pointCount; i++) {
+    for (let i = 0; i <= pointCount; i++) {
         vec3.scaleAndAdd(scratchVec3b, pos, scratchVec3a, radius);
-        transformVec3Mat4w0(scratchVec3b, scratchMat4a, scratchVec3b);
         ddraw.position3vec3(scratchVec3b);
+        transformVec3Mat4w0(scratchVec3a, scratchMat4a, scratchVec3a);
     }
     ddraw.end();
 }
@@ -351,33 +350,37 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowSurfaceCircle', controller);
-        debugger;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.controller.isProjected || !this.controller.isDraw())
             return;
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x80 / 0xFF;
+        this.material.setOnRenderInst(device, cache, template);
+
+        materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.material.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.material.allocatedrawParamsDataOnInst(template, drawParams);
 
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
-        this.ddraw.endAndUpload(renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
+        renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -409,8 +412,6 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.GEQUAL, false);
         mb.setUsePnMtxIdx(usePnMtxIdx);
-        mb.setColorUpdate(false);
-        mb.setAlphaUpdate(true);
 
         mb.setCullMode(GX.CullMode.FRONT);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
@@ -427,21 +428,21 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         return this.controller.isDraw();
     }
 
-    protected abstract loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void;
+    protected abstract loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void;
     protected abstract drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void;
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.isDraw())
             return;
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x40 / 0xFF;
+        materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        this.loadDrawModelMtx(packetParams, viewerInput);
-        this.materialFront.allocatePacketParamsDataOnInst(template, packetParams);
+        this.loadDrawModelMtx(drawParams, viewerInput);
+        this.materialFront.allocatedrawParamsDataOnInst(template, drawParams);
 
         this.drawShapes(sceneObjHolder, renderInstManager);
         renderInstManager.popTemplateRenderInst();
@@ -492,23 +493,23 @@ class ShadowVolumeSphere extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeSphere');
     }
 
-    protected isDraw(): boolean {
+    protected override isDraw(): boolean {
         return this.controller.isProjected && super.isDraw();
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         let scale = this.radius / 100.0;
         if (this.controller.followHostScale)
             scale *= this.controller.host.scale[0];
 
-        computeModelMatrixS(packetParams.u_PosMtx[0], scale);
+        computeModelMatrixS(drawParams.u_PosMtx[0], scale);
         const projectionPos = this.controller.getProjectionPos();
-        setMatrixTranslation(packetParams.u_PosMtx[0], projectionPos);
+        setMatrixTranslation(drawParams.u_PosMtx[0], projectionPos);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, drawParams.u_PosMtx[0]);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
     }
 }
@@ -521,11 +522,11 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeSphere');
     }
 
-    protected isDraw(): boolean {
+    protected override isDraw(): boolean {
         return this.controller.isProjected && super.isDraw();
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         vec3.scale(scratchVec3a, this.size, 1 / 100.0);
         scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
         scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
@@ -555,10 +556,10 @@ class ShadowVolumeOval extends ShadowVolumeModel {
         vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
         setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
     }
 }
@@ -571,7 +572,7 @@ class ShadowVolumeOvalPole extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         vec3.scale(scratchVec3a, this.size, 1 / 100.0);
         scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
         scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
@@ -606,10 +607,10 @@ class ShadowVolumeOvalPole extends ShadowVolumeModel {
         vec3.scale(scratchVec3b, scratchVec3b, baseDropLength / 100.0);
         setMatrixAxis(scratchMat4a, null, scratchVec3b, null);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
     }
 }
@@ -622,7 +623,7 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         this.calcBaseDropPosition(scratchVec3a);
         vec3.negate(scratchVec3b, this.controller.getDropDir());
 
@@ -632,13 +633,13 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
         let scaleXZ = this.radius / 100.0;
         if (this.controller.followHostScale)
             scaleXZ *= this.controller.host.scale[0];
-        const scaleY = this.calcBaseDropLength();
+        const scaleY = this.calcBaseDropLength() / 100.0;
 
         scaleMatrix(scratchMat4a, scratchMat4a, scaleXZ, scaleY, scaleXZ);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
     }
 }
@@ -817,27 +818,24 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
-        front.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(front);
         this.materialFront.setOnRenderInst(device, cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
-        back.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(back);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
-
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst.reset();
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -922,27 +920,24 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        const shapeRenderInst = this.ddraw.endDraw(renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
-        front.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(front);
         this.materialFront.setOnRenderInst(device, cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
-        back.setFromTemplate(shapeRenderInst);
+        this.ddraw.setOnRenderInst(back);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
-
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst.reset();
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
     }
 }
@@ -1007,11 +1002,11 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
         }
     }
 
-    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+    public loadDrawModelMtx(drawParams: DrawParams, viewerInput: ViewerRenderInput): void {
         vec3.scale(scratchVec3a, this.controller.getDropDir(), this.calcBaseDropLength());
 
-        const rootMtx = packetParams.u_PosMtx[this.rootJointPosNrmMtxIndex];
-        const dropMtx = packetParams.u_PosMtx[this.dropJointPosNrmMtxIndex];
+        const rootMtx = drawParams.u_PosMtx[this.rootJointPosNrmMtxIndex];
+        const dropMtx = drawParams.u_PosMtx[this.dropJointPosNrmMtxIndex];
 
         this.calcRootJoint(rootMtx, scratchVec3a);
         if (this.controller.followHostScale)
@@ -1026,6 +1021,7 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
 }
 
 // NOTE(jstpierre): This is not how it's normally done. fillSilhouetteColor is called directly from the main list, normally.
+// NOTE(jstpierre): The original game uses framebuffer alpha to store the shadow buffer, but we just use a separate R8 target.
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
@@ -1035,25 +1031,28 @@ class AlphaShadow extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'AlphaShadow');
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
 
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
+        // TODO(jstpierre): Replace this with a single FS tri?
         const mb = new GXMaterialBuilder(`fillSilhouetteColor`);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
         mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.KONST, GX.CA.A0, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
+        mb.setTevSwapMode(0, undefined, [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R]);
         mb.setZMode(true, GX.CompareType.ALWAYS, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setUsePnMtxIdx(false);
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
 
-        computeProjectionMatrixFromCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
+        projectionMatrixForCuboid(this.orthoSceneParams.u_Projection, 0, 1, 1, 0, 0, 10);
+        projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, sceneObjHolder.viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
@@ -1076,12 +1075,18 @@ class AlphaShadow extends NameObj {
         sceneObjHolder.specialTextureBinder.registerTextureMapping(this.textureMapping, SpecialTextureType.OpaqueSceneTexture);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         colorFromRGBA(materialParams.u_Color[ColorKind.K0], 0.0, 0.0, 0.0, 1 / 0xFF);
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0.0, 0.0, 0.0, 0.5);
         materialParams.m_TextureMapping[0].copy(this.textureMapping);
+
+        mat4.identity(materialParams.u_TexMtx[0]);
+        if (this.textureMapping.flipY) {
+            materialParams.u_TexMtx[0][5] = -1;
+            materialParams.u_TexMtx[0][13] = 1;
+        }
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();
@@ -1091,12 +1096,12 @@ class AlphaShadow extends NameObj {
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.orthoQuad.setOnRenderInst(renderInst);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.identity(drawParams.u_PosMtx[0]);
+        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.orthoQuad.destroy(device);
     }
 }
@@ -1112,7 +1117,7 @@ export class ShadowControllerHolder extends NameObj {
         this.alphaShadow = new AlphaShadow(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         for (let i = 0; i < this.shadowControllers.length; i++) {
@@ -1122,8 +1127,8 @@ export class ShadowControllerHolder extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         this.updateController(sceneObjHolder);
     }
 
@@ -1136,7 +1141,7 @@ export class ShadowControllerHolder extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         ShadowVolumeSphere.requestArchives(sceneObjHolder);
         ShadowVolumeOval.requestArchives(sceneObjHolder);
         ShadowVolumeCylinder.requestArchives(sceneObjHolder);
@@ -1221,16 +1226,6 @@ function setUpShadowVolumeFromCSV(volume: ShadowVolumeDrawer, infoIter: JMapInfo
     volume.cutDropShadow = volumeCut !== 0;
 }
 
-function createShadowSurfaceCircleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
-    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeSurface();
-
-    const drawer = new ShadowSurfaceCircle(sceneObjHolder, controller);
-    drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
-    controller.shadowDrawer = drawer;
-}
-
 function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
     controller.setDropTypeNormal();
@@ -1305,9 +1300,11 @@ function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: Li
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
-        createShadowSurfaceCircleFromCSV(sceneObjHolder, actor, infoIter);
+        // Never used
     } else if (shadowType === 'SurfaceOval') {
+        // Only used in Meramera
     } else if (shadowType === 'SurfaceBox') {
+        // Never used
     } else if (shadowType === 'VolumeSphere') {
         createShadowVolumeSphereFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOval') {
@@ -1319,7 +1316,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeBox') {
         createShadowVolumeBoxFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeFlatModel') {
-        debugger;
+        // Only used in SkeletalFishGuard
     } else if (shadowType === 'VolumeLine') {
         createShadowVolumeLineFromCSV(sceneObjHolder, actor, infoIter);
     } else {
@@ -1476,6 +1473,10 @@ export function setShadowDropPositionAtJoint(actor: LiveActor, name: string | nu
     actor.shadowControllerList!.getController(name)!.setDropPosMtxPtr(jointMtx, offset);
 }
 
+export function setShadowDropStartOffset(actor: LiveActor, name: string | null, v: number): void {
+    actor.shadowControllerList!.getController(name)!.setDropStartOffset(v);
+}
+
 export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
 }
@@ -1532,31 +1533,43 @@ export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | 
     getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
 }
 
+export function setShadowVolumeEndDropOffset(actor: LiveActor, name: string | null, v: number): void {
+    getShadowVolumeDrawer(actor, name).endDrawShapeOffset = v;
+}
+
 export function setShadowVolumeBoxSize(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
     vec3.copy(getShadowVolumeBox(actor, name).size, v);
 }
 
-export function isExistShadow(actor: LiveActor, name: string | null): boolean {
+export function onShadowVolumeCutDropLength(actor: LiveActor, name: string | null = null): void {
+    getShadowVolumeDrawer(actor, name).cutDropShadow = true;
+}
+
+export function isExistShadow(actor: LiveActor, name: string | null = null): boolean {
     if (actor.shadowControllerList === null)
         return false;
     return actor.shadowControllerList.getController(name) !== null;
 }
 
-export function isShadowProjected(actor: LiveActor, name: string | null): boolean {
+export function isShadowProjected(actor: LiveActor, name: string | null = null): boolean {
     if (actor.shadowControllerList === null)
         return false;
     return actor.shadowControllerList.getController(name)!.isProjected;
 }
 
-export function getShadowProjectionPos(actor: LiveActor, name: string | null): ReadonlyVec3 {
+export function getShadowProjectionPos(actor: LiveActor, name: string | null = null): ReadonlyVec3 {
     return actor.shadowControllerList!.getController(name)!.getProjectionPos();
 }
 
-export function getShadowProjectedSensor(actor: LiveActor, name: string | null): HitSensor {
+export function getShadowProjectionNormal(actor: LiveActor, name: string | null = null): ReadonlyVec3 {
+    return actor.shadowControllerList!.getController(name)!.getProjectionNormal();
+}
+
+export function getShadowProjectedSensor(actor: LiveActor, name: string | null = null): HitSensor {
     return actor.shadowControllerList!.getController(name)!.triHitSensor!;
 }
 
-export function getShadowProjectionLength(actor: LiveActor, name: string | null): number | null {
+export function getShadowProjectionLength(actor: LiveActor, name: string | null = null): number | null {
     const controller = actor.shadowControllerList!.getController(name)!;
     if (controller.isProjected)
         return controller.getProjectionLength();

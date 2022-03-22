@@ -1,6 +1,6 @@
 
 import CodeEditor from "./CodeEditor";
-import { assertExists } from "./util";
+import { assert, assertExists, nullify } from "./util";
 import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
 
@@ -23,18 +23,32 @@ export class DeviceProgram {
     }
 
     public setDefineString(name: string, v: string | null): boolean {
-        if (this.defines.get(name) === v)
-            return false;
-        if (v)
+        if (v !== null) {
+            if (this.defines.get(name) === v)
+                return false;
             this.defines.set(name, v);
-        else
+        } else {
+            if (!this.defines.has(name))
+                return false;
             this.defines.delete(name);
+        }
         this.definesChanged();
         return true;
     }
 
     public setDefineBool(name: string, v: boolean): boolean {
         return this.setDefineString(name, v ? '1' : null);
+    }
+
+    public getDefineString(name: string): string | null {
+        return nullify(this.defines.get(name));
+    }
+
+    public getDefineBool(name: string): boolean {
+        const str = this.getDefineString(name);
+        if (str !== null)
+            assert(str === '1');
+        return str !== null;
     }
 
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
@@ -91,6 +105,7 @@ export class DeviceProgram {
             };
             onresize();
             (win as any).editor = editor;
+            (window as any).editor = editor;
             win.document.body.appendChild(editor.elem);
         };
         if (win.document.readyState === 'complete')

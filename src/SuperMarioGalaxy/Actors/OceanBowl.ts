@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexInputLocation } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
+import { MaterialParams, DrawParams, ColorKind } from "../../gx/gx_render";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderInstManager";
 import { DrawType, NameObj, MovementType } from "../NameObj";
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
@@ -48,7 +48,7 @@ class OceanBowlBloomDrawer extends NameObj {
         connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanBowlBloomDrawer);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this.bowl))
@@ -63,7 +63,7 @@ class OceanBowlBloomDrawer extends NameObj {
 
 const scratchVec3 = vec3.create();
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 export class OceanBowl extends LiveActor {
     private points: OceanBowlPoint[] = [];
     private animationController = new AnimationController(60);
@@ -307,9 +307,9 @@ export class OceanBowl extends LiveActor {
         this.materialHelperBloom = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         // Every frame, we add -0.04 onto the counter.
-        this.animationController.setTimeFromViewerInput(viewerInput);
+        this.animationController.setTimeFromViewerInput(sceneObjHolder.viewerInput);
         const time = this.animationController.getTimeInFrames();
 
         const posTime = time * -0.04;
@@ -326,7 +326,7 @@ export class OceanBowl extends LiveActor {
         this.tex2Trans[1] = (1.0 + time * -0.001) % 1.0;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -395,8 +395,8 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -428,13 +428,13 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelperBloom.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
+        this.materialHelperBloom.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.water.destroy(device);
         this.waterIndirect.destroy(device);
         this.mask.destroy(device);
@@ -445,7 +445,7 @@ export class OceanBowl extends LiveActor {
         device.destroyInputState(this.inputState);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
         WaterAreaHolder.requestArchives(sceneObjHolder);
     }

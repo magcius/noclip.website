@@ -17,6 +17,7 @@ import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 const id = 'klonoa';
 const name = "Klonoa";
@@ -45,20 +46,16 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(6/60);
     }
 
-    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -95,7 +92,8 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(opaqueSceneTextureID);
 
                 pass.exec((passRenderer, scope) => {
-                    const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+                    const flipY = gfxDeviceNeedsFlipY(device);
+                    const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY };
                     this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
                     executeOnPass(renderInstManager, passRenderer, KlonoaPass.INDIRECT);
                 });
@@ -104,7 +102,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.prepareToRender(device, viewerInput);
+        this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
@@ -115,8 +113,6 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
     }
 }
 

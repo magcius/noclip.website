@@ -132,8 +132,7 @@ class TTK1Animator {
         } else {
             const centerS = this.animationEntry.centerS;
             const centerT = this.animationEntry.centerT;
-            const centerQ = this.animationEntry.centerQ;
-            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT);
         }
     }
 }
@@ -288,7 +287,7 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         if (this.ownedModelMaterialData !== null)
             this.ownedModelMaterialData.destroy(device);

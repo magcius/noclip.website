@@ -337,6 +337,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        this.sceneTexture.destroy(device);
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);
@@ -628,16 +629,15 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('lvl10', 10, "Make the Moon (World)", 100),
 
     "Constellations",
-    new KatamariLevelSceneDesc('clvl1', 11, "Make Cancer"),
-    new KatamariLevelSceneDesc('clvl2', 12, "Make Cygnus"),
-    new KatamariLevelSceneDesc('clvl3', 14, "Make Corona Borealis"),
-    new KatamariLevelSceneDesc('clvl4', 18, "Make Gemini"),
-    new KatamariLevelSceneDesc('clvl5', 17, "Make Ursa Major"),
-    new KatamariLevelSceneDesc('clvl6', 19, "Make Taurus"),
-    new KatamariLevelSceneDesc('clvl7', 15, "Make Pisces"),
-    new KatamariLevelSceneDesc('clvl8', 16, "Make Virgo"),
-
-    new KatamariLevelSceneDesc('clvl9', 21, "Make the North Star"),
+    new KatamariLevelSceneDesc('clvl1', 11, "Make Cancer (House)"),
+    new KatamariLevelSceneDesc('clvl2', 12, "Make Cygnus (House)"),
+    new KatamariLevelSceneDesc('clvl3', 14, "Make Corona Borealis (Town)"),
+    new KatamariLevelSceneDesc('clvl4', 18, "Make Gemini (World)"),
+    new KatamariLevelSceneDesc('clvl5', 17, "Make Ursa Major (Town)"),
+    new KatamariLevelSceneDesc('clvl6', 19, "Make Taurus (World)"),
+    new KatamariLevelSceneDesc('clvl7', 15, "Make Pisces (Town)"),
+    new KatamariLevelSceneDesc('clvl8', 16, "Make Virgo (Town)"),
+    new KatamariLevelSceneDesc('clvl9', 21, "Make the North Star (World)"),
 
     "Special Levels",
     new KatamariLevelSceneDesc('slvl28', 28, "Tutorial"),

@@ -7,11 +7,11 @@ import { Camera } from "../Camera";
 import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, colorScale, OpaqueBlack } from "../Color";
 import { copyMegaState, fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
 import { fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GXShaderLibrary } from "../gx/gx_material";
 import { DeviceProgram } from "../Program";
@@ -65,8 +65,8 @@ export function parseBBLM(buffer: ArrayBufferSlice): BBLM {
 }
 
 class FullscreenBlitProgram extends DeviceProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-    public frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
 }
 
 class EggBloomBaseProgram extends DeviceProgram {
@@ -81,17 +81,17 @@ layout(std140) uniform ub_Params {
 };
 `;
 
-    public vert = `
+    public override vert = `
 ${EggBloomBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 }
 
 class EggBloomThresholdProgram extends EggBloomBaseProgram {
-    public frag: string = `
+    public override frag: string = `
 ${EggBloomBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.saturate}
-${GfxShaderLibrary.monochromeNTSC}
+${GfxShaderLibrary.MonochromeNTSC}
 ${GXShaderLibrary.TevOverflow}
 
 in vec2 v_TexCoord;
@@ -242,7 +242,7 @@ export class EggDrawPathBloom {
     private target4ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private target8ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
-    public pushPassesBloom(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainResolveTextureID: number): void {
+    public pushPassesBloom(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainResolveTextureID: GfxrResolveTextureID): void {
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
 
         this.target2ColorDesc.setDimensions(mainColorTargetDesc.width >>> 1, mainColorTargetDesc.height >>> 1, 1);
@@ -432,7 +432,7 @@ layout(std140) uniform ub_Params {
 #define u_IndTexIndScale  (u_Misc0.yz)
 `;
 
-    public vert = `
+    public override vert = `
 ${EggDOFBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.fullscreenVS}
 `;
@@ -560,7 +560,7 @@ export class EggDrawPathDOF {
 
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
-    private pushPassesDOF_DrawMode2(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: number, mainDepthTargetID: number, mainResolveTextureID: number): void {
+    private pushPassesDOF_DrawMode2(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, mainResolveTextureID: GfxrResolveTextureID): void {
         const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
 
         this.target2ColorDesc.setDimensions(mainColorTargetDesc.width >>> 1, mainColorTargetDesc.height >>> 1, 1);
@@ -653,7 +653,7 @@ export class EggDrawPathDOF {
         });
     }
 
-    public pushPassesDOF(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: number, mainDepthTargetID: number, mainResolveTextureID: number): void {
+    public pushPassesDOF(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, camera: Camera, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, mainResolveTextureID: GfxrResolveTextureID): void {
         if (this.drawMode === DOFDrawMode.DrawMode2)
             this.pushPassesDOF_DrawMode2(builder, renderInstManager, camera, mainColorTargetID, mainDepthTargetID, mainResolveTextureID);
     }

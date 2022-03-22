@@ -1,7 +1,7 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 
 class CounterStrikeGOSceneDesc implements SceneDesc {
@@ -17,7 +17,8 @@ class CounterStrikeGOSceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/maps/${this.id}.bsp`);
     }
 }
 

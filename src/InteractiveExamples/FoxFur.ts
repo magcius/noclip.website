@@ -125,7 +125,7 @@ function parseObjFile(objText: string): ObjModel {
 class FurProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
 
-    public both = `
+    public override both = `
 layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_BoneMatrix[1];
@@ -145,10 +145,12 @@ layout(std140) uniform ub_ShapeParams {
 #define u_PoreMapIndScale (u_Misc[2].z)
 #define u_PoreMapIndAngle (u_Misc[2].w)
 
-uniform sampler2D u_Texture[3];
+uniform sampler2D u_TextureBody;
+uniform sampler2D u_TexturePore;
+uniform sampler2D u_TextureInd;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
@@ -162,7 +164,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public override frag = `
 in vec2 v_TexCoord;
 
 vec2 rotateZ(vec2 v, float theta) {
@@ -176,24 +178,24 @@ void main() {
 
     // Trying out some ind stuff
     vec2 t_BodyIndCoord = v_TexCoord.xy + vec2(u_BodyIndMapOffsS, u_BodyIndMapOffsT);
-    vec2 t_BodyIndTex = (texture(SAMPLER_2D(u_Texture[2]), t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    vec2 t_BodyIndTex = (texture(SAMPLER_2D(u_TextureInd), t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_BodyIndTex = rotateZ(t_BodyIndTex, u_BodyMapIndAngle);
     t_BodyIndTex *= u_BodyMapIndScale;
     vec2 t_BodyTexCoord = (v_TexCoord.xy) + t_BodyIndTex;
 
-    vec4 t_BodyColor = texture(SAMPLER_2D(u_Texture[0]), t_BodyTexCoord);
+    vec4 t_BodyColor = texture(SAMPLER_2D(u_TextureBody), t_BodyTexCoord);
     gl_FragColor *= t_BodyColor;
 
     // Sample pore map.
     vec2 t_PoreIndCoord = v_TexCoord.xy + vec2(u_PoreIndMapOffsS, u_PoreIndMapOffsT);
-    vec2 t_PoreIndTex = (texture(SAMPLER_2D(u_Texture[2]), t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    vec2 t_PoreIndTex = (texture(SAMPLER_2D(u_TextureInd), t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_PoreIndTex = rotateZ(t_PoreIndTex, u_PoreMapIndAngle);
     t_PoreIndTex *= u_PoreMapIndScale;
 
     vec2 t_PoreTexCoord = (v_TexCoord.xy * u_PoreMapScale) + t_PoreIndTex;
-    vec4 t_PoreMask = texture(SAMPLER_2D(u_Texture[1]), t_PoreTexCoord).rrrg;
+    vec4 t_PoreMask = texture(SAMPLER_2D(u_TexturePore), t_PoreTexCoord).rrrg;
     t_PoreMask.a += u_PoreBaseAlpha;
     gl_FragColor *= t_PoreMask;
 }
@@ -397,7 +399,7 @@ class FurObj {
 }
 
 const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
-export class SceneRenderer implements SceneGfx {
+class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;
     public obj: GraphObjBase[] = [];
@@ -488,7 +490,7 @@ export class FoxFur implements SceneDesc {
         const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);
-        window.main.ui.debugFloaterHolder.bindSliders(o);
+        window.main.ui.debugFloaterHolder.bindPanel(o);
         r.fur = o;
         r.obj.push(o);
         return r;

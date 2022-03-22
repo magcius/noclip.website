@@ -1155,7 +1155,7 @@ export class evt_handler_ttyd extends evt_handler {
         this.mapfile = new evt_map(mapFileData);
     }
 
-    public user_func(ctx: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
+    public override user_func(ctx: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
         if (addr === 0x805bea21) {
             // HACK: fix for tou_01
             ctx.evt_set_arg(evt, 1, 1);
@@ -1235,7 +1235,7 @@ export class evt_handler_ttyd extends evt_handler {
         return evt_user_func_ret.advance;
     }
 
-    public get_map_symbol(addr: number): evt_sym | null {
+    public override get_map_symbol(addr: number): evt_sym | null {
         return this.mapfile.getSymbol(addr);
     }
 }

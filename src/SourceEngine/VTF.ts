@@ -10,6 +10,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 const enum ImageFormat {
     RGBA8888      = 0x00,
     ABGR8888      = 0x01,
+    RGB888        = 0x02,
     BGR888        = 0x03,
     I8            = 0x05,
     ARGB8888      = 0x0B,
@@ -25,6 +26,8 @@ const enum ImageFormat {
 
 function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
     if (fmt === ImageFormat.DXT1)
+        return true;
+    if (fmt === ImageFormat.DXT3)
         return true;
     if (fmt === ImageFormat.DXT5)
         return true;
@@ -45,6 +48,8 @@ function imageFormatGetBPP(fmt: ImageFormat): number {
         return 4;
     if (fmt === ImageFormat.BGRX8888)
         return 4;
+    if (fmt === ImageFormat.RGB888)
+        return 3;
     if (fmt === ImageFormat.BGR888)
         return 3;
     if (fmt === ImageFormat.BGRA5551)
@@ -63,6 +68,8 @@ function imageFormatCalcLevelSize(fmt: ImageFormat, width: number, height: numbe
         const count = ((width * height) / 16) * depth;
         if (fmt === ImageFormat.DXT1)
             return count * 8;
+        else if (fmt === ImageFormat.DXT3)
+            return count * 16;
         else if (fmt === ImageFormat.DXT5)
             return count * 16;
         else
@@ -77,10 +84,12 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
     if (fmt === ImageFormat.DXT1)
         return srgb ? GfxFormat.BC1_SRGB : GfxFormat.BC1;
     else if (fmt === ImageFormat.DXT3)
-        return srgb ? GfxFormat.BC2_SRGB : GfxFormat.BC1;
+        return srgb ? GfxFormat.BC2_SRGB : GfxFormat.BC2;
     else if (fmt === ImageFormat.DXT5)
         return srgb ? GfxFormat.BC3_SRGB : GfxFormat.BC3;
     else if (fmt === ImageFormat.RGBA8888)
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.RGB888)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGR888)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
@@ -113,6 +122,20 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
             dst[i++] = src.getUint8(p + 2);
             dst[i++] = src.getUint8(p + 1);
             dst[i++] = src.getUint8(p + 0);
+            dst[i++] = 255;
+            p += 3;
+        }
+        return dst;
+    } else if (fmt === ImageFormat.RGB888) {
+        // RGB888 => RGBA8888
+        const src = data.createDataView();
+        const n = width * height * depth * 4;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            dst[i++] = src.getUint8(p + 0);
+            dst[i++] = src.getUint8(p + 1);
+            dst[i++] = src.getUint8(p + 2);
             dst[i++] = 255;
             p += 3;
         }
@@ -199,12 +222,12 @@ export class VTF {
     public gfxSampler: GfxSampler | null = null;
 
     public format: ImageFormat;
-    public flags: VTFFlags;
-    public width: number;
-    public height: number;
-    public depth: number;
-    public numFrames: number;
-    public numLevels: number;
+    public flags: VTFFlags = 0;
+    public width: number = 0;
+    public height: number = 0;
+    public depth: number = 1;
+    public numFrames: number = 1;
+    public numLevels: number = 1;
 
     private versionMajor: number;
     private versionMinor: number;

@@ -16,6 +16,8 @@ export interface TPLTexture extends GX_Texture.TextureInputGX {
     edgeLOD: number;
     minLOD: number;
     maxLOD: number;
+    paletteFormat: GX.TexPalette;
+    paletteData: ArrayBufferSlice | null;
 }
 
 export interface TPL {
@@ -58,8 +60,8 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         const mipCount = (maxLOD - minLOD) + 1;
         const data = buffer.subarray(dataOffs);
 
-        let paletteData: ArrayBufferSlice | undefined = undefined;
-        let paletteFormat: GX.TexPalette | undefined = undefined;
+        let paletteData: ArrayBufferSlice | null = null;
+        let paletteFormat: GX.TexPalette = GX.TexPalette.IA8;
         if (paletteOffs !== 0) {
             const nItems = view.getUint16(paletteOffs + 0x00);
             paletteFormat = view.getUint16(paletteOffs + 0x06);

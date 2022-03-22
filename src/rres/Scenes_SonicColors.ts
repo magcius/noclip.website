@@ -118,9 +118,6 @@ class SonicColorsRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.renderHelper.destroy();
 
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
-
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
     }

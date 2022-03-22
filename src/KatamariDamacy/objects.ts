@@ -1852,17 +1852,17 @@ function motion_conditionMet(motion: MotionState, position: vec3, gameState: Cam
     const inZone = gameState.currZone >= 0 && gameState.currZone === motion.zone;
     const parentRolled = false; // just to document
     switch (motion.parameters.motionID) {
-        case 0x00:
-        case 0x01:
-        case 0x02:
-        case 0x07:
-        case 0x08:
-        case 0x09:
-        case 0x0C:
+        case 0x00 as MotionID:
+        case 0x01 as MotionID:
+        case 0x02 as MotionID:
+        case 0x07 as MotionID:
+        case 0x08 as MotionID:
+        case 0x09 as MotionID:
+        case 0x0C as MotionID:
             return closeEnough && bigEnough;
         case MotionID.ChasePlayer:
             return inZone && closeEnough && !bigEnough; // actually more complicated
-        case 0x04:
+        case 0x04 as MotionID:
             return inZone && parentRolled;
         case MotionID.PathTowardsPlayer:
         case MotionID.RepeatablePath:
@@ -1872,8 +1872,8 @@ function motion_conditionMet(motion: MotionState, position: vec3, gameState: Cam
         case MotionID.HouseDoors:
         case MotionID.AltStageAreaPath: // unused?
             return gameState.area >= 2; // change this a bit to handle going backwards
-        case 0x0E:
-        case 0x0F:
+        case 0x0E as MotionID:
+        case 0x0F as MotionID:
             return vec3.len(cameraScratch) < 200;
         case MotionID.ScatterFromParent:
             return parentRolled;

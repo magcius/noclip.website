@@ -484,13 +484,13 @@ void main() {
 
 export class EggDrawCall extends DrawCallInstance {
     public separation = 0;
-    protected fillExtraCombine(offs: number, comb: Float32Array): number {
+    protected override fillExtraCombine(offs: number, comb: Float32Array): number {
         offs += super.fillExtraCombine(offs, comb);
         comb[offs] = this.separation;
         return 1;
     }
 
-    protected programConstructor(otherH: number, otherL: number, combine: RDP.CombineParams, alpha: number, tiles: RDP.TileState[]): F3DEX_Program {
+    protected override programConstructor(otherH: number, otherL: number, combine: RDP.CombineParams, alpha: number, tiles: RDP.TileState[]): F3DEX_Program {
         return new EggProgram(otherH, otherL, combine, alpha, tiles);
     }
 }

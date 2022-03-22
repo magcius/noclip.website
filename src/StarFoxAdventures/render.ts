@@ -2,26 +2,33 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Viewer from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, PacketParams, SceneParams } from '../gx/gx_render';
+import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render';
 import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CameraController } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8, White } from '../Color';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
-import { MaterialFactory, HeatShimmerMaterial } from './materials';
+import { MaterialFactory, HeatShimmerMaterial, MaterialRenderContext } from './materials';
 import { radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
+import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
+import { World } from './world';
+
+export interface SceneUpdateContext {
+    viewerInput: Viewer.ViewerRenderInput;
+}
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
     animController: SFAAnimationController;
+    world?: World;
 }
 
 const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
@@ -38,26 +45,24 @@ export interface SFARenderLists {
 
 const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
+const scratchdrawParams = new DrawParams();
 const scratchMaterialParams = new MaterialParams();
-const scratchPacketParams = new PacketParams();
 
-export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams) {
+export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-    if (noViewMatrix)
-        mat4.identity(packetParams.u_PosMtx[0]);
-    else
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 }
 
-export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, noViewMatrix: boolean = false, materialParams: MaterialParams, packetParams: PacketParams): void {
-    setGXMaterialOnRenderInst(device, renderInstManager, materialHelper, renderInst, viewerInput, noViewMatrix, materialParams, packetParams);
+export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
+    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, drawParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
 export class SFARenderer implements Viewer.SceneGfx {
+    protected world?: World;
+
     protected renderHelper: GXRenderHelperGfx;
     protected renderLists: SFARenderLists;
     
@@ -89,7 +94,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.renderLists = {
-            // atmosphere: new GfxRenderInstList(),
             skyscape: new GfxRenderInstList(),
             world: nArray(3, () => new GfxRenderInstList()),
             waters: new GfxRenderInstList(),
@@ -121,6 +125,10 @@ export class SFARenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(1 / 3); // Slow down the default camera a bit
     }
 
+    public getDefaultWorldMatrix(dst: mat4) {
+        mat4.fromYRotation(dst, -Math.PI * 3 / 4); // Aim towards the map by default
+    }
+
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         this.animController.update(viewerInput);
     }
@@ -129,8 +137,10 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, sceneCtx: SceneRenderContext) {}
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
+    protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
 
-    private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sourceColorResolveTextureID: number, sourceDepthTargetID: number, sceneCtx: SceneRenderContext) {        // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
+    private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sourceColorResolveTextureID: GfxrResolveTextureID, sourceDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
+        // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
         // to obtain a local SceneParams buffer
         const template = this.renderHelper.pushTemplateRenderInst();
 
@@ -177,22 +187,20 @@ export class SFARenderer implements Viewer.SceneGfx {
         if (this.heatShimmerMaterial === undefined)
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
 
-        const matCtx = {
+        const matCtx: MaterialRenderContext = {
             sceneCtx,
-            modelViewMtx: mat4.create(),
-            invModelViewMtx: mat4.create(),
+            worldToViewMtx: mat4.create(),
+            viewToWorldMtx: mat4.create(),
+            modelToViewMtx: mat4.create(),
+            viewToModelMtx: mat4.create(),
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
             furLayer: 0,
         };
-        this.heatShimmerMaterial!.setupMaterialParams(scratchMaterialParams, matCtx);
-        for (let i = 0; i < 8; i++) {
-            const tex = this.heatShimmerMaterial!.getTexture(i);
-            if (tex !== undefined)
-                tex.setOnTextureMapping(scratchMaterialParams.m_TextureMapping[i], matCtx);
-            else
-                scratchMaterialParams.m_TextureMapping[i].reset();
-        }
-        setGXMaterialOnRenderInst(device, renderInstManager, this.heatShimmerMaterial!.getGXMaterialHelper(), renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
+        this.heatShimmerMaterial!.setOnMaterialParams(scratchMaterialParams, matCtx);
+
+        scratchdrawParams.clear();
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchdrawParams);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 
@@ -221,19 +229,53 @@ export class SFARenderer implements Viewer.SceneGfx {
         });
     }
 
-    private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+    private blurFilter?: BlurFilter;
+
+    private blurTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
+        if (this.blurFilter === undefined)
+            this.blurFilter = new BlurFilter(this.renderHelper.getCache());
+
+        return this.blurFilter.render(builder, renderInstManager, this.mainColorDesc.width, this.mainColorDesc.height,
+            () => {
+                return this.temporalTexture.getTextureForSampling();
+            }
+        );
+    }
+
+    protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {}
+    protected resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {}
+
+    private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
+        this.addWorldRenderPassesInner(device, builder, renderInstManager, sceneCtx);
+
+        let blurTargetID: GfxrRenderTargetID | undefined;
+        if (renderLists.world[0].hasLateSamplerBinding('temporal-texture-downscale-8x'))
+            blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
+
         builder.pushPass((pass) => {
             pass.setDebugName('World Opaques');
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                // TODO: downscale temporal texture by 8x and/or apply blur
-                this.temporalTextureMapping.gfxTexture = this.temporalTexture.getTextureForSampling();
-                renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
 
-                renderInstManager.drawListOnPassRenderer(renderLists.world[0], passRenderer);
-                renderInstManager.drawListOnPassRenderer(renderLists.furs, passRenderer);
+            let blurResolveID: GfxrResolveTextureID;
+            if (blurTargetID !== undefined) {
+                blurResolveID = builder.resolveRenderTarget(blurTargetID);
+                pass.attachResolveTexture(blurResolveID);
+            }
+
+            this.attachResolveTexturesForWorldOpaques(builder, pass);
+
+            pass.exec((passRenderer, scope) => {
+                if (blurTargetID !== undefined) {
+                    this.temporalTextureMapping.gfxTexture = scope.getResolveTextureForID(blurResolveID);
+                    renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
+                }
+
+                this.resolveLateSamplerBindingsForWorldOpaques(renderLists.world[0], scope);
+
+                renderLists.world[0].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.furs.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -253,9 +295,9 @@ export class SFARenderer implements Viewer.SceneGfx {
                 this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 renderLists.waters.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
 
-                renderInstManager.drawListOnPassRenderer(renderLists.waters, passRenderer);
-                renderInstManager.drawListOnPassRenderer(renderLists.world[1], passRenderer);
-                renderInstManager.drawListOnPassRenderer(renderLists.world[2], passRenderer);
+                renderLists.waters.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.world[1].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.world[2].drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
     }
@@ -274,6 +316,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         const sceneCtx: SceneRenderContext = {
             viewerInput,
             animController: this.animController,
+            world: this.world,
         };
 
         this.addSkyRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
@@ -296,6 +339,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.addWorldRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
         if (this.enableHeatShimmer)
             this.addHeatShimmerRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
+            
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
@@ -316,6 +361,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.materialFactory.destroy(device);
         this.renderHelper.destroy();
         this.temporalTexture.destroy(device);
     }

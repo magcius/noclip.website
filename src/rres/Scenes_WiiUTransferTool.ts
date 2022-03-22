@@ -34,7 +34,7 @@ class BgStage {
         this.duration = duration !== null ? duration : Math.max(this.scn0.duration, 60);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): boolean {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, isPaused: boolean): boolean {
         this.modelAnimationController.setTimeFromViewerInput(viewerInput);
         this.scn0AnimationController.setTimeFromViewerInput(viewerInput);
         this.scn0AnimationController.quantizeTimeToFPS();
@@ -45,8 +45,10 @@ class BgStage {
             this.isStarting = false;
         }
 
-        this.scn0Animator.calcCameraPositionAim(viewerInput.camera, 0);
-        this.scn0Animator.calcCameraProjection(viewerInput.camera, 0);
+        if (!isPaused) {
+            this.scn0Animator.calcCameraPositionAim(viewerInput.camera, 0);
+            this.scn0Animator.calcCameraProjection(viewerInput.camera, 0);
+        }
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
@@ -60,14 +62,14 @@ class BgStage {
 
 class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx {
     public textureHolder = new RRESTextureHolder();
-    public isInteractive = false;
 
     private stages: BgStage[] = [];
     private currentStage: number = 0;
 
-    constructor(device: GfxDevice, modelCommon: BRRES.RRES, modelWii: BRRES.RRES, modelWiiU: BRRES.RRES) {
-        super(device);
+    constructor(private context: SceneContext, modelCommon: BRRES.RRES, modelWii: BRRES.RRES, modelWiiU: BRRES.RRES) {
+        super(context.device);
 
+        const device = context.device;
         this.textureHolder.addRRESTextures(device, modelCommon);
         this.textureHolder.addRRESTextures(device, modelWii);
         this.textureHolder.addRRESTextures(device, modelWiiU);
@@ -115,7 +117,11 @@ class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx
     public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
-        const isFinished = this.stages[this.currentStage].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        // Change interactivity based on whether we're paused or not...
+        const isPaused = viewerInput.deltaTime === 0;
+        this.context.inputManager.isInteractive = isPaused;
+
+        const isFinished = this.stages[this.currentStage].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, isPaused);
         if (isFinished) {
             this.currentStage = (this.currentStage + 1) % this.stages.length;
             this.stages[this.currentStage].isStarting = true;
@@ -153,7 +159,7 @@ class WiiUTransferToolSceneDesc implements SceneDesc {
         if (!IS_DEVELOPMENT)
             await loadYouTubeMusic(context.uiContainer, `XLtMQuZbecA`);
 
-        return new WiiUTransferToolRenderer(device, modelCommon, modelWii, modelWiiU);
+        return new WiiUTransferToolRenderer(context, modelCommon, modelWii, modelWiiU);
     }
 }
 

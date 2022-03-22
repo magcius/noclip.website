@@ -38,6 +38,8 @@ const enum PartType {
 };
 
 export interface Part {
+    areaID: string;
+
     name: string;
     type: PartType;
     modelIndex: number;
@@ -46,6 +48,26 @@ export interface Part {
     scale: vec3;
     drawGroupBitMap: BitMap;
     dispGroupBitMap: BitMap;
+
+    entityID: number;
+    lightID: number;
+    fogID: number;
+    scatterID: number;
+    lensFlareID: number;
+    shadowID: number;
+    dofID: number;
+    toneMapID: number;
+    toneCorrectID: number;
+    lanternID: number;
+    lodParamID: number;
+    partsBaseUnk0ID: number;
+    isShadowSrc: boolean;
+    isShadowDst: boolean;
+    isShadowOnly: boolean;
+    drawInReflect: boolean;
+    drawOnlyReflect: boolean;
+    isUseDepthBiasFloat: boolean;
+    disablePointLight: boolean;
 }
 
 export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
@@ -56,6 +78,8 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
     assert(view.getUint32(paramTableIdx + 0x00, true) == 0);
     assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) == 'MODEL_PARAM_ST');
     const modelTableCount = view.getUint32(paramTableIdx + 0x08, true) - 1;
+
+    const areaID = mapID.slice(0, 3); // "m10"
 
     let modelTableIdx = paramTableIdx + 0x0C;
     const models: Model[] = [];
@@ -74,8 +98,8 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
         const instanceCount = view.getUint32(modelOffs + 0x10, true);
 
         const mapIDBase = mapID.slice(0, 6); // "m10_00"
-        const mapIDFirstPart = mapIDBase.slice(1, 3);
-        const flverPath = `/map/${mapIDBase}_00_00/${name}A${mapIDFirstPart}.flver.dcx`;
+        const aid = `A${mapID.slice(1, 3)}`;
+        const flverPath = `/map/${mapIDBase}_00_00/${name}${aid}.flver.dcx`;
 
         models.push({ name, type, id, filename, flverPath });
 
@@ -118,22 +142,23 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
     function readPart(offs: number): Part {
         const baseOffs = offs;
 
-        const nameOffs = view.getUint32(offs, true);
+        const nameOffs = view.getUint32(offs + 0x00, true);
         offs += 0x04;
         const name = readString(buffer, baseOffs + nameOffs, -1, true);
 
-        const type = view.getUint32(offs, true);
+        const type = view.getUint32(offs + 0x00, true);
         offs += 0x04;
 
         // An index into a group of things, but which things?
-        const unkIdx = view.getUint32(offs, true);
+        const index = view.getUint32(offs + 0x00, true);
         offs += 0x04;
 
-        const modelIndex = view.getUint32(offs, true);
+        const modelIndex = view.getUint32(offs + 0x00, true);
         offs += 0x04;
 
-        const unk2 = view.getUint32(offs, true);
+        const placeholderModelOffs = view.getUint32(offs + 0x00, true);
         offs += 0x04;
+        const placeholderModel = readString(buffer, baseOffs + nameOffs, -1, true);
 
         function readVec3(): vec3 {
             const x = view.getFloat32(offs + 0x00, true);
@@ -165,7 +190,37 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
         const dispGroupBitMap = new BitMap(128);
         dispGroupBitMap.setWords([dispGroup1, dispGroup2, dispGroup3, dispGroup4]);
 
-        return { name, type, modelIndex, translation, rotation, scale, drawGroupBitMap, dispGroupBitMap };
+        const drawDataOffs = baseOffs + view.getUint32(offs + 0x00, true);
+        const subtypeDataOffs = baseOffs + view.getUint32(offs + 0x04, true);
+        offs += 0x08;
+
+        const entityID = view.getInt32(drawDataOffs + 0x00, true);
+        const lightID = view.getInt8(drawDataOffs + 0x04);
+        const fogID = view.getInt8(drawDataOffs + 0x05);
+        const scatterID = view.getInt8(drawDataOffs + 0x06);
+        const lensFlareID = view.getInt8(drawDataOffs + 0x07);
+        const shadowID = view.getInt8(drawDataOffs + 0x08);
+        const dofID = view.getInt8(drawDataOffs + 0x09);
+        const toneMapID = view.getInt8(drawDataOffs + 0x0A);
+        const toneCorrectID = view.getInt8(drawDataOffs + 0x0B);
+        const lanternID = view.getInt8(drawDataOffs + 0x0C);
+        const lodParamID = view.getInt8(drawDataOffs + 0x0D);
+        const partsBaseUnk0ID = view.getInt8(drawDataOffs + 0x0E);
+        const isShadowSrc = !!view.getUint8(drawDataOffs + 0x0F);
+        const isShadowDst = !!view.getUint8(drawDataOffs + 0x10);
+        const isShadowOnly = !!view.getUint8(drawDataOffs + 0x11);
+        const drawInReflect = !!view.getUint8(drawDataOffs + 0x12);
+        const drawOnlyReflect = !!view.getUint8(drawDataOffs + 0x13);
+        const isUseDepthBiasFloat = !!view.getUint8(drawDataOffs + 0x14);
+        const disablePointLight = !!view.getUint8(drawDataOffs + 0x15);
+
+        return { areaID,
+            name, type, modelIndex, translation, rotation, scale, drawGroupBitMap, dispGroupBitMap,
+            entityID, lightID, fogID, scatterID, lensFlareID, shadowID, dofID, toneMapID, toneCorrectID,
+            lanternID, lodParamID, partsBaseUnk0ID,
+            isShadowSrc, isShadowDst, isShadowOnly, drawInReflect, drawOnlyReflect, isUseDepthBiasFloat,
+            disablePointLight,
+        };
     }
 
     let partsTableIdx = paramTableIdx + 0x0C;

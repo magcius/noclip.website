@@ -55,30 +55,32 @@ export const enum TextureFormat {
     R5G6B5,
     A8,
     L8,
-    L8_2, // Why twice?
+    AL8, // Why twice?
     DXT1,
     DXT3,
     DXT5,
-    L8A8,
-    L16A16,
+    V8U8,
+    V16U16,
+    P8,
 }
 
 export function getTextureFormatName(fmt: TextureFormat): string {
     switch (fmt) {
-    case TextureFormat.B8G8R8A8: return "B8G8R8A8";
-    case TextureFormat.B8G8R8X8: return "B8G8R8X8";
-    case TextureFormat.R4G4B4A4: return "R4G4B4A4";
-    case TextureFormat.R5G5B5A1: return "R5G5B5A1";
-    case TextureFormat.R5G5B5X1: return "R5G5B5X1";
-    case TextureFormat.R5G6B5: return "R5G6B5";
-    case TextureFormat.A8: return "A8";
-    case TextureFormat.L8: return "L8";
-    case TextureFormat.L8_2: return "L8_2";
-    case TextureFormat.DXT1: return "DXT1";
-    case TextureFormat.DXT3: return "DXT3";
-    case TextureFormat.DXT5: return "DXT5";
-    case TextureFormat.L8A8: return "L8A8";
-    case TextureFormat.L16A16: return "L16A16";
+    case TextureFormat.B8G8R8A8: return "8888";
+    case TextureFormat.B8G8R8X8: return "0888";
+    case TextureFormat.R4G4B4A4: return "4444";
+    case TextureFormat.R5G5B5A1: return "1555";
+    case TextureFormat.R5G5B5X1: return "0555";
+    case TextureFormat.R5G6B5:   return "565";
+    case TextureFormat.A8:       return "A8";
+    case TextureFormat.L8:       return "L8";
+    case TextureFormat.AL8:      return "AL8";
+    case TextureFormat.DXT1:     return "DXT1";
+    case TextureFormat.DXT3:     return "DXT3";
+    case TextureFormat.DXT5:     return "DXT5";
+    case TextureFormat.V8U8:     return "V8U8";
+    case TextureFormat.V16U16:   return "V16U16";
+    case TextureFormat.P8:       return "P8";
     }
 }
 
@@ -86,16 +88,17 @@ function getTextureFormatGetBytesPerPixel(fmt: TextureFormat): number {
     switch (fmt) {
     case TextureFormat.B8G8R8A8:
     case TextureFormat.B8G8R8X8:
-    case TextureFormat.L16A16:
+    case TextureFormat.V16U16:
         return 4;
     case TextureFormat.R4G4B4A4:
     case TextureFormat.R5G5B5A1:
     case TextureFormat.R5G5B5X1:
     case TextureFormat.R5G6B5:
-    case TextureFormat.L8A8:
+    case TextureFormat.V8U8:
         return 2;
     case TextureFormat.A8:
     case TextureFormat.L8:
+    case TextureFormat.P8:
         return 1;
     default:
         throw "whoops";
@@ -112,6 +115,17 @@ function calcTextureByteSize(fmt: TextureFormat, width: number, height: number):
     default:
         return getTextureFormatGetBytesPerPixel(fmt) * width * height;
     }
+}
+
+function autoDetectMipCount(width: number, height: number): number {
+    let count = 0;
+    while (width > 0 && height > 0) {
+        count++;
+        width >>= 1;
+        height >>= 1;
+    }
+
+    return count;
 }
 
 export const enum TextureType {
@@ -139,13 +153,15 @@ export function parsePPAKTexture(buffer: ArrayBufferSlice): PPAK_Texture {
         stream.offs += 0x18;
     }
 
-    const a0 = stream.readUint32();
+    const dataId = stream.readUint32();
     const format: TextureFormat = stream.readUint32();
     const type: TextureType = stream.readUint32();
-    const v30 = stream.readUint32();
+    const flags = stream.readUint32();
     const width = stream.readUint32();
     const height = stream.readUint32();
-    const numMips = stream.readUint32();
+    let numMips = stream.readUint32();
+    if (numMips === 0)
+        numMips = autoDetectMipCount(width, height);
     stream.offs += 0x10;
 
     const mipData: ArrayBufferSlice[] = [];
@@ -204,26 +220,23 @@ function EGameTextureManager_ReadPackFile(stream: DataStream): PPAK_Texture[] {
 }
 
 function EScriptVM_ReadPackFile(stream: DataStream): void {
-    let scriptCount = stream.readUint16();
-    let v22 = 0;
+    let scriptObjectCount = stream.readUint16();
+    let scriptFilesHaveNames = 0;
 
-    if (scriptCount === 0xFCFC) {
-        v22 = stream.readUint16();
-        scriptCount = stream.readUint16();
+    if (scriptObjectCount === 0xFCFC) {
+        scriptFilesHaveNames = stream.readUint16();
+        scriptObjectCount = stream.readUint16();
     }
 
-    for (let i = 0; i < scriptCount; i++) {
+    for (let i = 0; i < scriptObjectCount; i++) {
         const name = stream.readStringStream_2b();
         const scriptSize = stream.readUint32();
         stream.offs += scriptSize;
     }
 
-    const scriptCount2 = stream.readUint16();
-    for (let i = 0; i < scriptCount2; i++) {
-        if (v22) {
-            const name = stream.readStringStream_2b();
-        }
-
+    const scriptFileCount = stream.readUint16();
+    for (let i = 0; i < scriptFileCount; i++) {
+        const filename = scriptFilesHaveNames ? stream.readStringStream_2b() : null;
         const scriptSize = stream.readUint32();
         stream.offs += scriptSize;
     }

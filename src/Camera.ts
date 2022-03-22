@@ -2,13 +2,13 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
+import { clampRange, projectionMatrixForFrustum, computeUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
-import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
+import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -49,11 +49,6 @@ export class Camera {
 
     private forceInfiniteFarPlane: boolean = false;
 
-    private webXROverrideCameraProperties: boolean = false;
-    public setWebXROverrideEnabled(enabled: boolean): void {
-        this.webXROverrideCameraProperties = enabled;
-    }
-
     public identity(): void {
         mat4.identity(this.worldMatrix);
         mat4.identity(this.viewMatrix);
@@ -86,9 +81,6 @@ export class Camera {
     }
 
     public setClipPlanes(n: number, f: number = Infinity): void {
-        if (this.webXROverrideCameraProperties) {
-            return;
-        }
         if (this.isOrthographic) {
             // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
         } else {
@@ -98,15 +90,15 @@ export class Camera {
 
     private updateClipFromWorld(): void {
         mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
-        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
     }
 
     public updateProjectionMatrix(): void {
         if (this.isOrthographic)
-            computeProjectionMatrixFromCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
+            projectionMatrixForCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
         else
-            computeProjectionMatrixFromFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
-        reverseDepthForProjectionMatrix(this.projectionMatrix);
+            projectionMatrixForFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
+        projectionMatrixReverseDepth(this.projectionMatrix);
         projectionMatrixConvertClipSpaceNearZ(this.projectionMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.updateClipFromWorld();
@@ -149,13 +141,21 @@ const scratchMat4 = mat4.create();
 const scratchQuat = quat.create();
 
 /**
- * Computes a view-space depth given @param camera and @param aabb in world-space.
+ * Computes a view-space depth given @param viewMatrix and @param aabb in world-space.
  * 
- * This is computed by taking the depth of the world-space depth of @param aabb.
+ * This is computed by taking the depth of the center of the passed-in @param aabb.
+ * 
+ * The convention of "view-space depth" is that 0 is near plane, +z is further away.
+ *
+ * The returned value is not clamped to the near or far planes -- that is, the depth
+ * value is less than zero if the camera is behind the point.
+ *
+ * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
+ * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AABB, v: vec3 = scratchVec3a): number {
+ export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4, aabb: AABB, v: vec3 = scratchVec3a): number {
     aabb.centerPoint(v);
-    return computeViewSpaceDepthFromWorldSpacePoint(camera, v);
+    return computeViewSpaceDepthFromWorldSpacePoint(viewMatrix, v);
 }
 
 /**
@@ -169,24 +169,9 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
- export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
+ export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
     transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
-}
-
-/**
- * Computes a view-space depth given @param camera and @param v in world-space.
- * 
- * The convention of "view-space depth" is that 0 is near plane, +z is further away.
- *
- * The returned value is not clamped to the near or far planes -- that is, the depth
- * value is less than zero if the camera is behind the point.
- *
- * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
- * which will clamp if the value is below 0.
- */
-export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: ReadonlyVec3, v_ = scratchVec3a): number {
-    return computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(camera.viewMatrix, v);
 }
 
 export function divideByW(dst: vec4, src: ReadonlyVec4): void {
@@ -309,6 +294,17 @@ export interface CameraControllerClass {
 
 // Movement speeds have been designed for a 60fps experience.
 const FPS = 1000/60;
+
+function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
+    // Quantize to nearest world axis.
+    const x = m[0], y = m[1], z = m[2], speed = vec3.length(m);
+    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > Math.abs(z))
+        vec3.set(dst, speed * Math.sign(x), 0, 0);
+    else if (Math.abs(y) > Math.abs(x) && Math.abs(y) > Math.abs(z))
+        vec3.set(dst, 0, speed * Math.sign(y), 0);
+    else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
+        vec3.set(dst, 0, 0, speed * Math.sign(z));
+}
 
 export class FPSCameraController implements CameraController {
     public camera: Camera;
@@ -513,67 +509,45 @@ export class FPSCameraController implements CameraController {
 }
 
 export class StudioCameraController extends FPSCameraController {
-    private isAnimationPlaying: boolean = false;
+    public isAnimationPlaying: boolean = false;
     private interpStep: InterpolationStep = new InterpolationStep();
-    /**
-     * Indicates if the camera is currently positioned on a keyframe's end position.
-     */
-    private isOnKeyframe: boolean = false;
 
-    constructor(private animationManager: CameraAnimationManager) {
+    constructor(private animationManager: CameraAnimationManager, private studioPanel: StudioPanel) {
         super();
     }
 
-    public update(inputManager: InputManager, dt: number): CameraUpdateResult {
+    public override update(inputManager: InputManager, dt: number): CameraUpdateResult {
         let result;
+
         if (this.isAnimationPlaying) {
             result = this.updateAnimation(dt);
             if (result === CameraUpdateResult.Changed) {
                 mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
                 this.camera.worldMatrixUpdated();
             }
-            if (inputManager.isKeyDownEventTriggered('Escape')) {
-                this.stopAnimation();
-            }
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
-            if (!this.isOnKeyframe && inputManager.isKeyDownEventTriggered('Enter')) {
-                this.animationManager.addNextKeyframe(mat4.clone(this.camera.worldMatrix));
-                this.isOnKeyframe = true;
-            }
-            if (inputManager.isKeyDownEventTriggered('Escape')) {
-                this.animationManager.endEditKeyframePosition();
-            }
             result = super.update(inputManager, dt);
-            if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged) {
-                this.isOnKeyframe = false;
-            }
+
+            this.studioPanel.drawWorldHelpers(this.camera.clipFromWorldMatrix);
         }
 
         return result;
     }
 
     public updateAnimation(dt: number): CameraUpdateResult {
-        if (this.animationManager.isKeyframeFinished()) {
-            if (this.animationManager.playbackHasNextKeyframe())
-                this.animationManager.playbackAdvanceKeyframe();
-            else
-                this.stopAnimation();
+        if (this.animationManager.isAnimationFinished()) {
+            this.studioPanel.stopAnimation();
             return CameraUpdateResult.Unchanged;
         }
 
-        if (this.animationManager.interpFinished()) {
-            // The interpolation is finished, but this keyframe still has a hold duration to complete.
-            this.animationManager.update(dt);
-            return CameraUpdateResult.Unchanged;
-        } else {
-            this.animationManager.update(dt);
-            this.animationManager.playbackInterpolationStep(this.interpStep);
-            mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
-            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
-            return CameraUpdateResult.Changed;
-        }
+        this.animationManager.updateElapsedTime(dt);
+        this.animationManager.getAnimFrame(this.interpStep);
+        mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
+        mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
+        this.studioPanel.onAnimationAdvance(this.animationManager.getElapsedTimeSeconds());
+        return CameraUpdateResult.Changed;
     }
 
     public setToPosition(setStep: InterpolationStep): void {
@@ -581,17 +555,6 @@ export class StudioCameraController extends FPSCameraController {
         mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, setStep.bank);
         mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
         this.camera.worldMatrixUpdated();
-        this.isOnKeyframe = true;
-    }
-
-    public playAnimation(startStep: InterpolationStep) {
-        this.isAnimationPlaying = true;
-        this.setToPosition(startStep);
-    }
-
-    public stopAnimation() {
-        this.isAnimationPlaying = false;
-        this.animationManager.fireStoppedEvent();
     }
 
 }
@@ -604,19 +567,18 @@ export class XRCameraController {
     public worldScale: number = 70; // Roughly the size of Banjo in Banjo Kazooie
 
     public update(webXRContext: WebXRContext): boolean {
-        let updated = false;
-
         if (!webXRContext.xrSession)
             return false;
 
         const inputSources = webXRContext.xrSession.inputSources;
 
         const cameraMoveSpeed = this.worldScale;
-        const keyMovement = vec3.create();
+        const keyMovement = scratchVec3a;
+        vec3.zero(keyMovement);
         if (inputSources.length > 0) {
             for (let i = 0; i < inputSources.length; i++) {
                 const gamepad = inputSources[i].gamepad;
-                if (gamepad && gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
+                if (gamepad && gamepad.axes.length >= 4 && gamepad.buttons.length >= 2) {
                     keyMovement[0] = gamepad.axes[2] * cameraMoveSpeed;
                     keyMovement[1] = (gamepad.buttons[0].value - gamepad.buttons[1].value) * cameraMoveSpeed;
                     keyMovement[2] = gamepad.axes[3] * cameraMoveSpeed;
@@ -624,8 +586,9 @@ export class XRCameraController {
             }
         }
 
+        let updated = false;
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {            
-            const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
+            const viewMovementSpace = webXRContext.xrViewerSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
                     new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
             const pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
@@ -684,16 +647,12 @@ export class XRCameraController {
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
 
             // Extract camera properties
+            // TODO(jstpierre): Just trust the original projection matrix
             camera.fovY = fov;
             camera.aspect = aspect;
-            camera.setWebXROverrideEnabled(false);
-            camera.setClipPlanes(5);
-            camera.setWebXROverrideEnabled(true);
 
-            // TODO WebXR: We do this to restore the components removed by setClipPlanes.
-            // The camera class ideally should generate the projection matrix taking these components into account
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
-            reverseDepthForProjectionMatrix(camera.projectionMatrix);
+            projectionMatrixReverseDepth(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();
 
@@ -829,10 +788,10 @@ export class OrbitCameraController implements CameraController {
             const kSpringZ = 0.1;
             this.z += zTargetDelta * kSpringZ;
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
+            getMatrixAxisX(scratchVec3a, this.camera.worldMatrix);
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel);
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
+            getMatrixAxisY(scratchVec3a, this.camera.worldMatrix);
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel);
 
             const eyePos = scratchVec3a;
@@ -862,9 +821,9 @@ export class OrthoCameraController implements CameraController {
 
     public x: number = -Math.PI / 2;
     public y: number = 2;
-    public z: number = 200;
+    public z: number = -200;
+    public zTarget: number = -200;
     public orbitSpeed: number = -0.05;
-    public zVel: number = 0;
     public xTarget: number = this.x;
     public yTarget: number = this.y;
 
@@ -872,13 +831,16 @@ export class OrthoCameraController implements CameraController {
     public txVel: number = 0;
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
-    private farPlane = 100000;
+    private farPlane = 500000;
     private nearPlane = -this.farPlane;
+
+    private sceneMoveSpeedMult = 1;
 
     constructor() {
     }
 
     public setSceneMoveSpeedMult(v: number): void {
+        this.sceneMoveSpeedMult = v;
     }
 
     public cameraUpdateForced(): void {
@@ -939,8 +901,8 @@ export class OrthoCameraController implements CameraController {
 
         // Get new velocities from inputs.
         if (!!(inputManager.buttons & 4)) {
-            this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
-            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
+            this.txVel += inputManager.dx * (-10 - Math.min(-this.z, 0.01)) / -5000;
+            this.tyVel += inputManager.dy * (-10 - Math.min(-this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
             this.xTarget += inputManager.dx / 200 * invertXMult;
             this.yTarget += inputManager.dy / 200 * invertYMult;
@@ -948,12 +910,15 @@ export class OrthoCameraController implements CameraController {
             this.xTarget += this.orbitSpeed * 1/25;
         }
 
-        let zAccel = inputManager.dz * -1;
+        let zTargetAdjAmt = inputManager.dz * 80.0;
         if (inputManager.isKeyDown('KeyQ'))
-            zAccel += 1.0;
+            zTargetAdjAmt -= 80.0;
         if (inputManager.isKeyDown('KeyE'))
-            zAccel -= 1.0;
-        this.zVel += zAccel;
+            zTargetAdjAmt += 80.0;
+        this.zTarget += zTargetAdjAmt * this.sceneMoveSpeedMult;
+        if (this.zTarget > -10)
+            this.zTarget = -10;
+        let zTargetDelta = this.zTarget - this.z;
 
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
         if (!isShiftPressed) {
@@ -985,7 +950,7 @@ export class OrthoCameraController implements CameraController {
         this.xTarget = this.xTarget % MathConstants.TAU;
         this.yTarget = this.yTarget % MathConstants.TAU;
 
-        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || zTargetDelta !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             this.x = lerpAngle(this.x, this.xTarget, 0.1);
             this.y = lerpAngle(this.y, this.yTarget, 0.1);
@@ -995,19 +960,14 @@ export class OrthoCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += this.zVel;
-            if (zAccel === 0)
-                this.zVel *= drag * 0.98;
-            if (this.z < 1) {
-                this.z = 1;
-                this.zVel = 0;
-            }
+            const kSpringZ = 0.1;
+            this.z += zTargetDelta * kSpringZ;
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * -this.z);
+            getMatrixAxisX(scratchVec3a, this.camera.worldMatrix);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * this.z);
 
-            vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
-            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * -this.z);
+            getMatrixAxisY(scratchVec3a, this.camera.worldMatrix);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * this.z);
 
             this.forceUpdate = false;
         }
@@ -1019,7 +979,7 @@ export class OrthoCameraController implements CameraController {
         vec3.add(eyePos, eyePos, this.translation);
         mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, Vec3UnitY);
         mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
-        this.camera.setOrthographic(this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
+        this.camera.setOrthographic(-this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
         this.camera.worldMatrixUpdated();
 
         return updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;

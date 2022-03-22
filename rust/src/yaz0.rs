@@ -16,7 +16,7 @@
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 use std::convert::TryInto;
 

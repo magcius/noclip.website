@@ -4,7 +4,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/rend
 import { ViewerRenderInput } from "../viewer";
 import { FlipbookRenderer, MovementController, FlipbookData, GeometryData, SpawnedObjects, BKLayer } from "./render";
 import { nArray, hexzero } from "../util";
-import { MathConstants, lerp } from "../MathHelpers";
+import { MathConstants, lerp, randomRange } from "../MathHelpers";
 import { FlipbookMode } from "./flipbook";
 import { LavaRock, SnowballChunk } from "./actors";
 
@@ -23,10 +23,6 @@ const enum MotionType {
     Projectile,
     StopOnCollision,
     BounceOnCollision,
-}
-
-export function randomRange(a: number, b = -a): number {
-    return lerp(a, b, Math.random());
 }
 
 // particle graphics mostly start at 0x700, number indices from there
@@ -229,7 +225,7 @@ export class Emitter extends BaseEmitter<Particle>{
         super()
     }
 
-    public init(manager: EmitterManager, particle: Particle): void {
+    public override init(manager: EmitterManager, particle: Particle): void {
         particle.parent = this;
         particle.init(manager, this.type, this.modelMatrix, this.sparkleColor);
     }
@@ -272,7 +268,7 @@ export class Sparkler extends Emitter {
         super(ParticleType.Sparkle, sparkleColor);
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+    public override update(manager: EmitterManager, time: number, deltaSeconds: number): void {
         // Poisson process in this time interval, assuming base rate is for a 30 fps frame
         this.emitCount = Math.random() > Math.exp(-this.sparkleRate * deltaSeconds * 30) ? 1 : 0;
         super.update(manager, time, deltaSeconds);
@@ -286,7 +282,7 @@ export class StreamEmitter extends Emitter {
         super(type);
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+    public override update(manager: EmitterManager, time: number, deltaSeconds: number): void {
         if (this.active)
             this.emitCount += this.emitRate * deltaSeconds;
         super.update(manager, time, deltaSeconds);
@@ -648,7 +644,7 @@ export class ConfigurableEmitter extends Emitter {
         p.modelMatrix[14] += configScratch[2];
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+    public override update(manager: EmitterManager, time: number, deltaSeconds: number): void {
         if (this.active) {
             if (this.config.frameChance > 0) {
                 this.emitCount = Math.random() > Math.exp(-this.config.frameChance * deltaSeconds * 30) ? 1 : 0;
@@ -667,7 +663,7 @@ export class WaterfallEmitter extends ConfigurableEmitter {
         super(waterfallConfig);
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
+    public override update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
         return false;
     }
 }
@@ -677,7 +673,7 @@ export class ScaledEmitter extends ConfigurableEmitter {
         super(config);
     }
 
-    public initParticle(manager: EmitterManager, p: Particle): void {
+    public override initParticle(manager: EmitterManager, p: Particle): void {
         this.config.initParticle(configScratch, manager, p);
 
         vec3.scale(configScratch, configScratch, this.scale);
@@ -695,7 +691,7 @@ export class ScaledEmitter extends ConfigurableEmitter {
 
 export class JumpPadEmitter extends ConfigurableEmitter {
     private yellow = false; // alternate yellow and green, game has two emitters
-    public initParticle(manager: EmitterManager, p: Particle): void {
+    public override initParticle(manager: EmitterManager, p: Particle): void {
         super.initParticle(manager, p);
         if (this.yellow) {
             p.flipbook.primColor[0] = 1;
@@ -713,7 +709,7 @@ export class MultiEmitter extends ConfigurableEmitter {
         super(config);
     }
 
-    public emit(manager: EmitterManager): boolean {
+    public override emit(manager: EmitterManager): boolean {
         for (let i = 0; i < this.sprites.length; i++) {
             this.config.spriteIndex = this.sprites[i];
             if (!super.emit(manager))
@@ -742,14 +738,14 @@ export class LavaRockEmitter extends BaseEmitter<LavaRock> {
         mat4.fromTranslation(this.modelMatrix, pos);
     }
 
-    public update(manager: BaseEmitterManager<LavaRock>, time: number, deltaSeconds: number): void {
+    public override update(manager: BaseEmitterManager<LavaRock>, time: number, deltaSeconds: number): void {
         const shouldEmit = Math.random() > Math.exp(-.1 * deltaSeconds * 30);
         if (shouldEmit && this.ready)
             this.emitCount = 1;
         super.update(manager, time, deltaSeconds);
     }
 
-    public init(manager: BaseEmitterManager<LavaRock>, rock: LavaRock): void {
+    public override init(manager: BaseEmitterManager<LavaRock>, rock: LavaRock): void {
         this.ready = false;
         let target = this.modelMatrix;
         const bigRock = Math.random() > .5;
@@ -764,7 +760,7 @@ export class LavaRockEmitter extends BaseEmitter<LavaRock> {
 }
 
 export class SnowballChunkEmitter extends BaseEmitter<SnowballChunk> {
-    public init(manager: BaseEmitterManager<SnowballChunk>, chunk: SnowballChunk): void {
+    public override init(manager: BaseEmitterManager<SnowballChunk>, chunk: SnowballChunk): void {
         chunk.init(this.modelMatrix);
     }
 }

@@ -1294,7 +1294,7 @@ export class EventScript {
                 if ((c.flags & ControllerFlags.DONE) === 0)
                     vec3.copy(c.position.prevPos, c.position.pos);
                 return 0;
-            } case 0x0017: {
+            } case 0x0016: {
                 const speed = c.stack.pop();
                 c.motions[c.currThread].startSpeed = speed;
                 return speed;

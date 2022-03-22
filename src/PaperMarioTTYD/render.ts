@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, DrawParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -15,7 +15,7 @@ import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
@@ -38,7 +38,7 @@ export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
@@ -46,7 +46,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -59,7 +59,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -77,8 +77,8 @@ class BackgroundBillboardRenderer {
     private textureMappings = nArray(1, () => new TextureMapping());
     public scroll: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
-        this.gfxProgram = device.createProgram(this.program);
+    constructor(cache: GfxRenderCache, public textureHolder: TPLTextureHolder, public textureName: string) {
+        this.gfxProgram = cache.createProgram(this.program);
         // Fill texture mapping.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
@@ -112,7 +112,6 @@ class BackgroundBillboardRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -134,9 +133,9 @@ class MaterialInstance {
             return MaterialInstance.translateSampler(device, cache, sampler);
         });
 
-        this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
+        this.isTranslucent = material.materialLayer === MaterialLayer.Blend;
 
-        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
+        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.AlphaTest;
     }
 
     public setMaterialHacks(materialHacks: GXMaterialHacks): void {
@@ -145,15 +144,15 @@ class MaterialInstance {
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
         switch (materialLayer) {
-        case MaterialLayer.OPAQUE:
+        case MaterialLayer.Opaque:
             return GfxRendererLayer.OPAQUE;
-        case MaterialLayer.OPAQUE_PUNCHTHROUGH:
+        case MaterialLayer.OpaquePunchthrough:
             return GfxRendererLayer.OPAQUE + 1;
-        case MaterialLayer.ALPHA_TEST:
+        case MaterialLayer.AlphaTest:
             return GfxRendererLayer.ALPHA_TEST;
-        case MaterialLayer.ALPHA_TEST_PUNCHTHROUGH:
+        case MaterialLayer.AlphaTestPunchthrough:
             return GfxRendererLayer.ALPHA_TEST + 1;
-        case MaterialLayer.BLEND:
+        case MaterialLayer.Blend:
             return GfxRendererLayer.TRANSLUCENT;
         }
     }
@@ -224,7 +223,7 @@ class MaterialInstance {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
 
@@ -237,8 +236,8 @@ class BatchInstance {
         this.shapeHelper.setOnRenderInst(renderInst);
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
-        materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
+        materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -248,13 +247,13 @@ class BatchInstance {
 }
 
 function fillDebugColorFromCollisionFlags(dst: Color, flags: CollisionFlags): void {
-    if (!!(flags & CollisionFlags.WALK_SLOW)) {
+    if (!!(flags & CollisionFlags.WalkSlow)) {
         colorFromRGBA(dst, 0.0, 0.0, 1.0);
-    } else if (!!(flags & CollisionFlags.HAZARD_RESPAWN_ENABLED)) {
+    } else if (!!(flags & CollisionFlags.HazardRespawnEnabled)) {
         colorFromRGBA(dst, 0.0, 1.0, 0.0);
     } else if (!!(flags & 0x200000)) {
         colorFromRGBA(dst, 1.0, 0.0, 1.0);
-    } else if (flags !== 0) {
+    } else if (flags !== CollisionFlags.None) {
         colorFromRGBA(dst, 1.0, 0.0, 0.0);
     } else {
         colorFromRGBA(dst, 1.0, 1.0, 1.0);
@@ -282,7 +281,7 @@ class NodeInstance {
 
     constructor(public node: SceneGraphNode, parentNamePath: string, private childIndex: number) {
         this.namePath = `${parentNamePath}/${node.nameStr}`;
-        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IS_DECAL);
+        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IsDecal);
         this.megaStateFlags = Object.assign({}, this.node.renderFlags);
     }
 
@@ -312,7 +311,7 @@ class NodeInstance {
             this.children[i].updateModelMatrix(scratchMatrix);
 
         scratchAABB.transform(this.node.bbox, scratchMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, scratchAABB);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, scratchAABB);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
@@ -334,9 +333,9 @@ class NodeInstance {
                 const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, viewerInput.camera.clipSpaceNearZ);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, camera.clipSpaceNearZ);
                 sceneParams.u_Projection[10] *= depthBias;
-                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
                 fillSceneParamsData(d, offs, sceneParams);
             }
         }
@@ -367,7 +366,7 @@ class NodeInstance {
             samplers: [],
             texMtx: [],
             matColorReg: White,
-            materialLayer: MaterialLayer.BLEND,
+            materialLayer: MaterialLayer.Blend,
             name: "Collision",
             gxMaterial: mb.finish(),
         };
@@ -541,7 +540,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         // this.playAllAnimations();
 
         if (backgroundTextureName !== null)
-            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
+            this.backgroundRenderer = new BackgroundBillboardRenderer(this.getCache(), textureHolder, backgroundTextureName);
     }
 
     public spawnMOBJ(mobjName: string, animPoseName: string): MOBJ {
@@ -655,7 +654,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         return [renderHacksPanel];
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
 
         this.bufferCoalescer.destroy(device);

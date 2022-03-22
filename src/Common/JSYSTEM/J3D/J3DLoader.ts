@@ -14,7 +14,7 @@ import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
-import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
+import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8, White, TransparentBlack } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
 import { quatFromEulerRadians } from '../../../MathHelpers';
 
@@ -607,7 +607,7 @@ export interface MAT3 {
     materialEntries: MaterialEntry[];
 }
 
-export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number): void {
+export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number): void {
     const theta = rotation * Math.PI;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
@@ -631,12 +631,12 @@ export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotat
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
+    dst[4]  = scaleS *  sinR;
     dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
 
-    dst[4]  = scaleS *  sinR;
+    dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1.0;
 }
 
 function readColorU8(view: DataView, srcOffs: number): Color {
@@ -711,26 +711,26 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const colorMatRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
-            const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
-            const matColorReg = readColorU8(view, matColorOffs);
-            colorMatRegs[j] = matColorReg;
+            if (matColorIndex !== 0xFFFF)
+                colorMatRegs.push(readColorU8(view, materialColorTableOffs + matColorIndex * 0x04));
+            else
+                colorMatRegs.push(White);
         }
 
         const colorAmbRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
-            const ambColorOffs = ambientColorTableOffs + ambColorIndex * 0x04;
-            const ambColorReg = readColorU8(view, ambColorOffs);
-            colorAmbRegs[j] = ambColorReg;
+            if (ambColorIndex !== 0xFFFF)
+                colorAmbRegs.push(readColorU8(view, ambientColorTableOffs + ambColorIndex * 0x04));
+            else
+                colorAmbRegs.push(White);
         }
 
         const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanNumIndex);
         const lightChannels: GX_Material.LightChannelControl[] = [];
         for (let j = 0; j < lightChannelCount; j++) {
-            const colorChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 0) * 0x02));
-            const colorChannel = readColorChannel(colorChanTableOffs, colorChannelIndex);
-            const alphaChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 1) * 0x02));
-            const alphaChannel = readColorChannel(colorChanTableOffs, alphaChannelIndex);
+            const colorChannel = readColorChannel(view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 0) * 0x02));
+            const alphaChannel = readColorChannel(view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 1) * 0x02));
             lightChannels.push({ colorChannel, alphaChannel });
         }
 
@@ -788,31 +788,31 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         }
         */
 
-       let textureIndexTableIdx = materialEntryIdx + 0x84;
-       const textureIndexes = [];
-       for (let j = 0; j < 8; j++) {
-           const textureTableIndex = view.getInt16(textureIndexTableIdx);
-           if (textureTableIndex >= 0) {
-               const textureIndex = view.getUint16(textureTableOffs + textureTableIndex * 0x02);
-               textureIndexes.push(textureIndex);
-           } else {
-               textureIndexes.push(-1);
-           }
-           textureIndexTableIdx += 0x02;
-       }
+        const textureIndexes = [];
+        for (let j = 0; j < 8; j++) {
+            const textureTableIndex = view.getUint16(materialEntryIdx + 0x84 + j * 0x02);
+            if (textureTableIndex !== 0xFFFF)
+                textureIndexes.push(view.getUint16(textureTableOffs + textureTableIndex * 0x02));
+            else
+                textureIndexes.push(-1);
+        }
 
         const colorConstants: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
-            const color = readColorU8(view, colorConstantTableOffs + colorIndex * 0x04);
-            colorConstants.push(color);
+            if (colorIndex !== 0xFFFF)
+                colorConstants.push(readColorU8(view, colorConstantTableOffs + colorIndex * 0x04));
+            else
+                colorConstants.push(White);
         }
 
         const colorRegisters: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
-            const color = readColorS16(view, colorRegisterTableOffs + colorIndex * 0x08);
-            colorRegisters.push(color);
+            if (colorIndex !== 0xFFFF)
+                colorRegisters.push(readColorS16(view, colorRegisterTableOffs + colorIndex * 0x08));
+            else
+                colorRegisters.push(TransparentBlack);
         }
 
         const indTexStages: GX_Material.IndTexStage[] = [];
@@ -883,7 +883,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const alphaScale: GX.TevScale = view.getUint8(tevStageOffs + 0x10);
             const alphaClamp: boolean = !!view.getUint8(tevStageOffs + 0x11);
             const alphaRegId: GX.Register = view.getUint8(tevStageOffs + 0x12);
-            // const unknown1 = view.getUint8(tevStageOffs + 0x13);
 
             // TevOrder
             const tevOrderIndex = view.getUint16(materialEntryIdx + 0xBC + j * 0x02);
@@ -1040,25 +1039,34 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         });
     }
 
-    function readColorChannel(tableOffs: number, colorChanIndex: number): GX_Material.ColorChannelControl {
-        const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
-        const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
-        assert(view.getUint8(colorChanOffs + 0x00) < 2);
-        const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
-        const litMask = view.getUint8(colorChanOffs + 0x02);
-        const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
-        const attnFn = view.getUint8(colorChanOffs + 0x04);
-        const attenuationFunction: GX.AttenuationFunction = (
-            attnFn === 0 ? GX.AttenuationFunction.NONE :
-            attnFn === 1 ? GX.AttenuationFunction.SPEC :
-            attnFn === 2 ? GX.AttenuationFunction.NONE :
-            attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
-        );
-        assert((attenuationFunction as number) !== -1);
-        const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
+    function readColorChannel(colorChanIndex: number): GX_Material.ColorChannelControl {
+        if (colorChanIndex !== 0xFFFF) {
+            const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
+            const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
+            assert(view.getUint8(colorChanOffs + 0x00) < 2);
+            const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
+            const litMask = view.getUint8(colorChanOffs + 0x02);
+            const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
+            const attnFn = view.getUint8(colorChanOffs + 0x04);
+            const attenuationFunction: GX.AttenuationFunction = (
+                attnFn === 0 ? GX.AttenuationFunction.NONE :
+                attnFn === 1 ? GX.AttenuationFunction.SPEC :
+                attnFn === 2 ? GX.AttenuationFunction.NONE :
+                attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
+            );
+            assert((attenuationFunction as number) !== -1);
+            const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
 
-        const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
-        return colorChan;
+            return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+        } else {
+            const lightingEnabled = false;
+            const matColorSource: GX.ColorSrc = GX.ColorSrc.REG;
+            const litMask = 0;
+            const diffuseFunction: GX.DiffuseFunction = GX.DiffuseFunction.CLAMP;
+            const attenuationFunction: GX.AttenuationFunction = GX.AttenuationFunction.NONE;
+            const ambColorSource: GX.ColorSrc = GX.ColorSrc.REG;
+            return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+        }
     }
 
     function readTexMatrix(tableOffs: number, texMtxIndex: number): TexMtx {
@@ -1116,7 +1124,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         if (isMaya) {
             calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
         } else {
-            calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT);
         }
 
         const texMtx: TexMtx = { info, projection, effectMatrix, matrix };
@@ -1182,9 +1190,8 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
 
         // Try to find existing texture data.
         const textureData = btiTexture.data;
-        if (textureData) {
+        if (textureData)
             textureDataIndex = textureDatas.findIndex((tex) => tex.data && tex.data.byteOffset === textureData.byteOffset);
-        }
 
         if (textureDataIndex < 0) {
             const textureData: TEX1_TextureData = {
@@ -1194,8 +1201,8 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
                 format: btiTexture.format,
                 mipCount: btiTexture.mipCount,
                 data: btiTexture.data,
-                paletteFormat: btiTexture.paletteFormat!,
-                paletteData: btiTexture.paletteData!,
+                paletteFormat: btiTexture.paletteFormat,
+                paletteData: btiTexture.paletteData,
             };
             textureDatas.push(textureData);
             textureDataIndex = textureDatas.length - 1;
@@ -1222,68 +1229,68 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
 //#endregion
 
 //#region BMD
-function assocHierarchy(bmd: BMD): void {
-    const view = bmd.inf1.hierarchyData.createDataView();
-
-    let offs = 0x00;
-    let currentMaterialIndex = -1;
-    while (true) {
-        const type: HierarchyNodeType = view.getUint16(offs + 0x00);
-        const value = view.getUint16(offs + 0x02);
-
-        if (type === HierarchyNodeType.End) {
-            break;
-        } else if (type === HierarchyNodeType.Material) {
-            currentMaterialIndex = value;
-        } else if (type === HierarchyNodeType.Shape) {
-            const shape = bmd.shp1.shapes[value];
-            assert(currentMaterialIndex !== -1);
-            assert(shape.materialIndex === -1);
-            shape.materialIndex = currentMaterialIndex;
-        }
-
-        offs += 0x04;
-    }
-
-    // Double-check that we have everything done.
-    for (let i = 0; i < bmd.shp1.shapes.length; i++)
-        assert(bmd.shp1.shapes[i].materialIndex !== -1);
-
-    // Go through and auto-optimize materials which don't use MULTI
-    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
-        let multiCount = 0;
-        for (let j = 0; j < bmd.shp1.shapes.length; j++) {
-            const shp1 = bmd.shp1.shapes[j];
-            if (shp1.materialIndex !== i)
-                continue;
-
-            if (bmd.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
-                ++multiCount;
-        }
-
-        if (multiCount === 0)
-            bmd.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
-    }
-}
-
 export class BMD {
-    public static parseReader(j3d: JSystemFileReaderHelper): BMD {
-        const bmd = new BMD();
-
-        bmd.subversion = j3d.subversion;
-        bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
-        bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
-        bmd.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
-        bmd.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
-        bmd.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
-        bmd.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), bmd);
-        bmd.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+    private constructor(j3d: JSystemFileReaderHelper) {
+        this.subversion = j3d.subversion;
+        this.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
+        this.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
+        this.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
+        this.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
+        this.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
+        this.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), this);
+        this.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
         const mdl3 = j3d.maybeNextChunk('MDL3');
-        bmd.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
+        this.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
 
-        assocHierarchy(bmd);
+        this.assocHierarchy();
+    }
 
-        return bmd;
+    private assocHierarchy(): void {
+        const view = this.inf1.hierarchyData.createDataView();
+
+        let offs = 0x00;
+        let currentMaterialIndex = -1;
+        while (true) {
+            const type: HierarchyNodeType = view.getUint16(offs + 0x00);
+            const value = view.getUint16(offs + 0x02);
+
+            if (type === HierarchyNodeType.End) {
+                break;
+            } else if (type === HierarchyNodeType.Material) {
+                currentMaterialIndex = value;
+            } else if (type === HierarchyNodeType.Shape) {
+                const shape = this.shp1.shapes[value];
+                assert(currentMaterialIndex !== -1);
+                assert(shape.materialIndex === -1);
+                shape.materialIndex = currentMaterialIndex;
+            }
+
+            offs += 0x04;
+        }
+
+        // Double-check that we have everything done.
+        for (let i = 0; i < this.shp1.shapes.length; i++)
+            assert(this.shp1.shapes[i].materialIndex !== -1);
+
+        // Go through and auto-optimize materials which don't use MULTI
+        for (let i = 0; i < this.mat3.materialEntries.length; i++) {
+            let multiCount = 0;
+            for (let j = 0; j < this.shp1.shapes.length; j++) {
+                const shp1 = this.shp1.shapes[j];
+                if (shp1.materialIndex !== i)
+                    continue;
+
+                if (this.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
+                    ++multiCount;
+            }
+
+            if (multiCount === 0)
+                this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
+        }
+    }
+
+    public static parseReader(j3d: JSystemFileReaderHelper): BMD {
+        return new BMD(j3d);
     }
 
     public static parse(buffer: ArrayBufferSlice): BMD {
@@ -1307,22 +1314,22 @@ export class BMD {
 
 //#region BMT
 export class BMT {
-    public static parse(buffer: ArrayBufferSlice): BMT {
-        const bmt = new BMT();
+    public mat3: MAT3 | null;
+    public tex1: TEX1 | null;
 
-        const j3d = new JSystemFileReaderHelper(buffer);
+    private constructor(j3d: JSystemFileReaderHelper) {
         assert(j3d.magic === 'J3D2bmt3');
 
         const mat3Chunk = j3d.maybeNextChunk('MAT3');
-        bmt.mat3 = mat3Chunk !== null ? readMAT3Chunk(mat3Chunk) : null;
+        this.mat3 = mat3Chunk !== null ? readMAT3Chunk(mat3Chunk) : null;
         const tex1Chunk = j3d.maybeNextChunk('TEX1');
-        bmt.tex1 = tex1Chunk !== null ? readTEX1Chunk(tex1Chunk) : null;
-
-        return bmt;
+        this.tex1 = tex1Chunk !== null ? readTEX1Chunk(tex1Chunk) : null;
     }
 
-    public mat3: MAT3 | null;
-    public tex1: TEX1 | null;
+    public static parse(buffer: ArrayBufferSlice): BMT {
+        const j3d = new JSystemFileReaderHelper(buffer);
+        return new BMT(j3d);
+    }
 }
 //#endregion
 
@@ -1914,7 +1921,5 @@ export class BVA {
 
         return readVAF1Chunk(j3d.nextChunk('VAF1'));
     }
-
-    public vaf1: VAF1;
 }
 //#endregion

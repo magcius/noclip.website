@@ -86,13 +86,11 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
     }
 }
 
@@ -134,7 +132,7 @@ export function createBasicRRESRendererFromU8Buffer(device: GfxDevice, buffer: A
     });
 }
 
-export function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBufferSlice) {
+export async function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBufferSlice) {
     const device = context.device;
     const arc = U8.parse(buffer);
 

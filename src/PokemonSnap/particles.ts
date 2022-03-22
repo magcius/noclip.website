@@ -571,13 +571,13 @@ class Emitter {
 }
 
 class ParticleProgram extends DeviceProgram {
-    public name = "Snap_Particles";
+    public override name = "Snap_Particles";
     public static a_Position = 0;
 
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {
@@ -594,14 +594,14 @@ uniform sampler2D u_Texture;
 
 varying vec2 v_TexCoord;`;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_Matrix), vec4(a_Position, 1.0)));
     v_TexCoord = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1);
 }`;
-    public frag = `
+    public override frag = `
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
 vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {

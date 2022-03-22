@@ -1,14 +1,12 @@
-import { F3DDKR_Program } from "./F3DDKR_Program";
+
 import { DkrTexture } from './DkrTexture';
 import { DataManager } from "./DataManager";
-import { NamedArrayBufferSlice } from "../DataFetcher";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { parseIndirectStages } from "../gx/gx_material";
 
 export class DkrTextureCache {
-    private textures3d: any = {};
-    private textures2d: any = {};
+    private textures3d: { [k: string]: DkrTexture } = {};
+    private textures2d: { [k: string]: DkrTexture } = {};
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private dataManager: DataManager) {
 

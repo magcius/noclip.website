@@ -10,17 +10,6 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
-class TriangleBatchFlags {
-    constructor(
-        public isInvisibleGeometry: boolean, // Determines if the geometry should be an invisible wall/ceiling.
-        public isEnvMapEnabled: boolean      // Determines if environment mapping (spherical) is enabled.
-    ){}
-};
-
-function buf2hex(buffer: Uint8Array) { // buffer is an ArrayBuffer
-    return Array.prototype.map.call(new Uint8Array(buffer), (x: any) => ('00' + x.toString(16)).slice(-2)).join('');
-  }
-
 const SIZE_OF_BATCH_INFO = 12;
 
 export class DkrLevelSegment {

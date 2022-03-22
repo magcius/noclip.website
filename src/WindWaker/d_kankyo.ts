@@ -1301,7 +1301,7 @@ export function dKy_get_dayofweek(envLight: dScnKy_env_light_c): number {
 class d_kankyo extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_kankyo;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         envcolor_init(globals);
         // dKy_setLight_init();
         dKy_wave_chan_init(globals);
@@ -1311,14 +1311,14 @@ class d_kankyo extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         dKy_event_proc(globals);
         exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
         dKyw_wind_set(globals);
         drawKankyo(globals);
     }
 
-    public draw(globals: dGlobals): void {
+    public override draw(globals: dGlobals): void {
         // Moved to execute to fix a few ordering bugs... :/
         // drawKankyo(globals);
     }
@@ -1327,7 +1327,7 @@ class d_kankyo extends kankyo_class {
 class d_kyeff extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_kyeff;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
 
         // dKyw_wether_init(globals);
@@ -1362,7 +1362,7 @@ class d_kyeff extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (globals.stageName === 'Name') {
             // menu_vrbox_set();
         } else {
@@ -1371,11 +1371,11 @@ class d_kyeff extends kankyo_class {
         dKyw_wether_move_draw(globals, deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         dKyw_wether_draw(globals, renderInstManager, viewerInput);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const envLight = globals.g_env_light;
         const device = globals.modelCache.device;
 
@@ -1395,20 +1395,20 @@ class d_kyeff extends kankyo_class {
 class d_kyeff2 extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_kyeff2;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         // dKyw_wether_init2(globals);
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         dKyw_wether_move_draw2(globals, deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         dKyw_wether_draw2(globals, renderInstManager, viewerInput);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const envLight = globals.g_env_light;
         const device = globals.modelCache.device;
 

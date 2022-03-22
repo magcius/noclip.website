@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
@@ -24,14 +24,18 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
         const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
-        if (bntxFile !== undefined) {
-            const bntx = BNTX.parse(bntxFile.buffer);
-            this.addTextures(device, bntx.textures);
-        }
+        if (bntxFile !== undefined)
+            this.addBNTXFile(device, bntxFile.buffer);
+    }
+
+    public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
+        const bntx = BNTX.parse(buffer);
+        this.addTextures(device, bntx.textures);
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
@@ -47,16 +51,16 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             const width = Math.max(textureEntry.width >>> mipLevel, 1);
             const height = Math.max(textureEntry.height >>> mipLevel, 1);
             const depth = 1;
-            const deswizzled = deswizzle({ buffer, width, height, channelFormat });
-            const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
-            const rgbaPixels = rgbaTexture.pixels;
-
-
-            device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-
-            const canvas = document.createElement('canvas');
-            surfaceToCanvas(canvas, rgbaTexture);
-            canvases.push(canvas);
+            const blockHeightLog2 = textureEntry.blockHeightLog2;
+            deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then((deswizzled) => {
+                const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
+                const rgbaPixels = rgbaTexture.pixels;
+                device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
+    
+                const canvas = document.createElement('canvas');
+                surfaceToCanvas(canvas, rgbaTexture);
+                canvases.push(canvas);
+            });
         }
 
         const extraInfo = new Map<string, string>();
@@ -151,7 +155,7 @@ layout(std140) uniform ub_ShapeParams {
 uniform sampler2D u_Samplers[8];
 `;
 
-    public both = AglProgram.globalDefinitions;
+    public override both = AglProgram.globalDefinitions;
 
     public lookupSamplerIndex(shadingModelSamplerBindingName: string) {
         // Translate to a local sampler by looking in the sampler map, and then that's the index we use.
@@ -270,7 +274,7 @@ uniform sampler2D u_Samplers[8];
             return true;
     }
 
-    public vert = `
+    public override vert = `
 layout(location = ${AglProgram._p0}) in vec3 _p0;
 layout(location = ${AglProgram._c0}) in vec4 _c0;
 layout(location = ${AglProgram._u0}) in vec2 _u0;
@@ -708,7 +712,7 @@ class FSHPMeshInstance {
         renderInst.drawIndexes(this.meshData.mesh.count);
         renderInst.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
 
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.meshData.mesh.bbox);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -770,10 +774,12 @@ export class FMDLRenderer {
     public name: string;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public textureHolder: BRTITextureHolder, public fmdlData: FMDLData) {
-        this.name = fmdlData.fmdl.name;
+        const fmdl = this.fmdlData.fmdl;
+        this.name = fmdl.name;
 
-        for (let i = 0; i < this.fmdlData.fmdl.fmat.length; i++)
-            this.fmatInst.push(new FMATInstance(device, cache, this.textureHolder, this.fmdlData.fmdl.fmat[i]));
+        for (let i = 0; i < fmdl.fmat.length; i++)
+            this.fmatInst.push(new FMATInstance(device, cache, this.textureHolder, fmdl.fmat[i]));
+
         for (let i = 0; i < this.fmdlData.fshpData.length; i++) {
             const fshpData = this.fmdlData.fshpData[i];
             const fmatInstance = this.fmatInst[fshpData.fshp.materialIndex];

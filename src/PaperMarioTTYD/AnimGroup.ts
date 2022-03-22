@@ -9,7 +9,7 @@ import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer, setSortKeyBias
 import * as TPL from "./tpl";
 import { BTIData, TEX1_SamplerSub } from "../Common/JSYSTEM/JUTTexture";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
+import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { mapSetMaterialTev } from "./world";
@@ -538,7 +538,7 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const scratchVec3a = vec3.create();
 
 class AnimGroupInstance_Shape {
@@ -629,7 +629,7 @@ class AnimGroupInstance_Shape {
         const template = renderInstManager.pushTemplateRenderInst();
 
         getMatrixTranslation(scratchVec3a, modelMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, scratchVec3a);
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, scratchVec3a);
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
     
         for (let i = 0; i < this.shape.draws.length; i++) {
@@ -641,8 +641,8 @@ class AnimGroupInstance_Shape {
             shapeHelper.setOnRenderInst(renderInst);
             materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
-            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
-            materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
+            materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
             for (let j = 0; j < draw.texId.length; j++) {
                 const texId = draw.texId[j];

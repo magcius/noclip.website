@@ -15,7 +15,8 @@ layout(std140) uniform ub_DrawParams {
     Mat4x2 u_TexMatrix[2];
 };
 
-uniform sampler2D u_Texture[2];
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
 
 varying vec4 v_Color;
 varying vec4 v_TexCoord;
@@ -88,11 +89,11 @@ void main() {
 
 #ifdef USE_TEXTURE
 
-    vec4 t_Texel0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+    vec4 t_Texel0 = Texture2D_N64(u_Texture0, v_TexCoord.xy);
 
 #ifdef USE_2CYCLE_MODE
 
-    vec4 t_Texel1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
+    vec4 t_Texel1 = Texture2D_N64(u_Texture1, v_TexCoord.zw);
 #if defined(USE_COMBINE_MODULATE)
     t_Color = t_Texel0 * t_Texel1 * v_Color;
 #elif defined(USE_COMBINE_DIFFERENCE)

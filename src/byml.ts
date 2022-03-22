@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
-import { assert, readString, align, decodeString } from "./util";
+import { assert, readString, align } from "./util";
 import { Endianness } from "./endian";
 
 export const enum FileType {
@@ -10,9 +10,11 @@ export const enum FileType {
 
 const enum NodeType {
     String       = 0xA0,
+    Path         = 0xA1,
     Array        = 0xC0,
     Dictionary   = 0xC1,
     StringTable  = 0xC2,
+    PathTable    = 0xC3,
     BinaryData   = 0xCB, // CRG1 extension.
     Bool         = 0xD0,
     Int          = 0xD1,
@@ -32,12 +34,12 @@ interface FileDescription {
 
 const fileDescriptions: { [key: number]: FileDescription } = {
     [FileType.BYML]: {
-        magics: ['BY\0\x01', 'BY\0\x02', 'YB\x03\0'],
-        allowedNodeTypes: [ NodeType.String, NodeType.Array, NodeType.Dictionary, NodeType.StringTable, NodeType.Bool, NodeType.Int, NodeType.UInt, NodeType.Float, NodeType.Null ],
+        magics: ['BY\0\x01', 'BY\0\x02', 'YB\x03\0', 'YB\x01\0'],
+        allowedNodeTypes: [ NodeType.String, NodeType.Path, NodeType.Array, NodeType.Dictionary, NodeType.StringTable, NodeType.PathTable, NodeType.Bool, NodeType.Int, NodeType.UInt, NodeType.Float, NodeType.Null ],
     },
     [FileType.CRG1]: {
         magics: ['CRG1'],
-        allowedNodeTypes: [ NodeType.String, NodeType.Array, NodeType.Dictionary, NodeType.StringTable, NodeType.Bool, NodeType.Int, NodeType.UInt, NodeType.Float, NodeType.Null, NodeType.FloatArray, NodeType.BinaryData ],
+        allowedNodeTypes: [ NodeType.String, NodeType.Path, NodeType.Array, NodeType.Dictionary, NodeType.StringTable, NodeType.PathTable, NodeType.Bool, NodeType.Int, NodeType.UInt, NodeType.Float, NodeType.Null, NodeType.FloatArray, NodeType.BinaryData ],
     },
 }
 
@@ -46,18 +48,30 @@ function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
 }
 
 export type StringTable = string[];
-export type ComplexNode = NodeDict | NodeArray | StringTable | ArrayBufferSlice | Float32Array;
+export type ComplexNode = NodeDict | NodeArray | NodePath | PathTable | StringTable | ArrayBufferSlice | Float32Array;
 export type SimpleNode = number | bigint | string | boolean | null;
 export type Node = ComplexNode | SimpleNode;
 
 export interface NodeDict { [key: string]: Node; }
-export interface NodeArray extends Array<Node> {}
+export type NodeArray = Node[];
+export interface NodePathPoint {
+    px: number;
+    py: number;
+    pz: number;
+    nx: number;
+    ny: number;
+    nz: number;
+    arg: number;
+}
+export type NodePath = NodePathPoint[];
+export type PathTable = NodePath[];
 
 class ParseContext {
     constructor(public fileType: FileType, public endianness: Endianness) {}
     public get littleEndian() { return this.endianness === Endianness.LITTLE_ENDIAN; }
     public strKeyTable: StringTable | null = null;
     public strValueTable: StringTable | null = null;
+    public pathTable: PathTable | null = null;
 }
 
 function getUint24(view: DataView, offs: number, littleEndian: boolean) {
@@ -123,6 +137,33 @@ function parseArray(context: ParseContext, buffer: ArrayBufferSlice, offs: numbe
     return result;
 }
 
+function parsePathTable(context: ParseContext, buffer: ArrayBufferSlice, offs: number): PathTable {
+    const view = buffer.createDataView();
+    const nodeType: NodeType = view.getUint8(offs + 0x00);
+    const numPaths = getUint24(view, offs + 0x01, context.littleEndian);
+    assert(nodeType === NodeType.PathTable);
+
+    const pathTable: NodePath[] = [];
+    for (let i = 0; i < numPaths; i++) {
+        const startOffs = offs + view.getUint32(offs + 0x04 + 0x04 * (i + 0), context.littleEndian);
+        const endOffs = offs + view.getUint32(offs + 0x04 + 0x04 * (i + 1), context.littleEndian);
+
+        const path: NodePath = [];
+        for (let j = startOffs; j < endOffs; j += 0x1C) {
+            const px = view.getFloat32(j + 0x00, context.littleEndian);
+            const py = view.getFloat32(j + 0x04, context.littleEndian);
+            const pz = view.getFloat32(j + 0x08, context.littleEndian);
+            const nx = view.getFloat32(j + 0x0C, context.littleEndian);
+            const ny = view.getFloat32(j + 0x10, context.littleEndian);
+            const nz = view.getFloat32(j + 0x14, context.littleEndian);
+            const arg = view.getFloat32(j + 0x18, context.littleEndian);
+            path.push({ px, py, pz, nx, ny, nz, arg });
+        }
+        pathTable.push(path);
+    }
+    return pathTable;
+}
+
 function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs: number, expectedNodeType?: NodeType): ComplexNode {
     const view = buffer.createDataView();
     const nodeType: NodeType = view.getUint8(offs + 0x00);
@@ -136,6 +177,8 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs:
         return parseArray(context, buffer, offs);
     case NodeType.StringTable:
         return parseStringTable(context, buffer, offs);
+    case NodeType.PathTable:
+        return parsePathTable(context, buffer, offs);
     case NodeType.BinaryData:
         if (numValues == 0x00FFFFFF) {
             const numValues2 = view.getUint32(offs + 0x04, context.littleEndian);
@@ -162,6 +205,7 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     case NodeType.Array:
     case NodeType.Dictionary:
     case NodeType.StringTable:
+    case NodeType.PathTable:
     case NodeType.BinaryData:
     case NodeType.FloatArray: {
         const complexOffs = view.getUint32(offs, context.littleEndian);
@@ -170,6 +214,10 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     case NodeType.String: {
         const idx = view.getUint32(offs, context.littleEndian);
         return context.strValueTable![idx];
+    }
+    case NodeType.Path: {
+        const idx = view.getUint32(offs, context.littleEndian);
+        return context.pathTable![idx];
     }
     case NodeType.Bool: {
         const value = view.getUint32(offs, context.littleEndian);
@@ -195,7 +243,11 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     }
 }
 
-export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML): T {
+export interface ParseOptions {
+    hasPathTable: boolean;
+}
+
+export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML, opt?: ParseOptions): T {
     const magic = readString(buffer, 0x00, 0x04, false);
     const magics = fileDescriptions[fileType].magics;
     assert(magics.includes(magic));
@@ -207,13 +259,20 @@ export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType
 
     const strKeyTableOffs = view.getUint32(0x04, context.littleEndian);
     const strValueTableOffs = view.getUint32(0x08, context.littleEndian);
-    const rootNodeOffs = view.getUint32(0x0C, context.littleEndian);
+    let headerOffs = 0x0C;
+    let pathTableOffs: number = 0;
+    if (opt && opt.hasPathTable) {
+        pathTableOffs = view.getUint32(headerOffs + 0x00, context.littleEndian);
+        headerOffs += 0x04;
+    }
+    const rootNodeOffs = view.getUint32(headerOffs + 0x00, context.littleEndian);
 
     if (rootNodeOffs === 0)
         return {} as T;
 
     context.strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(context, buffer, strKeyTableOffs) : null;
     context.strValueTable = strValueTableOffs !== 0 ? parseStringTable(context, buffer, strValueTableOffs) : null;
+    context.pathTable = pathTableOffs !== 0 ? parsePathTable(context, buffer, pathTableOffs) : null;
     const node = parseComplexNode(context, buffer, rootNodeOffs);
     return node as any as T;
 }
@@ -512,7 +571,7 @@ function gatherStrings(v: Node, keyStrings: Set<string>, valueStrings: Set<strin
         valueStrings.add(v);
     } else if (v instanceof Array) {
         for (let i = 0; i < v.length; i++)
-            gatherStrings(v[i], keyStrings, valueStrings);
+            gatherStrings(v[i] as Node, keyStrings, valueStrings);
     } else if (v.constructor === Object) {
         // Generic object.
         const keys = Object.keys(v);

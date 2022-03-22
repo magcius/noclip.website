@@ -10,7 +10,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { PacketParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
+import { DrawParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -149,7 +149,7 @@ class PlaneShape {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class FakeWaterModelInstance {
     private plane: PlaneShape;
     private materialInstance: MaterialInstance;
@@ -241,13 +241,13 @@ class FakeWaterModelInstance {
 
         const template = renderInstManager.pushTemplateRenderInst();
 
-        // Calc our packet params.
-        mat4.copy(packetParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
-        this.materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        // Calc our draw params.
+        mat4.copy(drawParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
+        this.materialInstance.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         // Push our material instance.
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
+        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, drawParams);
         this.plane.prepareToRender(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
@@ -278,7 +278,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
     public createCameraController() {
         this.orbitCC = new OrbitCameraController(this.shouldOrbit);
         this.orbitCC.orbitSpeed *= 0.4;
-        this.orbitCC.z = -1500;
+        this.orbitCC.z = this.orbitCC.zTarget = -1500;
         return this.orbitCC;
     }
 

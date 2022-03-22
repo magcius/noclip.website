@@ -1,7 +1,7 @@
 
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin } from "../platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform";
 import { assert } from "../platform/GfxPlatformUtil";
-import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
@@ -11,11 +11,25 @@ function defineStr(k: string, v: string): string {
     return `#define ${k} ${v}`;
 }
 
+function parseBinding(layout: string | undefined): number | null {
+    if (layout === undefined)
+        return null;
+
+    const g = (/binding\s*=\s*(\d+)/).exec(layout);
+    if (g !== null) {
+        const bindingNum = parseInt(g[1], 10);
+        if (!Number.isNaN(bindingNum))
+            return bindingNum;
+    }
+
+    return null;
+}
+
 export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: DefineMap | null = null): string {
     // Garbage WebGL2 shader compiler until I get something better down the line...
     const lines = source.split('\n').map((n) => {
         // Remove comments.
-        return n.replace(/[/][/].*$/, '');
+        return n.replace(/\s*[/][/].*$/, '');
     }).filter((n) => {
         // Filter whitespace.
         const isEmpty = !n || /^\s+$/.test(n);
@@ -26,33 +40,37 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (defines !== null)
         definesString = [... defines.entries()].map(([k, v]) => defineStr(k, v)).join('\n');
 
-    const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
+    let precision = lines.filter((line) => line.startsWith('precision')).join('\n') || 'precision mediump float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
     let extraDefines = '';
 
     if (vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft)
-        extraDefines += `${defineStr(`VIEWPORT_ORIGIN_TL`, `1`)}\n`;
+        extraDefines += `${defineStr(`GFX_VIEWPORT_ORIGIN_TL`, `1`)}\n`;
+    if (vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero)
+        extraDefines += `${defineStr(`GFX_CLIPSPACE_NEAR_ZERO`, `1`)}\n`;
 
     let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
-        let set = 0, binding = 0, location = 0;
+        let set = 0, implicitBinding = 0, location = 0;
 
         rest = rest.replace(/^(layout\((.*)\))?\s*uniform(.+{)$/gm, (substr, cap, layout, rest) => {
             const layout2 = layout ? `${layout}, ` : ``;
-            return `layout(${layout2}set = ${set}, binding = ${binding++}) uniform ${rest}`;
+            return `layout(${layout2}set = ${set}, binding = ${implicitBinding++}) uniform ${rest}`;
         });
 
         // XXX(jstpierre): WebGPU now binds UBOs and textures in different sets as a porting hack, hrm...
         set++;
-        binding = 0;
+        implicitBinding = 0;
 
         assert(vendorInfo.separateSamplerTextures);
-        rest = rest.replace(/uniform sampler2D (.*);/g, (substr, samplerName) => {
-            // Can't have samplers in vertex for some reason.
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, samplerType, samplerName) => {
+            let binding = parseBinding(layout);
+            if (binding === null)
+                binding = implicitBinding++;
+
             return type === 'frag' ? `
-layout(set = ${set}, binding = ${binding++}) uniform texture2D T_${samplerName};
-layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
-` : '';
+layout(set = ${set}, binding = ${(binding * 2) + 0}) uniform texture${samplerType} T_${samplerName};
+layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler S_${samplerName};`.trim() : '';
         });
 
         rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {
@@ -62,38 +80,64 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         outLayout = 'layout(location = 0) ';
 
         extraDefines += `${defineStr(`gl_VertexID`, `gl_VertexIndex`)}\n`;
+        extraDefines += `${defineStr(`gl_InstanceID`, `gl_InstanceIndex`)}\n`;
+
+        // Workaround for Naga
+        // https://github.com/gfx-rs/naga/issues/1353
+        precision = precision.replace(/^precision (.*) sampler(.*);$/gm, '');
+    } else {
+        let implicitBinding = 0;
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, samplerType, samplerName) => {
+            let binding = parseBinding(layout);
+            if (binding === null)
+                binding = implicitBinding++;
+
+            return `uniform sampler${samplerType} ${samplerName}; // BINDING=${binding}`;
+        });
     }
 
+    rest = rest.replace(/\bPU_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+        return `SAMPLER_${samplerType}(P_${samplerName})`;
+    });
+
+    rest = rest.replace(/\bPF_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+        return `PP_SAMPLER_${samplerType}(P_${samplerName})`;
+    });
+
+    rest = rest.replace(/\bPU_TEXTURE\((.*?)\)/g, (substr, samplerName) => {
+        return `TEXTURE(P_${samplerName})`;
+    });
+
     if (vendorInfo.separateSamplerTextures) {
-        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `texture2D T_P_${samplerName}, sampler S_P_${samplerName}`;
+        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return `texture${samplerType} T_P_${samplerName}, sampler S_P_${samplerName}`;
         });
 
-        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `SAMPLER_2D(P_${samplerName})`;
-        });
-
-        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return `T_${samplerName}, S_${samplerName}`;
         });
 
-        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `sampler2D(T_${samplerName}, S_${samplerName})`;
+        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return `sampler${samplerType}(T_${samplerName}, S_${samplerName})`;
+        });
+
+        rest = rest.replace(/\bTEXTURE\((.*?)\)/g, (substr, samplerName) => {
+            return `T_${samplerName}`;
         });
     } else {
-        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `sampler2D P_${samplerName}`;
+        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return `sampler${samplerType} P_${samplerName}`;
         });
 
-        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
-            return `SAMPLER_2D(P_${samplerName})`;
-        });
-
-        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
             return samplerName;
         });
 
-        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+            return samplerName;
+        });
+
+        rest = rest.replace(/\bTEXTURE\((.*?)\)/g, (substr, samplerName) => {
             return samplerName;
         });
     }

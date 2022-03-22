@@ -1,8 +1,6 @@
 import { GfxBuffer, GfxDevice, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { DkrTexture } from "./DkrTexture";
 import { assert } from "../util";
-import { isFlagSet } from "./DkrUtil"
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export const SIZE_OF_VERTEX = 10;
@@ -80,7 +78,8 @@ export class DkrTriangleBatch {
             const fi = i * SIZE_OF_TRIANGLE_FACE; // triangle face index
 
             // If the first byte is 0x40, then the backface should be drawn.
-            const isBackfaceVisible = isFlagSet(triangleDataView.getUint8(fi + 0x00), 0x40);
+            const flags = triangleDataView.getUint8(fi + 0x00);
+            const isBackfaceVisible = !!(flags & 0x40);
 
             const v0 = triangleDataView.getUint8(fi + 0x01);
             const v1 = triangleDataView.getUint8(fi + 0x02);

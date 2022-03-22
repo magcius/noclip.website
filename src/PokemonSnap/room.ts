@@ -398,20 +398,20 @@ class ObjectDataFinder extends MIPS.NaiveInterpreter {
     public dataAddress = 0;
     public globalRef = 0
 
-    public reset(): void {
+    public override reset(): void {
         super.reset();
         this.spawnFunc = 0;
         this.dataAddress = 0;
         this.globalRef = 0;
     }
 
-    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
+    protected override handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
         this.spawnFunc = func;
         this.dataAddress = assertExists(stackArgs[1]).value; // stack+0x14
         return 0;
     }
 
-    handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+    public override handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
         if (op === MIPS.Opcode.SW && value.lastOp === MIPS.Opcode.JAL)
             this.globalRef = target.value;
     }
@@ -1570,7 +1570,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         return super.parseFromView(this.dataMap.getView(this.state.startAddress));
     }
 
-    public reset(): void {
+    public override reset(): void {
         super.reset();
         this.trivial = true;
         this.recentRandom = 0;
@@ -1606,7 +1606,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         }
     }
 
-    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[], branch: MIPS.BranchInfo | null): number {
+    protected override handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[], branch: MIPS.BranchInfo | null): number {
         if (func !== StateFuncs.SetState || branch !== null)
             this.markNontrivial();
         switch (func) {
@@ -1850,7 +1850,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         return 0;
     }
 
-    protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number) {
+    protected override handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number) {
         this.markNontrivial();
         if (op === MIPS.Opcode.SW && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP)) {
             // this looks like setting a struct field - LW comes from loading the object struct from the parent,
@@ -1947,7 +1947,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         }
     }
 
-    protected finish(): void {
+    protected override finish(): void {
         if (!emptyStateBlock(this.currBlock))
             this.state.blocks.push(this.currBlock);
     }
@@ -2201,7 +2201,7 @@ class SpawnParser extends MIPS.NaiveInterpreter {
     public data: SpawnData;
     public foundSpawn = false;
 
-    public reset(): void {
+    public override reset(): void {
         super.reset();
         this.data = {
             id: 0,
@@ -2212,7 +2212,7 @@ class SpawnParser extends MIPS.NaiveInterpreter {
         this.foundSpawn = false;
     }
 
-    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
+    protected override handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
         if (func === StateFuncs.SpawnActor) {
             assert(this.data.id !== 0);
             this.data.behavior = 0;
@@ -2224,7 +2224,7 @@ class SpawnParser extends MIPS.NaiveInterpreter {
         return 0;
     }
 
-    protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+    protected override handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
         if (op === MIPS.Opcode.SW && offset === 0 && target.lastOp === MIPS.Opcode.ADDIU && this.data.id === 0)
             this.data.id = value.value;
         if (!this.foundSpawn)
@@ -2253,7 +2253,7 @@ class SpawnParser extends MIPS.NaiveInterpreter {
         }
     }
 
-    protected finish(): void {
+    protected override finish(): void {
         if (!this.foundSpawn)
             return;
         if (this.data.id > 0x80000000)
