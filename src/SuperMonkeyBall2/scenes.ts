@@ -10,14 +10,6 @@ import { parseStagedefLz } from './parse';
 import { AABB } from '../Geometry';
 import { CameraController } from '../Camera';
 
-/**
- * TODO:
- * Debug draw lines
- * Describe stagedef in Typescript interfaces
- * Decompress and parse stagedef
- * Render basic stagedef
- */
-
 const PATH_CASE = 'SuperMonkeyBall2';
 
 const SHORT_TO_RAD = Math.PI / 0x8000;
@@ -32,12 +24,12 @@ const scratchAABB: AABB = new AABB(-100, -100, -100, 100, 100, 100);
 
 class Mkb2Renderer extends BasicGXRendererHelper {
 
-    constructor(device: GfxDevice, private stagedef: SD.FileHeader) {
+    constructor(device: GfxDevice, private stagedef: SD.Stage) {
         super(device);
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let coliHeader of this.stagedef.coliHeaders) {
+        for (let coliHeader of this.stagedef.itemgroups) {
             for (let i = 0; i < coliHeader.coliTris.length; i++) {
                 const coliTri = coliHeader.coliTris[i];
                 const color = scratchColora;
@@ -89,7 +81,7 @@ class Mkb2SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const lzBuffer = await context.dataFetcher.fetchData(`${PATH_CASE}/stage/STAGE319.lz`);
+        const lzBuffer = await context.dataFetcher.fetchData(`${PATH_CASE}/stage/STAGE320.lz`);
         const stagedef = parseStagedefLz(lzBuffer);
         const renderer = new Mkb2Renderer(device, stagedef);
         return renderer;

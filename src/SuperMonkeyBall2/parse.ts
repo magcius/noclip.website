@@ -78,7 +78,7 @@ function parseSlicedList<T>(view: DataView, offset: number, origList: T[], origL
     return origList.slice(idx, idx + count);
 }
 
-export function parseStagedefLz(buffer: ArrayBufferSlice): SD.FileHeader {
+export function parseStagedefLz(buffer: ArrayBufferSlice): SD.Stage {
     const view = buffer.createDataView();
     const compressedView = buffer.subarray(0x8).createDataView()
     const uncompressedSize = view.getUint32(0x4, true);
@@ -86,7 +86,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): SD.FileHeader {
     return parseStagedefUncompressed(uncompressedBuffer);
 }
 
-function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.FileHeader {
+function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     const view = buffer.createDataView();
 
     const magicNumberA = view.getUint32(0x0);
@@ -362,7 +362,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.FileHeader {
 
     const coliHeaderCount = view.getUint32(0x8);
     const coliHeaderListOffs = view.getUint32(0xC);
-    const coliHeaders: SD.ColiHeader[] = [];
+    const coliHeaders: SD.StageItemgroup[] = [];
     for (let i = 0; i < coliHeaderCount; i++) {
         const coliHeaderOffs = coliHeaderListOffs + i * COLI_HEADER_SIZE;
         const origin = parseVec3f(view, coliHeaderOffs + 0x0);
@@ -471,13 +471,13 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.FileHeader {
             conveyorVel: conveyorVel,
 
             coliTris: coliTris,
-            coliTriIdxs: coliTriIdxs,
-            coliGridStartX: coliGridStartX,
-            coliGridStartZ: coliGridStartZ,
-            coliGridStepX: coliGridStepX,
-            coliGridStepZ: coliGridStepZ,
-            coliGridCellsX: coliGridCellsX,
-            coliGridCellsZ: coliGridCellsZ,
+            gridCellTris: coliTriIdxs,
+            gridOriginX: coliGridStartX,
+            gridOriginZ: coliGridStartZ,
+            gridStepX: coliGridStepX,
+            gridStepZ: coliGridStepZ,
+            gridCellCountX: coliGridCellsX,
+            gridCellCountZ: coliGridCellsZ,
 
             goals: subGoals,
             bumpers: subBumpers,
@@ -506,7 +506,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.FileHeader {
     return {
         magicNumberA,
         magicNumberB,
-        coliHeaders,
+        itemgroups: coliHeaders,
         start,
         falloutPlane,
         goals,

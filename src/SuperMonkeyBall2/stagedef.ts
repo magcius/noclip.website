@@ -33,13 +33,13 @@ export const enum Easing {
     Smooth,
 }
 
-export interface AnimKeyframe {
+export type AnimKeyframe = {
     easing: number; // integer (enum?)
     time: number; // float
     value: number; // float
 }
 
-export interface AnimHeader {
+export type AnimHeader = {
     rotXKeyframes: AnimKeyframe[];
     rotYKeyframes: AnimKeyframe[];
     rotZKeyframes: AnimKeyframe[];
@@ -48,7 +48,7 @@ export interface AnimHeader {
     posZKeyframes: AnimKeyframe[];
 }
 
-export interface BackgroundAnim2Header {
+export type BackgroundAnim2Header = {
     loopPointSeconds: number;
     unk1Keyframes: AnimKeyframe[];
     unk2Keyframes: AnimKeyframe[];
@@ -63,7 +63,7 @@ export interface BackgroundAnim2Header {
     unk11Keyframes: AnimKeyframe[];
 }
 
-export interface BackgroundAnimHeader {
+export type BackgroundAnimHeader = {
     loopPointSeconds: number,
     posXKeyframes: AnimKeyframe[];
     posYKeyframes: AnimKeyframe[];
@@ -73,25 +73,25 @@ export interface BackgroundAnimHeader {
     rotZKeyframes: AnimKeyframe[];
 }
 
-export interface EffectHeader {
+export type EffectHeader = {
     fx1Keyframes: Effect1[];
     fx2Keyframes: Effect2[];
     textureScroll: TextureScroll;
 }
 
-export interface Effect1 {
+export type Effect1 = {
     // ??
 }
 
-export interface Effect2 {
+export type Effect2 = {
     // ??
 }
 
-export interface TextureScroll {
+export type TextureScroll = {
     speed: vec3;
 }
 
-export interface BackgroundModel {
+export type BackgroundModel = {
     modelName: string;
     pos: vec3;
     rot: vec3;
@@ -101,19 +101,19 @@ export interface BackgroundModel {
     effectHeader: EffectHeader;
 }
 
-export interface Banana {
+export type Banana = {
     pos: vec3;
     type: BananaType;
 }
 
-export interface StageModelInstance {
+export type StageModelInstance = {
     stageModelA: StageModelPtrA;
     pos: vec3;
     rot: vec3;
     scale: vec3;
 }
 
-export interface FogAnimHeader {
+export type FogAnimHeader = {
     startDistanceKeyframes: AnimKeyframe[];
     endDistanceKeyframes: AnimKeyframe[];
     redKeyframes: AnimKeyframe[];
@@ -122,31 +122,31 @@ export interface FogAnimHeader {
     unkKeyframes: AnimKeyframe[];
 }
 
-export interface ColiCone {
+export type ColiCone = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
 }
 
-export interface Bumper {
+export type Bumper = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
 }
 
-export interface ReflectiveStageModel {
+export type ReflectiveStageModel = {
     modelName: string;
 }
 
-export interface FalloutPlane {
+export type FalloutPlane = {
     y: number;
 }
 
-export interface StageModel {
+export type StageModel = {
     modelName: string;
 }
 
-export interface ColiHeader {
+export type StageItemgroup = {
     origin: vec3;
     initialRot: vec3;
     animType: AnimType;
@@ -156,13 +156,13 @@ export interface ColiHeader {
     coliTris: ColiTri[];
     // Given cell coord (x, z), coliTriIdxs[z * coliGridCellsX + x] gives you
     // a list of tri indices in that cell
-    coliTriIdxs: number[][];
-    coliGridStartX: number;
-    coliGridStartZ: number;
-    coliGridStepX: number;
-    coliGridStepZ: number;
-    coliGridCellsX: number;
-    coliGridCellsZ: number;
+    gridCellTris: number[][];
+    gridOriginX: number;
+    gridOriginZ: number;
+    gridStepX: number;
+    gridStepZ: number;
+    gridCellCountX: number;
+    gridCellCountZ: number;
 
     goals: Goal[];
     bumpers: Bumper[];
@@ -187,11 +187,11 @@ export interface ColiHeader {
     textureScroll: TextureScroll;
 }
 
-export interface StageModelPtrA {
+export type StageModelPtrA = {
     stageModel: StageModel;
 }
 
-export interface ForegroundModel {
+export type ForegroundModel = {
     // Some other unknown fields are here...
     modelName: string;
     pos: vec3;
@@ -200,19 +200,19 @@ export interface ForegroundModel {
     backgroundAnim2Header: BackgroundAnim2Header;
 }
 
-export interface StageModelPtrB {
+export type StageModelPtrB = {
     stageModelA: StageModelPtrA;
 }
 
-export interface ColiSphere {
+export type ColiSphere = {
     pos: vec3;
     radius: number;
 }
 
-export interface FileHeader {
+export type Stage = {
     magicNumberA: number;
     magicNumberB: number;
-    coliHeaders: ColiHeader[];
+    itemgroups: StageItemgroup[];
     start: Start;
     falloutPlane: FalloutPlane;
     goals: Goal[];
@@ -235,19 +235,19 @@ export interface FileHeader {
     fog: Fog;
 }
 
-export interface Jamabar {
+export type Jamabar = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
 }
 
-export interface FalloutVolume {
+export type FalloutVolume = {
     pos: vec3;
     size: vec3;
     rot: vec3;
 }
 
-export interface ColiTri {
+export type ColiTri = {
     point1Pos: vec3;
     normal: vec3;
     rotFromXY: vec3;
@@ -257,38 +257,38 @@ export interface ColiTri {
     bitangent: vec2;
 }
 
-export interface Goal {
+export type Goal = {
     pos: vec3;
     rot: vec3;
     type: GoalType;
 }
 
-export interface Wormhole {
+export type Wormhole = {
     pos: vec3;
     rot: vec3;
     destination: Wormhole;
 }
 
-export interface ColiCylinder {
+export type ColiCylinder = {
     pos: vec3;
     radius: number;
     height: number;
     rot: vec3;
 }
 
-export interface Start {
+export type Start = {
     pos: vec3;
     rot: vec3;
 }
 
-export interface Button {
+export type Button = {
     pos: vec3;
     rot: vec3;
     playbackState: PlaybackState;
     animGroupId: number;
 }
 
-export interface Fog {
+export type Fog = {
     type: GX.FogType;
     startDistance: number;
     endDistance: number;
