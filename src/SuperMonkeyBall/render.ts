@@ -7,7 +7,7 @@ import { LoadedVertexData, LoadedVertexDraw } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice, GfxMipFilterMode, GfxNormalizedViewportCoords, GfxSampler, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateWrapModeGfx } from "../gx/gx_render";
+import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, DrawParams, translateWrapModeGfx } from "../gx/gx_render";
 import { mat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { Color, colorCopy } from '../Color';
@@ -87,7 +87,7 @@ export class GcmfModel {
 }
 
 const bboxScratch = new AABB();
-const packetParams = new PacketParams();
+const packetParams = new DrawParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
@@ -124,7 +124,7 @@ class ShapeInstance {
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, draw);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, packetParams);
 
             renderInstManager.submitRenderInst(renderInst);
         }

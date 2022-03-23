@@ -45,7 +45,7 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
         
     }
     
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public override async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const sceneRender = new FZEROGXSceneRenderer(device);
         
         const dataFetcher = context.dataFetcher;
